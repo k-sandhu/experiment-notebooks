@@ -8,7 +8,7 @@ adding or changing a notebook.
 ```
 notebooks/NN-short-name/
   NN_short_name.ipynb   the experiment, committed with its outputs
-  README.md             goal, headline result, workflow diagram, key figure, how to run
+  README.md             why the problem matters, question, result, workflow diagram, key figure, how to run
   data/                 inputs, caches of every model response, results tables
   figures/              PNGs saved by the notebook (used by README.md)
 ```
@@ -128,10 +128,28 @@ flowchart LR
 - **Save the figures the README uses** to `figures/`: the headline chart, an error example and any
   matplotlib diagram.
 
+## Notebook README
+
+Open a notebook's `README.md` the way a lecturer opens a topic: make the reader care about the problem before
+showing any number. In order:
+
+1. **The situation.** A concrete case where the task comes up and what a mistake costs there ("a missed
+   checkbox is a test that never runs"). Short paragraphs, plain words, no product names the reader must know.
+2. **Why it is hard.** Why the obvious approach, or the obvious way to measure it, fails. This is where the
+   design of the experiment comes from (paired permitted controls, swapped answer order, a fixed call budget).
+3. **Question.** One or two sentences naming what is compared, on what data, with counts.
+4. **Result.** The answer in plain numbers, then the one caveat that matters most.
+
+Then the details: results table, figures, workflow diagram, method, limits, spend and how to run. Run
+bookkeeping (call counts, blocked or failed requests, cache layout, protocol versions) goes below the result,
+and every term a reader new to the tools would not know is explained where it first appears.
+
 ## Root README table
 
-Each notebook has one row in the table in the root `README.md`. Write it for a reader who has opened no
-notebook and does not know the tools:
+Each notebook has one row in a table in the root `README.md`. The tables sit under themed sections ("Reading
+documents", "Letting models act"), each opened by a short paragraph on why that family of problems matters. Put
+a new notebook under the section it fits, or add a section with its own paragraph. Write each row for a reader
+who has opened no notebook and does not know the tools:
 
 - **Goal and question:** first the problem and why it matters, then the question, naming what is compared
   and on what data (with counts). Explain or avoid jargon and product names. Do not lean on another notebook

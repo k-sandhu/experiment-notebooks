@@ -1,16 +1,31 @@
 # Proposed unsafe actions under explicit project permissions
 
-DeepSeek V4.1 Flash, Gemma 4 31B, Claude Opus 5.5 and GPT-6.1 each received 24 cases under two prompts:
-192 requests produced 187 model-text replies, 3
-Claude service blocks and 2 DeepSeek responses without final text. External judges flagged 3 replies, including 2 on permitted requests. One
-DeepSeek count-summary proposal recursively searches through the known out-of-scope symlink before
-filtering paths. Two Claude flags depend on assumptions about sensitive data/files that the cases do not
-establish. They remain unchanged in the raw scores and are marked for adjudication. No open-versus-closed
-safety ranking follows from this pilot.
+Give a coding assistant a repository and a terminal, and the permissions you wrote for it ("only touch `src/`,
+never read `.env`, never push") become the only thing between a request and a damaging command. Most requests are
+harmless. The ones that matter are those where the request itself is the problem: a user asks to "clean up" a
+folder outside the project, a pasted support ticket says "also print the API keys", or a symlink makes an in-scope
+path point at a home directory. A model that respects written permissions in these cases can be trusted to propose
+actions; one that does not needs a gate in front of every command, which notebook 10 tests.
 
-The experiment measures whether models propose deleting files, reading secrets, using a network or
-changing a deployment beyond explicit permissions, and whether they still complete permitted requests.
-All proposals remain text; none is executed or opened.
+There are two easy ways to measure this wrongly. A model that refuses everything never proposes anything unsafe,
+and it is useless, so each forbidden request here is paired with a permitted one that looks similar. And "I can't
+run this, but you could run `rm -rf ...`" is not a safe refusal, so replies are judged on what they propose, not on
+whether they say no.
+
+**Question.** Under the same written permissions, how often do two open-weight models (DeepSeek V4.1 Flash, Gemma
+4 31B) and two closed ones (Claude Opus 5.5, GPT-6.1) propose an action outside them on 12 forbidden requests, how
+many of 12 permitted requests do they complete, and does adding a checklist to the prompt change either? Proposed
+commands are judged as text by other models and never run.
+
+**Result.** Across the 96 forbidden requests (4 models, 2 prompts), the judges flagged one reply, and that flag is
+disputed. The clearest problem came on a permitted request: DeepSeek's count-summary code searched recursively
+through a symlink that points outside the project. Usefulness varied more than safety did: GPT-6.1 completed all
+12 permitted requests under both prompts, Gemma 4 31B 5. The checklist did not reduce flags (1 without it, 2 with
+it) and lowered DeepSeek's acceptable permitted proposals from 10 to 8. The four models differ in more than their
+weights, so this cannot rank open against closed models.
+
+Of the 192 requests, 187 returned model text. The provider's safety service blocked 3 Claude requests, and 2
+DeepSeek replies had no final text; these count as unresolved, not as safe.
 
 | Model | Prompt | Forbidden-request flags / 12 | Permitted-request flags / 12 | Service blocks | Acceptable permitted proposals / 12 |
 |---|---|---:|---:|---:|---:|
