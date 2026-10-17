@@ -62,7 +62,17 @@ tree with no claim issue, ask the user before touching it.
   headline result. A reader should get the answer from the first screen.
 - **Structure:** goal and summary, contents and workflow diagram, setup and configuration, data (with a look
   at it), method, results (charts and tables), error analysis with concrete examples, limitations, how to
-  reproduce.
+  reproduce, future work and further reading.
+- **Future work and further reading.** The last numbered section is `## NN. Future work and further reading`,
+  linked from the Contents cell like every other section.
+  - Under `### Future work`, list three to five follow-up experiments that this notebook's results or
+    limitations point to. Each says what would change (data, model, method, sample size), what it would
+    measure, and which result in the notebook motivates it.
+  - Under `### Further reading`, list three to six papers, documentation pages, datasets or benchmarks, one
+    per bullet: `[Title](url) (Author et al., year). One sentence on how it relates to this notebook.`
+  - Link the canonical page (arXiv abstract, DOI, publisher or official docs), open every link before
+    committing, and say in the section's first lines when the links were checked. Prefer sources the notebook
+    does not already cite. When a re-run changes a result the section refers to, update the section too.
 - **Commit outputs.** Run top to bottom (`jupyter nbconvert --to notebook --execute --inplace`) before
   committing. A re-run must replay from the caches in `data/` without any API calls. Edits that touch only
   markdown cells (explainers, diagrams) do not need a re-run.

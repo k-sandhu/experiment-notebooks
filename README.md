@@ -69,5 +69,6 @@ Notebooks 09–12 use authored synthetic cases and objective fixtures. Notebook 
 ## For AI agents
 
 See [AGENTS.md](AGENTS.md): layout, the pull-request workflow, claiming a notebook number with an issue,
-self-containment, workflow diagrams and explainers, how to call models, and the writing style (including
+self-containment, workflow diagrams and explainers, the closing future-work and further-reading section, how to
+call models, and the writing style (including
 LLM prose habits to avoid).
