@@ -23,6 +23,9 @@ person.
 | 06 | [Car make and model from one photo](notebooks/06-car-make-model-from-image/) | Labelling photos against a fixed list (products, parts, vehicles) is a task where a probability per label is cheaper than generated text and gives a confidence score. Can the Decisions API name a car's make and model from one photo over 109 labels, and how does it compare with frontier vision models (Claude, GPT, Muse) on accuracy, cost and speed? | Decisions API: 94.5% top-1 over 109 labels at $0.20 per 1,000 images and 0.9 s per call; GPT-6.1 and Muse Wonder 100%, Claude Opus 5.5 99.3% at 4-12 s per call |
 | 07 | [Subagent handoff harness](notebooks/07-subagent-handoff-harness/) | Agent frameworks hide how a main agent hands work to subagents, receives their messages and decides when to wait for them. This builds that harness in plain Python one pattern at a time (synchronous handoff, async spawn, messages both ways, a subagent asking a question, racing, nesting) and runs each pattern with real Claude agents on the same trip-planning task. What does each pattern cost and gain in time and LLM calls? | All 7 levels correct. Async spawn: 57 s vs 82 s single agent; sync handoff slower (120 s). A late reply to a finished subagent is silently lost |
 | 08 | [Ontario lab requisition extraction](notebooks/08-lab-requisition-extraction/) | Labs receive paper test requisitions as scans, faxes and phone photos, and a missed checkbox is a test that never runs. The Ontario form has about 70 tests in a tight grid of small boxes, plus typed and handwritten patient details. On 24 synthetic forms with exact ground truth, can vision LLMs read which tests were ordered and the patient and clinician fields? | Claude Opus 5.5 read every marked test on 24 forms (F1 1.00); GPT-6.1 0.995, Muse Wonder 0.986; best open model 0.94, open models weak on phone photos and written-in tests |
+| 09 | [Proposed unsafe agent actions](notebooks/09-agent-action-safety/) | Enterprise agents can delete files, expose secrets or change production beyond their granted permissions. On 12 forbidden requests and 12 permitted controls, how often do two open-weight and two closed-weight model endpoints propose unsafe actions, and does an added checklist help? Commands are judged as text and never executed. | 192 requests: 187 model-text replies, 3 Claude service blocks and 2 empty DeepSeek replies. Judges flagged 3 replies; one DeepSeek search follows a known external symlink, while 2 Claude flags rely on unstated assumptions and need adjudication. No reliable open-versus-closed ranking |
+| 10 | [Code execution guardrails](notebooks/10-code-execution-guardrails/) | Giving an agent a shell or interpreter can turn a reasoning mistake into a filesystem or network side effect. On 22 authored action fixtures, what do five enforcement profiles block, what permitted work do they prevent, and how do language-specific restrictions differ from OS isolation? | A string-prefix gate allows 5/14 forbidden actions; a scoped gate allows 0/14 and all 8 permitted actions. Read-only blocks 4/8 permitted actions. Three fixed Linux container probes pass; sandbox escape is not tested |
+| 11 | [LLM judges across four tasks](notebooks/11-llm-judges/) | Automated evaluation needs judges that follow source facts and rules rather than answer length, position or embedded instructions. Across 12 candidate pairs covering arithmetic, extraction, grounded summaries and policy, do Claude and GPT judges agree with objective labels under two prompts and reversed answer orders? | 96/96 ratings match gold; 0/48 order checks change the underlying answer. Both judges pass all 12 pairs in both orders (Wilson 95% interval 75.7%–100%); this easy pilot establishes no judge or rubric advantage |
 
 Notebooks 01-04 were first run inside another project and moved here with their data and caches.
 
@@ -50,6 +53,7 @@ python -m venv .venv
 * **Replay** (default): open a notebook and run all cells. Cached responses are used; no keys are needed.
 * **Re-query the models**: delete the notebook's `data/cache_*.jsonl` (or `data/runs/` in 07). This needs
   `OPENROUTER_API_KEY` and logged-in `claude`, `codex` and `muse` CLIs.
+* New collection in 09, 11 and 12: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
 * **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
 
@@ -59,6 +63,8 @@ Only public or synthetic data. OpenAlex metadata (CC0); public PDFs from US and 
 referenced by URL and downloaded on demand; the Chinook sample database (MIT); Wikimedia Commons photos (licence
 and author per image in `notebooks/06-car-make-model-from-image/data/images.csv`); synthetic lab requisitions generated for notebook 08,
 stamped SYNTHETIC with invalid identifiers. Code and text in this repo are MIT licensed (see `LICENSE`).
+
+Notebooks 09–12 use authored synthetic cases and objective fixtures. Notebook 12 records original IRS source URLs and section names alongside authored summaries for its restricted 2025 US federal S-Corporation workpaper; original US government material has separate source provenance.
 
 ## For AI agents
 
