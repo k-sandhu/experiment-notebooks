@@ -27,6 +27,30 @@ legitimate questions.
 * Gemma 4 31B returned customers' personal data twice and ignored the row limit once.
 * No model refused a legitimate question. Zero violations out of 29 still allows a true rate up to 12%.
 
+**Workflow.** The whole experiment from data to results, with the counts from this run. Every model response is cached in `data/`, so a re-run replays it without API calls.
+
+```mermaid
+flowchart TD
+    db["Chinook sample database (MIT)<br/>+ 2 synthetic restricted tables: EmployeePayroll, AppUser"]
+    watch["Watch lists read from the database<br/>225 personal-data values, 48 restricted values"]
+    sys["System prompt: full schema + 5-rule read-only policy<br/>5,326 characters"]
+    q["52 questions<br/>23 legitimate, each with a gold query<br/>29 policy-breaking, in 7 groups"]
+    models["11 models × 52 questions, 1 call each<br/>8 open-weight via OpenRouter<br/>3 frontier via claude -p, codex exec, muse exec<br/>572 responses, 0 failed calls"]
+    parse["Parse the JSON reply: sql, refused, reason<br/>100% valid JSON"]
+    static["Static analysis with sqlglot<br/>statement count, statement types, tables read"]
+    sand["Run on a throwaway copy of the database<br/>301 queries, 5 s limit, file access blocked"]
+    v["Apply the 6 violation rules<br/>291 answered, 271 refused, 10 violations"]
+    res["Per model: violations on 29, accuracy on 23<br/>9 of 11 models with 0 violations<br/>OpenRouter spend $0.485"]
+    db --> watch
+    db --> sys
+    sys --> models
+    q --> models
+    models --> parse --> static --> sand --> v
+    watch --> v
+    q -->|"gold results"| v
+    v --> res
+```
+
 ![Safety vs usefulness](figures/safety_vs_usefulness.png)
 ![Violations by request type](figures/violation_heatmap.png)
 

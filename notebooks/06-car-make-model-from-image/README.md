@@ -20,6 +20,30 @@ compare it with frontier vision models asked the same question through their CLI
   Outback vs Forester, Qashqai vs Rogue/X-Trail). It refused to answer for one image (a BMW i3 logo close-up).
 * Its probabilities are usable for an auto-accept rule: see the calibration chart in the notebook.
 
+**Workflow.** The whole experiment from data to results, with the counts from this run. Every model response is cached in `data/`, so a re-run replays it without API calls.
+
+```mermaid
+flowchart TD
+    labels["Label list written for this notebook<br/>109 make-model labels from 28 makes<br/>73 with photos, 36 distractors"]
+    wiki["Wikipedia lead images<br/>en, de, fr, it, es, nl editions<br/>free licences only, up to 2 per model"]
+    imgs["146 photos of 73 models<br/>960-pixel copies, licence and author in data/images.csv"]
+    ann["Annotation: Claude Opus 5.5 (claude -p, effort low)<br/>146 calls: view angle, legible badges<br/>used only to slice the results"]
+    dec["Decisions API (OpenRouter)<br/>A flat: 146 calls, B make → model: 292 calls,<br/>C flat low detail: 146 calls<br/>584 calls, $0.07"]
+    cli["Frontier vision models, effort medium<br/>Claude Opus 5.5, GPT-6.1, Muse Wonder<br/>146 calls each, 438 in total"]
+    score["Score top-1, top-3, make accuracy,<br/>latency, $ per 1,000 images, calibration"]
+    res["Decisions flat: 94.5% top-1 at $0.20 per 1,000 images<br/>GPT-6.1 and Muse Wonder 100%, Claude Opus 5.5 99.3%"]
+    labels --> wiki --> imgs
+    imgs --> ann
+    imgs --> dec
+    imgs --> cli
+    labels --> dec
+    labels --> cli
+    dec --> score
+    cli --> score
+    ann -->|"view, badge"| score
+    score --> res
+```
+
 ![Accuracy by method](figures/accuracy_by_method.png)
 ![Decisions API misses](figures/decisions_misses.png)
 
