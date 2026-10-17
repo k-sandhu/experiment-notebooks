@@ -34,6 +34,24 @@ step's cost and benefit is measured.
   the planner's reply arrived after it had finished and was silently lost. A harness should report that.
 * Nesting cost 35 LLM calls instead of 11, and the final answer picked up weather figures that no tool returned.
 
+**Workflow.** The whole experiment from data to results, with the counts from this run. Every run is recorded in `data/runs/`, so a re-run replays it without CLI calls.
+
+```mermaid
+flowchart TD
+    world["Simulated tools with fixed data and delays<br/>flights 3 s, hotels 4 s, backup hotels 5 s, weather 2 s<br/>correct total known: €3,316"]
+    harness["Harness built in this notebook<br/>Runtime, one thread and inbox per agent, 16 actions"]
+    levels["7 levels, one recorded run each<br/>planner: Claude Sonnet 5.5, subagents: Claude Haiku 5.5<br/>every agent step is one claude -p call"]
+    runs["data/runs: 7 JSON records, replayed by default<br/>spans, messages, LLM log, final answer<br/>144 LLM calls and 71 tool calls in total"]
+    tl["Timelines drawn from the records<br/>figures/L0.png to L6.png"]
+    cmp["Comparison per level<br/>wall-clock, LLM calls, share of time the planner is blocked, correct answer"]
+    res["All 7 answers correct<br/>async spawn 57 s vs 82 s for one agent, sync handoff 120 s"]
+    world --> harness --> levels --> runs
+    runs --> tl
+    runs --> cmp
+    tl --> res
+    cmp --> res
+```
+
 ![Level 4 timeline](figures/L4.png)
 
 **The task.** Plan a trip for two (Toronto → Lisbon → Rome → Prague → Toronto) with cheapest flights and the cheapest

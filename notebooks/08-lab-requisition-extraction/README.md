@@ -24,6 +24,32 @@ handwriting.
 * The hardest fields for every model: date of birth split across yyyy/mm/dd boxes (68% across models), the
   clinician's urgent-results phone, and addresses.
 
+**Workflow.** The whole experiment from data to results, with the counts from this run. Every model response is cached in `data/`, so a re-run replays it without API calls.
+
+```mermaid
+flowchart TD
+    gen["Synthetic requisition generator from an earlier project<br/>seeds 4422, 8424, 2284"]
+    docs["24 requisition images<br/>10 scans of form 4422-84, 8 phone photos of it,<br/>6 scans of an Ontario-style layout"]
+    gt["Ground truth per image<br/>20 scored fields, 102 ordered tests in total,<br/>a bounding box for every mark"]
+    prompt["One prompt for every model<br/>output schema, 31 canonical test names, the marking rule"]
+    cli["3 frontier models via CLI, effort medium<br/>Claude Opus 5.5, GPT-6.1, Muse Wonder<br/>72 calls"]
+    open["4 open-weight models via OpenRouter, temperature 0<br/>Qwen3.8 Flash, Gemma 4 31B, Nemotron 3.5 Super VL, Muse Spark Open<br/>96 calls + 8 retries with 20,000 tokens"]
+    parse["Parse the first JSON object<br/>167 of 168 replies parsed"]
+    score["Deterministic scoring<br/>3,360 field judgements, 876 test judgements"]
+    res["Test F1: Claude Opus 5.5 1.00, GPT-6.1 0.995, best open model 0.94<br/>OpenRouter spend $0.536"]
+    gen --> docs
+    gen --> gt
+    docs --> cli
+    docs --> open
+    prompt --> cli
+    prompt --> open
+    cli --> parse
+    open --> parse
+    parse --> score
+    gt --> score
+    score --> res
+```
+
 ![Ordered-test extraction](figures/tests_overall.png)
 ![Recall by test source and F1 by subset](figures/tests_by_source_subset.png)
 
