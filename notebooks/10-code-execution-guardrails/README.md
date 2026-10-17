@@ -1,12 +1,27 @@
 # Execution guardrails for AI agents
 
-A string-prefix gate allowed 5/14 forbidden actions. Scoped capabilities allowed 0/14 and all eight
-permitted actions; read-only blocked four of eight permitted actions. The five profiles made 110 decisions
-on 22 authored fixtures. Model spend was $0.
+Notebook 09 asks whether a model proposes a forbidden action. This notebook asks what happens when it does, or
+when an attacker's text makes it: the action reaches whatever code decides whether to run it. The usual first
+version of that code is a string check, such as allowing a delete only if the path starts with `/project/tmp/`.
+String checks are easy to write and easy to get past. A path like `/project/tmp/../secrets` starts with the right
+prefix, so does a link inside `tmp/` that points somewhere else, and an "approved by admin" line inside a ticket
+looks like an approval to anything that only reads text.
 
-This notebook compares five permission profiles to show what each enforces and what permitted work it
-blocks. It then demonstrates fixed benign broker operations and language-specific execution controls.
-All unsafe requests remain data.
+The alternative stops treating commands as text. The agent gets a few typed operations (read this file, write a
+report under `output/`, delete one scratch file with a matching approval token), and every path is resolved before
+it is checked. That blocks more, but every restriction also blocks some legitimate work, and that cost is rarely
+measured.
+
+**Question.** On 22 requests with known right answers (8 permitted, 14 forbidden), what does each of five
+enforcement profiles let through, and how much legitimate work does each block? No model is called: the requests
+are fixed, so the profiles are compared on identical inputs.
+
+**Result.** The lexical prefix check let through 5 of 14 forbidden actions. Scoped capabilities (typed operations
+on resolved paths) let through none and still allowed all 8 permitted ones. A read-only profile also blocked every
+forbidden action, but it blocked half the legitimate work too (4 of 8). These are checks on fixed cases in a
+virtual filesystem; they do not show resistance to sandbox escape.
+
+Five profiles over 22 fixtures make 110 gate decisions. Model spend was $0.
 
 | Profile | Forbidden actions allowed | Permitted actions allowed |
 |---|---:|---:|

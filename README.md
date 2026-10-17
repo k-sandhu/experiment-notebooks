@@ -1,17 +1,33 @@
 # Experiment notebooks
 
-Small, self-contained experiments with language models on document work and agent systems. Each notebook
-states its question first, runs end to end, and is committed with its outputs. Every model response is cached
-in the notebook's `data/` folder, so you can read the results on GitHub or re-run a notebook offline without any
-API key.
+Companies are starting to give language models two kinds of work. One is reading: sorting incoming documents,
+finding the passage that answers a question, pulling fields off a scanned form. The other is acting: running
+database queries, editing files, calling tools, directing other agents. Before either goes into production,
+someone has to answer three questions for their own task, and public benchmarks rarely do:
 
-## Notebooks
+- How often is the model right on documents like ours, and what does each answer cost?
+- When it reports high confidence, can we accept the answer without a person checking it?
+- When it is wrong, what does the mistake look like, and what stops a wrong action from doing damage?
 
-Five notebooks (01-04, 06) test OpenAI's **Decisions API** (`openai/gpt-6-luna-decisions`, served by OpenRouter).
-It is not a chat model. You send it evidence (text or an image) and multiple-choice or yes/no questions, and it
-returns a probability for every option instead of writing an answer. That makes it cheap and fast for
-classification, and the probabilities can decide which answers to accept automatically and which to send to a
-person.
+Each notebook takes one such task, builds a small test with known right answers (from public documents or
+synthetic cases written for it), and measures accuracy, cost and failure modes on current models. The tests are
+small on purpose, tens to a few hundred items: enough to show where a method breaks and what to test at scale,
+not enough to rank models in general. Each notebook states its question first, runs end to end and is committed
+with its outputs. Every model response is cached in the notebook's `data/` folder, so you can read the results on
+GitHub or replay a notebook offline without an API key.
+
+## Reading documents
+
+A document pipeline starts with three steps: work out what arrived, cut it into pieces a search can find, and
+pull out the fields that matter. A mistake at any step carries into everything after it. A misfiled permit is
+never searched, a chunk that splits a section returns half an answer, and a missed checkbox on a lab form is a
+test that never runs.
+
+Five of these notebooks (01-04, 06) test OpenAI's **Decisions API** (`openai/gpt-6-luna-decisions`, served by
+OpenRouter). It is not a chat model. You send it evidence (text or an image) and multiple-choice or yes/no
+questions, and it returns a probability for every option instead of writing an answer. That makes it cheap and
+fast for classification, and the probabilities can decide which answers to accept automatically and which to
+send to a person.
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
@@ -19,13 +35,24 @@ person.
 | 02 | [Decisions API chunking](notebooks/02-decisions-api-chunking/) | Retrieval-augmented generation (RAG) systems cut long documents into chunks and search the chunks to answer questions. A chunk that splits a section or joins two sections is harder to find and to quote. On six public documents, can the Decisions API's probability that "a new section starts here" place chunk boundaries better than fixed-size windows, recursive splitting, heading rules or embedding similarity? | Best at finding real section starts (average precision 0.60 vs 0.43 for a heading heuristic); 8% of its chunks mix two sections vs 46% for fixed windows. Retrieval recall@5 is the same for every chunker (0.76-0.79) |
 | 03 | [Document-type classification](notebooks/03-document-type-classification/) | Document pipelines often start by working out what kind of document arrived: a permit, a settlement, an inspection form, a recall notice. Notebook 01 used clean abstracts; this uses about 300 messy public PDFs from US and UK regulators. Can the Decisions API sort them into 101 document types, and how much of each document does it need to read? | One question over all 101 types: 90.9% top-1, $0.48 per 1,000 documents. The embedding shortlist that won in 01 drops to 88% here; reading 8,000 characters instead of 2,000 adds 4 points |
 | 04 | [Industry document chunking](notebooks/04-industry-document-chunking/) | Notebook 02's chunking test used six well-structured documents. Regulatory filings are harder: long permits, a 387-page utility rate case and inspection forms full of tables. On 12 such PDFs with 276 evidence quotes, does the Decisions API still place better chunk boundaries, and does that help retrieval? | Still the best boundary detector (average precision 0.35 vs 0.21 for headings); retrieval recall@5 unchanged (0.50-0.55 for all). Its boundaries split 22% of short evidence quotes vs 6-8% for other methods, so add chunk overlap |
-| 05 | [Text-to-SQL safety](notebooks/05-text-to-sql-safety/) | A text-to-SQL assistant turns an analyst's plain-English question into SQL that runs on a live database, so one bad query can change data or leak personal details. Given a written read-only policy, how often do 8 open-weight models write a query that breaks it on 29 policy-breaking requests, compared with Claude, GPT and Muse, and do they still answer 23 legitimate questions? | Claude, GPT, Muse Wonder and 6 of 8 open models: 0 violations on 29 policy-breaking requests. Mistral Small 4: 7 (one an `UPDATE` hidden in a "refused" reply); Gemma 4 31B: 3 |
 | 06 | [Car make and model from one photo](notebooks/06-car-make-model-from-image/) | Labelling photos against a fixed list (products, parts, vehicles) is a task where a probability per label is cheaper than generated text and gives a confidence score. Can the Decisions API name a car's make and model from one photo over 109 labels, and how does it compare with frontier vision models (Claude, GPT, Muse) on accuracy, cost and speed? | Decisions API: 94.5% top-1 over 109 labels at $0.20 per 1,000 images and 0.9 s per call; GPT-6.1 and Muse Wonder 100%, Claude Opus 5.5 99.3% at 4-12 s per call |
-| 07 | [Subagent handoff harness](notebooks/07-subagent-handoff-harness/) | Agent frameworks hide how a main agent hands work to subagents, receives their messages and decides when to wait for them. This builds that harness in plain Python one pattern at a time (synchronous handoff, async spawn, messages both ways, a subagent asking a question, racing, nesting) and runs each pattern with real Claude agents on the same trip-planning task. What does each pattern cost and gain in time and LLM calls? | All 7 levels correct. Async spawn: 57 s vs 82 s single agent; sync handoff slower (120 s). A late reply to a finished subagent is silently lost |
 | 08 | [Ontario lab requisition extraction](notebooks/08-lab-requisition-extraction/) | Labs receive paper test requisitions as scans, faxes and phone photos, and a missed checkbox is a test that never runs. The Ontario form has about 70 tests in a tight grid of small boxes, plus typed and handwritten patient details. On 24 synthetic forms with exact ground truth, can vision LLMs read which tests were ordered and the patient and clinician fields? | Claude Opus 5.5 read every marked test on 24 forms (F1 1.00); GPT-6.1 0.995, Muse Wonder 0.986; best open model 0.94, open models weak on phone photos and written-in tests |
-| 09 | [Proposed unsafe agent actions](notebooks/09-agent-action-safety/) | Enterprise agents can delete files, expose secrets or change production beyond their granted permissions. On 12 forbidden requests and 12 permitted controls, how often do two open-weight and two closed-weight model endpoints propose unsafe actions, and does an added checklist help? Commands are judged as text and never executed. | 192 requests: 187 model-text replies, 3 Claude service blocks and 2 empty DeepSeek replies. Judges flagged 3 replies; one DeepSeek search follows a known external symlink, while 2 Claude flags rely on unstated assumptions and need adjudication. No reliable open-versus-closed ranking |
-| 10 | [Code execution guardrails](notebooks/10-code-execution-guardrails/) | Giving an agent a shell or interpreter can turn a reasoning mistake into a filesystem or network side effect. On 22 authored action fixtures, what do five enforcement profiles block, what permitted work do they prevent, and how do language-specific restrictions differ from OS isolation? | A string-prefix gate allows 5/14 forbidden actions; a scoped gate allows 0/14 and all 8 permitted actions. Read-only blocks 4/8 permitted actions. Three fixed Linux container probes pass; sandbox escape is not tested |
-| 11 | [LLM judges across four tasks](notebooks/11-llm-judges/) | Automated evaluation needs judges that follow source facts and rules rather than answer length, position or embedded instructions. Across 12 candidate pairs covering arithmetic, extraction, grounded summaries and policy, do Claude and GPT judges agree with objective labels under two prompts and reversed answer orders? | 96/96 ratings match gold; 0/48 order checks change the underlying answer. Both judges pass all 12 pairs in both orders (Wilson 95% interval 75.7%–100%); this easy pilot establishes no judge or rubric advantage |
+
+## Letting models act
+
+Once a model can run a query or edit a file, a wrong answer becomes a wrong action. These notebooks test the
+layers between what a model writes and what it changes: whether it respects written permissions (05, 09), what
+should enforce them when it does not (10), how agents hand work to each other (07), whether one model can grade
+another (11), and whether review loops make a model more reliable at regulated work (12).
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 05 | [Text-to-SQL safety](notebooks/05-text-to-sql-safety/) | A text-to-SQL assistant turns an analyst's plain-English question into SQL that runs on a live database, so one bad query can change data or leak personal details. Given a written read-only policy, how often do 8 open-weight models write a query that breaks it on 29 policy-breaking requests, compared with Claude, GPT and Muse, and do they still answer 23 legitimate questions? | Claude, GPT, Muse Wonder and 6 of 8 open models: 0 violations on 29 policy-breaking requests. Mistral Small 4: 7 (one an `UPDATE` hidden in a "refused" reply); Gemma 4 31B: 3 |
+| 07 | [Subagent handoff harness](notebooks/07-subagent-handoff-harness/) | Agent frameworks hide how a main agent hands work to subagents, receives their messages and decides when to wait for them. This builds that harness in plain Python one pattern at a time (synchronous handoff, async spawn, messages both ways, a subagent asking a question, racing, nesting) and runs each pattern with real Claude agents on the same trip-planning task. What does each pattern cost and gain in time and LLM calls? | All 7 levels correct. Async spawn: 57 s vs 82 s single agent; sync handoff slower (120 s). A late reply to a finished subagent is silently lost |
+| 09 | [Proposed unsafe agent actions](notebooks/09-agent-action-safety/) | An assistant with a terminal can delete files, read secrets or push code, and its written permissions are often the only guard. On 12 forbidden requests, each paired with a similar permitted one, how often do two open-weight models (DeepSeek, Gemma) and two closed ones (Claude, GPT) propose an action outside their permissions, how many permitted requests do they complete, and does a checklist in the prompt help? Proposed commands are judged as text by other models and never run. | On 96 forbidden requests the judges flagged one reply, and that flag is disputed. The clearest problem was on a permitted request: a search that follows a symlink out of the project. GPT-6.1 completed 12/12 permitted requests, Gemma 4 31B 5/12; the checklist did not reduce flags |
+| 10 | [Code execution guardrails](notebooks/10-code-execution-guardrails/) | When a model proposes a forbidden action, the code that decides whether to run it is the last guard, and a string check on the path is easy to get past. On 22 requests with known right answers (8 permitted, 14 forbidden), what do five enforcement designs let through, and how much legitimate work does each block? | A path-prefix check let through 5/14 forbidden actions. Typed operations on resolved paths let through 0/14 and kept all 8 permitted ones. Read-only also allowed 0/14 but blocked 4/8 permitted actions |
+| 11 | [LLM judges across four tasks](notebooks/11-llm-judges/) | Many evaluations, including notebook 09, use one model to grade another, and judges can favour the first or the longer answer. On 12 pairs where one answer is objectively right (arithmetic, extraction, grounded summaries, policy decisions), do Claude and GPT judges pick it, with and without an evidence rubric, and with the order swapped? | Both judges were right in 96/96 ratings and never changed their pick when the order was swapped. The pairs were too easy to tell the judges apart: a perfect score on 12 pairs still allows a true accuracy as low as 76% |
+| 12 | [Tax workpaper harnesses](notebooks/12-tax-research-harnesses/) | An S-Corporation tax workpaper is mechanical but unforgiving: one misclassified ledger line flows into every shareholder's numbers, and some cases need an accountant's judgment. On 12 fictional 2025 US S-Corps, do detailed instructions, a self-review pass, feedback from a custom validator or the smolagents agent framework give more fully correct workpapers than one direct call, at the same model and call budget? | No. Qwen3.8 Flash's direct call got 12/12, and review steps only matched or lowered that (generic self-review with detailed instructions: 9/12). Gemma 4 31B got 0/12 in every setup. All 24 Qwen framework runs failed because the provider rejects the framework's default tool setting |
 
 Notebooks 01-04 were first run inside another project and moved here with their data and caches.
 

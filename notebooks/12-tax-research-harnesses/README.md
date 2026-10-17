@@ -1,9 +1,26 @@
 # Custom harnesses for US S-Corporation tax research and preparation
 
-Qwen3.8 Flash direct calls passed 12/12 cases under both instruction conditions. Detailed custom feedback passed 11/12 and detailed generic self-review 9/12; Gemma 4 31B passed 0/12 in every arm. None of 12 predeclared paired contrasts had a 95% case-bootstrap interval above zero. All 24 Qwen framework runs failed at HTTP transport because its provider rejects required tool choice in thinking mode. The framework comparison therefore includes a transport failure. Twelve authored cases cannot establish general tax reliability.
+An S-Corporation tax workpaper is a fair test of regulated professional work. The steps are mechanical but
+unforgiving: classify every ledger line, compute ordinary business income, separate out the items reported on
+their own (interest, charitable gifts), split everything among shareholders by ownership, and cite the rule behind
+each step. One misclassified line flows into every shareholder's numbers. Some cases also need judgment the model
+should not exercise alone: an owner who works in the business but takes no wages, or a client note saying "deduct
+my personal draws", should go to an accountant, not be resolved by the model.
 
-The experiment tests whether detailed tax instructions and a custom validation loop improve draft workpapers
-over a simple call, generic self-review or smolagents. It holds the model, facts, source packet and call cap fixed.
+When a model gets work like this wrong, the usual answer is a harness around it: longer instructions, a
+self-review pass, a validator that sends errors back, or an agent framework. Each adds cost and complexity. The
+deployment question is whether any of them helps at the same model and the same number of calls.
+
+**Question.** On 12 fictional 2025 US S-Corps, do detailed instructions, generic self-review, feedback from a
+custom validator or the smolagents framework produce more fully correct workpapers than one direct call? Gemma 4
+31B and Qwen3.8 Flash each run every combination of 2 instruction levels and 4 harnesses: 192 runs.
+
+**Result.** No: the model mattered more than the harness. Qwen3.8 Flash's single direct call got all 12 right
+under both instruction levels, and Gemma 4 31B got none right in any setup. Review steps could only match or lower
+Qwen's score: generic self-review with detailed instructions got 9 of 12, and custom feedback 11 of 12. None of
+the 12 planned paired comparisons showed a gain whose 95% interval was above zero. For Qwen the framework could
+not be compared at all: its hosting provider rejects the framework's default tool setting in thinking mode, so all
+24 of those runs failed before writing a workpaper. Twelve cases cannot establish general tax reliability.
 
 Calendar-year 2025 US federal S-Corps: ordinary business income, separately stated portfolio
 interest/qualifying cash charity, cash distributions, constant-year shareholder allocations, applicable source

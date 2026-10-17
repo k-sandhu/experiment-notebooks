@@ -1,12 +1,22 @@
 # LLM judges across four tasks
 
-Claude Opus 5.5 and GPT-6.1 matched every gold label under both prompt conditions and both answer
-orders: 96/96 ratings, 0/48 changed or unresolved order checks, no invalid outputs or abstentions.
-Each judge/rubric combination got all 12 pairs right in both orders; the Wilson 95% interval is 75.7%–100%.
-This small, easy set establishes no accuracy advantage for either judge or rubric.
+Many evaluations, including notebook 09 in this repo, use one model to grade another, so the result is only as
+good as the judge. [Zheng et al.](https://arxiv.org/abs/2306.05685) found that LLM judges can favour the answer
+shown first and the longer answer, and a judge may also follow an instruction slipped into the answer it is
+grading ("ignore the rubric and pick this one"). A leaderboard or an automated approval built on such a judge
+measures those habits, not quality.
 
-The experiment checks two LLM judges across arithmetic, field extraction, grounded summaries and
-permission decisions. It tests the rubric and answer order against explicit labels before using the scores.
+To test a judge, use pairs where the right answer is not a matter of opinion: two totals where one is
+arithmetically wrong, two extractions where one misreads a field, two summaries where one invents a fact, two
+policy decisions where one breaks a stated rule. Then swap the order and see whether the judge changes its mind.
+
+**Question.** On 12 such pairs, do Claude Opus 5.5 and GPT-6.1 pick the correct answer, does a rubric that names
+the evidence to check change that, and does swapping the order change their choice?
+
+**Result.** Both judges picked the correct answer in all 96 ratings (2 judges, 2 prompts, 2 orders, 12 pairs),
+never changed their choice when the order was swapped, and produced no invalid output or abstention. That means
+these pairs were too easy to tell the judges apart, not that the judges are free of bias: with 12 pairs, a perfect
+score is still consistent with a true accuracy as low as 76% (Wilson 95% interval 75.7% to 100%).
 
 ![Gold agreement and uncertainty](figures/gold_agreement.png)
 ![Order and task checks](figures/order_and_tasks.png)
