@@ -21,6 +21,38 @@ notebooks/NN-short-name/
   for a new or re-run notebook, the headline result and the spend.
 - A PR that adds a notebook also adds its row to the table in the root `README.md`.
 
+## Claim a notebook number before you start
+
+Several agents may build notebooks at the same time. To keep two of them from picking the same `NN`, claim
+the number with a GitHub issue before you create any file for a new notebook.
+
+1. **Find the lowest free number**: the lowest `NN` not used by a folder in `notebooks/` on `origin/main`
+   and not claimed by an open issue titled `Notebook NN: ...`.
+
+   ```bash
+   git fetch origin
+   git ls-tree -d --name-only origin/main notebooks/
+   gh issue list --state open --search "Notebook in:title" --json number,title
+   ```
+
+2. **Open the claim issue.** Title `Notebook NN: short-name`. The body gives the question, the data, the
+   models, a cost estimate and the branch name (`add-NN-short-name`).
+
+   ```bash
+   gh issue create --title "Notebook 09: short-name" --body "Question: ... Data: ... Models: ... Branch: add-09-short-name"
+   ```
+
+3. **Check for a race.** List open claim issues again. If another open issue claims the same `NN` and has a
+   lower issue number, it keeps the number: retitle yours to the next free number
+   (`gh issue edit <issue> --title "Notebook 10: short-name"`) and check again.
+4. **Use the number everywhere**: folder, notebook file name, branch and PR title. The PR body says
+   `Closes #<issue>`, so merging the PR closes the claim.
+5. **Release a number you will not use.** If you stop, comment on the issue and close it as not planned
+   (`gh issue close <issue> --reason "not planned"`). The number is then free for the next agent.
+
+Do not rename or renumber another agent's notebook or issue. If you find a notebook folder in your working
+tree with no claim issue, ask the user before touching it.
+
 ## Rules for notebooks
 
 - **Self-contained.** A notebook imports nothing from this repo. Helpers (CLI wrappers, caches, plot style)
@@ -114,10 +146,84 @@ private or client data. Large public files (PDFs) are downloaded on demand and g
 
 ## Writing style
 
-Plain, specific, short. State what was measured and what it showed, with numbers.
+Plain, specific, short. State what was measured and what it showed, with numbers. Write for a reader who
+knows Python but has not seen this experiment. These rules apply to notebook markdown, READMEs, PR
+descriptions and issues.
 
-- No filler or hype: "delve", "crucial", "robust", "seamless", "leverage", "unlock", "game-changer",
-  "it's worth noting", "in today's fast-paced world", "comprehensive".
-- No rhetorical questions as headings, no emoji, no exclamation marks.
-- Do not claim more than the data supports. Small samples get confidence intervals or a caveat.
-- Prefer a table or a number over an adjective.
+LLM-written text has recognisable habits: a small set of overused words, stock sentence shapes and
+formatting tics. One instance is harmless; several together make a page read as generated and hide the
+findings. The lists below come from Wikipedia's [Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing)
+guide (WikiProject AI Cleanup) and from studies of words whose frequency jumped in scientific abstracts after
+2022 ([Kobak et al.](https://arxiv.org/abs/2406.07016), [Juzek and Ward](https://arxiv.org/abs/2412.11385)).
+
+### Do
+
+- **Lead with the finding and its number.** "Claude Opus 5.5 read every marked test on 24 forms (F1 1.00)",
+  not "The results reveal interesting patterns across models".
+- **Name things.** The model, the dataset, the count, the file: "146 photos of 73 car models", not "a
+  diverse set of images".
+- **Use plain verbs.** "is", "has", "uses", "shows", "returns".
+- **Keep one name per thing.** Once a method is "Decisions + DP" it stays "Decisions + DP". Do not rotate
+  synonyms for variety; a reader takes a new word for a new thing.
+- **Hedge once, where the doubt is, and say why.** "0 violations in 29 requests still allows a true rate up
+  to 12%", not "this may potentially suggest the model is safe".
+- **Say what a model did, not what it thought.** "returned", "wrote", "chose label X", not "understood" or
+  "realised".
+- **Use sentences for reasoning and bullets for parallel items.** A chain of "because" and "so" belongs in
+  a paragraph.
+- **Stop when the content stops.** A section ends with its last finding. A closing section gives a decision
+  or recommendation, not a recap of numbers the reader just saw.
+- **Attribute claims** to a named, linked source or to this notebook's own results.
+
+### Avoid
+
+**Overused words.** delve, tapestry, testament, intricate, meticulous(ly), pivotal, crucial, vital, robust,
+seamless, leverage, harness (as a verb; an agent harness is fine), unlock, elevate, empower, foster, underscore, showcase, realm, landscape,
+navigate (figurative), journey, embark, game-changer, cutting-edge, groundbreaking, transformative,
+holistic, multifaceted, nuanced, comprehensive, invaluable, vibrant, boasts, notably, additionally,
+furthermore, moreover, "plays a key role", "a wide range of", "a myriad of", "valuable insights". Use the
+plain word, or delete the phrase.
+
+**Sentence patterns.**
+
+| Pattern | Example | Instead |
+|---|---|---|
+| Denying a claim nobody made | "It's not just a classifier, it's a triage system." "Not only cheap but also fast." | State the claim: "It costs $0.20 per 1,000 images and answers in 0.9 s." |
+| Rule of three | "fast, reliable and scalable" | List what you measured, however many items that is. |
+| Trailing "-ing" significance | "..., highlighting the importance of calibration." "..., underscoring the need for overlap." | Make it a separate claim with its evidence, or cut it. |
+| Inflated "is" | "serves as", "stands as", "functions as", "features", "boasts" | "is", "has". |
+| Significance inflation | "marks a pivotal moment", "sets the stage for", "in an evolving landscape" | Say what changed and by how much. |
+| Teaser or colon reveal | "The result? ...", "Here's the catch:", "The answer is simple:" | State the result. |
+| Throat clearing and signposting | "It's worth noting that", "It's important to note", "Let's dive in", "In this section we will explore" | Start with the content. |
+| Recap endings | "In conclusion", "Overall,", "In summary", "Key takeaways" that repeat the section | End on the last finding. |
+| Vague attribution | "Studies show", "Experts agree", "It is widely known" | Name and link the source, or drop the claim. |
+| Stacked hedges | "may potentially", "could possibly suggest", "it seems that perhaps" | One hedge with its reason. |
+| Unmeasured intensifiers | "significantly" (with no test), "dramatically", "substantially", "remarkably" | The number, and the test or interval if you claim significance. |
+| Filler openers and false ranges | "In today's fast-paced world", "When it comes to", "from beginners to experts" | Delete. |
+| Promotional tone | "powerful", "impressive", "exciting", "state-of-the-art" | A measured comparison. |
+| Chatbot residue | "Certainly", "Great question", "I hope this helps", "Let me know if", "Here is the updated notebook", knowledge-cutoff notes | Delete. None of it belongs in a committed file. |
+
+**Formatting.**
+
+- Bold only a headline number or a term where it is defined. Not a phrase in every sentence.
+- In notebook prose and READMEs, do not give every bullet a bold lead-in and a colon ("**Speed:** ...").
+  Write the sentence.
+- Headings in sentence case ("Accuracy by view angle"), not Title Case. No rhetorical questions as headings.
+- No em dashes. Use a comma, a colon, parentheses or a new sentence.
+- No emoji, no exclamation marks, no horizontal rules between sections.
+- Use a table to compare several items on several attributes, not to hold two facts.
+
+**Claims.** Do not claim more than the data supports. Small samples get confidence intervals or a caveat.
+Prefer a table or a number over an adjective.
+
+### Check before you commit
+
+Read the changed text once against the lists above, then search the files you wrote for the overused words
+and for em dashes (replace the paths with your notebook's):
+
+```bash
+grep -niE "\b(delv(e|es|ed|ing)|tapestry|testament|intricate|meticulous(ly)?|pivotal|crucial|robust|seamless(ly)?|leverag(e|es|ed|ing)|unlock(s|ed|ing)?|underscor(e|es|ed|ing)|showcas(e|es|ed|ing)|realm|landscape|game-changer|cutting-edge|groundbreaking|transformative|holistic|multifaceted|comprehensive|furthermore|moreover|additionally|notably|it's worth noting)\b|—" notebooks/09-short-name/*.ipynb notebooks/09-short-name/README.md
+```
+
+Rewrite every hit in prose. Leave a word that is literal or sits in code or output (a "robust" estimator, a
+column named `landscape`).

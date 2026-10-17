@@ -62,5 +62,6 @@ stamped SYNTHETIC with invalid identifiers. Code and text in this repo are MIT l
 
 ## For AI agents
 
-See [AGENTS.md](AGENTS.md): layout, the pull-request workflow, self-containment, workflow diagrams and
-explainers, how to call models, and the writing style.
+See [AGENTS.md](AGENTS.md): layout, the pull-request workflow, claiming a notebook number with an issue,
+self-containment, workflow diagrams and explainers, how to call models, and the writing style (including
+LLM prose habits to avoid).
