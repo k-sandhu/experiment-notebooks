@@ -77,6 +77,17 @@ of topic, formatting or wording.
 |---|---|---|---|
 | 13 | [Attributing older model outputs](notebooks/13-older-model-attribution/) | Checking a claimed text source can expose a substituted model, but topic or formatting can give the answer away. On 100 fresh texts from four older endpoints in two families, can five newer models name the source on ten held-out prompts (40 texts), compared with trained character and embedding classifiers? | GPT-6.1 / few-shot: 27/40 (67.5%); character classifier 16/40 (40.0%, 12 training texts), embedding baseline 14/40 (35.0%); chance 25%. The identical-order GPT zero-shot repeat changes 13/40 guesses. Shared calls connect all ten prompts; no population confidence interval or general ranking. Serving-provider confounds remain |
 
+## Predicting from tables
+
+When only a few labeled rows exist, an analyst still needs to predict the next category or number. A pretrained
+tabular model can use those examples as context without updating its weights. The useful comparison is with
+ordinary fitted models on the same rows, including inputs outside the examples' range. Balanced accuracy gives
+each class equal weight; numeric mean absolute error (MAE) is the average size of a prediction error.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 14 | [Zero-shot prediction from small tables](notebooks/14-tabular-zero-shot/) | A new process may have only a few labeled outcomes, so a prediction must work before there is much data to tune it. On 24 fresh synthetic numeric tables (four mechanisms, classification and regression, three seeds), how does pretrained TabPFN compare with four fitted baselines using 32 or 128 labeled examples and 128 held-out rows? | At 128 labeled rows, TabPFN balanced accuracy 82.9% vs 71.7% for Random forest; numeric MAE 0.198 times a constant predictor vs 0.479 for Gradient boosting. Four synthetic mechanisms do not establish a real-data ranking |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
@@ -98,6 +109,7 @@ Notebooks 01-04 were first run inside another project and moved here with their 
 | OpenAI | GPT-6.1 | `codex exec` (Codex CLI), read-only sandbox |
 | Meta | Muse Wonder | `muse exec` (Muse CLI), empty preset |
 | OpenAI Decisions API | `openai/gpt-6-luna-decisions` | OpenRouter HTTP API (there is no CLI for it) |
+| Prior Labs | TabPFN-3.5, numeric tabular classification and regression | Prior Labs REST API, labeled context and unlabeled test features |
 | Open-weight models | Llama 3.1, DeepSeek, Qwen, GLM, Kimi, Gemma, Mistral, gpt-oss, Muse Spark Open, Nemotron | OpenRouter HTTP API |
 
 Paid OpenRouter calls are small by default and every notebook has a size knob at the top (`N_DOCS`,
@@ -116,6 +128,7 @@ python -m venv .venv
   `OPENROUTER_API_KEY` and logged-in `claude`, `codex` and `muse` CLIs.
 * New collection in 09, 11, 12 and 13: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
 * Notebook 13 verifies cached evidence before replay. For a new collection, use a separate copy and follow its README; keep the committed cache intact.
+* Notebook 14 uses `PRIORLABS_API_KEY` and `NB_LIVE=1` for new collection, with a checked computation-token cap. Its default replay reads 48 saved responses without network access.
 * **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
 
@@ -130,6 +143,8 @@ New notebooks use data the models cannot have seen: synthetic data written for t
 created after every tested model's training cutoff (for time series, the last one to two months), with creation
 dates recorded. Notebooks 01-04 and 06 predate this rule. Their abstracts, PDFs and Wikipedia photos are older than
 the models, which may have seen them, so treat those accuracy figures as upper bounds.
+
+Notebook 14 uses 24 newly generated numeric tables with exact generation rules, seeds and input hashes.
 
 Notebooks 09-12 use authored synthetic cases and objective fixtures. Notebook 12 records original IRS source URLs and section names alongside authored summaries for its restricted 2025 US federal S-Corporation workpaper; original US government material has separate source provenance.
 
