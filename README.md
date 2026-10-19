@@ -75,7 +75,7 @@ of topic, formatting or wording.
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
-| 13 | [Attributing older model outputs](notebooks/13-older-model-attribution/) | Checking a claimed text source can expose a substituted model, but topic or formatting can give the answer away. On 100 fresh texts from four older endpoints in two families, can five newer models name the source on ten held-out prompts (40 texts), compared with trained character and embedding classifiers? | GPT-6.1 / few-shot: 27/40 (67.5%); character classifier 16/40 (40.0%, 12 training texts), embedding baseline 14/40 (35.0%); chance 25%. The identical-order GPT zero-shot repeat changes 13/40 guesses. Only ten prompt clusters, with serving-provider confounds |
+| 13 | [Attributing older model outputs](notebooks/13-older-model-attribution/) | Checking a claimed text source can expose a substituted model, but topic or formatting can give the answer away. On 100 fresh texts from four older endpoints in two families, can five newer models name the source on ten held-out prompts (40 texts), compared with trained character and embedding classifiers? | GPT-6.1 / few-shot: 27/40 (67.5%); character classifier 16/40 (40.0%, 12 training texts), embedding baseline 14/40 (35.0%); chance 25%. The identical-order GPT zero-shot repeat changes 13/40 guesses. Shared calls connect all ten prompts; no population confidence interval or general ranking. Serving-provider confounds remain |
 
 ## Planned experiments
 
