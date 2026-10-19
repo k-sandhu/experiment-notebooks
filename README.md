@@ -96,6 +96,14 @@ each class equal weight; numeric mean absolute error (MAE) is the average size o
 |---|---|---|---|
 | 14 | [Zero-shot prediction from small tables](notebooks/14-tabular-zero-shot/) | A new process may have only a few labeled outcomes, so a prediction must work before there is much data to tune it. On 24 fresh synthetic numeric tables (four mechanisms, classification and regression, three seeds), how does pretrained TabPFN compare with four fitted baselines using 32 or 128 labeled examples and 128 held-out rows? | At 128 labeled rows, TabPFN balanced accuracy 82.9% vs 71.7% for Random forest; numeric MAE 0.198 times a constant predictor vs 0.479 for Gradient boosting. Four synthetic mechanisms do not establish a real-data ranking |
 
+## Writing analyses
+
+An analysis must help its reader make a decision. These experiments separate the content of a model's draft from the preferences of the models asked to grade it, including whether naming the author or asking for a prose audit changes the score.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 15 | [Analytical writing and judge framing](notebooks/15-analytical-writing-style/) | A draft can contain the right numbers yet bury its decision in vague or repeated prose. On two fresh numerical cases in four genres (216 requested drafts), how do 27 writers fare under 30 model judges, and do author disclosure and an explicit prose audit change ratings of the same text? | Anonymous external clarity 88.9/100; audit 0.76 quoted issues per 100 words. Audit clarity change -1.66 points; neutral author-disclosure change -0.06. Model ratings on two cases, no human comprehension claim |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
@@ -112,9 +120,9 @@ Notebooks 01-04 were first run inside another project and moved here with their 
 
 | Provider | Models used | How |
 |---|---|---|
-| Anthropic | Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 | `claude -p` (Claude Code CLI), headless, no tools |
-| OpenAI | GPT-6.1 | `codex exec` (Codex CLI), read-only sandbox |
-| Meta | Muse Wonder | `muse exec` (Muse CLI), empty preset |
+| Anthropic | Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 and older versions in 15 | `claude -p` (Claude Code CLI), headless, no tools |
+| OpenAI | GPT-6.1, GPT-6 Astra/Sol/Luna and GPT-5.6 Sol/Terra/Luna | `codex exec` (Codex CLI), read-only sandbox |
+| Meta | Muse Spark 1.2/1.3 and Muse Wonder/Wonder Full | `muse exec` (Muse CLI), empty preset |
 | OpenAI Decisions API | `openai/gpt-6-luna-decisions` | OpenRouter HTTP API (there is no CLI for it) |
 | Prior Labs | TabPFN-3.5, numeric tabular classification and regression | Prior Labs REST API, labeled context and unlabeled test features |
 | Open-weight models | Llama 3.1, DeepSeek, Qwen, GLM, Kimi, Gemma, Mistral, gpt-oss, Muse Spark Open, Nemotron | OpenRouter HTTP API |
@@ -141,6 +149,8 @@ python -m venv .venv
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
 * Notebook 16 forecasts six public series through TSFM.ai. Its own `requirements.txt` pins the fitted-baseline libraries; replay needs no key. New collection requires `TS16_LIVE=1` and `TSFMAI_API_KEY`.
 
+Notebook 15 uses strict offline replay with an evidence manifest and a $10 OpenRouter guard. Its README gives model coverage and limits.
+
 ## Data and licences
 
 Only public or synthetic data. OpenAlex metadata (CC0); public PDFs from US and UK agencies and other publishers,
@@ -158,6 +168,8 @@ Notebook 14 uses 24 newly generated numeric tables with exact generation rules, 
 Notebooks 09-12 use authored synthetic cases and objective fixtures. Notebook 12 records original IRS source URLs and section names alongside authored summaries for its restricted 2025 US federal S-Corporation workpaper; original US government material has separate source provenance.
 
 Notebook 13 uses 100 fresh synthetic model outputs collected on 2026-10-19, with per-item timestamps and sourced model cutoff or release dates in its data folder. Its gold labels are the recorded generation endpoints.
+
+Notebook 15 uses two fresh numerical packets and model drafts collected on 2026-10-19, with exact answers generated in code and model date sources in its data folder.
 
 ## For AI agents
 
