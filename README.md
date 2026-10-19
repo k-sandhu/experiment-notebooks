@@ -13,7 +13,7 @@ This repo collects such experiments. Each notebook asks one question and answers
 included.
 
 - Some build intuition about a new tool. OpenAI's Decisions API returns a probability for every option instead of
-  writing text; five notebooks measure how accurate it is, on which kinds of decision, at what cost and speed, and
+  writing text; six notebooks measure how accurate it is, on which kinds of decision, at what cost and speed, and
   whether its probabilities can decide which answers to accept without review.
 - Some open up something usually hidden. Notebook 07 builds a subagent harness from scratch to show the handoffs,
   messages and waits that agent frameworks keep out of sight, and what each pattern costs in time and calls.
@@ -67,6 +67,16 @@ another (11), and whether review loops make a model more reliable at regulated w
 | 11 | [LLM judges across four tasks](notebooks/11-llm-judges/) | Many evaluations, including notebook 09, use one model to grade another, and judges can favour the first or the longer answer. On 12 pairs where one answer is objectively right (arithmetic, extraction, grounded summaries, policy decisions), do Claude and GPT judges pick it, with and without an evidence rubric, and with the order swapped? | Both judges were right in 96/96 ratings and never changed their pick when the order was swapped. The pairs were too easy to tell the judges apart: a perfect score on 12 pairs still allows a true accuracy as low as 76% |
 | 12 | [Tax workpaper harnesses](notebooks/12-tax-research-harnesses/) | An S-Corporation tax workpaper is mechanical but unforgiving: one misclassified ledger line flows into every shareholder's numbers, and some cases need an accountant's judgment. On 12 fictional 2025 US S-Corps, do detailed instructions, a self-review pass, feedback from a custom validator or the smolagents agent framework give more fully correct workpapers than one direct call, at the same model and call budget? | No. Qwen3.8 Flash's direct call got 12/12, and review steps only matched or lowered that (generic self-review with detailed instructions: 9/12). Gemma 4 31B got 0/12 in every setup. All 24 Qwen framework runs failed because the provider rejects the framework's default tool setting |
 
+## Recognising model outputs
+
+If a model is sold under the wrong name, a plausible answer gives no proof of its source. These experiments
+ask whether patterns in generated text can identify an endpoint, and whether that evidence survives a change
+of topic, formatting or wording.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 13 | [Attributing older model outputs](notebooks/13-older-model-attribution/) | Checking a claimed text source can expose a substituted model, but topic or formatting can give the answer away. On 100 fresh texts from four older endpoints in two families, can five newer models name the source on ten held-out prompts (40 texts), compared with trained character and embedding classifiers? | GPT-6.1 / few-shot: 27/40 (67.5%); character classifier 16/40 (40.0%, 12 training texts), embedding baseline 14/40 (35.0%); chance 25%. The identical-order GPT zero-shot repeat changes 13/40 guesses. Only ten prompt clusters, with serving-provider confounds |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
@@ -77,7 +87,6 @@ label. Each one gives the question, the fresh data to use, the models, the measu
 |---|---|
 | [#12](https://github.com/k-sandhu/experiment-notebooks/issues/12) | Across 12 to 15 new tasks (complaints, regulatory notices, recalls, weather alerts, wildlife photos, bird recordings, synthetic invoices), which kinds of decision does the Decisions API handle well, what does each cost, and when are its probabilities good enough to skip review? |
 | [#13](https://github.com/k-sandhu/experiment-notebooks/issues/13) | Forecasting the last one to two months of electricity demand, temperature, page views, exchange rates and air quality, how do general-purpose time-series models used without any fitting compare with classical per-series baselines, and what do they cost to run? |
-| [#14](https://github.com/k-sandhu/experiment-notebooks/issues/14) | Given text written by one of several older models, can a newer model tell which one wrote it, and does it recognise its own vendor's older models better? |
 
 Notebooks 01-04 were first run inside another project and moved here with their data and caches.
 
@@ -89,7 +98,7 @@ Notebooks 01-04 were first run inside another project and moved here with their 
 | OpenAI | GPT-6.1 | `codex exec` (Codex CLI), read-only sandbox |
 | Meta | Muse Wonder | `muse exec` (Muse CLI), empty preset |
 | OpenAI Decisions API | `openai/gpt-6-luna-decisions` | OpenRouter HTTP API (there is no CLI for it) |
-| Open-weight models | DeepSeek, Qwen, GLM, Kimi, Gemma, Mistral, gpt-oss, Muse Spark Open, Nemotron | OpenRouter HTTP API |
+| Open-weight models | Llama 3.1, DeepSeek, Qwen, GLM, Kimi, Gemma, Mistral, gpt-oss, Muse Spark Open, Nemotron | OpenRouter HTTP API |
 
 Paid OpenRouter calls are small by default and every notebook has a size knob at the top (`N_DOCS`,
 `OPEN_MODELS`, `IMAGES_PER_MODEL`, ...). Each notebook prints what it spent.
@@ -105,7 +114,8 @@ python -m venv .venv
 * **Replay** (default): open a notebook and run all cells. Cached responses are used; no keys are needed.
 * **Re-query the models**: delete the notebook's `data/cache_*.jsonl` (or `data/runs/` in 07). This needs
   `OPENROUTER_API_KEY` and logged-in `claude`, `codex` and `muse` CLIs.
-* New collection in 09, 11 and 12: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
+* New collection in 09, 11, 12 and 13: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
+* Notebook 13 verifies cached evidence before replay. For a new collection, use a separate copy and follow its README; keep the committed cache intact.
 * **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
 
@@ -122,6 +132,8 @@ dates recorded. Notebooks 01-04 and 06 predate this rule. Their abstracts, PDFs 
 the models, which may have seen them, so treat those accuracy figures as upper bounds.
 
 Notebooks 09-12 use authored synthetic cases and objective fixtures. Notebook 12 records original IRS source URLs and section names alongside authored summaries for its restricted 2025 US federal S-Corporation workpaper; original US government material has separate source provenance.
+
+Notebook 13 uses 100 fresh synthetic model outputs collected on 2026-10-19, with per-item timestamps and sourced model cutoff or release dates in its data folder. Its gold labels are the recorded generation endpoints.
 
 ## For AI agents
 
