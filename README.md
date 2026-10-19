@@ -78,6 +78,7 @@ label. Each one gives the question, the fresh data to use, the models, the measu
 | [#12](https://github.com/k-sandhu/experiment-notebooks/issues/12) | Across 12 to 15 new tasks (complaints, regulatory notices, recalls, weather alerts, wildlife photos, bird recordings, synthetic invoices), which kinds of decision does the Decisions API handle well, what does each cost, and when are its probabilities good enough to skip review? |
 | [#13](https://github.com/k-sandhu/experiment-notebooks/issues/13) | Forecasting the last one to two months of electricity demand, temperature, page views, exchange rates and air quality, how do general-purpose time-series models used without any fitting compare with classical per-series baselines, and what do they cost to run? |
 | [#14](https://github.com/k-sandhu/experiment-notebooks/issues/14) | Given text written by one of several older models, can a newer model tell which one wrote it, and does it recognise its own vendor's older models better? |
+| [#17](https://github.com/k-sandhu/experiment-notebooks/issues/17) | On 24 fresh numeric tables with known label rules, how does pretrained TabPFN compare with fitted baselines using 32 or 128 labeled examples for classification and regression? Claimed as notebook 14 in [#18](https://github.com/k-sandhu/experiment-notebooks/issues/18). |
 
 Notebooks 01-04 were first run inside another project and moved here with their data and caches.
 
