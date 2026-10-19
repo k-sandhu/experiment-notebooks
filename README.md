@@ -67,6 +67,17 @@ another (11), and whether review loops make a model more reliable at regulated w
 | 11 | [LLM judges across four tasks](notebooks/11-llm-judges/) | Many evaluations, including notebook 09, use one model to grade another, and judges can favour the first or the longer answer. On 12 pairs where one answer is objectively right (arithmetic, extraction, grounded summaries, policy decisions), do Claude and GPT judges pick it, with and without an evidence rubric, and with the order swapped? | Both judges were right in 96/96 ratings and never changed their pick when the order was swapped. The pairs were too easy to tell the judges apart: a perfect score on 12 pairs still allows a true accuracy as low as 76% |
 | 12 | [Tax workpaper harnesses](notebooks/12-tax-research-harnesses/) | An S-Corporation tax workpaper is mechanical but unforgiving: one misclassified ledger line flows into every shareholder's numbers, and some cases need an accountant's judgment. On 12 fictional 2025 US S-Corps, do detailed instructions, a self-review pass, feedback from a custom validator or the smolagents agent framework give more fully correct workpapers than one direct call, at the same model and call budget? | No. Qwen3.8 Flash's direct call got 12/12, and review steps only matched or lowered that (generic self-review with detailed instructions: 9/12). Gemma 4 31B got 0/12 in every setup. All 24 Qwen framework runs failed because the provider rejects the framework's default tool setting |
 
+## Predicting from tables
+
+When only a few labeled rows exist, an analyst still needs to predict the next category or number. A pretrained
+tabular model can use those examples as context without updating its weights. The useful comparison is with
+ordinary fitted models on the same rows, including inputs outside the examples' range. Balanced accuracy gives
+each class equal weight; numeric mean absolute error (MAE) is the average size of a prediction error.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 14 | [Zero-shot prediction from small tables](notebooks/14-tabular-zero-shot/) | A new process may have only a few labeled outcomes, so a prediction must work before there is much data to tune it. On 24 fresh synthetic numeric tables (four mechanisms, classification and regression, three seeds), how does pretrained TabPFN compare with four fitted baselines using 32 or 128 labeled examples and 128 held-out rows? | At 128 labeled rows, TabPFN balanced accuracy 82.9% vs 71.7% for Random forest; numeric MAE 0.198 times a constant predictor vs 0.479 for Gradient boosting. Four synthetic mechanisms do not establish a real-data ranking |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
@@ -78,7 +89,6 @@ label. Each one gives the question, the fresh data to use, the models, the measu
 | [#12](https://github.com/k-sandhu/experiment-notebooks/issues/12) | Across 12 to 15 new tasks (complaints, regulatory notices, recalls, weather alerts, wildlife photos, bird recordings, synthetic invoices), which kinds of decision does the Decisions API handle well, what does each cost, and when are its probabilities good enough to skip review? |
 | [#13](https://github.com/k-sandhu/experiment-notebooks/issues/13) | Forecasting the last one to two months of electricity demand, temperature, page views, exchange rates and air quality, how do general-purpose time-series models used without any fitting compare with classical per-series baselines, and what do they cost to run? |
 | [#14](https://github.com/k-sandhu/experiment-notebooks/issues/14) | Given text written by one of several older models, can a newer model tell which one wrote it, and does it recognise its own vendor's older models better? |
-| [#17](https://github.com/k-sandhu/experiment-notebooks/issues/17) | On 24 fresh numeric tables with known label rules, how does pretrained TabPFN compare with fitted baselines using 32 or 128 labeled examples for classification and regression? Claimed as notebook 14 in [#18](https://github.com/k-sandhu/experiment-notebooks/issues/18). |
 
 Notebooks 01-04 were first run inside another project and moved here with their data and caches.
 
@@ -90,6 +100,7 @@ Notebooks 01-04 were first run inside another project and moved here with their 
 | OpenAI | GPT-6.1 | `codex exec` (Codex CLI), read-only sandbox |
 | Meta | Muse Wonder | `muse exec` (Muse CLI), empty preset |
 | OpenAI Decisions API | `openai/gpt-6-luna-decisions` | OpenRouter HTTP API (there is no CLI for it) |
+| Prior Labs | TabPFN-3.5, numeric tabular classification and regression | Prior Labs REST API, labeled context and unlabeled test features |
 | Open-weight models | DeepSeek, Qwen, GLM, Kimi, Gemma, Mistral, gpt-oss, Muse Spark Open, Nemotron | OpenRouter HTTP API |
 
 Paid OpenRouter calls are small by default and every notebook has a size knob at the top (`N_DOCS`,
@@ -107,6 +118,7 @@ python -m venv .venv
 * **Re-query the models**: delete the notebook's `data/cache_*.jsonl` (or `data/runs/` in 07). This needs
   `OPENROUTER_API_KEY` and logged-in `claude`, `codex` and `muse` CLIs.
 * New collection in 09, 11 and 12: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
+* Notebook 14 uses `PRIORLABS_API_KEY` and `NB_LIVE=1` for new collection, with a checked computation-token cap. Its default replay reads 48 saved responses without network access.
 * **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
 
@@ -121,6 +133,8 @@ New notebooks use data the models cannot have seen: synthetic data written for t
 created after every tested model's training cutoff (for time series, the last one to two months), with creation
 dates recorded. Notebooks 01-04 and 06 predate this rule. Their abstracts, PDFs and Wikipedia photos are older than
 the models, which may have seen them, so treat those accuracy figures as upper bounds.
+
+Notebook 14 uses 24 newly generated numeric tables with exact generation rules, seeds and input hashes.
 
 Notebooks 09-12 use authored synthetic cases and objective fixtures. Notebook 12 records original IRS source URLs and section names alongside authored summaries for its restricted 2025 US federal S-Corporation workpaper; original US government material has separate source provenance.
 
