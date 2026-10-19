@@ -1,20 +1,33 @@
 # Experiment notebooks
 
-Companies are starting to give language models two kinds of work. One is reading: sorting incoming documents,
-finding the passage that answers a question, pulling fields off a scanned form. The other is acting: running
-database queries, editing files, calling tools, directing other agents. Before either goes into production,
-someone has to answer three questions for their own task, and public benchmarks rarely do:
+A data scientist builds intuition by running experiments. You take a new tool, or one you already use, and go deep
+on it: set up conditions that show where it works and where it fails, how long it takes to build, how hard it is to
+get right, what it costs, and how much accuracy a given amount of effort buys. Before you train or post-train a
+model, you try several candidates on your own task and keep the one that holds up.
 
-- How often is the model right on documents like ours, and what does each answer cost?
-- When it reports high confidence, can we accept the answer without a person checking it?
-- When it is wrong, what does the mistake look like, and what stops a wrong action from doing damage?
+AI coding agents make this much cheaper. You describe an experiment, an agent builds and runs it, and you read the
+results and decide what to try next. Experiments that each took days by hand can now run side by side, so you can
+test more hypotheses, and test each one more carefully.
 
-Each notebook takes one such task, builds a small test with known right answers (from public documents or
-synthetic cases written for it), and measures accuracy, cost and failure modes on current models. The tests are
-small on purpose, tens to a few hundred items: enough to show where a method breaks and what to test at scale,
-not enough to rank models in general. Each notebook states its question first, runs end to end and is committed
-with its outputs. Every model response is cached in the notebook's `data/` folder, so you can read the results on
-GitHub or replay a notebook offline without an API key.
+This repo collects such experiments. Each notebook asks one question and answers it with measurements, failures
+included.
+
+- Some build intuition about a new tool. OpenAI's Decisions API returns a probability for every option instead of
+  writing text; five notebooks measure how accurate it is, on which kinds of decision, at what cost and speed, and
+  whether its probabilities can decide which answers to accept without review.
+- Some open up something usually hidden. Notebook 07 builds a subagent harness from scratch to show the handoffs,
+  messages and waits that agent frameworks keep out of sight, and what each pattern costs in time and calls.
+- Some check whether general-purpose models hold up on work that matters in practice: reading regulatory filings
+  and lab forms, writing safe SQL, staying inside permissions, grading other models, preparing tax workpapers.
+  Planned notebooks extend this to many more kinds of decision and to general-purpose time-series forecasting
+  models.
+
+Each test is small on purpose, tens to a few hundred items with known right answers: enough to show where a method
+breaks and what to test at scale, not enough to rank models in general. Test data is new, either written for the
+experiment or published after the models were trained, so a model cannot score well by remembering it (notebooks
+01-04 and 06 predate this rule; see [Data and licences](#data-and-licences)). Every notebook states its question
+first, runs end to end and is committed with its outputs. Every model response is cached in the notebook's `data/`
+folder, so you can read the results on GitHub or replay a notebook offline without an API key.
 
 ## Reading documents
 
@@ -54,6 +67,18 @@ another (11), and whether review loops make a model more reliable at regulated w
 | 11 | [LLM judges across four tasks](notebooks/11-llm-judges/) | Many evaluations, including notebook 09, use one model to grade another, and judges can favour the first or the longer answer. On 12 pairs where one answer is objectively right (arithmetic, extraction, grounded summaries, policy decisions), do Claude and GPT judges pick it, with and without an evidence rubric, and with the order swapped? | Both judges were right in 96/96 ratings and never changed their pick when the order was swapped. The pairs were too easy to tell the judges apart: a perfect score on 12 pairs still allows a true accuracy as low as 76% |
 | 12 | [Tax workpaper harnesses](notebooks/12-tax-research-harnesses/) | An S-Corporation tax workpaper is mechanical but unforgiving: one misclassified ledger line flows into every shareholder's numbers, and some cases need an accountant's judgment. On 12 fictional 2025 US S-Corps, do detailed instructions, a self-review pass, feedback from a custom validator or the smolagents agent framework give more fully correct workpapers than one direct call, at the same model and call budget? | No. Qwen3.8 Flash's direct call got 12/12, and review steps only matched or lowered that (generic self-review with detailed instructions: 9/12). Gemma 4 31B got 0/12 in every setup. All 24 Qwen framework runs failed because the provider rejects the framework's default tool setting |
 
+## Planned experiments
+
+Experiments that are written up but not built yet are open issues with the
+[`notebook-proposal`](https://github.com/k-sandhu/experiment-notebooks/issues?q=is%3Aissue+is%3Aopen+label%3Anotebook-proposal)
+label. Each one gives the question, the fresh data to use, the models, the measures and a cost estimate.
+
+| Issue | Question |
+|---|---|
+| [#12](https://github.com/k-sandhu/experiment-notebooks/issues/12) | Across 12 to 15 new tasks (complaints, regulatory notices, recalls, weather alerts, wildlife photos, bird recordings, synthetic invoices), which kinds of decision does the Decisions API handle well, what does each cost, and when are its probabilities good enough to skip review? |
+| [#13](https://github.com/k-sandhu/experiment-notebooks/issues/13) | Forecasting the last one to two months of electricity demand, temperature, page views, exchange rates and air quality, how do general-purpose time-series models used without any fitting compare with classical per-series baselines, and what do they cost to run? |
+| [#14](https://github.com/k-sandhu/experiment-notebooks/issues/14) | Given text written by one of several older models, can a newer model tell which one wrote it, and does it recognise its own vendor's older models better? |
+
 Notebooks 01-04 were first run inside another project and moved here with their data and caches.
 
 ## How models are called
@@ -91,11 +116,16 @@ referenced by URL and downloaded on demand; the Chinook sample database (MIT); W
 and author per image in `notebooks/06-car-make-model-from-image/data/images.csv`); synthetic lab requisitions generated for notebook 08,
 stamped SYNTHETIC with invalid identifiers. Code and text in this repo are MIT licensed (see `LICENSE`).
 
-Notebooks 09–12 use authored synthetic cases and objective fixtures. Notebook 12 records original IRS source URLs and section names alongside authored summaries for its restricted 2025 US federal S-Corporation workpaper; original US government material has separate source provenance.
+New notebooks use data the models cannot have seen: synthetic data written for the experiment, or public data
+created after every tested model's training cutoff (for time series, the last one to two months), with creation
+dates recorded. Notebooks 01-04 and 06 predate this rule. Their abstracts, PDFs and Wikipedia photos are older than
+the models, which may have seen them, so treat those accuracy figures as upper bounds.
+
+Notebooks 09-12 use authored synthetic cases and objective fixtures. Notebook 12 records original IRS source URLs and section names alongside authored summaries for its restricted 2025 US federal S-Corporation workpaper; original US government material has separate source provenance.
 
 ## For AI agents
 
 See [AGENTS.md](AGENTS.md): layout, the pull-request workflow, claiming a notebook number with an issue,
-self-containment, workflow diagrams and explainers, the closing future-work and further-reading section, how to
-call models, and the writing style (including
-LLM prose habits to avoid).
+proposing an experiment as an issue, self-containment, fresh data with no training-set leakage, workflow
+diagrams and explainers, the closing future-work and further-reading section, how to call models, and the writing
+style (including LLM prose habits to avoid).

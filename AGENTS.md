@@ -21,6 +21,15 @@ notebooks/NN-short-name/
   for a new or re-run notebook, the headline result and the spend.
 - A PR that adds a notebook also adds its row to the table in the root `README.md`.
 
+## Propose an experiment
+
+An idea for a notebook that nobody is building yet is an issue titled `Proposal: <short description>` with the
+`notebook-proposal` label (do not put the word "Notebook" in the title). The body gives the question, why it
+matters, the fresh data to use (see [Data](#data)), the models, the method, what to measure, and a size and cost
+estimate. A proposal claims no number. To build one, claim a number as below, link the proposal from the claim
+issue, and close the proposal when the notebook's PR merges. The root `README.md` lists open proposals under
+"Planned experiments"; update that table when you open or close one.
+
 ## Claim a notebook number before you start
 
 Several agents may build notebooks at the same time. To keep two of them from picking the same `NN`, claim
@@ -162,6 +171,9 @@ who has opened no notebook and does not know the tools:
   and `muse exec`. Never through their HTTP APIs or SDKs.
 - OpenRouter (`OPENROUTER_API_KEY`) is used only for open-weight models and for the OpenAI Decisions API,
   which has no CLI.
+- Open-weight models that are not chat LLMs (time-series foundation models, embedding, image or audio models) may
+  run locally. Pin the Hugging Face revision, and record the licence, release date, hardware and run time. Leave
+  out any model whose licence forbids this use.
 - Anything that costs money has a size knob (`N_...`, `MODELS`) at the top of the notebook. Defaults stay
   small. Print the spend at the end.
 - Cache every model response on disk, keyed by the full request. Never commit keys or tokens.
@@ -171,6 +183,26 @@ who has opened no notebook and does not know the tools:
 
 Public data with its source and licence recorded, or synthetic data generated for the experiment. No
 private or client data. Large public files (PDFs) are downloaded on demand and git-ignored.
+
+### Fresh data: no training-set leakage
+
+A model may have been trained on anything published before its training cutoff, labels included. A score on such
+data can measure memory rather than skill. Test on data the models cannot have seen:
+
+- **Data written for the experiment**: synthetic cases, generated documents, authored fixtures. Prefer generating
+  it in code with exact ground truth. If an LLM writes any of it, use a different vendor from the models under
+  test and say so.
+- **Data published after the models were trained**: keep only items created after the latest training cutoff of
+  every model in the notebook (or its release date, when no cutoff is published). For time series, forecast the
+  last one to two months before the run; earlier history may be used as model input but never as a target.
+- Prefer recent data over easily available older data (benchmarks, Kaggle sets, well-known papers and
+  documents), even when the older data is cheaper or cleaner. Data used only to train a baseline may be older.
+- Record in `data/`, and show in the notebook's data section: each model's training cutoff or release date with its
+  source, each item's creation date, and the date filter applied.
+- Freeze what you collect (save it in `data/`, or pin URLs and hashes where the licence does not allow
+  redistribution), so a re-run scores the same items.
+- If a notebook has to use older public data, say so in the goal cell and the limitations, and treat its accuracy
+  as an upper bound. Notebooks 01-04 and 06 predate this rule and do so.
 
 ## Writing style
 
