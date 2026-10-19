@@ -51,6 +51,14 @@ send to a person.
 | 06 | [Car make and model from one photo](notebooks/06-car-make-model-from-image/) | Labelling photos against a fixed list (products, parts, vehicles) is a task where a probability per label is cheaper than generated text and gives a confidence score. Can the Decisions API name a car's make and model from one photo over 109 labels, and how does it compare with frontier vision models (Claude, GPT, Muse) on accuracy, cost and speed? | Decisions API: 94.5% top-1 over 109 labels at $0.20 per 1,000 images and 0.9 s per call; GPT-6.1 and Muse Wonder 100%, Claude Opus 5.5 99.3% at 4-12 s per call |
 | 08 | [Ontario lab requisition extraction](notebooks/08-lab-requisition-extraction/) | Labs receive paper test requisitions as scans, faxes and phone photos, and a missed checkbox is a test that never runs. The Ontario form has about 70 tests in a tight grid of small boxes, plus typed and handwritten patient details. On 24 synthetic forms with exact ground truth, can vision LLMs read which tests were ordered and the patient and clinician fields? | Claude Opus 5.5 read every marked test on 24 forms (F1 1.00); GPT-6.1 0.995, Muse Wonder 0.986; best open model 0.94, open models weak on phone photos and written-in tests |
 
+## Forecasting observations
+
+Demand, weather and traffic histories are easy to collect, but fitting and maintaining one forecast model per series takes work. These experiments test whether pretrained models can use recent observations directly, and whether their error ranges match what happens next.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 16 | [Zero-shot time-series forecasting](notebooks/16-time-series-zero-shot/) | A bad demand or traffic forecast can leave too little capacity. On six fresh public series and 112 rolling origins, do seven pretrained forecasting families, given 512 or 2,048 past observations without weight updates, beat five seasonal or fitted baselines? | At 512 inputs, Chronos-2: 0.860 error relative to repeating the seasonal cycle (14.0% less); best baseline AutoETS: 0.961. Nominal 80% interval coverage averaged 67.4%; six selected series |
+
 ## Letting models act
 
 Once a model can run a query or edit a file, a wrong answer becomes a wrong action. These notebooks test the
@@ -97,7 +105,6 @@ label. Each one gives the question, the fresh data to use, the models, the measu
 | Issue | Question |
 |---|---|
 | [#12](https://github.com/k-sandhu/experiment-notebooks/issues/12) | Across 12 to 15 new tasks (complaints, regulatory notices, recalls, weather alerts, wildlife photos, bird recordings, synthetic invoices), which kinds of decision does the Decisions API handle well, what does each cost, and when are its probabilities good enough to skip review? |
-| [#13](https://github.com/k-sandhu/experiment-notebooks/issues/13) | Forecasting the last one to two months of electricity demand, temperature, page views, exchange rates and air quality, how do general-purpose time-series models used without any fitting compare with classical per-series baselines, and what do they cost to run? |
 
 Notebooks 01-04 were first run inside another project and moved here with their data and caches.
 
@@ -111,6 +118,7 @@ Notebooks 01-04 were first run inside another project and moved here with their 
 | OpenAI Decisions API | `openai/gpt-6-luna-decisions` | OpenRouter HTTP API (there is no CLI for it) |
 | Prior Labs | TabPFN-3.5, numeric tabular classification and regression | Prior Labs REST API, labeled context and unlabeled test features |
 | Open-weight models | Llama 3.1, DeepSeek, Qwen, GLM, Kimi, Gemma, Mistral, gpt-oss, Muse Spark Open, Nemotron | OpenRouter HTTP API |
+| Time-series foundation models | Chronos-2, TimesFM 2.5, Moirai 2, TiRex-2, Toto 2, TTM R3, Lag-Llama | TSFM.ai HTTP API; notebook 16 defaults to frozen caches |
 
 Paid OpenRouter calls are small by default and every notebook has a size knob at the top (`N_DOCS`,
 `OPEN_MODELS`, `IMAGES_PER_MODEL`, ...). Each notebook prints what it spent.
@@ -131,13 +139,14 @@ python -m venv .venv
 * Notebook 14 uses `PRIORLABS_API_KEY` and `NB_LIVE=1` for new collection, with a checked computation-token cap. Its default replay reads 48 saved responses without network access.
 * **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
+* Notebook 16 forecasts six public series through TSFM.ai. Its own `requirements.txt` pins the fitted-baseline libraries; replay needs no key. New collection requires `TS16_LIVE=1` and `TSFMAI_API_KEY`.
 
 ## Data and licences
 
 Only public or synthetic data. OpenAlex metadata (CC0); public PDFs from US and UK agencies and other publishers,
 referenced by URL and downloaded on demand; the Chinook sample database (MIT); Wikimedia Commons photos (licence
 and author per image in `notebooks/06-car-make-model-from-image/data/images.csv`); synthetic lab requisitions generated for notebook 08,
-stamped SYNTHETIC with invalid identifiers. Code and text in this repo are MIT licensed (see `LICENSE`).
+stamped SYNTHETIC with invalid identifiers. Notebook 16 uses IESO demand, Open-Meteo weather analysis, Wikimedia CC0 page views and Bank of Canada exchange rates; its [source notices and redistribution terms](notebooks/16-time-series-zero-shot/data/ATTRIBUTION.md) are recorded separately. Code and text in this repo are MIT licensed (see `LICENSE`).
 
 New notebooks use data the models cannot have seen: synthetic data written for the experiment, or public data
 created after every tested model's training cutoff (for time series, the last one to two months), with creation
