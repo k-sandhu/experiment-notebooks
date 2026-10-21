@@ -103,6 +103,7 @@ An analysis must help its reader make a decision. These experiments separate the
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
 | 15 | [Analytical writing and judge framing](notebooks/15-analytical-writing-style/) | A draft can contain the right numbers yet bury its decision in vague or repeated prose. On two fresh numerical cases in four genres (216 requested drafts), how do 27 writers fare under 30 model judges, and do author disclosure and an explicit prose audit change ratings of the same text? | Anonymous external clarity 88.9/100; audit 0.76 quoted issues per 100 words. Audit clarity change -1.66 points; neutral author-disclosure change -0.06. Model ratings on two cases, no human comprehension claim |
+| 17 | [Writing validation on longer documents](notebooks/17-writing-validation-extension/) | A prose flag can reflect reading difficulty, a factual error or taste. Reassess 108 cached drafts from 27 writers, then compare six writers on 24 fresh cases in four genres with realistic lengths (288 requested drafts), using only Codex and Claude judges. | 288/288 usable drafts; model reviewers upheld 1.6% of sampled old flags as prose concerns on average. Warning effect -0.31/100; human validation materials ready, human results pending |
 
 ## Planned experiments
 
@@ -170,6 +171,8 @@ Notebooks 09-12 use authored synthetic cases and objective fixtures. Notebook 12
 Notebook 13 uses 100 fresh synthetic model outputs collected on 2026-10-19, with per-item timestamps and sourced model cutoff or release dates in its data folder. Its gold labels are the recorded generation endpoints.
 
 Notebook 15 uses two fresh numerical packets and model drafts collected on 2026-10-19, with exact answers generated in code and model date sources in its data folder.
+
+Notebook 17 extends the writing pilot with 24 fresh programmatic cases and copied legacy evidence. Human reader and editor results are pending; their participant materials and import workflow are included.
 
 ## For AI agents
 
