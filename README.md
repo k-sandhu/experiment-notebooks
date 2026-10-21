@@ -119,7 +119,7 @@ A generated deck must keep its facts correct while making a decision easy to see
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
-| 19 | [PowerPoint harnesses and screenshot judges](notebooks/19-powerpoint-harness/) | A presentation edit can leave stale values or unreadable charts. On two fresh briefs and 24 four-slide decks from three models, do layout helpers and screenshot feedback improve native editable PowerPoints under the same two-call workflow? Three frontier judges see only images. | 24/24 rendered; GPT-6.1 Sol had the highest model average, 94.5/100. Helpers -2.9 points; screenshots +0.2. Two related briefs, no general ranking |
+| 19 | [PowerPoint harnesses and screenshot judges](notebooks/19-powerpoint-harness/) | A presentation edit can leave stale values or unreadable charts. Do layout helpers and screenshot review improve editable decks? Three models make 24 four-slide decks, then 24 harder eight-slide decks after a header repair. Three frontier judges see only images; 18 matched pairs add head-to-head comparisons. | Harder pilot: helpers earn 27.8% win credit against primitives; absolute scores change -1.1 points with helpers and +1.6 with screenshots. 24/24 rendered; 52/1728 checklist failures. Two related briefs, no general ranking |
 
 ## Planned experiments
 
