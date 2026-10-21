@@ -169,8 +169,13 @@ who has opened no notebook and does not know the tools:
 
 - OpenAI, Anthropic and Meta Muse models are called **only through their CLIs**: `codex exec`, `claude -p`
   and `muse exec`. Never through their HTTP APIs or SDKs.
-- OpenRouter (`OPENROUTER_API_KEY`) is used only for open-weight models and for the OpenAI Decisions API,
-  which has no CLI.
+- OpenRouter (`OPENROUTER_API_KEY`) is used only for open-weight models and for decision models (models that
+  answer typed questions with probabilities instead of text). The allowed decision models are OpenAI's
+  Decisions API (`openai/gpt-6-luna-decisions`, which has no CLI), TypeSafe's Jev (`typesafe/jev-1.14`) and
+  Inception's Mercury Decide (`inception/mercury-decide`). Open-weight decision models such as Cloudflare's Clef
+  (`cloudflare/clef-flash`) fall under the open-weight rule. Pin a dated version, not a `-latest` alias, and record
+  its permaslug (for example `typesafe/jev-1.14-20261014`). Adding another closed decision model needs the
+  repo owner's approval and a change to this list.
 - Open-weight models that are not chat LLMs (time-series foundation models, embedding, image or audio models) may
   run locally. Pin the Hugging Face revision, and record the licence, release date, hardware and run time. Leave
   out any model whose licence forbids this use.
