@@ -174,8 +174,9 @@ who has opened no notebook and does not know the tools:
   Decisions API (`openai/gpt-6-luna-decisions`, which has no CLI), TypeSafe's Jev (`typesafe/jev-1.14`) and
   Inception's Mercury Decide (`inception/mercury-decide`). Open-weight decision models such as Cloudflare's Clef
   (`cloudflare/clef-flash`) fall under the open-weight rule. Pin a dated version, not a `-latest` alias, and record
-  its permaslug (for example `typesafe/jev-1.14-20261014`). Adding another closed decision model needs the
-  repo owner's approval and a change to this list.
+  its permaslug (for example `typesafe/jev-1.14-20261014`). These models are allowed, not required: compare the
+  ones the experiment's question needs or the requester asks for, and say why each one is included. Adding
+  another closed decision model needs the repo owner's approval and a change to this list.
 - Open-weight models that are not chat LLMs (time-series foundation models, embedding, image or audio models) may
   run locally. Pin the Hugging Face revision, and record the licence, release date, hardware and run time. Leave
   out any model whose licence forbids this use.
