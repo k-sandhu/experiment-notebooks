@@ -2,174 +2,152 @@
 
 A committee changes its preferred project option before a meeting. The new investment and savings must reach the recommendation, scenario chart, payback calculations and final funding request. A deadline shift must also reach the roadmap without losing its dependencies. A deck can look finished while a chart label, table cell or decision threshold remains wrong.
 
-Reusable layout helpers can reduce the work of placing objects, but a helper can introduce a defect on every slide. The first pilot found a wrapped-title collision and passed all 864 factual checks, so its tasks were too easy to test preservation. The follow-up repairs the header and adds longer decks with linked edits. Text and screenshot review receive the same draft and change request; the primitive compiler stays unchanged.
+Layout helpers can reduce the work of placing objects, but a helper can also repeat a defect on every slide. An isolated 9/10 rating is difficult to interpret when deck length and content change. This experiment therefore combines matched feature comparisons with blinded, head-to-head judging of complete decks on the same brief, in both presentation orders.
 
 ## Question
 
-On two fresh synthetic briefs, do revised helpers improve eight-slide editable decks compared with primitives? Does screenshot review change that effect, and which complete decks win head to head? Three generators cross two authoring interfaces with two review modes, producing 12 drafts and 24 final decks. GPT-6 Astra, Claude Opus 5.5 and Muse Wonder Full provide 72 blinded ratings and 108 paired judgments using only task-card images and slide screenshots.
+Do layout helpers and screenshot feedback improve editable PowerPoint decks, and which models win under each interface? Three producers cross primitive or helper authoring with text or screenshot review on two fresh synthetic briefs. They make 12 shared drafts and 24 final eight-slide decks. Three frontier judges provide 72 absolute ratings and 288 head-to-head judgments across 48 matched deck pairs, using only task-card images and slide screenshots.
 
 ## Result
 
-Revised helpers earned 27.8% head-to-head win credit against primitives with screenshot review held fixed (27.1% using other-vendor judges). Absolute-score order agreed with direct preference on 15/17 non-tied comparisons.
+Across both review modes, helpers earned 38.2% head-to-head win credit against primitives. Across both interfaces, screenshots earned 61.1% against text review.
 
-24/24 eight-slide decks rendered. Revised helpers changed quality by -1.1 points; screenshots by +1.6. GPT-6.1 Sol had the highest model mean, 87.5/100.
+Absolute-score order agreed with direct preference on 37/40 non-tied pairs. Judge preferences differed between the two presentation orders on 32/144 judge-pair checks.
 
-Judges marked 52/1728 requirement checks unmet, compared with 0/864 in the first pilot. These are judgments, not unique deck errors. The helper-by-screenshot interaction is -1.3 points. These are two synthetic briefs with one generation per cell and three model judges, not a general model ranking. Both briefs share one structure.
+All 24 final decks rendered. Absolute ratings changed by -1.1/100 with helpers and +1.6 with screenshots; GPT-6.1 Sol had the highest model mean, 87.5/100. Judges marked 52/1728 requirement checks unmet. These counts are judge responses, not unique deck errors. The full grid was frozen after focused results were available. It includes every remaining planned comparison and reuses 108 earlier judgments unchanged; it is not an independent replication. There are still only two related briefs and one generation per cell.
 
-## Head-to-head comparisons
+## Models in all four conditions
 
-| Producer | Authoring and review | Win credit | Other-vendor credit | Pair wins / ties / losses |
-|---|---|---:|---:|---:|
-| Claude Opus 5.5 | helpers vision | 66.7% | 75.0% | 3 / 0 / 1 |
-| GPT-6.1 Sol | helpers vision | 81.2% | 75.0% | 3 / 0 / 1 |
-| Muse Wonder Full | helpers vision | 2.1% | 0.0% | 0 / 0 / 4 |
-| Claude Opus 5.5 | primitive text | 66.7% | 75.0% | 3 / 0 / 1 |
-| GPT-6.1 Sol | primitive text | 83.3% | 75.0% | 3 / 0 / 1 |
-| Muse Wonder Full | primitive text | 0.0% | 0.0% | 0 / 0 / 4 |
+| Producer | Primitives + text | Primitives + screenshots | Helpers + text | Helpers + screenshots |
+|---|---:|---:|---:|---:|
+| GPT-6.1 Sol | 83.3% | 89.6% | 95.8% | 81.2% |
+| Claude Opus 5.5 | 66.7% | 60.4% | 52.1% | 66.7% |
+| Muse Wonder Full | 0.0% | 0.0% | 2.1% | 2.1% |
 
 
-A win credit is 1 for a win, 0.5 for a tie and 0 for a loss. Each judge sees both orders; average within judge before averaging judges and briefs. Each row contains four matched deck pairs: two opponents on two briefs. Wins, ties and losses use the three-judge, order-averaged preference. Other-vendor model comparisons exclude both producers, leaving only one judge vendor per matchup. Helper comparisons retain two external judges.
+Win credit is 1 for a win, 0.5 for a tie and 0 for a loss. The two orders are averaged within a judge before averaging judges and briefs. Each table cell covers four matched pairings: two opponents on two briefs. These pairings are not four independent source tasks. Cross-condition differences also change the opponents' decks; use the matched factor comparisons below to test each feature.
 
-Excluding both producing vendors leaves Claude Opus 5.5 and GPT-6.1 Sol tied at 75.0% model win credit. Only one judge vendor remains per model matchup, so this does not establish a clear ranking between them.
+Pooled across the four conditions: GPT-6.1 Sol 87.5%; Claude Opus 5.5 61.5%; Muse Wonder Full 1.0%. Excluding both producing vendors' judges: GPT-6.1 Sol 82.8%; Claude Opus 5.5 65.6%; Muse Wonder Full 1.6%. Only one judge vendor remains per model matchup in that sensitivity check, and the judge differs across opponent pairs. These results do not establish a general model ranking.
 
-The focused plan compares all three producer pairs under primitive/text and helper/screenshot authoring (12 pairs) and helpers against primitives with screenshots held fixed for every producer (6 pairs). It does not directly measure the screenshot effect or every possible model-condition comparison. The plan was frozen after generation and before aggregate absolute scores were inspected. No earlier ratings were shown to paired judges.
+![Head-to-head model results in all four conditions](figures/full_models.png)
 
-![Head-to-head model comparisons](figures/paired_models.png)
+## Helpers and screenshot review
 
-![Helpers against primitives](figures/paired_helpers.png)
-
-![Helper preference by judged dimension](figures/paired_dimensions.png)
-
-Mapped preferences stayed the same in 43/54 judge-pair order checks, with 8/108 individual judgments returning ties. The score-order comparison excludes pairs tied on either measure. These two-brief results provide a local reference for the scores, not a universal conversion from 9/10 to a win probability.
-
-![Score margins and order consistency](figures/paired_anchor.png)
-
-## Absolute ratings
-
-| Producer | Condition | Quality / 100 | Other-vendor / 100 | Checklist passed |
-|---|---|---:|---:|---:|
-| Claude Opus 5.5 | helpers text | 84.0 | 84.0 | 97.9% |
-| Claude Opus 5.5 | helpers vision | 86.0 | 86.0 | 97.9% |
-| Claude Opus 5.5 | primitive text | 86.0 | 86.0 | 97.9% |
-| Claude Opus 5.5 | primitive vision | 86.7 | 87.0 | 97.9% |
-| GPT-6.1 Sol | helpers text | 88.7 | 89.0 | 98.6% |
-| GPT-6.1 Sol | helpers vision | 86.7 | 86.0 | 97.9% |
-| GPT-6.1 Sol | primitive text | 86.7 | 86.0 | 100.0% |
-| GPT-6.1 Sol | primitive vision | 88.0 | 88.0 | 100.0% |
-| Muse Wonder Full | helpers text | 73.3 | 71.0 | 95.8% |
-| Muse Wonder Full | helpers vision | 76.0 | 75.0 | 93.8% |
-| Muse Wonder Full | primitive text | 74.7 | 73.0 | 93.1% |
-| Muse Wonder Full | primitive vision | 79.3 | 78.0 | 93.1% |
+| Treatment and control setting | Win credit | Other-vendor credit | Pair wins/ties/losses | Score change /100 |
+|---|---:|---:|---:|---:|
+| Helpers, text review fixed | 48.6% | 54.2% | 2/1/3 | -0.4 |
+| Helpers, screenshots fixed | 27.8% | 27.1% | 1/0/5 | -1.8 |
+| Screenshots, helpers fixed | 52.8% | 50.0% | 3/1/2 | +0.9 |
+| Screenshots, primitives fixed | 69.4% | 68.8% | 4/1/1 | +2.2 |
 
 
-The score averages design, legibility, visual communication, coherence and requirements, each rated 0-5, then scales to 100. Other-vendor scores exclude the producer's vendor; the two-judge panels differ between producers. Checklist pass rate is reported separately from aesthetic quality. A failed generation receives zero, and incomplete judge panels stop the analysis.
+Each row contains six matched deck pairs: three producers on two briefs. Pair wins, ties and losses use the order-averaged three-judge preference. Helper comparisons hold review mode fixed; screenshot comparisons hold authoring interface fixed. Other-vendor factor results exclude the producer's vendor and retain two judges. The absolute-score difference uses the same decks.
 
-![Harder pilot quality](figures/harder_headline.png)
+![Both factor comparisons under each control setting](figures/full_factors.png)
 
-![Paired helper and screenshot effects](figures/harder_effects.png)
+Legibility win credit was 35.4% for helpers and 69.4% for screenshot review. The five dimension votes are secondary diagnostics. They retain overall preference as the primary outcome and cannot isolate an individual helper's contribution.
 
-| Producer | Primitive + text baseline | Revised helpers + screenshots |
+![Factor preferences by judged dimension](figures/full_dimensions.png)
+
+The following figure shows how preference for each feature changes when the other feature is present. A percentage point is a difference between two percentages. These are changes in direct preference, not an additive measure of slide quality, so they need not match the absolute-score interaction.
+
+![Preference changes when the other feature is present](figures/full_interactions.png)
+
+## Scores, order and concrete disagreements
+
+Absolute-score order agreed with direct preference on 37/40 non-tied pairs. Judge preferences differed between the two presentation orders on 32/144 judge-pair checks. Judges returned ties in 51/288 individual decisions. Pairs tied on either score ordering or direct preference are excluded from the agreement fraction. Differences across orders combine position sensitivity and response variability; repeated same-order controls would be needed to separate them. This provides a local reference for the rating scale, not a universal conversion from 9/10 to a probability of winning.
+
+![Absolute-score margins and direct preferences](figures/full_reliability.png)
+
+The notebook shows the largest score-order disagreement, both decks' roadmap slides and the judges' exact reasons. That example is selected mechanically by absolute score margin; no generated deck was repaired after evaluation. The complete PPTX files and screenshots remain available.
+
+| Producer | Primitive/text baseline | Helpers/screenshots |
 |---|---|---|
 | GPT-6.1 Sol | [PPTX](data/harder/artifacts/180b0686bfd85db8/deck.pptx), [preview](data/harder/artifacts/180b0686bfd85db8/contact.png) | [PPTX](data/harder/artifacts/beba013335974f93/deck.pptx), [preview](data/harder/artifacts/beba013335974f93/contact.png) |
 | Claude Opus 5.5 | [PPTX](data/harder/artifacts/494bc96620387047/deck.pptx), [preview](data/harder/artifacts/494bc96620387047/contact.png) | [PPTX](data/harder/artifacts/2555ca16c56d227b/deck.pptx), [preview](data/harder/artifacts/2555ca16c56d227b/contact.png) |
 | Muse Wonder Full | [PPTX](data/harder/artifacts/a2298a70bdc31a0c/deck.pptx), [preview](data/harder/artifacts/a2298a70bdc31a0c/contact.png) | [PPTX](data/harder/artifacts/005b8e576ac75c08/deck.pptx), [preview](data/harder/artifacts/005b8e576ac75c08/contact.png) |
 
 
-## What changed
+## Header repair and harder tasks
 
-The [header helper](harness.py) measures installed font glyphs and inserts explicit breaks into a reserved two-line band. Titles use 24-27 points, subtitles 10-12 points on a separate line, and body content starts at y=1.7 inches. Headers that exceed the band fail explicitly. On the original failing scene in Arial, Calibri and Georgia, title/subtitle collisions fell from 6 to 0 across 12 tested headers. This geometry check is not a quality judgment.
+The first four-slide pilot passed all 864 factual checks and exposed a wrapped-title collision. The revised [header helper](harness.py) measures installed font glyphs, inserts explicit breaks into a two-line band, and reserves a separate subtitle line. Titles use 24-27 points, subtitles 10-12 points, and body content starts at y=1.7 inches. Overlong headers fail explicitly. Collisions fell from 6 to 0 across 12 development headers in Arial, Calibri and Georgia.
 
-The primitive compiler produced identical expanded scenes, slide XML, chart XML and embedded workbook content on 18 original primitive decks; ZIP timestamps were excluded. The KPI, flow and columns helpers are unchanged. Both new conditions share the same native renderer and a 75,000-character generation cap. Each final deck has one draft and one revision; shared drafts reduce generation to 36 calls.
+The primitive compiler produced identical expanded scenes, slide XML, chart XML and embedded workbook content on 18 original primitive decks; ZIP timestamps were excluded. The other three helpers stayed unchanged. A post-collection check found all 156 fitted header text objects clear of the next header band, although 34 titles extend 0.72 points below their nominal text boxes. Those outputs remain unchanged. Header geometry is an engineering check, separate from the model quality judgments.
 
-A post-collection PowerPoint geometry check found all 156 fitted header text objects clear of the next header band. Of these, 34 titles have font bounds 0.72 points below their nominal text box. That small overshoot is retained and reported in [data/harder/native_audit.json](data/harder/native_audit.json); it does not change quality scores. All final decks contain at least two native charts and two native tables, with 48 charts and 108 tables in total.
+![Original and repaired header on the same scene](figures/header_fix.png)
 
-![Old and revised header on the same scene](figures/header_fix.png)
+The eight-slide task requires a financial decision, six-month chart, option table, scenario economics, five-site capacity table, connected two-lane roadmap, risk matrix and final funding/gate decision. The revision changes the chosen option and its derived values, one month and totals, gate/rollout timing and a new risk. Other facts must survive. Each judge sees three final task-card images and eight full-resolution slide images per deck. Final decks contain at least two native charts and two tables, with 48 charts and 108 tables in total.
 
-Each eight-slide brief contains a decision, six-month actual/target chart, option table, scenario chart with derived financial values, five-site capacity table, connected roadmap, risk matrix and final go/no-go decision. The edit changes the chosen option and its derived economics, M4 actual and totals, gate/rollout timing and a new risk. Other values and dependencies must remain. Judges see three image cards with exact final facts and 24 checks, then eight full-resolution slide images.
+![Requirement checks marked unmet](figures/harder_requirements.png)
 
-## Workflow
+![Lowest-scoring harder-pilot deck](figures/harder_error.png)
+
+## Workflow and controls
 
 ```mermaid
 flowchart LR
-    old["Original: 2 four-slide briefs<br/>24 final decks, 132 calls"] --> fix["Repair wrapped headers<br/>3-font development regression"]
-    fix --> data["Harder: 2 eight-slide briefs<br/>24 requirements each"]
-    data --> draft["3 models x 2 interfaces<br/>12 drafts, 96 screenshots"]
-    draft --> edit["Text or screenshots + same coupled edit<br/>24 revision calls"]
-    edit --> final["24 final decks<br/>192 screenshots"]
-    controls["6 image controls<br/>all must pass"] --> judges
-    final --> judges["3 frontier judges<br/>72 image-only ratings"]
-    final --> audit["18 matched pairs, both orders<br/>108 head-to-head calls"]
-    judges --> result["Paired effects, errors<br/>model scores, expansion decision"]
-    audit --> result
+    old["Original: 24 four-slide decks<br/>132 CLI calls"] --> fix["Header repair<br/>three-font development regression"]
+    fix --> data["2 fresh eight-slide briefs<br/>24 visible requirements each"]
+    data --> draft["3 producers x 2 interfaces<br/>12 shared drafts"]
+    draft --> edits["Text or screenshots + same edit<br/>24 final decks, 192 screenshots"]
+    controls["6 image controls<br/>all passed"] --> judges
+    edits --> judges["3 frontier screenshot judges<br/>72 absolute ratings"]
+    edits --> pairs["48 matched deck pairs, both orders<br/>288 paired judgments"]
+    reused["108 focused judgments reused<br/>180 additional calls"] --> pairs
+    judges --> results["Model scores and direct wins<br/>helper and screenshot effects"]
+    pairs --> results
 ```
 
-The notebook's sections 11 and 14 give the model call graphs, exact prompts, raw response examples and frozen settings. Each CLI runs in a new empty directory with tools disabled. Models return declarative JSON scenes; no generated code executes. Microsoft PowerPoint exports actual slides at 1440 by 810 pixels. Charts and tables remain editable. Rendering is serial; independent CLI calls have concurrency at most three.
+GPT-6.1 Sol, Claude Opus 5.5 and Muse Wonder Full produce declarative JSON scenes through `codex exec`, `claude -p` and `muse exec`. The compiler makes editable native objects; Microsoft PowerPoint exports the actual slides at 1440 by 810 pixels. Each final deck receives one draft and one independent revision. Review modes share their initial draft and factual edit. A 75,000-character output cap applies to every generation condition.
 
-## Errors and judge checks
+GPT-6 Astra, Claude Opus 5.5 and Muse Wonder Full judge only images, without producer names, extracted deck text, source files or earlier ratings. Their five equally weighted dimensions are design, legibility, visual communication, coherence and requirements. Absolute scores use 0-5 per dimension, scaled to 100. Pair judges choose A, B or tie overall and by dimension, citing both decks. Calls use independent empty directories, tools disabled, medium effort and concurrency at most three.
 
-All six image controls passed: read an image-only code and prefer clean typography over overlapping low-contrast text in both orders. The original planned harder order audit is a subset of the new paired phase: helpers versus primitives under screenshot review on the first brief. Mapped preferences were consistent in 5/9 checks in that subset; no duplicate audit calls were made. These checks do not establish agreement with a human audience.
+All six image controls passed: reading an image-only code and preferring clean typography over overlapping low-contrast text in both orders. The full grid contains 24 producer pairs, 12 helper pairs and 12 screenshot-review pairs. Every pair is matched on brief. The earlier 18-pair phase remains in notebook section 14; section 15 adds all remaining comparisons. It does not change the deck generation or absolute ratings.
 
-One Muse absolute response returned 25 identical true checklist entries instead of 24. Offline parsing removes one indistinguishable excess entry; every possible single deletion gives the same vector. All five quality scores are unchanged, and the raw response and original failed parse remain cached. Mixed excess values or missing entries would still fail. No new call was made.
+One Muse absolute response had 25 identical true checklist values instead of 24. Offline parsing removes one indistinguishable excess entry; every possible deletion yields the same vector. All five quality scores and the raw response remain unchanged. One earlier GPT paired response was lost during a local disk-full cache append, then its identical request was repeated once. The lost attempt and request are recorded separately. The extension adds disk-space checks and local write retries without model retries. After collection, the active writer was changed to unbuffered appends with short-write handling so rollback does not need to flush buffered data. The frozen collector and all responses remain unchanged; this last writer change was tested locally without model calls.
 
-The error example is selected mechanically: lowest mean-scoring rendered deck, then the slide most often nominated as worst by the judges. Their exact reasons and checklist disagreements appear in notebook section 13. Experimental defects are preserved.
+## Limits and decision
 
-![Harder-pilot checklist failures](figures/harder_requirements.png)
+Keep the primitive baseline as the default in this tested interface. Screenshot review wins more direct preference credit than text review across these tasks. The frozen absolute-score expansion rule is still reported separately; neither feature passed all its requirements. The paired extension is descriptive and does not replace that rule after the results are known.
 
-![Selected harder-pilot error](figures/harder_error.png)
+There are only two briefs, one generation per cell and a shared task structure. Annual savings are fixed by the template, and both briefs drew the same selected investment; monthly and site data differ. GPT assistance wrote the templates and deterministic data generator, which can introduce author preferences. Helpers are available rather than compulsory, and the notebook measures adoption. The comparison says little about photographs, animations, imported templates, unrestricted authoring code or open-ended source documents.
 
-## Original pilot and limits
-
-The original four-slide pilot remains unchanged in `data/`, notebook sections 1-10 and its original manifest. It rendered 24/24 decks; GPT-6.1 Sol averaged 94.5/100, helpers changed scores by -2.9 and screenshots by +0.2. Its 864/864 factual checks all passed. New evidence is isolated in `data/harder/`. Changing task length, edits, checklist and output allowance means old/new score differences cannot identify the effect of the header fix.
-
-Both pilots use two instances of a prescribed structure, one generation per cell and three model judges. They have no photographs, animations, imported templates, open-ended source documents or alternative authoring backend. GPT assistance wrote the fixed templates and code; seeded facts prevent memorized labels but do not remove author preferences. CLI system prompts, model alias changes and uneven token accounting remain part of the tested systems. Model judges may favor their own vendor, so dimensions, individual judges and other-vendor sensitivities are retained.
-
-Annual saving amounts are fixed by the template, and both harder briefs also drew the same selected investment; monthly and site values differ. Financial-edit coverage is therefore narrow. Models can also choose how many helpers to use, so the contrast measures availability of the helper bundle. The notebook reports adoption rather than assuming every helper was used.
-
-## Decision
-
-Helpers: does not pass the expansion rule. Screenshots: does not pass the expansion rule. The predeclared rule requires at least 90% valid decks, a positive effect on both briefs under both full and other-vendor panels, no requirement loss on either brief and a checklist below complete ceiling. A pass recommends a larger study, not a universal default. The added paired phase is descriptive and does not replace this frozen rule.
-
-Keep the primitive baseline. The harder pilot does not justify making the revised helper bundle the default; test the remaining failure modes on new development fixtures before another held-out run. Expansion should add at least 12 distinct task structures and multiple generation repeats. Raising `--n-briefs` alone only changes numerical draws.
-
-## Research and further reading
-
-Links checked on 2026-10-21. The original decision log is in [data/research.json](data/research.json); follow-up sources and runtime details are in [data/harder/runtime.json](data/harder/runtime.json).
-
-- [PPTAgent](https://arxiv.org/abs/2501.03936) motivates separate content, design and coherence outcomes.
-- [DECKBench](https://arxiv.org/abs/2602.13318) (Jang et al., 2026) motivates generation plus later editing and preservation checks.
-- [PresentBench](https://presentbench.github.io/) motivates a task-specific visible checklist.
-- [LLM-as-a-judge](https://arxiv.org/abs/2306.05685) motivates multiple judges, vendor exclusion and swapped order.
-- [Text fitting analysis](https://python-pptx.readthedocs.io/en/latest/dev/analysis/txt-fit-text.html) explains the role of actual font metrics.
-- [PowerPoint Slide.Export](https://learn.microsoft.com/en-us/office/vba/api/powerpoint.slide.export) documents the common renderer.
+The original four-slide pilot remains unchanged in `data/` and notebook sections 1-10: 24/24 decks rendered, GPT-6.1 Sol averaged 94.5/100, helpers changed scores by -2.9 and screenshots by +0.2. The old/new score difference cannot isolate the header repair because the tasks changed. The full paired expansion adds comparisons, not new task diversity. A next study should first add distinct structures and multiple generation repeats.
 
 ## Spend and evidence
 
-The harder pilot made 223 CLI attempts: 6 controls, 36 generation/revision calls, 72 absolute ratings, 108 saved paired judgments and one paired response lost to a local disk-full cache failure. Only that identical missing request was repeated after space became available. The 222 usable responses and the full failed-storage request are retained; the lost response itself could not be recovered. Claude reported $23.31 as a list-price equivalent; dollar costs for 149 other calls and incremental subscription charges are unknown. The original pilot used 132 calls and reported $5.68. Together, the known equivalent is $28.99, which is not the total bill. No OpenRouter or direct provider HTTP calls were used. Claude has a $3 per-call limit, or $222 for its 74 planned calls in this expanded harder pilot.
+The extension made 180 additional CLI calls, reusing 108 earlier judgments. Claude reported $19.66 additional list-price equivalent. The harder study now has 403 CLI attempts, including the earlier lost response, and $42.97 known Claude equivalent. Dollar costs for 269 other attempts and incremental subscription charges are unknown. Including the original pilot, there are 535 attempts and $48.65 known Claude equivalent; this is not the total bill.
 
-There is one reusable harness file, one executed analysis notebook and pinned requirements. Each profile caches full requests, saved raw responses, errors, usage and image hashes; the storage incident records the one unavailable response. Synthetic inputs are MIT licensed; creation dates and model cutoff/release sources are recorded in each profile's `date_provenance.json`. Generation prompts and source hashes were frozen before generation. The paired protocol and its separate collector snapshot were frozen before paired judging.
+The harder cumulative cap is 430 attempts. The expansion has 60 new Claude calls capped at $3 each, a $180 additional ceiling. No direct provider HTTP APIs or OpenRouter calls were used. A fresh full-grid run without the earlier storage incident needs 402 attempts.
 
-```text
-harness.py, 19_powerpoint_harness.ipynb, README.md, requirements.txt
-data/                         original pilot, unchanged
-  harder/                     second pilot, independent manifest and protocol
-    cache.jsonl               full CLI requests and responses
-    cases.json, tasks/        synthetic facts and three task-card images per brief
-    drafts.json, runs.json    mapping, failures and native-object measurements
-    judgments.json, paired_judgments.json, audit.json
-    protocol.json, paired_protocol.json, *_at_freeze.py
-    artifacts/<opaque-id>/    scene, PPTX, eight slide PNGs, contact sheet
-    header_regression/        old and fixed development images
-    *.csv, spend.json         derived analysis
-figures/                      plots from both pilots
-```
+The active code remains one harness file and one self-contained notebook with pinned requirements. Earlier manifests and response caches stay unchanged. `data/harder/paired_full/` holds the expansion protocol, collector snapshot, 180 new responses, the combined 288 judgments, derived tables and its own manifest. All scored responses include full requests and image hashes. Data are synthetic and MIT licensed; creation dates and model date sources remain in `date_provenance.json`.
 
 ## How to run
 
-Offline replay imports no harness, calls no models and needs no PowerPoint:
+Offline replay verifies all three manifests and calls no models:
 
 ```bash
 python -m pip install -r requirements.txt
 python -m nbconvert --to notebook --execute --inplace 19_powerpoint_harness.ipynb
 ```
 
-For live collection, use a separate copy with an empty `data/harder/`, keep the original evidence, and follow notebook section 16. It needs Windows, PowerPoint and authenticated model CLIs. The size knobs are `--n-briefs`, `MODELS`, `JUDGES`, `--pair-scope` and `--max-calls`; defaults remain a two-brief pilot. The focused paired plan uses a cumulative cap of 240 calls. A full paired grid on the same two briefs has 48 pairs and 288 paired calls, or 402 total, and requires an explicit larger cap in a fresh collection. Select `--profile harder` for the new eight-slide collector or `--profile original` for the retained four-slide behavior. Missing requests fail without `--live`. No semantic retries or provider substitutions are automatic.
+Notebook section 17 gives fresh collection commands. To expand an existing focused run, make a separate copy with the current collector and earlier evidence, omitting the frozen `data/harder/paired_full/` subfolder, then run:
+
+```bash
+python harness.py paired-expand --profile harder --max-calls 430
+python harness.py paired-collect --profile harder --pair-scope full --live --max-calls 430
+python harness.py paired-manifest --profile harder
+```
+
+The size controls are `--n-briefs`, `MODELS`, `JUDGES`, `--pair-scope` and `--max-calls`. Raising the brief count changes numerical draws, not story structures. Live generation needs Windows, PowerPoint and authenticated CLIs. The frozen replay expects the complete study; a new design needs its own report. No semantic retries or provider substitutions occur automatically.
+
+## Research and further reading
+
+Links checked on 2026-10-21. The research log, exact prompts and source snapshots are retained with the evidence. Notebook section 18 lists the follow-up experiments.
+
+- [PPTAgent](https://arxiv.org/abs/2501.03936) motivates separate content, design and coherence outcomes.
+- [DECKBench](https://arxiv.org/abs/2602.13318) motivates generation followed by editing and preservation checks.
+- [PresentBench](https://presentbench.github.io/) motivates a task-specific visible checklist.
+- [Judging LLM-as-a-judge](https://arxiv.org/abs/2306.05685) motivates multiple judges, vendor exclusion and swapped presentation order.
+- [Text fitting analysis](https://python-pptx.readthedocs.io/en/latest/dev/analysis/txt-fit-text.html) explains why actual font metrics matter.
+- [PowerPoint Slide.Export](https://learn.microsoft.com/en-us/office/vba/api/powerpoint.slide.export) documents the common renderer.

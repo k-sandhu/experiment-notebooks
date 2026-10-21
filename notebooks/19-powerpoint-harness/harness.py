@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import base64
 import copy
+import errno
 import hashlib
 import importlib.metadata
 import json
@@ -527,18 +528,46 @@ def cli(model, prompt, images, effort, timeout):
         return result
 
 
+def append_response(path, row):
+    """Retry a transient full disk without repeating a model call or leaving a partial row."""
+    payload = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
+    for attempt in range(6):
+        try:
+            with path.open("ab", buffering=0) as f:
+                checkpoint = f.tell()
+                try:
+                    remaining = memoryview(payload)
+                    while remaining:
+                        written = f.write(remaining)
+                        if not written:
+                            raise OSError(errno.EIO, "Cache write made no progress")
+                        remaining = remaining[written:]
+                    os.fsync(f.fileno())
+                except OSError:
+                    f.truncate(checkpoint)
+                    raise
+            return
+        except OSError as exc:
+            if exc.errno != errno.ENOSPC or attempt == 5:
+                raise
+            print("Cache storage full; retaining the response in memory and retrying the write", flush=True)
+            time.sleep(5)
+
+
 class Cache:
-    def __init__(self, live=False, max_calls=150):
+    def __init__(self, live=False, max_calls=150, path=None, seed_paths=(), prior_lost_attempts=0):
         self.live, self.max_calls = live, max_calls
-        self.path = DATA / "cache.jsonl"
+        self.path = Path(path) if path is not None else DATA / "cache.jsonl"
         self.rows = {}
-        if self.path.exists():
-            for line in self.path.read_text(encoding="utf-8").splitlines():
+        for source in [*seed_paths, self.path]:
+            if not source.exists():
+                continue
+            for line in source.read_text(encoding="utf-8").splitlines():
                 row = json.loads(line)
                 assert digest(row["request"]) == row["key"], "Corrupt cache request"
                 assert row["key"] not in self.rows, "Duplicate cache request"
                 self.rows[row["key"]] = row
-        self.reserved = len(self.rows)
+        self.reserved = len(self.rows) + prior_lost_attempts
 
     def ask(self, model, prompt, images=(), phase="generation", tag="", effort="medium"):
         images = list(images)
@@ -554,14 +583,15 @@ class Cache:
                 raise RuntimeError("Offline cache miss " + key)
             if self.reserved >= self.max_calls:
                 raise RuntimeError("Cumulative call cap reached")
+            if shutil.disk_usage(self.path.parent).free < 256*1024*1024:
+                raise RuntimeError("Less than 256 MiB free before model call; restore storage and resume")
             self.reserved += 1
         out = cli(model, prompt, images, effort, 600)
         if len(out["text"]) > request["max_output_characters"]:
             out["error"] = "Output character budget exceeded"
         row = {"key": key, "request": request, "response": out, "collected_at": now()}
         with LOCK:
-            with self.path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            append_response(self.path, row)
             self.rows[key] = row
         print(phase, tag, model["id"], "ERROR" if out.get("error") else "ok", round(out["elapsed_s"]), "s", flush=True)
         return row
@@ -853,9 +883,10 @@ def audit(live=False, max_calls=150):
     save(DATA / "audit.json", rows)
 
 
-def manifest():
-    files = {p.relative_to(ROOT).as_posix(): sha(p) for p in DATA.rglob("*") if p.is_file() and p.name != "manifest.json"}
-    save(DATA / "manifest.json", {"created": now(), "scheme": "sha256-bytes", "files": files})
+def manifest(folder=None):
+    folder = Path(folder) if folder is not None else DATA
+    files = {p.relative_to(ROOT).as_posix(): sha(p) for p in folder.rglob("*") if p.is_file() and p.name != "manifest.json"}
+    save(folder / "manifest.json", {"created": now(), "scheme": "sha256-bytes", "files": files})
     print("Hashed", len(files), "evidence files")
 
 
@@ -1174,13 +1205,9 @@ Return JSON only: {"winner":"A or B or tie", "reason":"specific evidence and tra
 """
 
 
-def pair_plan(scope="focused", max_calls=240):
-    """Freeze matched comparisons without looking at the absolute quality ratings."""
-    if VERSION != "ppt-harness-2":
-        raise ValueError("Head-to-head collection is for the harder profile")
-    if (DATA / "paired_protocol.json").exists():
-        raise RuntimeError("Paired protocol already frozen")
-    runs = read(DATA / "runs.json")
+def matched_pairs(runs, scope):
+    if scope not in ("focused", "full"):
+        raise ValueError("Unknown pair scope")
     lookup = {(r["case"], r["model"], r["condition"]): r for r in runs}
     pairs = []
 
@@ -1205,6 +1232,16 @@ def pair_plan(scope="focused", max_calls=240):
                 for interface in ["primitive", "helpers"]:
                     add("vision", case, lookup[case, model, interface+"_text"], lookup[case, model, interface+"_vision"],
                         model=model, interface=interface)
+    return pairs
+
+
+def pair_plan(scope="focused", max_calls=240):
+    """Freeze matched comparisons without looking at the absolute quality ratings."""
+    if VERSION != "ppt-harness-2":
+        raise ValueError("Head-to-head collection is for the harder profile")
+    if (DATA / "paired_protocol.json").exists():
+        raise RuntimeError("Paired protocol already frozen")
+    pairs = matched_pairs(read(DATA / "runs.json"), scope)
     existing = len(Cache().rows)
     calls = sum(p["eligible"] for p in pairs)*len(JUDGES)*2
     if existing+calls > max_calls:
@@ -1232,11 +1269,61 @@ def pair_plan(scope="focused", max_calls=240):
     print("Frozen", len(pairs), "matched pairs;", calls, "judge calls;", existing+calls, "total planned calls")
 
 
-def paired_collect(live=False, max_calls=240):
-    p = read(DATA / "paired_protocol.json")
+def pair_expand(max_calls=430):
+    """Extend the completed focused plan without replacing its requests or responses."""
+    assert VERSION == "ppt-harness-2"
+    folder = DATA / "paired_full"
+    if (folder / "protocol.json").exists():
+        raise RuntimeError("Full extension already frozen")
+    previous = read(DATA / "paired_protocol.json")
+    previous_judgments = read(DATA / "paired_judgments.json")
+    assert previous["scope"] == "focused" and previous["prompt"] == PAIR_PROMPT
+    assert all(j["status"] == "ok" for j in previous_judgments)
+    pairs = matched_pairs(read(DATA / "runs.json"), "full")
+    mapping = {p["id"]: p for p in pairs}
+    assert all(mapping[p["id"]] == p for p in previous["pairs"])
+    cache = Cache()
+    lost = read(DATA / "collection_failure.json")["attempts"] if (DATA / "collection_failure.json").exists() else 0
+    planned = sum(p["eligible"] for p in pairs)*len(JUDGES)*2
+    reused = len(previous_judgments)
+    prior_attempts = len(cache.rows) + lost
+    assert prior_attempts+planned-reused <= max_calls
+    protocol = {**previous, "version": "ppt-pairs-full-1", "frozen_at": now(), "scope": "full",
+        "pairs": pairs, "planned_pair_calls": planned, "reused_pair_calls": reused,
+        "new_pair_calls": planned-reused, "prior_attempts": prior_attempts, "calls_already_cached": len(cache.rows),
+        "cumulative_call_cap": max_calls, "source_sha256": sha(__file__),
+        "runs_sha256": sha(DATA / "runs.json"),
+        "base_cache_sha256": sha(DATA / "cache.jsonl"),
+        "base_manifest_sha256": sha(DATA / "manifest.json"),
+        "base_judgments_sha256": sha(DATA / "paired_judgments.json"),
+        "prior_lost_attempts": lost,
+        "timing": "User selected all four conditions and factor comparisons after focused results were available. Freeze every remaining pair before new calls; no outcome-based subset selection.",
+        "reuse": "Reuse all 108 focused judgments unchanged; this expansion is not an independent replication. Existing decks, task cards, prompts, judges, effort and ordering rule stay fixed.",
+        "primary": "Report model win credit separately for all four conditions, helper win credit under each review mode, and screenshot win credit under each interface. Average orders within judge, then equal judges and briefs.",
+        "factor_interaction": "Compare helper win credit with versus without screenshot review and screenshot win credit with versus without helpers. These differences compare preferences, not a cardinal quality scale.",
+        "cache_write_change": "Local writes retry ENOSPC up to five times after truncating any partial append; no model retry. Require 256 MiB free before starting a missing call.",
+        "budget": {"effort": "medium", "claude_per_call_usd_cap": 3,
+                   "additional_claude_call_cap_usd": (planned-reused)//len(JUDGES)*3,
+                   "model_retries": "none", "concurrency": 3}}
+    save(folder / "protocol.json", protocol)
+    shutil.copyfile(__file__, folder / "harness_at_freeze.py")
+    print("Full plan:", len(pairs), "pairs;", reused, "reused +", planned-reused,
+          "new judgments;", prior_attempts+planned-reused, "cumulative attempts", flush=True)
+
+
+def paired_collect(live=False, max_calls=240, scope="focused"):
+    expanded = scope == "full" and (DATA / "paired_full/protocol.json").exists()
+    folder = DATA / "paired_full" if expanded else DATA
+    p = read(folder / ("protocol.json" if expanded else "paired_protocol.json"))
+    assert p["scope"] == scope
     assert p["prompt"] == PAIR_PROMPT and p["runs_sha256"] == sha(DATA / "runs.json")
     assert max_calls <= p["cumulative_call_cap"], "Raise the frozen budget explicitly before collection"
-    cache = Cache(live, max_calls)
+    if expanded:
+        assert p["base_cache_sha256"] == sha(DATA / "cache.jsonl")
+        assert p["base_manifest_sha256"] == sha(DATA / "manifest.json")
+        assert p["base_judgments_sha256"] == sha(DATA / "paired_judgments.json")
+    cache = Cache(live, max_calls, folder / "cache.jsonl",
+                  (DATA / "cache.jsonl",) if expanded else (), p.get("prior_lost_attempts", 0))
     runs = {r["artifact"]: r for r in read(DATA / "runs.json")}
     jobs = [(pair, j, reverse) for pair in p["pairs"] if pair["eligible"] for j in JUDGES for reverse in (False, True)]
     random.Random(20261024).shuffle(jobs)
@@ -1266,7 +1353,10 @@ def paired_collect(live=False, max_calls=240):
 
     with ThreadPoolExecutor(max_workers=3) as pool:
         rows = list(pool.map(one, jobs))
-    save(DATA / "paired_judgments.json", rows)
+    save(folder / ("judgments.json" if expanded else "paired_judgments.json"), rows)
+    if expanded:
+        print("Full paired responses:", sum(r["status"] == "ok" for r in rows), "/", len(rows), flush=True)
+        return
     pair_lookup = {pair["id"]: pair for pair in p["pairs"]}
     audit_rows = []
     for row in rows:
@@ -1301,7 +1391,7 @@ def select_profile(profile):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["init", "self-test", "controls", "collect", "judge", "audit", "manifest", "paired-init", "paired-collect"])
+    parser.add_argument("command", choices=["init", "self-test", "controls", "collect", "judge", "audit", "manifest", "paired-init", "paired-expand", "paired-collect", "paired-manifest"])
     parser.add_argument("--live", action="store_true", help="Explicitly permit missing CLI requests")
     parser.add_argument("--profile", choices=["original", "harder"], default="harder", help="Independent evidence folder; original preserves v1 behavior")
     parser.add_argument("--n-briefs", type=int, default=2, help="Set before init; pilot default 2, larger study 12+")
@@ -1318,7 +1408,11 @@ if __name__ == "__main__":
         manifest()
     elif args.command == "paired-init":
         pair_plan(args.pair_scope, args.max_calls)
+    elif args.command == "paired-expand":
+        pair_expand(args.max_calls)
+    elif args.command == "paired-manifest":
+        manifest(DATA / "paired_full")
     elif args.command == "paired-collect":
-        paired_collect(args.live, args.max_calls)
+        paired_collect(args.live, args.max_calls, args.pair_scope)
     else:
         {"controls": controls, "collect": collect, "judge": judge, "audit": audit}[args.command](args.live, args.max_calls)
