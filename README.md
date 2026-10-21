@@ -57,7 +57,7 @@ Routing, approvals and checks need one allowed answer rather than generated pros
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
-| 18 | [Four decision models as tasks get harder](notebooks/18-decisions-api-comparison/) | A wrong route or approval carries into later work. On 768 fresh cases in six task families and four construction levels, how do OpenAI Decisions, Jev 1.14, Mercury Decide and Clef Flash compare on exact accuracy, confidence calibration, response time, throughput and cost? | Mercury 611/768 (79.6%); Clef 74.7%, Jev 74.6%, OpenAI 74.3%. Clef and Jev serial medians about 0.21 s; Mercury 0.31 s. All four reach only 50% on the hardest one-cent ledger check; synthetic generators |
+| 18 | [Four decision models as tasks get harder](notebooks/18-decisions-api-comparison/) | A one-cent payment error or obsolete record can trigger the wrong action. How do OpenAI Decisions, Jev 1.14, Mercury Decide and Clef Flash compare on 768 fresh cases, and do clearer prompts or staged calculations fix ledger failures? A follow-up adds 288 ledger claims and 144 pilot plus 768 held-out join, policy and counting cases, with shortcut audits and all difficulty levels reported. | Clarified ledger prompts: 49.7–53.8%; model block sums: 51.0–56.9%; row labels plus Python: 99.7–100% (assisted). Pilot-selected replication: OpenAI 55.2%, Jev 70.1%, Mercury 72.1%; Clef 59.2% among valid replies, 44.3% including failures. Direct record equality explains the original shared 100% ceiling. Original serial medians: Jev/Clef about 0.21 s, Mercury 0.31 s |
 
 ## Forecasting observations
 
