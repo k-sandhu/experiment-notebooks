@@ -112,7 +112,7 @@ label. Each one gives the question, the fresh data to use, the models, the measu
 
 | Issue | Question |
 |---|---|
-| [#12](https://github.com/k-sandhu/experiment-notebooks/issues/12) | People have used the Decisions API since its October beta to route complaints, grade agent transcripts, pick an agent's next action from a screenshot and choose which LLM should answer a prompt, and their reports disagree on whether its probabilities can be trusted. On 14 tasks with fresh data, including those uses plus bird recordings, wildlife photos and restaurant inspection reports, which uses hold up, are its probabilities calibrated and stable when options are reordered or reworded, and what does each cost? |
+| [#12](https://github.com/k-sandhu/experiment-notebooks/issues/12) | People have used the Decisions API since its October beta to route complaints, grade agent transcripts, pick an agent's next action from a screenshot and choose which LLM should answer a prompt, and their reports disagree on whether its probabilities can be trusted. On 14 tasks with fresh data, including those uses plus bird recordings, wildlife photos and restaurant inspection reports, which uses hold up, are its probabilities calibrated and stable when options are reordered or reworded, how does it compare with other decision models such as Jev where a task calls for it, and what does each cost? |
 
 Notebooks 01-04 were first run inside another project and moved here with their data and caches.
 
