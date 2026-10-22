@@ -8,7 +8,7 @@ adding or changing a notebook.
 ```
 notebooks/NN-short-name/
   NN_short_name.ipynb   the experiment, committed with its outputs
-  README.md             why the problem matters, question, result, workflow diagram, key figure, how to run
+  README.md             topic introduction, worked examples, question, explained results and visuals, how to run
   data/                 inputs, caches of every model response, results tables
   figures/              PNGs saved by the notebook (used by README.md)
 ```
@@ -62,16 +62,37 @@ the number with a GitHub issue before you create any file for a new notebook.
 Do not rename or renumber another agent's notebook or issue. If you find a notebook folder in your working
 tree with no claim issue, ask the user before touching it.
 
+## Reader and quality standard
+
+Assume the reader knows nothing about the topic and will not read or run the code. Both the notebook's
+rendered narrative and its README must teach the topic and explain the experiment independently. A reader
+should understand the problem, the choices made, the evidence and its practical meaning from prose,
+examples, tables and figures alone. Python knowledge is needed only for the optional reproduction steps.
+
+Aim for the teaching and presentation quality of winning Kaggle competition notebooks: a welcoming
+introduction, carefully chosen examples, clear visual explanations, reasoned comparisons and honest error
+analysis. Treat this as an editorial standard. Every explanation must be supported by this experiment's
+evidence or a named source. Give the subject enough space to make sense; short sentences do not require
+short explanations.
+
 ## Rules for notebooks
 
 - **Self-contained.** A notebook imports nothing from this repo. Helpers (CLI wrappers, caches, plot style)
   are defined inside the notebook, even if another notebook has the same code. Paths are relative to
   the notebook's folder.
-- **Goal first.** The first cell states the question, why it matters, the data, the method and the
-  headline result. A reader should get the answer from the first screen.
-- **Structure:** goal and summary, contents and workflow diagram, setup and configuration, data (with a look
-  at it), method, results (charts and tables), error analysis with concrete examples, limitations, how to
-  reproduce, future work and further reading.
+- **Introduce the topic first.** Open with several short markdown paragraphs that explain the topic in
+  everyday language, where it comes up, who uses the answer and why mistakes matter. Start with a concrete
+  situation and a simple example of the task. Explain the basic concepts and the ordinary approach before
+  introducing model names, metrics or experiment details. Let the difficulty in that example lead into
+  the research question. The opening may span several markdown cells.
+- **Orient the reader before the code.** After the introduction, state the question, data and counts,
+  method in plain language, headline result and main caveat. Keep this summary before the Contents and
+  setup cells. Give readers enough context to understand the result before asking them to interpret it.
+- **Structure:** topic introduction and simple example, question and summary, contents and workflow
+  diagram, setup and configuration, data (with a look at it), method with worked examples, results (charts,
+  tables and interpretation), error analysis with concrete examples, limitations, how to reproduce,
+  future work and further reading. Explain the purpose and choices of each code step in the surrounding
+  prose, so skipping all code leaves a complete account of the experiment.
 - **Future work and further reading.** The last numbered section is `## NN. Future work and further reading`,
   linked from the Contents cell like every other section.
   - Under `### Future work`, list three to five follow-up experiments that this notebook's results or
@@ -92,10 +113,11 @@ tree with no claim issue, ask the user before touching it.
 
 A reader should see how the experiment runs before reading any code.
 
-- **Contents and workflow at the top.** Right after the goal cell, add a `## Contents` cell that links to
-  every numbered `##` section, then a diagram of the whole experiment: data, preparation, model calls,
-  scoring, results. Label each step with what goes in and what comes out, with counts ("146 photos",
-  "584 Decisions calls"). Repeat the diagram in the notebook's `README.md`.
+- **Contents and workflow at the top.** After the opening introduction and experiment summary, before
+  any code, add a `## Contents` cell that links to every numbered `##` section, then a diagram of the whole
+  experiment: data, preparation, model calls, scoring, results. Label each step with what goes in and what
+  comes out, with counts ("146 photos", "584 Decisions calls"). Repeat the diagram in the notebook's
+  `README.md` and explain how one example travels through it.
 - **Model call graph.** When a notebook makes more than one LLM call per item, or calls are chained, add a
   diagram of the calls. This covers cascades, retrieve-then-decide, tournaments, judges, retries and
   fallbacks, agent loops and agents that message each other.
@@ -124,41 +146,98 @@ flowchart LR
 
 ## Explainers and visuals
 
-- **Explain each step.** Before each method or processing step, a markdown cell says what the step does,
-  why it is there and what to look for in the output. After each result, one or two sentences state what it
-  shows, with the number.
-- **Show the inputs.** Show a sample of the data (a page, an image, a row), the exact prompt or question sent
-  to each model, and one raw response next to the parsed result.
-- **Charts for every result.** Each results section has at least one chart, not only a table. Error analysis
-  shows failures visually where it can: the image or page region next to the model's answer and the gold
-  label.
-- **Define terms on first use** (average precision, recall@k, F1, calibration, top-1) in a sentence a reader
-  new to the field can follow.
-- **Save the figures the README uses** to `figures/`: the headline chart, an error example and any
-  matplotlib diagram.
+- Before each method or processing step, explain what it does, why it is needed, why this approach was
+  chosen and what to look for in the output. Describe the simplest reasonable alternative and what the
+  comparison can tell us. A reader should not need to infer the method from code or a library name.
+- Show actual inputs (a page, an image, a row), the exact prompt or question sent to each model, and a raw
+  response next to the parsed result. Walk one example through preparation, prediction and scoring.
+  Explain what the correct answer means and how it was established.
+- Define terms and acronyms before using them to explain a result. For measures such as average precision,
+  recall@k, F1, calibration and top-1, explain what is counted, which direction is better and what a value
+  means for the task. Use a small numerical example for the main metric; formulas can follow the intuition.
+- Each results section has at least one chart. Choose a visual that answers a stated question. Before it,
+  explain what to compare; alongside it, explain the axes, units, groups, colours and any reference lines,
+  intervals or unusual scales. Define what an interval represents and how it was calculated.
+- Follow every figure and results table with interpretation in prose. For a diagram or input example,
+  explain the relationships or details it teaches. For measured results, state the main pattern with
+  actual values and sample counts, compare it with the relevant baseline, and explain what it means in
+  the original situation. Discuss exceptions, uncertainty and what the visual cannot establish. Use as
+  many connected paragraphs as the finding needs; a caption that repeats the title is not sufficient.
+- Explain why a pattern might occur using evidence from examples or further analysis. Separate measured
+  observations from possible explanations. Do not infer a cause from an aggregate comparison alone. When
+  supported by the data, examine groups or conditions that help explain the average and show their counts.
+- Show error examples visually where possible: put the input or relevant region beside the model's
+  answer and the correct answer. Explain the specific mismatch, its effect on the score and its practical
+  consequence. Include successes and disagreements to show the boundary of what worked.
+- Make figures readable at normal README width: legible text, units, consistent colours, descriptive
+  legends and annotations for the points discussed in prose. Do not rely on colour alone to identify a
+  result. Give embedded images useful alt text and keep detailed interpretation in visible prose.
+- Save every figure used by the README to `figures/`, including the headline chart, example panels and
+  any matplotlib diagrams. Keep notebook and README figures, numbers and explanations in agreement.
+
+## Worked examples
+
+Examples are part of the explanation in both the notebook and its README. Place them beside the concept
+or finding they teach. A reader should be able to follow the reasoning without opening the notebook from
+the README, reading code or inspecting a cache file.
+
+- Include at least five substantive examples in each README when the data supports them. Cover a simple
+  introduction to the task, an end-to-end worked case, a typical success, an informative failure and a
+  difficult case or disagreement between methods. Use more when different methods or failure types need
+  explanation. For very small experiments, show the available distinct cases and explain the coverage.
+- For each measured example, show the relevant input, expected answer, observed answer or behaviour, and
+  why the outcome matters. For the end-to-end example, show the intermediate steps and how the score is
+  calculated. Use readable excerpts, annotated images or small comparison tables as appropriate.
+- Identify measured cases with stable item IDs or source references that connect them to the saved data.
+  Explain how examples were selected and how common the illustrated behaviour was. Include ordinary cases
+  as well as striking ones, and relate them to aggregate results so examples do not substitute for evidence.
+- A teaching example may simplify the task, but label it as illustrative and keep it separate from measured
+  results. Never invent a response or failure to fill an example category. If no failures or disagreements
+  were observed, say so, explain the sample limit and show the closest informative cases instead.
 
 ## Notebook README
 
-Open a notebook's `README.md` the way a lecturer opens a topic: make the reader care about the problem before
-showing any number. In order:
+Write each notebook's `README.md` as a standalone illustrated explanation for someone new to the subject.
+It should provide enough background, examples and analysis to understand the work without reading code or
+following a link to the notebook. Open gently, like a lecturer introducing an unfamiliar topic. In order:
 
-1. **The situation.** A concrete case where the task comes up and what a mistake costs there ("a missed
-   checkbox is a test that never runs"). Short paragraphs, plain words, no product names the reader must know.
-2. **Why it is hard.** Why the obvious approach, or the obvious way to measure it, fails. This is where the
-   design of the experiment comes from (paired permitted controls, swapped answer order, a fixed call budget).
-3. **Question.** One or two sentences naming what is compared, on what data, with counts.
-4. **Result.** The answer in plain numbers, then the one caveat that matters most.
+1. Introduce the topic through a concrete situation. Explain what the task is, who needs it and why the
+   answer matters. Spend several short paragraphs on the background needed to understand the experiment.
+   Define unfamiliar concepts in plain language as they appear.
+2. Show a small example of the task and what a useful answer looks like. Explain the ordinary approach
+   and where it becomes difficult, including what a mistake costs. Use this difficulty to motivate the
+   experimental design; explain choices such as paired controls or a fixed call budget before naming them.
+3. State the question: what is compared, on what data and with what counts. Explain why the comparison
+   would help someone make a decision.
+4. Give the result in plain numbers, translate it into the original situation and state the caveat that
+   most affects its use. Introduce the metric before asking the reader to interpret a score.
 
-Then the details: results table, figures, workflow diagram, method, limits, spend and how to run. Run
-bookkeeping (call counts, blocked or failed requests, cache layout, protocol versions) goes below the result,
-and every term a reader new to the tools would not know is explained where it first appears.
+Then develop the evidence as a connected explanation:
+
+- Explain the data, method and reasons for the main choices. Include the workflow diagram and an
+  end-to-end worked example. Explain what makes the comparison fair and what each method can access.
+- Present a results table and key figures with the reading guidance and interpretation required above.
+  Connect each comparison to the question it answers. Explain the size and practical meaning of differences,
+  including tradeoffs such as accuracy, time and cost when measured.
+- Distribute the worked examples through the explanation. Include an error analysis that links particular
+  failures or disagreements to patterns in the results, with figures where they help the reader see why.
+- Explain limitations and the conditions under which the finding might change. End the analysis with what
+  the evidence supports doing and which uncertainty needs another experiment.
+- Put spend, call counts, blocked or failed requests, cache layout, protocol versions and how to run below
+  the analysis. Link the notebook and saved results for readers who want to inspect or reproduce the work.
+
+Use headings and a contents list when needed to make a long README easy to browse. Keep background relevant
+to the question, and give each example or visual a teaching purpose. Cut repetition while preserving the
+explanations that a new reader needs.
 
 ## Root README table
 
-Each notebook has one row in a table in the root `README.md`. The tables sit under themed sections ("Reading
-documents", "Letting models act"), each opened by a short paragraph on why that family of problems matters. Put
-a new notebook under the section it fits, or add a section with its own paragraph. Write each row for a reader
-who has opened no notebook and does not know the tools:
+Open the root `README.md` with a plain-language introduction to the project's topics, why the experiments
+matter and what a reader can learn without reading code. Each notebook has one row in a table under a
+themed section ("Reading documents", "Letting models act"). Introduce each theme with a concrete example
+and enough background to explain why that family of problems matters. Put a new notebook under the
+section it fits, or add a section with its own introduction. Write each row for a reader who has opened
+no notebook and does not know the topic or tools:
 
 - **Goal and question:** first the problem and why it matters, then the question, naming what is compared
   and on what data (with counts). Explain or avoid jargon and product names. Do not lean on another notebook
@@ -207,14 +286,15 @@ data can measure memory rather than skill. Test on data the models cannot have s
   source, each item's creation date, and the date filter applied.
 - Freeze what you collect (save it in `data/`, or pin URLs and hashes where the licence does not allow
   redistribution), so a re-run scores the same items.
-- If a notebook has to use older public data, say so in the goal cell and the limitations, and treat its accuracy
-  as an upper bound. Notebooks 01-04 and 06 predate this rule and do so.
+- If a notebook has to use older public data, say so in the opening summary and the limitations, and treat
+  its accuracy as an upper bound. Notebooks 01-04 and 06 predate this rule and do so.
 
 ## Writing style
 
-Plain, specific, short. State what was measured and what it showed, with numbers. Write for a reader who
-knows Python but has not seen this experiment. These rules apply to notebook markdown, READMEs, PR
-descriptions and issues.
+Use plain words, specific statements and short sentences, with enough explanation to teach an unfamiliar
+topic. Assume no subject knowledge and no code reading. Introduce concepts through examples, then state
+what was measured and what it showed, with numbers. These rules apply to notebook markdown, READMEs, PR
+descriptions and issues; the longer teaching narrative belongs in notebooks and READMEs.
 
 LLM-written text has recognisable habits: a small set of overused words, stock sentence shapes and
 formatting tics. One instance is harmless; several together make a page read as generated and hide the
@@ -224,8 +304,11 @@ guide (WikiProject AI Cleanup) and from studies of words whose frequency jumped 
 
 ### Do
 
-- **Lead with the finding and its number.** "Claude Opus 5.5 read every marked test on 24 forms (F1 1.00)",
-  not "The results reveal interesting patterns across models".
+- **Introduce the topic before the findings.** Give notebook and README openings room to explain the
+  subject, its importance and a concrete example before presenting the experimental result.
+- **Lead result paragraphs with the finding and its number.** Once the task and metric are explained,
+  write "Claude Opus 5.5 read every marked test on 24 forms (F1 1.00)", not "The results reveal interesting
+  patterns across models". Follow the number with its meaning and the evidence needed to interpret it.
 - **Name things.** The model, the dataset, the count, the file: "146 photos of 73 car models", not "a
   diverse set of images".
 - **Use plain verbs.** "is", "has", "uses", "shows", "returns".
@@ -283,6 +366,21 @@ plain word, or delete the phrase.
 Prefer a table or a number over an adjective.
 
 ### Check before you commit
+
+When adding or revising a notebook or its README, read the rendered README and the notebook with code
+cells hidden or skipped. Check that:
+
+- The opening teaches the topic, shows why it matters and gives a simple example before the result.
+- A new reader can explain the question, data, methods and main result using only the narrative and visuals.
+- The README stands on its own and includes the worked examples required above, drawn from traceable data
+  or clearly labelled as illustrations.
+- Every visual has reading guidance and an explanation of what it teaches. Results figures and tables
+  have numerical interpretation, practical meaning and relevant limits. The prose explains patterns
+  rather than merely naming the largest bar or best score.
+- Error analysis explains actual cases and how they relate to the aggregate findings. Observations and
+  possible explanations are clearly distinguished.
+- Images render, text is legible, links and section references work, and counts and claims agree between
+  the notebook, README and saved results.
 
 Read the changed text once against the lists above, then search the files you wrote for the overused words
 and for em dashes (replace the paths with your notebook's):
