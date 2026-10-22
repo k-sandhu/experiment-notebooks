@@ -1,494 +1,367 @@
-# From spending announcements to cash actually paid
+# Fiscal measurement from recent public reports
 
-A government announces a new clinic. Parliament approves funding, a contractor signs an agreement, and the treasury pays the first installment. These are separate economic events. An economist using document-based spending data needs to decide whether the variable measures a promise, permission to spend, a commitment, or money that has actually left the treasury.
+A government report can mention a programme's budget, an expense recorded in its accounts and a payment that has reached somebody's bank. These numbers answer different questions. A researcher building a spending series, or a journalist checking a promise, needs to know which number the document actually supports.
 
-Here implemented spending means settled cash paid to an external recipient. Budget authority is a ceiling, not a payment. A signed but unpaid contract is also not cash. A cancellation can leave past cash positive while reducing active authority to zero. This distinction matters because counting an announcement as implementation can put spending in the wrong quarter or count money that was never paid.
+Suppose an agency receives grants and uses part of the money to repay a lease. Its net financing inflow is smaller than the grants it received. Reporting that net figure as the amount of government funding would subtract a payment that belongs to a different part of the question. The error can survive even when every number was copied correctly.
 
-For an illustrative clinic, a 100-million announcement, an 80-million approval and a 20-million payment imply 20 million of implemented spending. If the programme is then cancelled without a refund, the 20 remains paid. A useful answer should preserve that history instead of choosing the last or largest amount in the documents.
+The Money and Pensions Service's newly published accounts give a real example. Its cash-flow statement reports grant receipts of GBP 203.555 million from the Department for Work and Pensions (DWP), GBP 2.100 million from HM Revenue and Customs (HMRC), and GBP 0.583 million from the Ministry of Justice (MoJ). Together these are GBP 206.238 million. The statement's net financing inflow is GBP 206.023 million, after lease principal of GBP 0.182 million and interest of GBP 0.033 million. Both totals are valid, but only the first answers a question about gross grant receipts. This is measured case `MAPS-01`; the model answers appear below.
 
-The ordinary approach is to read each document, identify its programme and fiscal stage, then reconcile repeated reports and revisions. A direct model answer combines these steps. An event ledger makes them explicit: the model records dated events and Python calculates the cash path. The ledger adds implementation work, so it needs either better measurements or a separately demonstrated review benefit to justify that work.
+The ordinary approach is to read the question, find the relevant table and notes, select the right amounts and calculate the answer. A language model can perform all of those steps in one response. Another approach asks the model to make a ledger: a short list of source numbers, their units, addition or subtraction signs, and supporting quotations. Python then does the arithmetic. A ledger can expose a wrong inclusion or unit conversion, but it also asks the model to produce more fields. It does not make an unsupported number true.
 
-We compare these methods on 48 held-out fictional policy histories, after 12 development histories, using GPT-6.1 Sol and Claude Opus 5.5. Both methods receive identical raw documents and use one model call per history. Each returns cumulative cash for three quarter-ends, plus separate active authority and status. All three quarters use information available by 30 September 2026. These are retrospectively reconstructed totals, not estimates restricted to what was known at each quarter-end.
+This notebook tests that choice on nine public fiscal reports or releases published from 13 to 22 October 2026, with an updated publication-history page as auxiliary context. It extends an earlier synthetic pilot, where every valid answer had the correct financial values and the ledger's only apparent gain was cleaner JSON formatting. The original caches, figures and [archived explanation](data/synthetic_v1_README.md) remain available.
 
-The main score is an exact cash history: all three cumulative cash amounts must be correct. A separate amount score averages the absolute error across the three quarters, in million crowns. Invalid responses fail exactness and remain in its denominator.
+The question is whether a ledger improves the correctness of fiscal amounts and missing-disclosure decisions when Direct and Ledger receive the same real source excerpts. The new study has 25 questions from nine source packets and ten official source records. Three questions from one packet are development checks. The primary comparison uses 22 held-out questions from eight packets, with one Direct and one Ledger request to each of GPT-6.1 Sol through Codex, Claude Opus 5.5 through Claude Code, and Muse Wonder Full 1.0 through Muse.
 
-GPT-6.1 Sol: direct 48/48 and ledger 48/48 exact cash histories; Claude Opus 5.5: direct 47/48 and ledger 48/48 exact cash histories. All 191 schema-valid held-out answers have zero cash error. There is 1 invalid output among 192 held-out responses. The invalid answer contains the correct cash, authority and status values but begins with prose. The sample contains explicit synthetic records and only six recurring history structures; it does not establish equal performance on public fiscal documents.
+An answer is correct under the primary score when its run satisfies the fixed rules and it returns the supported amount in the requested units, or correctly says that the supplied documents do not disclose it. Six held-out questions have no disclosed amount; 16 have a supported amount, including one explicit zero. Accuracy counts every question, including a request that fails or cannot be parsed. For example, 21 correct answers out of 22 means 95.5% accuracy. Cleaner JSON is measured separately, using the same unchanged-object recovery rule for both methods.
+
+GPT-6.1 Sol: Direct 22/22, Ledger 22/22; Claude Opus 5.5: Direct 22/22, Ledger 22/22; Muse Wonder Full: Direct 21/22, Ledger 21/22. Across the six model-method combinations, 130 of 132 held-out answers were correct. This run found no demonstrated gain in completed financial answers from the ledger. Run failures are reported separately from financial mistakes. The selected sample is too small to establish equivalence on other records. All 130 protocol-valid held-out answers have the correct financial amount or status. A separate unchanged-payload check also finds the excluded Muse Ledger answer financially correct: all 131 completed parseable answers have the right amount or status. That diagnostic does not replace the fixed one-attempt score.
+
+The main caveat is the small, selected sample. These are English excerpts chosen to contain relevant evidence and difficult nearby figures. Most packets contain one report. This tests reading and measurement after retrieval, rather than finding every relevant document on the open web. A recent publication date also does not prove that every underlying financial fact was previously unseen by a model.
 
 ## Contents
 
-- [Data and freshness](#data-and-freshness)
-- [Two methods with the same evidence](#two-methods-with-the-same-evidence)
-- [Results](#results)
-- [Worked histories and errors](#worked-histories-and-errors)
-- [Limits and practical use](#limits-and-practical-use)
-- [Spend and reproduction](#spend-and-reproduction)
-- [Future work and further reading](#9-future-work-and-further-reading)
+- [1. Configuration and fixed inputs](#1-configuration-and-fixed-inputs)
+- [2. Documents and the answer key](#2-documents-and-the-answer-key)
+- [3. Direct answers and the ledger](#3-direct-answers-and-the-ledger)
+- [4. Financial answer results](#4-financial-answer-results)
+- [5. Worked cases and error analysis](#5-worked-cases-and-error-analysis)
+- [6. Format and source checks](#6-format-and-source-checks)
+- [7. Time and spend](#7-time-and-spend)
+- [8. Limits and reproduction](#8-limits-and-reproduction)
+- [9. Future work and further reading](#9-future-work-and-further-reading)
 
-## Data and freshness
+```mermaid
+flowchart TD
+    A["9 recent reports/releases and 1 updated history record; primary publications 13-22 October 2026"] --> B["9 source packets and 25 fixed questions; 3 development, 22 held out"]
+    B --> C["Identical question and excerpts for both methods; source-derived answer key kept out of prompts"]
+    C --> D["75 Direct CLI requests; 25 questions x 3 models"]
+    C --> E["75 Ledger CLI requests; 25 questions x 3 models"]
+    D --> F["Shared unchanged-JSON parser; Direct amount or not disclosed"]
+    E --> G["Shared parser, then Python Decimal sum; Ledger amount or not disclosed"]
+    F --> H["132 held-out scores; paired comparisons within 8 source packets"]
+    G --> H
+    D --> I["Full-request caches; 18 development + 132 test attempts"]
+    E --> I
+    H --> J["Accuracy, disagreements, source checks; latency, known list-equivalent cost"]
+```
 
-The dataset has 60 histories, 560 visible documents and 60 additional post-cutoff documents that are stored but excluded. Six families have two development and eight held-out histories each. They cover approval without cash, installments with repeated reports, cancellation after payment, corrected historical amounts, publication-versus-settlement dates and notices about two programmes.
+For `MAPS-01`, the annual report enters as one frozen text excerpt. Each method receives the same gross-grant question and the same tables. Direct returns an amount. Ledger returns the selected source numbers, and Python adds them after converting thousands of pounds into millions. Both answers are compared with GBP 206.238 million. The three questions from this report remain together when uncertainty is estimated.
 
-Python generated every amount, identity and transaction schedule on 22 October 2026. The dates inside the records refer to a simulated 2026 accounting year. They are not dates of real public records or training examples. Different-vendor Qwen3.8 Flash, pinned to `qwen/qwen3.8-flash-20260826`, wrote 22 wording templates for 11 event types. Template placeholders were validated and factual semantics reviewed before evaluation. One template repeats its project placeholder; this is permitted because it changes neither the fact nor the set of substituted fields. Qwen did not produce the monetary gold labels.
+## 1. Configuration and fixed inputs
 
-GPT-6.1 Sol's [published cutoff is 30 April 2026](https://developers.openai.com/api/docs/models/gpt-6.1-sol). [Claude Opus 5.5 was released on 22 September 2026](https://www.anthropic.com/claude-opus-5-5); the release is recorded as the freshness fallback, not a claimed cutoff. [Qwen's weights](https://huggingface.co/Qwen/Qwen3.8-Flash-Next) use the Qwen community 1.0 licence; we used its hosted inference route and did not redistribute weights. Newly generated fixture content is released as CC0-1.0. Exact model metadata and the authored response are saved in `data/`.
+The published run uses medium reasoning effort for all three models. Those vendor labels do not guarantee equal hidden computation. The comparison that answers this notebook's question is within each model: the evidence is held fixed while the response method changes.
 
-The scoring gold comes from final cash transactions and a separate authority schedule. A second implementation reconciles the oracle events and must agree on every quarter of all 60 histories before any evaluated model call. This checks arithmetic and event semantics. It cannot establish that synthetic documents represent the ambiguities of real fiscal records.
+The notebook configuration defaults to a full replay of saved responses. Live mode is explicit and defaults to only two questions. Model selection, new-call limits and the Claude list-equivalent budget are visible at the top. Codex and Muse do not expose a cash charge attributable to each request, so a call cap also limits their use.
+
+The development run produced 17 correct completed answers and one Muse ledger timeout. Before any held-out request, the timeout was increased from 120 to 300 seconds for all three models. The failed development request was retained and was not retried. The original and amended protocol files record this change. Questions, evidence, gold labels, prompts and scoring were unchanged.
+
+## 2. Documents and the answer key
+
+The source packets include complete selected financial tables with their headers, comparative columns and relevant notes, as well as substantive sections from official releases. HTML table cells were kept in order. The UK annual-report PDFs were extracted with Poppler; the Treasury PDF used pdfplumber. Tables were checked against rendered pages. One Treasury footnote required a reading-order repair because the extraction interleaved it with a neighbouring note. Its words and numbers were preserved.
+
+| Packet | Publication | Questions | What can go wrong |
+| --- | --- | --- | --- |
+| [UK Fusion Energy accounts](https://www.gov.uk/government/publications/uk-fusion-energy-ltd-annual-report-and-accounts-202526/uk-fusion-energy-ltd-annual-report-and-accounts-202526-accessible-version) | 13 Oct | 3 test | Asset values and programme spending mistaken for cash; a supported zero |
+| [Money and Pensions Service accounts](https://www.gov.uk/government/publications/money-and-pensions-service-annual-report-and-accounts-2025-to-2026) | 20 Oct | 3 test | Net financing and investing totals mistaken for gross receipts or purchases |
+| [National Forest Company accounts](https://www.gov.uk/government/publications/national-forest-company-annual-report-and-accounts-2025-to-2026) | 15 Oct | 3 test | Pounds versus millions; group versus parent; accrued lease costs |
+| [Post Office Horizon redress](https://www.gov.uk/government/publications/post-office-horizon-financial-redress-and-legal-costs-data-for-2026/post-office-horizon-financial-redress-data-as-of-30-september-2026) and [update history](https://www.gov.uk/government/publications/post-office-horizon-financial-redress-and-legal-costs-data-for-2026) | 16 Oct; corrected 22 Oct | 3 test | Closed scheme omitted; interim payments confused with final settlements |
+| [US September Monthly Treasury Statement](https://fiscaldata.treasury.gov/static-data/published-reports/mts/MonthlyTreasuryStatement_202609.pdf) | 16 Oct | 3 test | Fiscal year versus quarter; offsets; an already-incorporated revision |
+| [Office for National Statistics (ONS), September public sector finances](https://www.ons.gov.uk/economy/governmentpublicsectorandtaxes/publicsectorfinance/bulletins/publicsectorfinances/september2026) | 21 Oct | 3 test | Net cash requirement confused with gross accrued expenditure |
+| [EU Ukraine support release](https://cyprus.representation.ec.europa.eu/news/commission-disburses-eur286-billion-ukraine-drones-missiles-and-urgent-battlefield-needs-2026-10-14_en) | 14 Oct | 3 test | New defence cash confused with available future budget support |
+| [European Parliament storm-aid vote, European Union Solidarity Fund (EUSF)](https://www.europarl.europa.eu/news/en/press-room/20261018IPR48259/parliament-backs-storm-recovery-aid-for-portugal-spain-italy-and-malta) | 21 Oct | 1 test | Approval and past advances mistaken for new same-day payment |
+| [EU Sweden/Netherlands Recovery and Resilience Facility (RRF) payments](https://ec.europa.eu/commission/presscorner/detail/en/mex_26_2159) | 14 Oct | 3 development | New payments versus cumulative totals; false precision from percentages |
+
+The eight held-out packets contain seven groups of three questions and one single-question packet. That is 22 questions, rather than 22 independent document settings. The Horizon packet contains the payment release and its publication/update history; the other packets each contain one official source record. The test includes GBP, EUR and USD questions but does not convert currencies or average monetary errors across currencies.
+
+Two measures need particular care. The US Monthly Treasury Statement uses modified cash accounting, with public-debt interest accrued rather than counted only when cash moves. Its questions therefore ask for reported net budget outlays, not strict gross bank payments. The ONS net cash requirement is the net financing that central government needs to raise, not a gross spending total. Converting the bulletin's GBP 16.9 billion into 16,900 million preserves the displayed precision; it does not create precision to the nearest million. The Treasury quarter target is likewise the sum of the displayed, rounded July, August and September cells.
+
+Each question specifies the entity, period and measure. An amount reported in billions is converted into millions. A gross receipt includes all the requested inflows before deductions; a net amount has specified inflows or outflows offset against one another. An accrual records an expense when the obligation arises, which can precede the cash payment. These distinctions determine the answer key, rather than a rule that every prominent amount must be cash.
+
+The answer key is derived from quotations, tables and explicit arithmetic. A second agent independently checked the UK/US cases and annual-report calculations against the sources. These were AI-agent documentary checks, not independent human coding. The root reviewer also checked the selected EU cases. The saved [gold review](data/real_v2/gold_review.json) records the roles and exclusions. The Renewables Obligation statement was excluded before collection because its units and cash basis were ambiguous. A redundant country-level storm-aid question was also excluded.
+
+For a question asking for a published rounded value, the target is that displayed value. `HORIZON_REPORTED_CHANGE`, for example, asks for the difference between the reported GBP 1,731 million and GBP 1,697 million totals: GBP 34 million. This does not establish an exact September bank-payment total, because the publication says prior payments can be retrospectively confirmed. Numerical scoring uses tight absolute Decimal tolerances, with no relative tolerance that could excuse a large monetary error on a large budget.
+
+Muse Wonder Full's release on 12 October 2026 supplies the latest conservative freshness bound. GPT-6.1 Sol's documented cutoff is 30 April 2026; Claude Opus 5.5 lists June 2026. Primary report and release publications are restricted to 13-22 October. The auxiliary Horizon history page was first published on 9 February and updated on 22 October; its frozen `published_on` field refers to that update, while `original_page_published_on` retains the original date. This qualification is documented in [provenance_notes.json](data/real_v2/provenance_notes.json), and the frozen prompts were not silently changed. No scored amount comes from an older entry on that history page.
+
+The annual reports describe the year ended March 2026, and individual facts may have appeared earlier. Publication recency reduces an obvious source of leakage but does not certify unseen facts. Publication evidence, source licences, exact text hashes and raw-download hashes are saved in [sources.json](data/real_v2/sources.json); model dates and official documentation links are in [model_metadata.json](data/real_v2/model_metadata.json).
+
+## 3. Direct answers and the ledger
+
+Direct receives the question and source text and returns a status, a final amount, source IDs and a brief explanation. Ledger receives the same question and source text. It returns included source amounts with their scales and signs, plus quotations and excluded figures. Python multiplies each amount by its scale and sign, then adds the rows. A thousand pounds has scale 0.001 when the target is million GBP; a billion euros has scale 1000 when the target is million EUR.
+
+Both methods are told to distinguish cash, allocations, forecasts, commitments, approvals, requests and balances. Both may answer `not_disclosed`. Neither may turn missing evidence into zero. Ledger may encode zero when the source explicitly says that no payments were made. Both use the same fixed parser: a single complete JSON object can be recovered unchanged from surrounding prose or a fence. Values are never repaired, and no model is called to fix an answer.
 
 ```mermaid
 flowchart LR
-    F["Python facts + Qwen wording templates<br/>60 new policy histories"] --> P["Publication-date filter<br/>same documents in each arm"]
-    P --> D["Direct totals<br/>2 models × 60 calls"]
-    P --> L["Event extraction<br/>2 models × 60 calls"]
-    L --> R["Python chronology and reconciliation<br/>3 quarter-end totals per history"]
-    D --> S["Exact transaction gold<br/>12 development + 48 held-out histories"]
-    R --> S
-    S --> O["Cash errors, fiscal-stage errors, intervals<br/>cached responses and figures"]
+    I["One question and its source packet"] --> GD["GPT-6.1 Sol / codex exec; Direct amount JSON"]
+    I --> GL["GPT-6.1 Sol / codex exec; Ledger rows JSON"]
+    I --> CD["Claude Opus 5.5 / claude -p; Direct amount JSON"]
+    I --> CL["Claude Opus 5.5 / claude -p; Ledger rows JSON"]
+    I --> MD["Muse Wonder Full 1.0 / muse exec; Direct amount JSON"]
+    I --> ML["Muse Wonder Full 1.0 / muse exec; Ledger rows JSON"]
+    MD -.->|"Internal stream retry on UKFE-02; timed out"| MD
+    ML -.->|"Internal stream retry on MTS_DEFENCE_LATEST; run excluded"| ML
+    GD --> D["Shared JSON parser; take reported amount"]
+    CD --> D
+    MD --> D
+    GL --> L["Shared JSON parser; Python sums amount x scale x sign"]
+    CL --> L
+    ML --> L
+    D --> S["Compare with source-derived gold; wait for both methods for paired analysis"]
+    L --> S
 ```
 
-One history passes through the publication filter once. Its resulting document packet goes to both model methods. A late document describing a March payment can inform the reconstructed Q1 total, but an October publication never reaches either method. The same gold cash schedule scores both branches, with no model judging another model.
+The six requests are independent. They do not exchange messages, see the other method's answer, or receive the gold labels. The runner randomizes request order and permits at most three concurrent CLI processes. Each request starts in a temporary directory with tools disabled. Raw CLI events, requested model IDs, returned model identities where available, token usage and latency are cached. Codex's event stream does not return a model identity, so its identity evidence is the explicit CLI model argument; Claude and Muse also return model identity metadata.
 
-## Two methods with the same evidence
+The fixed run checks require a successful terminal response, the requested model where returned identity is available, no tool calls and no observed extra model attempt. The runner never retries or repairs an answer. Muse's internal retry behaviour is visible in two held-out event streams despite the one-step CLI setting. One request timed out; the other returned a correct answer after a failed stream and was marked invalid under these unchanged rules.
 
-The direct prompt asks for quarterly cash totals, authority and status. The ledger prompt asks for event kind, source, payment or checkpoint reference, effective date and amount. The deterministic reducer keeps the latest publication of each referenced payment or checkpoint. It uses the most recent cumulative checkpoint as an anchor, adds later cash transfers, and follows authority changes separately. A correction replaces a prior record; a repeated report is not an additional payment.
+Consider `MAPS-02`. The exact question is:
 
-Both arms get the same fiscal definitions and the same source documents, with low reasoning effort. Each has one independent CLI call per history. The ledger may return more text; we do not claim equal token budgets. Calls have no tools or browsing and run in an isolated temporary directory. At most three run concurrently. There are no answer-repair calls.
+> For the Money and Pensions Service in the year ended 31 March 2026, what was the gross cash spent purchasing intangible assets and property, plant and equipment combined, without netting off proceeds from disposals? Report a positive outflow in million GBP.
 
-```mermaid
-flowchart LR
-    X["One history: identical dated documents<br/>as of 2026-09-30"] --> GD["GPT-6.1 Sol via codex exec<br/>direct quarterly answers"]
-    X --> GL["GPT-6.1 Sol via codex exec<br/>fiscal event ledger"]
-    X --> CD["Claude Opus 5.5 via claude -p<br/>direct quarterly answers"]
-    X --> CL["Claude Opus 5.5 via claude -p<br/>fiscal event ledger"]
-    GL --> P["Python reconciliation<br/>same fixed reducer"]
-    CL --> P
-    GD --> W["Wait for independent calls<br/>exact gold scoring"]
-    CD --> W
-    P --> W
-```
+The statement's current-year column has purchases of intangibles of 12,234, purchases of property, plant and equipment of 1,074, and disposal proceeds of 7, all in thousands of pounds. The requested gross outflow is `(12,234 + 1,074) x 0.001 = 13.308` million GBP. The net investing outflow of 13.301 million GBP includes the sale proceeds and answers a different question.
 
-For TEST-004, the following exact cached ledger response shows the intermediate event record before Python calculates quarter totals. It can be compared with the source excerpts and arithmetic in the worked example below.
-
-<details>
-<summary>Exact raw ledger response for TEST-004, GPT-6.1 Sol</summary>
+Claude's actual Ledger response for this case is reproduced without editing:
 
 ```json
-{"events":[{"source_id":"TEST-004-D01","event_id":"TEST-004-D01","kind":"announcement","effective_date":"2026-01-09","amount":147},{"source_id":"TEST-004-D02","event_id":"TEST-004-D02","kind":"authority","effective_date":"2026-02-01","amount":107},{"source_id":"TEST-004-D04","event_id":"TEST-004-P1","kind":"payment","effective_date":"2026-03-18","amount":25},{"source_id":"TEST-004-D05","event_id":"TEST-004-P2","kind":"payment","effective_date":"2026-06-15","amount":26},{"source_id":"TEST-004-D06","event_id":"TEST-004-P1","kind":"payment","effective_date":"2026-03-18","amount":25},{"source_id":"TEST-004-D07","event_id":"TEST-004-C1","kind":"cumulative","effective_date":"2026-06-30","amount":51},{"source_id":"TEST-004-D08","event_id":"TEST-004-P1","kind":"payment","effective_date":"2026-03-18","amount":21},{"source_id":"TEST-004-D09","event_id":"TEST-004-C1","kind":"cumulative","effective_date":"2026-06-30","amount":47},{"source_id":"TEST-004-D10","event_id":"TEST-004-P3","kind":"payment","effective_date":"2026-09-09","amount":10}]}
+{"status":"known","entries":[{"source_id":"UK-MAPS-20261020","label":"Purchase of intangibles, year ended 31 March 2026 (cash outflow)","amount":12234,"scale":0.001,"sign":1,"quote":"Purchase of intangibles                                        3                                  (12,234)                          (12,584)"},{"source_id":"UK-MAPS-20261020","label":"Purchase of property, plant, equipment, year ended 31 March 2026 (cash outflow)","amount":1074,"scale":0.001,"sign":1,"quote":"Purchase of property, plant, equipment                         4                                    (1,074)                             (44)"}],"exclusions":[{"source_id":"UK-MAPS-20261020","label":"Proceeds from sale of property, plant, equipment £7k (2025/26)","reason":"Question asks for gross purchases without netting off disposal proceeds."},{"source_id":"UK-MAPS-20261020","label":"Net cash outflow from investing activities £13,301k","reason":"Net figure includes disposal proceeds; components used instead to avoid double counting."},{"source_id":"UK-MAPS-20261020","label":"Grant-in-Aid incurred on capital expenditure £12.2 million","reason":"Funding allocation measure, not cash paid for asset purchases; overlaps with cash flow lines."},{"source_id":"UK-MAPS-20261020","label":"Prior-year purchases (£12,584k intangibles, £44k PPE) and PPE note additions for 2024/25","reason":"Relate to year ended 31 March 2025, not the requested period."}]}
 ```
 
-</details>
+Python's parsed amount is 13.308 million GBP. The expected amount is 13.308 million GBP, and the answer is correct under the fixed score. A numerical match is separate from a quotation match: copying a real passage does not establish that a number belongs to the right year or measure. The later audit checks copied numerals as well as literal passages, while the worked cases examine their meaning.
 
-<details>
-<summary>Exact direct prompt for TEST-004</summary>
+The complete common instruction, method contracts and one full worked request are displayed in the linked notebook. Every exact prompt is also saved with its full-request hash in the cache. The request manifest was frozen before development and the held-out deadline amendment was frozen before any held-out response.
+
+## 4. Financial answer results
+
+Compare Direct and Ledger within each model. Accuracy is the fraction of the 22 held-out questions with the right supported amount or missing-disclosure status. The difference is Ledger minus Direct, in percentage points. A positive value favours Ledger. The paired counts show whether one method corrected a case the other missed, rather than only comparing two averages.
+
+| Model | Direct correct | Ledger correct | Ledger-only correct | Direct-only correct | Difference; 95% packet interval |
+| --- | --- | --- | --- | --- | --- |
+| GPT-6.1 Sol | 22/22 | 22/22 | 0 | 0 | +0.0 pp; [+0.0, +0.0] |
+| Claude Opus 5.5 | 22/22 | 22/22 | 0 | 0 | +0.0 pp; [+0.0, +0.0] |
+| Muse Wonder Full | 21/22 | 21/22 | 1 | 1 | +0.0 pp; [-12.5, +12.5] |
+
+GPT-6.1 Sol: Direct 22/22, Ledger 22/22; Claude Opus 5.5: Direct 22/22, Ledger 22/22; Muse Wonder Full: Direct 21/22, Ledger 21/22. This run found no demonstrated gain in completed financial answers from the ledger. Run failures are reported separately from financial mistakes. The selected sample is too small to establish equivalence on other records. There were 2 held-out request failures. All failures remain in the denominator. All 130 protocol-valid held-out answers have the correct financial amount or status. A separate unchanged-payload check also finds the excluded Muse Ledger answer financially correct: all 131 completed parseable answers have the right amount or status. That diagnostic does not replace the fixed one-attempt score. The original pilot's prose-before-JSON failure would not by itself change this primary result, because both methods now receive the same deterministic recovery rule.
+
+![Financial answer accuracy and paired Ledger-minus-Direct differences for three models](figures/real_v2_accuracy_paired.png)
+
+The left panel shows correct-answer percentages; the right shows the paired difference. Intervals are the 2.5th and 97.5th percentiles from 10,000 resamples of the eight complete source packets, using seed 22061022. Each sampled packet brings all of its questions, and the score is divided by the number of sampled questions. Related questions are never resampled as if they were separate publications. With only eight purposively selected packets, these intervals cannot describe all public fiscal records.
+
+For GPT-6.1 Sol, Claude Opus 5.5, every observed paired difference is zero. Resampling those same pairs always gives zero, so their displayed [0, 0] difference intervals are degenerate. They do not establish equivalence on other documents. The intervals describe only variation among these eight observed packets. The three model comparisons are exploratory.
+
+| Model | Method | Known amount correct | Not disclosed correct |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | Direct | 16/16 | 6/6 |
+| GPT-6.1 Sol | Ledger | 16/16 | 6/6 |
+| Claude Opus 5.5 | Direct | 16/16 | 6/6 |
+| Claude Opus 5.5 | Ledger | 16/16 | 6/6 |
+| Muse Wonder Full | Direct | 15/16 | 6/6 |
+| Muse Wonder Full | Ledger | 15/16 | 6/6 |
+
+The known-amount subgroup contains 16 questions, including one explicit zero. The missing-disclosure subgroup contains six. A missing disclosure is conditional on the supplied excerpts, not a claim that no payment occurred in the world or that no other public source could reveal it. Returning an invented cash value on one of these cases is an error even if the value is a real budget allocation.
+
+## 5. Worked cases and error analysis
+
+2 of 132 held-out requests failed the fixed success criteria. The table lists every failure, so selected examples do not replace the denominator.
+
+| Case | Model | Method | Observed | Expected | Run valid |
+| --- | --- | --- | --- | --- | --- |
+| MTS_DEFENCE_LATEST | Muse Wonder Full | Ledger | 916,836 (run invalid) | 916,836 | False |
+| UKFE-02 | Muse Wonder Full | Direct | no completed answer | 0 | False |
+
+`MTS_DEFENCE_LATEST`, Muse Wonder Full ledger: The reported actual fiscal-year value already incorporates the USD 18m downward August correction. It is not the full-year budget estimate, and the superscript 1 is a footnote marker. The saved response was 916,836 (run invalid). The CLI returned a correct 916,836 million USD payload after an internal retry. Its usage records two model attempts, one failed and one completed. The fixed run validator rejects that extra attempt, so the primary score stays incorrect even though the unchanged payload is financially correct. This is a run-rule failure, not a financial reasoning error.
+
+`UKFE-02`, Muse Wonder Full direct: The source explicitly states no rental payments were made. The land valuation is non-cash recognition, so this is a supported zero, not a missing disclosure. The saved response was no completed answer. The request timed out without a completed answer. For the held-out Muse Direct request, the raw event stream also records an internal retry after HTTP 504. This is a workflow failure, not evidence of a wrong completed financial calculation.
+
+The case map shows every held-out question for each model. Compare the symbols as well as the colours: both-correct ties are different from both-wrong ties, even though either has a zero method difference. Packet labels identify questions sharing the same source report.
+
+![Case-by-model map distinguishing method wins, both-correct ties and both-wrong ties](figures/real_v2_case_heatmap.png)
+
+Across the 66 paired model-question comparisons, Ledger alone is correct on 1, Direct alone is correct on 1, both are correct on 64, and both are wrong on 0. The map identifies the source concentration of any differences; it does not turn several rows from one report into independent replications.
+
+The following six cases were chosen to teach distinct measurement problems: gross versus net, an embedded revision, a negative net amount, an explicit zero, an accrual-to-cash gap and an undisclosed settlement. `MAPS-02` above supplies the end-to-end arithmetic example. Every numerical table below is generated from the saved responses, and all remaining cases are available in [test_case_scores.csv](data/real_v2/results/test_case_scores.csv).
+
+
+### MAPS-01: Gross grant receipts
+
+> For the Money and Pensions Service in the year ended 31 March 2026, how much gross cash grant-in-aid was received from DWP, HMRC and MoJ combined, before lease principal and interest payments? Use the detailed cash-flow statement and report million GBP.
+
+The cash-flow statement lists grant inflows of 203,555, 2,100 and 583 in thousands of pounds. Their sum is GBP 206.238 million. The net financing total of GBP 206.023 million has already subtracted lease principal and interest. Reporting the net total as gross funding would understate receipts by GBP 0.215 million.
+
+| Model | Direct | Ledger | Expected |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | 206.238 | 206.238 | 206.238 |
+| Claude Opus 5.5 | 206.238 | 206.238 | 206.238 |
+| Muse Wonder Full | 206.238 | 206.238 | 206.238 |
+
+All six answers select gross receipts of GBP 206.238 million. Neither method substitutes the GBP 206.023 million net financing total, so neither understates these grant receipts by the GBP 0.215 million of lease payments.
+
+
+### MTS_DEFENCE_LATEST: A correction already included in the total
+
+> What are the latest reported fiscal-year-2026 net budget outlays for Department of Defense--Military Programs in the September final statement, in million USD? Incorporate the reported August correction exactly once.
+
+The final Treasury statement reports fiscal-year Defense military-programme net outlays of USD 916,836 million. Its footnote says the amount was decreased by USD 18 million for additional August reporting. The final figure already contains that correction, and another table repeats it. Subtracting 18 again would incorrectly give 916,818. This is a revision-reading test, not evidence that the notebook recovered an independently archived earlier vintage.
+
+| Model | Direct | Ledger | Expected |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | 916,836 | 916,836 | 916,836 |
+| Claude Opus 5.5 | 916,836 | 916,836 | 916,836 |
+| Muse Wonder Full | 916,836 | 916,836 (run invalid) | 916,836 |
+
+All six emitted answers contain the supported USD 916,836 million amount, and none subtracts the USD 18 million correction again. Five requests pass the fixed run rules; Muse Ledger is excluded because its CLI retried internally. The completed financial values agree even where the primary run scores differ.
+
+
+### MTS_CCC_NET: Negative net outlays still include gross payments
+
+> What are the Commodity Credit Corporation net budget outlays for September 2026 after applicable receipts, in million USD? Preserve the sign.
+
+The September Commodity Credit Corporation row shows gross outlays of USD 355 million and applicable receipts of USD 690 million. Net outlays are therefore minus USD 335 million. A negative net amount does not mean that no gross payment was made. Treating the sign as an error would reverse the fiscal measurement.
+
+| Model | Direct | Ledger | Expected |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | -335 | -335 | -335 |
+| Claude Opus 5.5 | -335 | -335 | -335 |
+| Muse Wonder Full | -335 | -335 | -335 |
+
+All six answers return minus USD 335 million. Both methods preserve the distinction between gross payments and net outlays when receipts exceed payments; neither replaces the negative amount with zero.
+
+
+### UKFE-02: An explicit zero beside a large asset value
+
+> How much rent did UK Fusion Energy Ltd pay during the year ended 31 March 2026 for the 99-year West Burton land and St Ives Bungalow arrangement granted by UKAEA on 23 March 2026? Report cash paid in million GBP.
+
+UK Fusion Energy reports a land and building valuation of GBP 17.904 million for the West Burton and St Ives Bungalow arrangement. The note explicitly states that no rental payments were made or payable. The requested rent paid is therefore zero. The valuation changes the accounts without establishing a cash rent payment.
+
+| Model | Direct | Ledger | Expected |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | 0 | 0 | 0 |
+| Claude Opus 5.5 | 0 | 0 | 0 |
+| Muse Wonder Full | no completed answer | 0 | 0 |
+
+The five completed answers return zero, matching the explicit no-payment statement. Muse Direct supplies no answer before the timeout. The observed method difference is therefore request completion, not one method mistaking the GBP 17.904 million asset value for rent paid.
+
+
+### UKFE-03: An expense does not disclose category cash
+
+> What exact cash amount did UK Fusion Energy Ltd pay for goods and services, excluding staff and capital purchases, during the year ended 31 March 2026? Report in million GBP only if that cash amount is established by the supplied report.
+
+The income statement reports goods-and-services expense of GBP 88.091 million. Its aggregate operating cash-flow reconciliation does not split receivable and payable movements enough to calculate the cash paid for that category. The supported answer is not disclosed, rather than 88.091 or zero.
+
+| Model | Direct | Ledger | Expected |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | not disclosed | not disclosed | not disclosed |
+| Claude Opus 5.5 | not disclosed | not disclosed | not disclosed |
+| Muse Wonder Full | not disclosed | not disclosed | not disclosed |
+
+All six answers say the cash amount is not disclosed. Neither method treats the GBP 88.091 million accrual expense as category cash expenditure or interprets the missing breakdown as zero. Another source could still disclose that cash amount.
+
+
+### FOREST-03: A lease liability does not disclose a settlement
+
+> What exact cash settlement had the National Forest Company paid by 31 March 2026 to surrender its former office lease after vacating in January 2026? Report in million GBP only if the supplied report establishes cash paid for that surrender.
+
+The National Forest Company vacated its office in January 2026 and began negotiations to surrender its lease. It accrued the remaining onerous costs as a liability at 31 March. Neither the annual lease expense nor zero future minimum rentals establishes a cash surrender settlement. The requested cash amount is not disclosed.
+
+| Model | Direct | Ledger | Expected |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | not disclosed | not disclosed | not disclosed |
+| Claude Opus 5.5 | not disclosed | not disclosed | not disclosed |
+| Muse Wonder Full | not disclosed | not disclosed | not disclosed |
+
+All six answers say the settlement amount is not disclosed. Neither method converts the accrued liability or the absence of future minimum rentals into a reported cash settlement. This result is conditional on the supplied annual-report excerpt.
+
+## 6. Format and source checks
+
+A correct total is one outcome; an inspectable path to that total is another. Strict format requires one JSON object with exactly the requested schema. The reported format rate also requires a valid run: the excluded Muse retry counts as a failure even though its final JSON has the correct schema. Source checks ask whether cited IDs belong to the supplied packet and whether each ledger quotation occurs in the source after whitespace normalization. A second check asks whether the entry copies a numeral found in that quotation, allowing grouping and sign direction, or uses an explicit no-payment statement to support zero.
+
+| Model | Direct strict format | Ledger strict format | Ledger entries passing passage + numeral check | Nonempty ledger outputs |
+| --- | --- | --- | --- | --- |
+| GPT-6.1 Sol | 22/22 | 22/22 | 23/25 | 16 |
+| Claude Opus 5.5 | 22/22 | 22/22 | 26/26 | 16 |
+| Muse Wonder Full | 21/22 | 21/22 | 25/25 | 15 |
+
+The ledger entry denominator excludes empty `not_disclosed` ledgers. It includes all entries in valid parsed nonempty outputs, rather than counting an unknown answer as a perfectly grounded zero-row calculation. A quote can pass the text check yet still refer to the wrong year, unit or measure. These automatic checks therefore do not certify semantic support or complete event coverage.
+
+![Strict format and literal source-plus-number checks, shown separately from financial answer accuracy](figures/real_v2_format_grounding.png)
+
+Across the three ledger methods, 74 of 76 eligible entries pass both literal-passage and copied-numeral checks. Across all methods, 130 of 132 held-out responses satisfy the strict format and run checks. All 131 emitted payloads have valid JSON and the requested schema; the lower run-gated count should not be read as a completed-payload formatting error. These denominators answer different questions and should not be combined into one accuracy score.
+
+Two GPT Ledger responses illustrate why those checks are separate. In `UKFE-01`, GPT joins the cash-flow heading and unit header to the investing rows, skipping the operating section between them. In `MTS_DEFENCE_LATEST`, it joins the Defense table row to a footnote elsewhere on the page. This is the actual quotation returned for the latter case:
 
 ```text
-You are measuring fiscal cash spending from fictional public documents. Use ONLY the supplied documents. All amounts are million crowns. The target programme is named below; ignore every other programme's cash and authority.
-The as-of date filters publication availability. Reconstruct cumulative cash at each quarter-end using ALL available documents, including later published corrections to earlier quarters. This is retrospective as-of measurement, not what was known at each quarter-end.
-Implemented cash means a settled external transfer. Announcements, budget authority, signed-but-unpaid contracts, and pending or proposed payments are not cash. Do not infer a payment from a plan. Payment references identify transfers: repeated reports of one reference are one payment; an explicit correction replaces its reported amount, not an extra cash flow. A cumulative checkpoint includes earlier transfers, not extra cash. Ignore later effective events when answering an earlier quarter. Cancellation removes active authority but does not erase paid cash unless a refund is explicitly stated.
-Active authority means the latest total authorized ceiling effective by that quarter, not the remaining unspent amount. A cut replaces the ceiling. Cancellation sets active authority to zero, even if cash was paid earlier. Status is cancelled if cancellation is effective; otherwise partly_paid if positive cash exists, authorized if authority has been granted, or announced if there is only an announcement.
-No tools. Return JSON only. Do not include prose outside JSON.
-
-Return {"quarters":[{"quarter_end":"YYYY-MM-DD","cash_paid":number,"active_authority":number,"status":"announced|authorized|partly_paid|cancelled"}, ...]}. Exactly one row per requested quarter. Compute the totals directly from the documents.
-INPUT
-{
-  "target_programme": "TEST-004 River Clinic",
-  "as_of": "2026-09-30",
-  "quarter_ends": [
-    "2026-03-31",
-    "2026-06-30",
-    "2026-09-30"
-  ],
-  "documents": [
-    {
-      "document_id": "TEST-004-D01",
-      "published_on": "2026-01-10",
-      "text": "On 2026-01-09, a proposal to allocate 147 million crowns to TEST-004 River Clinic was announced. This is not an approval, contract, or cash payment."
-    },
-    {
-      "document_id": "TEST-004-D02",
-      "published_on": "2026-02-06",
-      "text": "As of 2026-02-01, the total active spending authority for TEST-004 River Clinic is set at 107 million crowns. This represents a total ceiling, not an increment or cash payment."
-    },
-    {
-      "document_id": "TEST-004-D03",
-      "published_on": "2026-02-20",
-      "text": "Contract for TEST-004 River Clinic valued at 47 million crowns signed on 2026-02-19 is currently unpaid. This action does not alter existing budget authority."
-    },
-    {
-      "document_id": "TEST-004-D04",
-      "published_on": "2026-03-21",
-      "text": "External cash transfer of 25 million crowns for TEST-004 River Clinic settled on 2026-03-18 under reference TEST-004-P1. Note that reporting may occur later."
-    },
-    {
-      "document_id": "TEST-004-D05",
-      "published_on": "2026-06-18",
-      "text": "External cash transfer of 26 million crowns for TEST-004 River Clinic settled on 2026-06-15 under reference TEST-004-P2. Note that reporting may occur later."
-    },
-    {
-      "document_id": "TEST-004-D06",
-      "published_on": "2026-06-25",
-      "text": "External cash transfer of 25 million crowns for TEST-004 River Clinic settled on 2026-03-18 under reference TEST-004-P1. Note that reporting may occur later."
-    },
-    {
-      "document_id": "TEST-004-D07",
-      "published_on": "2026-07-03",
-      "text": "Through 2026-06-30, checkpoint TEST-004-C1 indicates cumulative cash paid for TEST-004 River Clinic totals 51 million crowns. This includes prior payments and is not an additional transfer."
-    },
-    {
-      "document_id": "TEST-004-D08",
-      "published_on": "2026-07-22",
-      "text": "Payment reference TEST-004-P1 for TEST-004 River Clinic settled on 2026-03-18 is corrected to 21 million crowns via accounting adjustment. This is not a new transfer or refund."
-    },
-    {
-      "document_id": "TEST-004-D09",
-      "published_on": "2026-07-23",
-      "text": "Corrected checkpoint TEST-004-C1 replaces its earlier cumulative cash total for TEST-004 River Clinic through 2026-06-30 with 47 million crowns. Not new spending."
-    },
-    {
-      "document_id": "TEST-004-D10",
-      "published_on": "2026-09-11",
-      "text": "External cash transfer of 10 million crowns for TEST-004 River Clinic settled on 2026-09-09 under reference TEST-004-P3. Note that reporting may occur later."
-    }
-  ]
-}
+Department of Defense--Military Programs 84,221 [1]916,836    868,412    913,705
+1 Amount decreased by $18 million due to additional reporting for the month of August 2026.
 ```
 
-</details>
+Both parts occur in the Treasury source, and the selected USD 916,836 million is the correct current-year amount. They do not form a single continuous passage, so the fixed literal-match check fails. The same distinction applies to the UK Fusion Energy response: its GBP 10.595 million answer is correct, while its quotation omits intervening rows. These are quotation-compliance failures, not fabricated financial values. The independent [response review](data/real_v2/response_review.json) records the exact requests and checks of passing multi-entry ledgers and missing-disclosure explanations.
 
-<details>
-<summary>Exact ledger prompt for TEST-004</summary>
+The copied-numeral check matters because a model could calculate 13.308 itself, place it in a ledger row, and quote a passage containing only 12,234 and 1,074. Its final amount would be correct, but the claimed extraction-and-calculation method would not have been followed. A regression check confirms that this constructed audit example fails component compliance while preserving the separate outcome score. It is a validator test, not an observed model failure.
 
-```text
-You are measuring fiscal cash spending from fictional public documents. Use ONLY the supplied documents. All amounts are million crowns. The target programme is named below; ignore every other programme's cash and authority.
-The as-of date filters publication availability. Reconstruct cumulative cash at each quarter-end using ALL available documents, including later published corrections to earlier quarters. This is retrospective as-of measurement, not what was known at each quarter-end.
-Implemented cash means a settled external transfer. Announcements, budget authority, signed-but-unpaid contracts, and pending or proposed payments are not cash. Do not infer a payment from a plan. Payment references identify transfers: repeated reports of one reference are one payment; an explicit correction replaces its reported amount, not an extra cash flow. A cumulative checkpoint includes earlier transfers, not extra cash. Ignore later effective events when answering an earlier quarter. Cancellation removes active authority but does not erase paid cash unless a refund is explicitly stated.
-Active authority means the latest total authorized ceiling effective by that quarter, not the remaining unspent amount. A cut replaces the ceiling. Cancellation sets active authority to zero, even if cash was paid earlier. Status is cancelled if cancellation is effective; otherwise partly_paid if positive cash exists, authorized if authority has been granted, or announced if there is only an announcement.
-No tools. Return JSON only. Do not include prose outside JSON.
+In this run, 23 of 47 valid known-amount Ledger responses contain more than one row. The remaining 24 contain one row, so Python only scales or signs that selected number. This descriptive count helps explain the scope of the arithmetic comparison: many of these questions test selecting the right reported amount rather than calculating a long sum.
 
-Return {"events":[{"source_id":"document ID","event_id":"reference ID or document ID","kind":"announcement|authority|payment|cumulative|cancel","effective_date":"YYYY-MM-DD","amount":number}, ...]}.
-Extract only target-programme fiscal events. One record for each relevant announcement, authority change, cash transfer or cumulative checkpoint. Do not include signed contracts or pending payments. Use each explicit payment or checkpoint reference as event_id; repeated reports and corrections keep the SAME reference and original effective date. A correction to a payment remains kind payment; a correction to a checkpoint remains cumulative. Include both the original source and its revision, so the deterministic reducer can choose the latest publication. An authority cut is kind authority, amount is the new total ceiling. A cancellation is kind cancel with amount 0. Other event IDs can be their source document IDs. In a joint payment extract ONLY the target share. Do not sum or replace the documents with quarter totals.
-The reducer sorts publications, keeps the latest record per (kind,event_id), anchors cash at the last effective cumulative checkpoint before each quarter-end, adds subsequent payments, and separately follows authority/cancellation in effective-date order.
-INPUT
-{
-  "target_programme": "TEST-004 River Clinic",
-  "as_of": "2026-09-30",
-  "quarter_ends": [
-    "2026-03-31",
-    "2026-06-30",
-    "2026-09-30"
-  ],
-  "documents": [
-    {
-      "document_id": "TEST-004-D01",
-      "published_on": "2026-01-10",
-      "text": "On 2026-01-09, a proposal to allocate 147 million crowns to TEST-004 River Clinic was announced. This is not an approval, contract, or cash payment."
-    },
-    {
-      "document_id": "TEST-004-D02",
-      "published_on": "2026-02-06",
-      "text": "As of 2026-02-01, the total active spending authority for TEST-004 River Clinic is set at 107 million crowns. This represents a total ceiling, not an increment or cash payment."
-    },
-    {
-      "document_id": "TEST-004-D03",
-      "published_on": "2026-02-20",
-      "text": "Contract for TEST-004 River Clinic valued at 47 million crowns signed on 2026-02-19 is currently unpaid. This action does not alter existing budget authority."
-    },
-    {
-      "document_id": "TEST-004-D04",
-      "published_on": "2026-03-21",
-      "text": "External cash transfer of 25 million crowns for TEST-004 River Clinic settled on 2026-03-18 under reference TEST-004-P1. Note that reporting may occur later."
-    },
-    {
-      "document_id": "TEST-004-D05",
-      "published_on": "2026-06-18",
-      "text": "External cash transfer of 26 million crowns for TEST-004 River Clinic settled on 2026-06-15 under reference TEST-004-P2. Note that reporting may occur later."
-    },
-    {
-      "document_id": "TEST-004-D06",
-      "published_on": "2026-06-25",
-      "text": "External cash transfer of 25 million crowns for TEST-004 River Clinic settled on 2026-03-18 under reference TEST-004-P1. Note that reporting may occur later."
-    },
-    {
-      "document_id": "TEST-004-D07",
-      "published_on": "2026-07-03",
-      "text": "Through 2026-06-30, checkpoint TEST-004-C1 indicates cumulative cash paid for TEST-004 River Clinic totals 51 million crowns. This includes prior payments and is not an additional transfer."
-    },
-    {
-      "document_id": "TEST-004-D08",
-      "published_on": "2026-07-22",
-      "text": "Payment reference TEST-004-P1 for TEST-004 River Clinic settled on 2026-03-18 is corrected to 21 million crowns via accounting adjustment. This is not a new transfer or refund."
-    },
-    {
-      "document_id": "TEST-004-D09",
-      "published_on": "2026-07-23",
-      "text": "Corrected checkpoint TEST-004-C1 replaces its earlier cumulative cash total for TEST-004 River Clinic through 2026-06-30 with 47 million crowns. Not new spending."
-    },
-    {
-      "document_id": "TEST-004-D10",
-      "published_on": "2026-09-11",
-      "text": "External cash transfer of 10 million crowns for TEST-004 River Clinic settled on 2026-09-09 under reference TEST-004-P3. Note that reporting may occur later."
-    }
-  ]
-}
-```
+## 7. Time and spend
 
-</details>
+The relevant comparison is the extra work required by the ledger within a model. The table and figure below use held-out requests only, with 22 requests per model-method group. Latency is elapsed CLI time, including startup, service delay and recorded failure durations. A timeout duration is not successful completion time. This is not a measurement of human review time, and the three-way concurrency can affect waiting time.
 
-The prompt wording is identical across evaluated models. The caches record the CLI options as well as the full prompt. Development produced 47/48 valid outputs; every valid development answer matched cash, authority and status. One Claude direct response added prose before otherwise correct JSON. We retained the strict output contract for the held-out run. The protocol and test requests were frozen before its first call.
+| Model | Direct median seconds | Ledger median seconds | Direct Claude list USD | Ledger Claude list USD |
+| --- | --- | --- | --- | --- |
+| GPT-6.1 Sol | 6.6 | 9.3 | unavailable | unavailable |
+| Claude Opus 5.5 | 5.2 | 7.6 | 1.955826 | 2.177798 |
+| Muse Wonder Full | 53.6 | 52.1 | unavailable | unavailable |
 
-## Results
+![Held-out median request latency and Claude list-equivalent cost by response method](figures/real_v2_latency_cost.png)
 
-Compare direct and ledger within each model. The first figure counts histories where all three cash amounts are right; an invalid output counts as a failure. Its intervals are 95% Wilson intervals over histories.
+GPT-6.1 Sol took a median 6.6 seconds for Direct and 9.3 seconds for Ledger. Claude took 5.2 and 7.6 seconds; Muse took 53.6 and 52.1 seconds. The cost panel shows only the known Claude list-equivalent amounts. Blank Codex and Muse dollar costs mean unavailable, not zero.
 
-![Exact cash-history rates with Wilson intervals, including invalid responses in the denominator](figures/cash_exact.png)
+Collection used 150 experimental CLI invocations: 18 development and 132 held-out, with 50 to each model. There were 3 invalid runs in total, including the retained Muse development timeout. The runner made no retry or answer-repair calls. Muse's event streams show internal retry activity on two held-out invocations; one timed out, while the other finished with two reported provider attempts. The 150 invocations therefore do not equal all underlying provider attempts. Claude's reported list-price equivalent for this new study is USD 4.28489600. Attributable cash charges for the authenticated subscriptions are unknown. This is not a complete cash bill, and Muse Wonder Full is not assigned the API price of a different Muse tier.
 
-### What the measured differences support
+The earlier synthetic pilot is separate: it recorded 240 evaluated CLI requests plus one wording-authoring request, Claude list equivalent of USD 3.009032 and OpenRouter metered cost of USD 0.00052039. Those old calls are not part of the new 150-request estimate. Every new response is cached, including the timeout and any partial output, so offline replay makes no paid calls.
 
-GPT-6.1 Sol: direct 48/48 and ledger 48/48 exact cash histories; Claude Opus 5.5: direct 47/48 and ledger 48/48 exact cash histories. All 191 schema-valid held-out answers have zero cash error. There is 1 invalid output among 192 held-out responses. The invalid answer contains the correct cash, authority and status values but begins with prose. The sample contains explicit synthetic records and only six recurring history structures; it does not establish equal performance on public fiscal documents.
+## 8. Limits and reproduction
 
-| Model | Method | Exact cash histories | Valid responses | Cash MAE, valid only | Authority exact | Status exact |
-| --- | --- | --- | --- | --- | --- | --- |
-| Claude Opus 5.5 | direct | 47/48 | 47/48 | 0.000 | 47/48 | 47/48 |
-| Claude Opus 5.5 | ledger | 48/48 | 48/48 | 0.000 | 48/48 | 48/48 |
-| GPT-6.1 Sol | direct | 48/48 | 48/48 | 0.000 | 48/48 | 48/48 |
-| GPT-6.1 Sol | ledger | 48/48 | 48/48 | 0.000 | 48/48 | 48/48 |
+This run found no demonstrated gain in completed financial answers from the ledger. Run failures are reported separately from financial mistakes. The selected sample is too small to establish equivalence on other records. A ledger supplies a list of included and excluded figures that a reviewer could inspect. This run does not establish whether that inspection benefit pays for the extra output and time. It also does not establish that a ledger improves the extraction of a fiscal time series, the estimated effect of spending on the economy, or the speed of a human auditor.
 
-The exact-history columns use all 48 histories for each method. MAE means mean absolute cash error, measured in million crowns; it uses only the valid responses shown beside it. Authority and status also require all three quarters to match. An invalid output fails each exact-history column, even if a reader can see a plausible answer in the raw response.
+Several limits affect that decision. The sample is purposive and small, with one response per model-method-question. Most questions use one report rather than a long chronology of conflicting releases. The selected excerpts retain distracting numbers but remove most retrieval work. The questions name the requested measure and period, and both methods receive guidance about double counting and missing evidence; less precise questions could perform differently. The answer key has source checks and arithmetic review by AI agents, not two blinded human economists. Some missing-disclosure decisions could change if another document were supplied. Source publication dates are recent, while many measured events are earlier. The real-document ledger also differs from the synthetic pilot's event-ID reconciliation algorithm, so the two studies are not a controlled before-and-after comparison of difficulty alone.
 
-For GPT-6.1 Sol, ledger minus direct cash error is 0.000 million crowns, with a 95% paired history-bootstrap interval [0.000, 0.000] on 48 histories with valid answers in both arms. For Claude Opus 5.5, ledger minus direct cash error is 0.000 million crowns, with a 95% paired history-bootstrap interval [0.000, 0.000] on 47 histories with valid answers in both arms. These intervals describe the observed valid-pair sample. An interval of [0, 0] when all observed errors are zero is not proof that the methods are equivalent on unseen cases. The Wilson bars in the first figure remain below 100% at their lower end even when all 48 histories pass.
-
-The first figure compares each method within its model. Bar heights count complete three-quarter cash histories; the black lines are 95% Wilson intervals over histories. The second figure groups the 48 histories into six families of eight. Its horizontal axis is absolute cash error in million crowns, so a zero bar means that no cash discrepancy was observed among valid answers in that family. It does not imply that every response met the output contract.
-
-There are 0 false positive cash quarters among 96 valid zero-cash quarter outputs. These quarters are nested within the eight no-payment histories and model-method runs; they are not 96 independent economic cases.
-
-The ledger responses match 672 of 672 gold source-event records and contain 672 records. Event precision is 1.000, the share of extracted records that exactly match gold. Recall is 1.000, the share of gold records found. The comparison checks source ID, reference, kind, date and amount. A duplicate report can be unnecessary for a correct cash total and still matter to this strict event audit.
-
-GPT-6.1 Sol median CLI latency is 5.6 seconds direct and 8.1 seconds for the ledger. Claude Opus 5.5 median CLI latency is 4.0 seconds direct and 5.6 seconds for the ledger. The timings include CLI startup and service variation. They come from this run, without randomized execution order or repeated timing trials, and should not be interpreted as stable model-speed rankings.
-
-
-Compare the six families next. Each model-method-family group has eight histories before any invalid outputs are excluded from amount-error calculation. Blue bars show direct errors, orange hatched bars ledger errors. The horizontal scale is million crowns.
-
-![Absolute cash amount error by fiscal history family for each model](figures/cash_error_by_family.png)
-
-The largest observed valid-response history error is 0.000 million crowns. Each family contributes eight histories per model-method before output failures are excluded; 191/192 total held-out outputs are valid. These counts keep the zero or small amount-error bars separate from schema reliability.
-
-All quarters in one history share documents and transactions. The bootstrap therefore resamples whole histories rather than treating 144 quarter rows as independent observations. MAE among valid answers and paired-valid differences cannot by themselves establish better overall reliability when format failure counts differ.
-
-## Worked histories and errors
-
-Examples are the first held-out case from each family. This deterministic choice shows ordinary cases rather than selecting the most favourable answers. Amount lists run from Q1 to Q3 and are in million crowns. The raw source IDs connect each excerpt to `data/histories.json`.
-
-### TEST-001: Approval and contracts still imply zero cash
-
-> TEST-001-D02 (published 2026-02-06): Effective 2026-02-01, total active spending authority for TEST-001 River Clinic becomes 126 million crowns. This is a total ceiling, not an increment or a cash payment.
-
-> TEST-001-D03 (published 2026-02-20): Contract for TEST-001 River Clinic valued at 62 million crowns signed on 2026-02-19 is currently unpaid. This action does not alter existing budget authority.
-
-> TEST-001-D07 (published 2026-09-18): A cash payment for TEST-001 River Clinic of 14 million crowns is proposed for 2026-10-07 but has not settled. Do not describe it as money already paid.
-
-> TEST-001-D08 (published 2026-09-19): External cash transfer of 55 million crowns for TEST-001 River Water settled on 2026-09-18 under reference TEST-001-W1. Note that reporting may occur later.
-
-The authority is 126 million crowns, but the target has no settled transfer. A signed contract and an unsettled proposal do not change this. A separate water-programme payment must also be ignored. The expected cash path is 0, 0, 0. This family contains eight held-out histories.
-
-| Model | Method | Returned Q1, Q2, Q3 cash | Returned active authority |
-| --- | --- | --- | --- |
-| GPT-6.1 Sol | direct | 0, 0, 0 | 126, 126, 126 |
-| GPT-6.1 Sol | ledger | 0, 0, 0 | 126, 126, 126 |
-| Claude Opus 5.5 | direct | 0, 0, 0 | 126, 126, 126 |
-| Claude Opus 5.5 | ledger | 0, 0, 0 | 126, 126, 126 |
-
-4/4 model-method answers reproduce the cash path 0, 0, 0 exactly under the strict output contract. Across the eight histories in this family, 32/32 model-method answers are exact. These are four model-method answers to the same case, not four independent economic observations. The fixtures and gold are stored under `TEST-001` in `data/histories.json`.
-
-
-### TEST-002: A repeated transfer is not another payment
-
-> TEST-002-D04 (published 2026-03-21): A settled external cash transfer of 19 million crowns for TEST-002 River Clinic with payment reference TEST-002-P1 and settlement date 2026-03-18. Reporting may occur later.
-
-> TEST-002-D05 (published 2026-06-18): External cash transfer of 30 million crowns for TEST-002 River Clinic settled on 2026-06-15 under reference TEST-002-P2. Note that reporting may occur later.
-
-> TEST-002-D06 (published 2026-06-25): A settled external cash transfer of 19 million crowns for TEST-002 River Clinic with payment reference TEST-002-P1 and settlement date 2026-03-18. Reporting may occur later.
-
-> TEST-002-D07 (published 2026-07-03): Checkpoint TEST-002-C1 reports cumulative cash paid for TEST-002 River Clinic through 2026-06-30 as 49 million crowns. Includes all earlier payments; not an additional transfer.
-
-> TEST-002-D08 (published 2026-09-11): A settled external cash transfer of 13 million crowns for TEST-002 River Clinic with payment reference TEST-002-P3 and settlement date 2026-09-09. Reporting may occur later.
-
-Transfer P1 paid 19 in March. The June document repeats P1 instead of making a second payment. P2 adds 30, and the cumulative June checkpoint confirms 49; it is not another 49 of spending. P3 adds 13, giving 19, 49, 62. Counting P1 twice would overstate Q1 onward. There are eight installment histories.
-
-| Model | Method | Returned Q1, Q2, Q3 cash | Returned active authority |
-| --- | --- | --- | --- |
-| GPT-6.1 Sol | direct | 19, 49, 62 | 112, 112, 112 |
-| GPT-6.1 Sol | ledger | 19, 49, 62 | 112, 112, 112 |
-| Claude Opus 5.5 | direct | 19, 49, 62 | 112, 112, 112 |
-| Claude Opus 5.5 | ledger | 19, 49, 62 | 112, 112, 112 |
-
-4/4 model-method answers reproduce the cash path 19, 49, 62 exactly under the strict output contract. Across the eight histories in this family, 32/32 model-method answers are exact. These are four model-method answers to the same case, not four independent economic observations. The fixtures and gold are stored under `TEST-002` in `data/histories.json`.
-
-
-### TEST-003: Cancellation retains money already paid
-
-> TEST-003-D04 (published 2026-03-21): A settled external cash transfer of 32 million crowns for TEST-003 River Clinic with payment reference TEST-003-P1 and settlement date 2026-03-18. Reporting may occur later.
-
-> TEST-003-D08 (published 2026-05-14): Total active spending authority for TEST-003 River Clinic is cut to 68 million crowns effective 2026-05-12. No refunds are issued for earlier payments. This is not a cash transfer.
-
-> TEST-003-D05 (published 2026-06-18): A settled external cash transfer of 26 million crowns for TEST-003 River Clinic with payment reference TEST-003-P2 and settlement date 2026-06-15. Reporting may occur later.
-
-> TEST-003-D09 (published 2026-08-21): From 2026-08-20 the TEST-003 River Clinic is cancelled and active spending authority is zero. Earlier cash payments are retained by recipients, without refund.
-
-> TEST-003-D10 (published 2026-09-12): A cash payment for TEST-003 River Clinic of 8 million crowns is proposed for 2026-09-20 but has not settled. Do not describe it as money already paid.
-
-March cash of 32 and June cash of 26 remain paid after the August cancellation. The correct cash path is 32, 58, 58; active authority follows 116, 68, 0. A rule that replaces cash with the latest budget amount would erase 58 million actually paid. Eight test histories use this structure.
-
-| Model | Method | Returned Q1, Q2, Q3 cash | Returned active authority |
-| --- | --- | --- | --- |
-| GPT-6.1 Sol | direct | 32, 58, 58 | 116, 68, 0 |
-| GPT-6.1 Sol | ledger | 32, 58, 58 | 116, 68, 0 |
-| Claude Opus 5.5 | direct | 32, 58, 58 | 116, 68, 0 |
-| Claude Opus 5.5 | ledger | 32, 58, 58 | 116, 68, 0 |
-
-4/4 model-method answers reproduce the cash path 32, 58, 58 exactly under the strict output contract. Across the eight histories in this family, 32/32 model-method answers are exact. These are four model-method answers to the same case, not four independent economic observations. The fixtures and gold are stored under `TEST-003` in `data/histories.json`.
-
-
-### TEST-004: A correction changes an earlier quarter
-
-> TEST-004-D04 (published 2026-03-21): External cash transfer of 25 million crowns for TEST-004 River Clinic settled on 2026-03-18 under reference TEST-004-P1. Note that reporting may occur later.
-
-> TEST-004-D07 (published 2026-07-03): Through 2026-06-30, checkpoint TEST-004-C1 indicates cumulative cash paid for TEST-004 River Clinic totals 51 million crowns. This includes prior payments and is not an additional transfer.
-
-> TEST-004-D08 (published 2026-07-22): Payment reference TEST-004-P1 for TEST-004 River Clinic settled on 2026-03-18 is corrected to 21 million crowns via accounting adjustment. This is not a new transfer or refund.
-
-> TEST-004-D09 (published 2026-07-23): Corrected checkpoint TEST-004-C1 replaces its earlier cumulative cash total for TEST-004 River Clinic through 2026-06-30 with 47 million crowns. Not new spending.
-
-> TEST-004-D10 (published 2026-09-11): External cash transfer of 10 million crowns for TEST-004 River Clinic settled on 2026-09-09 under reference TEST-004-P3. Note that reporting may occur later.
-
-P1 was first reported as 25 but corrected in July to 21. The June cumulative checkpoint was also corrected to 47. At the September as-of date, the corrected path is 21, 47, 57. The ledger replaces P1 and the checkpoint by their shared references. For a prediction equal to this path, absolute error is (0 + 0 + 0) / 3 = 0. These are revised estimates of past quarters, not the estimates available in March. All eight correction histories explicitly update both payment and checkpoint; stale checkpoint conflicts are untested.
-
-| Model | Method | Returned Q1, Q2, Q3 cash | Returned active authority |
-| --- | --- | --- | --- |
-| GPT-6.1 Sol | direct | 21, 47, 57 | 107, 107, 107 |
-| GPT-6.1 Sol | ledger | 21, 47, 57 | 107, 107, 107 |
-| Claude Opus 5.5 | direct | 21, 47, 57 | 107, 107, 107 |
-| Claude Opus 5.5 | ledger | 21, 47, 57 | 107, 107, 107 |
-
-4/4 model-method answers reproduce the cash path 21, 47, 57 exactly under the strict output contract. Across the eight histories in this family, 32/32 model-method answers are exact. These are four model-method answers to the same case, not four independent economic observations. The fixtures and gold are stored under `TEST-004` in `data/histories.json`.
-
-
-### TEST-005: Publication date differs from settlement date
-
-> TEST-005-D10 (published 2026-03-15): A cash payment for TEST-005 River Clinic of 17 million crowns is proposed for 2026-04-10 but has not settled. Do not describe it as money already paid.
-
-> TEST-005-D06 (published 2026-06-25): External cash transfer of 14 million crowns for TEST-005 River Clinic settled on 2026-03-18 under reference TEST-005-P1. Note that reporting may occur later.
-
-> TEST-005-D04 (published 2026-07-08): External cash transfer of 14 million crowns for TEST-005 River Clinic settled on 2026-03-18 under reference TEST-005-P1. Note that reporting may occur later.
-
-> TEST-005-D09 (published 2026-09-15): Effective 2026-10-01, total active spending authority for TEST-005 River Clinic becomes 148 million crowns. This is a total ceiling, not an increment or a cash payment.
-
-The source published in July describes a March settlement of 14. It belongs in reconstructed Q1 cash. A September authorization effective on 1 October does not change Q3 authority, which stays 123. Assigning amounts by publication date would instead shift cash between quarters. Eight histories contain this reporting-date structure.
-
-| Model | Method | Returned Q1, Q2, Q3 cash | Returned active authority |
-| --- | --- | --- | --- |
-| GPT-6.1 Sol | direct | 14, 43, 73 | 123, 123, 123 |
-| GPT-6.1 Sol | ledger | 14, 43, 73 | 123, 123, 123 |
-| Claude Opus 5.5 | direct | INVALID | INVALID |
-| Claude Opus 5.5 | ledger | 14, 43, 73 | 123, 123, 123 |
-
-3/4 model-method answers reproduce the cash path 14, 43, 73 exactly under the strict output contract. Across the eight histories in this family, 31/32 model-method answers are exact. These are four model-method answers to the same case, not four independent economic observations. The fixtures and gold are stored under `TEST-005` in `data/histories.json`.
-
-
-### TEST-006: A combined notice contains two programmes
-
-> TEST-006-D05 (published 2026-06-18): A joint settlement on 2026-06-15 paid 60 million crowns: 19 for TEST-006 River Clinic under reference TEST-006-P2 and 41 for TEST-006 River Water. The project amount is only its own share.
-
-> TEST-006-D09 (published 2026-08-16): External cash transfer of 99 million crowns for TEST-006 River Water settled on 2026-08-15 under reference TEST-006-W2. Note that reporting may occur later.
-
-> TEST-006-D10 (published 2026-09-20): Checkpoint TEST-006-C2 reports cumulative cash paid for TEST-006 River Clinic through 2026-09-15 as 72 million crowns. Includes all earlier payments; not an additional transfer.
-
-The joint settlement contains 19 for the clinic and 41 for the water programme, a total of 60. Only the clinic share counts. A later 99-million water payment also stays outside the target. Correct clinic cash is 24, 43, 72. Eight mixed-project histories test this separation.
-
-| Model | Method | Returned Q1, Q2, Q3 cash | Returned active authority |
-| --- | --- | --- | --- |
-| GPT-6.1 Sol | direct | 24, 43, 72 | 122, 122, 122 |
-| GPT-6.1 Sol | ledger | 24, 43, 72 | 122, 122, 122 |
-| Claude Opus 5.5 | direct | 24, 43, 72 | 122, 122, 122 |
-| Claude Opus 5.5 | ledger | 24, 43, 72 | 122, 122, 122 |
-
-4/4 model-method answers reproduce the cash path 24, 43, 72 exactly under the strict output contract. Across the eight histories in this family, 32/32 model-method answers are exact. These are four model-method answers to the same case, not four independent economic observations. The fixtures and gold are stored under `TEST-006` in `data/histories.json`.
-
-
-### Observed output failures
-
-The following held-out responses fail the primary output contract. They remain failures in the headline denominator. A reader can distinguish a formatting issue from a cash-amount issue by inspecting the exact text.
-
-#### TEST-005, Claude Opus 5.5, direct
-
-Parser result: `JSONDecodeError: Expecting value: line 1 column 1 (char 0)`. Cache key: `20d28b9ab035986a05fb5f5680d41992741573fad040c42aaf9a228fecd766fd`.
-
-```text
-Q1: P1 14. Q2: 14+29=43 (checkpoint consistent). Q3: 73. Authority 123 throughout (148 effective Oct).
-
-{"quarters":[{"quarter_end":"2026-03-31","cash_paid":14,"active_authority":123,"status":"partly_paid"},{"quarter_end":"2026-06-30","cash_paid":43,"active_authority":123,"status":"partly_paid"},{"quarter_end":"2026-09-30","cash_paid":73,"active_authority":123,"status":"partly_paid"}]}
-```
-
-
-
-Read the cash paths by quarter: compare TEST-003 after cancellation with the four histories that still receive a Q3 payment. The figure shows generated transaction truth, not another set of model predictions.
-
-![Gold cumulative cash paths for five traceable example histories](figures/example_cash_paths.png)
-
-The cash-path figure plots the gold trajectories for five displayed examples. Its horizontal axis is quarter-end; the vertical axis is cumulative paid cash in million crowns. TEST-003 stays at 58 million in Q2 and Q3 even though its authority falls from 68 to zero. The lines describe the generated facts, not model predictions. Different event structures can lead to the same monotone cash pattern, so accurate totals alone cannot tell us whether every source event was extracted correctly.
-
-A secondary diagnostic extracts a single JSON payload verbatim from otherwise invalid responses, ignoring a prose prefix or enclosing fence. It changes no values and makes no model calls. TEST-005's unchanged payload has the correct cash, authority and status in all three quarters. This diagnostic distinguishes formatting from cash reasoning but does not replace the primary exactness score. Its results are saved in `data/format_diagnostics.csv` and displayed in the notebook.
-
-## Limits and practical use
-
-The templates explicitly label unsettled payments, authorization ceilings and cumulative checkpoints. They are clearer than many public records. Amounts and identities vary, but the 48 histories use six recurring structures, so 48 should not be read as 48 independent writing styles or institutional settings. The experiment has one response per model-method-history and no human review-time measurements.
-
-
-
-Every historical payment correction is accompanied by an updated cumulative checkpoint. The reducer would otherwise trust the stale checkpoint for cash before that checkpoint date. This experiment does not establish that a ledger handles such conflicts. All histories have approved authority by Q1, so an announced-only final state and ambiguity about approval are also outside the tested coverage.
-
-The source templates explicitly label unsettled commitments and repeated checkpoints. Their clarity helps both methods. If all valid answers have zero cash error, the useful result is that this level of difficulty does not justify an accuracy claim for the extra ledger machinery. A ledger may still be useful for inspection, but that benefit has not been measured with human reviewers here.
-
-
-No claim about fiscal multipliers or causal spending shocks follows from the result. This is a measurement-method experiment. If the direct method already returns correct totals under these conditions, use the ledger for an explicit need such as inspectable event records, then test that need. A public-document validation with incomplete or contradictory sources is the next decision-relevant experiment.
-
-## Spend and reproduction
-
-The run cached 240 evaluated CLI requests: 120 Codex and 120 Claude, comprising 48 development and 192 held-out calls. The Qwen authoring call is separate. There were 0 transport-level failed requests, no model repair calls, and 1 held-out schema failure. Claude's reported list-price equivalent totals 3.009032 US dollars; the OpenRouter authoring call reports 0.00052039 US dollars. Codex per-request dollars are unknown under the authenticated subscription. These figures must not be added and labelled the full cash cost of the experiment. Unknown Claude costs, if any, retain the per-call budget reservation rather than counting as zero.
-
-GPT-6.1 Sol median CLI latency is 5.6 seconds direct and 8.1 seconds for the ledger. Claude Opus 5.5 median CLI latency is 4.0 seconds direct and 5.6 seconds for the ledger.
-
-The experiment is in [22_fiscal_implementation.ipynb](22_fiscal_implementation.ipynb). Run from this folder:
+The notebook is [22_fiscal_implementation.ipynb](22_fiscal_implementation.ipynb). Run from its directory:
 
 ```powershell
 python -m jupyter nbconvert --to notebook --execute --inplace 22_fiscal_implementation.ipynb
 ```
 
-The default is offline replay. A cache miss fails before making a model call. For a small live smoke run, set `NB_LIVE=1`; the default live sample is two development and two test histories. Set `NB_FISCAL_PROFILE=published` only to request the full profile. Model selection, counts, concurrency, the 240-request ceiling and the 20 US dollars Claude cap appear at the top of the notebook. The different-vendor authoring cap is 1 US dollar. Current caps protect new requests; cached results cost nothing to replay.
+Default execution reads the committed source excerpts and response caches. It refuses a cache miss before any model transport. Raw PDFs and HTML downloads are git-ignored; their URLs, licences and hashes are recorded, and the frozen excerpts are sufficient for replay. No source download is needed to reproduce the scores.
 
-| File | Contents |
+For a small live profile, set `NB_REAL_V2_LIVE=1`. It selects two development questions by default. `NB_REAL_V2_N_CASES`, `MODELS` and `NB_REAL_V2_MAX_NEW_CALLS` control size; the default new-call cap is 12. Existing matching responses are reused. The total cache cap is 180 attempts, Claude's list-equivalent ceiling is USD 20, and at most three CLIs run at once. A partial live profile prints its results without overwriting the published full-grid analysis. A changed question or prompt requires a new named protocol and request manifest; do not delete the published cache to hide or reroll failures.
+
+| Saved item | Purpose |
 | --- | --- |
-| `data/histories.json` | Created dates, published dates, frozen source text, latent transactions and oracle events |
-| `data/authoring_cache.json` | Exact different-vendor authoring request, raw response, usage and pinned metadata |
-| `data/cache_requests.jsonl` | Full-request hashes, prompts, raw CLI responses, latency and usage |
-| `data/protocol.json` and `data/test_request_freeze.json` | Fixed methods, scoring contract, evidence hashes and held-out request hashes |
-| `data/history_scores.csv` and `data/quarter_scores.csv` | Primary scores with every history retained |
-| `data/summary.csv` and `data/paired_contrasts.csv` | Method summaries and paired history-bootstrap intervals |
-| `data/format_diagnostics.csv` | Secondary unchanged-payload formatting diagnostic |
-| `data/spend.json` and `data/validation.json` | Known costs, unpriced usage and replay checks |
-| `data/offline_audit.json` | HTTP and subprocess guards, identical evidence checks and unchanged cache hashes |
+| [cases.json](data/real_v2/cases.json) | Fixed questions, source IDs, gold amounts/status, absolute tolerances and evidence |
+| [sources.json](data/real_v2/sources.json) | Exact official excerpts, publication evidence, licences and hashes |
+| [protocol.json](data/real_v2/protocol.json) and [request_manifest.json](data/real_v2/request_manifest.json) | Methods, scoring contract and all full-request hashes |
+| [transport_amendment.json](data/real_v2/transport_amendment.json) | The pre-test timeout change and its development evidence; initial freeze also retained |
+| `data/real_v2/cache/<request hash>/` | Immutable start and result records with full prompts, raw CLI events, usage and latency |
+| [analysis_summary.json](data/real_v2/results/analysis_summary.json) | Counts, denominators, paired packet intervals and currency-separated errors |
+| [scores.json](data/real_v2/results/scores.json) | All 150 rescored responses, including development and failures |
+| [spend.json](data/real_v2/results/spend.json) | List-equivalent amounts, unknown dollar costs and call counts |
+| [offline_audit.json](data/real_v2/offline_audit.json) | Frozen-input checks, unchanged-cache checks and zero-call replay |
+| [synthetic_v1_README.md](data/synthetic_v1_README.md) | Historical explanation of the initial synthetic pilot |
+
+The notebook contains its own runner, parser, Decimal calculator, source checks and plotting functions. It imports no helper from this repository. Its committed outputs and README figures are generated from the same saved rows.
 
 ## 9. Future work and further reading
 
-Links checked on 22 October 2026.
+Links checked on 22 October 2026. These readings place the measurement task in the wider use of models to construct economic data.
 
 ### Future work
 
-- Replace the generated histories with newly published public budget and audit records. Have two independent human coders reconstruct cash events. Measure accuracy and disagreement; this addresses the controlled templates and complete records used here.
-- Increase histories from 48 to at least 200 and vary document length, reference quality and publication delay. Measure whether the present zero cash-error result persists as histories become longer, rather than treating this small controlled sample as a universal ranking.
-- Add contradictory sources, missing settlement dates and revisions without explicit references. Permit an unknown answer and measure review workload as well as cash error; the current gold assumes that the records resolve to a definite answer.
-- Query each quarter using only that quarter's available documents. Measure revision size between first-release and September-vintage estimates; the present experiment instead reconstructs every quarter using one September information set.
+- Collect at least 100 source packets across institutions and languages, with two blinded human coders resolving the answer key. Measure paired financial accuracy and coder disagreement. The present eight held-out packets and agent-reviewed gold leave uncertainty about generalization and ambiguous disclosures.
+- Supply complete multi-release histories with revisions, stale cumulative totals and missing settlement dates. Measure duplicate counting and revision errors against dated source evidence. Most current packets contain one report, and the Defense correction is already incorporated in the final table.
+- Randomize human reviewers to Direct answers or Ledger records and measure review minutes, corrected errors and errors that survive review. The current source checks show only whether passages and numerals were copied; no human audit benefit was measured.
+- Repeat each model-method-question several times and add a condition that deliberately requires several source components to be combined. Measure reliability and the share of calculations actually delegated to Python. One response per arm and source totals that can sometimes be copied limit the current comparison.
 
 ### Further reading
 
-- [AI Meets Fiscal Policy: Mapping Government Spending Actions Across 64 Countries](https://www.imf.org/-/media/files/publications/wp/2026/english/wpiea2026043-source-pdf.pdf) (Das et al., 2026). Motivates distinguishing stages of fiscal policy when extracting economic measurements from documents.
-- [Learning to Regulate: A New Event-Level Dataset of Capital Control Measures](https://arxiv.org/abs/2505.23025) (Sun et al., 2025). Shows how dated policy events can support economic analysis; this notebook tests event reconciliation against exact synthetic cash facts.
-- [Inference for Regression with Variables Generated by AI or Machine Learning](https://arxiv.org/abs/2402.15585) (Battaglia et al., 2024, revised 2025). Explains why measurement errors in AI-generated variables matter for downstream economic estimates.
+- [AI Meets Fiscal Policy: Mapping Government Spending Actions Across 64 Countries](https://www.imf.org/-/media/files/publications/wp/2026/english/wpiea2026043-source-pdf.pdf) (Das et al., 2026). Uses document extraction to build a fiscal policy series, motivating careful distinctions between policy actions and measured spending.
+- [Learning to Regulate: A New Event-Level Dataset of Capital Control Measures](https://arxiv.org/abs/2505.23025) (Sun et al., 2025). Provides a related economic event-extraction setting in which dates, policy status and structured attributes matter.
+- [Inference for Regression with Variables Generated by AI or Machine Learning](https://arxiv.org/abs/2402.15585) (Battaglia et al., 2024, revised 2025). Explains why treating model-generated measurements as error-free data can distort downstream economic inference.

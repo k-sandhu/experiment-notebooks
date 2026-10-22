@@ -63,13 +63,13 @@ Routing, approvals and checks need one allowed answer rather than generated pros
 
 A low-priced model can cost more once checking and payment mistakes are included. A spending announcement can
 also look like economic activity even when no money has been paid. The [economics experiments](econ/) separate
-these quantities using new fictional records with independently calculated answers. Each has its own notebook,
-cached evidence and illustrated explanation under one `econ/` folder.
+these quantities using fresh synthetic invoices and recent public fiscal documents with source-checked answers.
+Each has its own notebook, cached evidence and illustrated explanation under one `econ/` folder.
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
 | 21 | [Verification costs](econ/21-verification-costs/) | A wrong invoice approval can release too much money or hold up a valid payment. On 72 held-out invoices after 12 development cases, when do checking, repeat decisions or escalation erase the savings from a cheaper model, compared with a strong model used directly? | Qwen: 14/72 exact; GPT and both escalation routes: 72/72. Checks avoided GPT only on 14 zero-payment holds. Claude screening breaks even against GPT direct above an assumed GPT price of USD 0.133/invoice using Claude list-price equivalents. Model calls had no calculator; the rule engine got 72/72. |
-| 22 | [Fiscal announcements and implementation](econ/22-fiscal-implementation/) | Announcements, approvals and cash transfers occur at different times. On 48 held-out fictional policy histories after 12 development histories, do direct answers or an extracted event ledger plus Python better reconstruct quarterly cash spending from the same dated documents? | GPT direct and ledger: 48/48 exact cash histories each. Claude direct: 47/48; ledger: 48/48. All 191 valid answers were correct; one Claude direct answer failed the JSON format rule. No fiscal-accuracy advantage for the ledger was demonstrated on these explicit records. |
+| 22 | [Fiscal measurement from public reports](econ/22-fiscal-implementation/) | A budget, an accounting expense and a cash payment can be different numbers. On 22 held-out questions from 8 recent public-document packets, do Direct answers or a quoted evidence ledger plus Python better identify fiscal amounts and missing disclosures? The full collection, including development, has nine primary reports/releases published 13-22 October 2026 and one updated history page. | GPT-6.1 Sol: Direct 22/22, Ledger 22/22; Claude Opus 5.5: Direct 22/22, Ledger 22/22; Muse Wonder Full: Direct 21/22, Ledger 21/22. All 130 protocol-valid held-out answers were correct. Muse had one Direct timeout and one correct Ledger answer excluded after an internal CLI retry; no financial-answer advantage was demonstrated. |
 
 ## Forecasting observations
 
