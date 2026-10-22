@@ -59,6 +59,18 @@ Routing, approvals and checks need one allowed answer rather than generated pros
 |---|---|---|---|
 | 18 | [Four decision models as tasks get harder](notebooks/18-decisions-api-comparison/) | A one-cent payment error or obsolete record can trigger the wrong action. How do OpenAI Decisions, Jev 1.14, Mercury Decide and Clef Flash compare on 768 fresh cases, and do clearer prompts or staged calculations fix ledger failures? A follow-up adds 288 ledger claims and 144 pilot plus 768 held-out join, policy and counting cases, with shortcut audits and all difficulty levels reported. | Clarified ledger prompts: 49.7–53.8%; model block sums: 51.0–56.9%; row labels plus Python: 99.7–100% (assisted). Pilot-selected replication: OpenAI 55.2%, Jev 70.1%, Mercury 72.1%; Clef 59.2% among valid replies, 44.3% including failures. Direct record equality explains the original shared 100% ceiling. Original serial medians: Jev/Clef about 0.21 s, Mercury 0.31 s |
 
+## Measuring economic decisions
+
+A low-priced model can cost more once checking and payment mistakes are included. A spending announcement can
+also look like economic activity even when no money has been paid. The [economics experiments](econ/) separate
+these quantities using new fictional records with independently calculated answers. Each has its own notebook,
+cached evidence and illustrated explanation under one `econ/` folder.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 21 | [Verification costs](econ/21-verification-costs/) | A wrong invoice approval can release too much money or hold up a valid payment. On 72 held-out invoices after 12 development cases, when do checking, repeat decisions or escalation erase the savings from a cheaper model, compared with a strong model used directly? | Qwen: 14/72 exact; GPT and both escalation routes: 72/72. Checks avoided GPT only on 14 zero-payment holds. Claude screening breaks even against GPT direct above an assumed GPT price of USD 0.133/invoice using Claude list-price equivalents. Model calls had no calculator; the rule engine got 72/72. |
+| 22 | [Fiscal announcements and implementation](econ/22-fiscal-implementation/) | Announcements, approvals and cash transfers occur at different times. On 48 held-out fictional policy histories after 12 development histories, do direct answers or an extracted event ledger plus Python better reconstruct quarterly cash spending from the same dated documents? | GPT direct and ledger: 48/48 exact cash histories each. Claude direct: 47/48; ledger: 48/48. All 191 valid answers were correct; one Claude direct answer failed the JSON format rule. No fiscal-accuracy advantage for the ledger was demonstrated on these explicit records. |
+
 ## Forecasting observations
 
 Demand, weather and traffic histories are easy to collect, but fitting and maintaining one forecast model per series takes work. These experiments test whether pretrained models can use recent observations directly, and whether their error ranges match what happens next.
@@ -170,6 +182,10 @@ python -m venv .venv
 Notebook 15 uses strict offline replay with an evidence manifest and a $10 OpenRouter guard. Its README gives model coverage and limits.
 
 Notebook 18 uses 768 fresh synthetic cases, all four decision models and strict offline replay. Its README records provider pins, scoring audits, diagnostics and reported spend.
+
+Notebooks 21 and 22 are grouped under `econ/`. Each runs independently from its own directory and stops on a
+missing offline cache entry. Their READMEs distinguish measured usage from assumed business costs and explain
+the small live profiles and spending caps.
 
 ## Data and licences
 
