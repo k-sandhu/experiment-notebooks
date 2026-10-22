@@ -2,6 +2,12 @@
 
 Preparing a presentation means shaping ideas and numbers into something an audience can follow. In a project review, the slides might compare a few options and explain the figures behind a recommendation. When the plan changes, keeping those figures and the timeline consistent helps the discussion stay clear.
 
+## Why slide generation is hard
+
+A model has to decide what to emphasize, choose a useful chart or diagram, and fit the content into a readable layout. A written slide description cannot fully show how PowerPoint will wrap a title or crowd its labels. Even correct risk values can tell the wrong story if they sit at the wrong coordinates on a matrix.
+
+Editing adds another challenge: changing an investment means updating payback, scenario calculations and the final recommendation, while preserving unrelated facts. The model must plan the content, place the objects, review the rendered result when available, and revise the deck consistently. Our briefs supply the facts and slide outline, so this pilot tests only part of that larger task.
+
 Language models can help draft these slides, but it is less clear which tools help them produce better decks. This experiment looks at reusable layout helpers and the ability to review screenshots. It also asks how best to compare the results: a 9/10 rating can be hard to interpret across decks of different lengths and complexity. Alongside individual scores, model judges compare complete decks made for the same brief.
 
 ## Question
@@ -16,16 +22,24 @@ GPT-6.1 Sol led the model comparisons in all four setups. Giving a model screens
 
 For similar decks, these results suggest trying GPT-6.1 Sol with basic drawing tools and screenshot review first. That is a starting point from this pilot: all 24 decks come from just two related briefs, with one generated deck per model and setup on each brief.
 
-## What the four setups mean
+## What the harness gives the models
 
 A harness is the tools and instructions a model uses to create and revise a deck. This experiment changes two parts of that harness: how the model places content, and what it can see when reviewing its draft.
 
-- Primitives are basic drawing tools for text, shapes, lines, charts and tables. The model chooses where they go.
-- Helpers add optional shortcuts for headers, key-number cards, process flows and columns. They use the same drawing tools underneath.
+- Primitives are basic drawing tools for text, rectangles, connectors, charts and tables. The model supplies the content, data, positions, sizes and colors.
+- Helpers add optional shortcuts for headers (`header`), key-number cards (`kpi`), connected process steps (`flow`) and columns (`columns`). They arrange the same drawing objects underneath. The repaired header measures text to fit its reserved area; the helpers do not calculate values or choose the story.
 - Text review gives the model its draft's written specification, including content and layout, plus a change request.
 - Screenshot review gives it that same material and images of its actual draft slides.
 
-Combining the two authoring choices with the two review choices gives the four columns below. All setups produce editable PowerPoint objects. The text and screenshot versions start from the same draft and get the same requested changes.
+Models use these controls by returning a structured JSON description of the slides. The harness builds the editable PowerPoint file and renders it. Each model returns a complete replacement description for its revision; it does not directly operate PowerPoint or call the renderer itself. All four setups keep text, charts and tables editable. Notebook section 4 explains the individual controls and supporting functions.
+
+## How the ablation study works
+
+An **ablation study** adds or removes a feature while keeping the other choices fixed. Here we cross two authoring choices, primitives or optional helpers, with two review choices, text or screenshots. This gives the four setups in the results table.
+
+To test helpers, we compare decks made by the same model for the same brief, keeping review mode fixed. To test screenshots, we keep the model, brief and authoring tools fixed. Each text/screenshot pair starts from the same draft and gets the same change request. Every final deck gets one draft call and one revision call. The call count is matched; token use and run time can still differ.
+
+Testing both features in all four combinations also shows whether they work well together. We assess the changes through individual scores and head-to-head comparisons, with judges seeing only images. This tests the helper bundle as a whole; it does not isolate the contribution of headers, cards, flows or columns individually.
 
 ## Choosing a model
 
@@ -48,7 +62,7 @@ Each table cell covers four deck pairs: two opponents on two briefs. Every pair 
 
 To check whether judges favor their own vendor, we also exclude judges from the two vendors whose decks are being compared. Averaged across all four setups, that leaves GPT at 82.8%, Claude at 65.6% and Muse at 1.6%. The ordering remains, but this check has only one judge vendor per matchup. It is a useful check on the result, with limited evidence for a general ranking.
 
-## Choosing a harness
+## Choosing a harness from the ablation results
 
 Screenshot review looks most useful when paired with primitives. It earned 69.4% win credit against text review in that setting. With helpers, the result was much closer to even at 52.8%.
 
