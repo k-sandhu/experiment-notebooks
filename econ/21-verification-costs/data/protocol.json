@@ -1,0 +1,90 @@
+{
+  "protocol": "verification-costs-v1.0",
+  "seed": 20261022,
+  "development": 12,
+  "test": 72,
+  "models": {
+    "cheap": [
+      "openrouter",
+      "qwen/qwen3.8-flash-20260826"
+    ],
+    "strong": [
+      "codex",
+      "gpt-6.1-sol"
+    ],
+    "verifier": [
+      "claude",
+      "claude-opus-5-5"
+    ]
+  },
+  "options": {
+    "codex": [
+      "exec",
+      "--skip-git-repo-check",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--sandbox",
+      "read-only",
+      "--disable",
+      "shell_tool",
+      "--disable",
+      "unified_exec",
+      "--disable",
+      "apps",
+      "--disable",
+      "plugins",
+      "--disable",
+      "multi_agent",
+      "--disable",
+      "browser_use",
+      "--disable",
+      "computer_use",
+      "--disable",
+      "image_generation",
+      "--disable",
+      "code_mode",
+      "--disable",
+      "code_mode_host",
+      "--disable",
+      "shell_snapshot",
+      "-c",
+      "web_search=\"disabled\"",
+      "-c",
+      "model_reasoning_effort=\"low\"",
+      "--json"
+    ],
+    "claude": [
+      "-p",
+      "--tools",
+      "",
+      "--safe-mode",
+      "--no-session-persistence",
+      "--output-format",
+      "json",
+      "--effort",
+      "low",
+      "--max-budget-usd",
+      "0.25"
+    ],
+    "openrouter": {
+      "max_tokens": 1200,
+      "temperature": 0.3,
+      "reasoning": {
+        "enabled": false
+      },
+      "response_format": {
+        "type": "json_object"
+      }
+    }
+  },
+  "policy": "You are processing one fictional invoice under the complete rules below. All money is integer US cents.\nNo external law or standard accounting practice applies. Do not use tools or external information.\nFor each line, eligible units = min(billed_units, max(0, received_total - returned_total - previously_billed_units)).\nUse the smaller of contracted_unit_cents and invoiced_unit_cents. Multiply by eligible units.\nSubtract the line discount, calculated from that line gross with discount_bps/10000 and rounded half up to whole cents.\nTaxable line tax = round-half-up(discounted line cents * tax_bps/10000); non-taxable line tax = 0.\nCompute and round each line separately, then sum discounted line cents plus line tax.\nAdd shipping_cents once. Tax shipping separately only if shipping_taxable, rounded half up.\nApply only credits with status=POSTED, effective_day <= today_day, and invoice_id equal to this invoice's id.\nEach eligible credit is already a gross amount including any tax; subtract it after tax. Do not subtract pending, future, or other-invoice credits.\nTake max(0, total_after_credits). If today_day <= discount_deadline_day, subtract the early-payment discount from this total, rounded half up.\nThen subtract prior_payments_cents; take max(0, result). Call this amount net_due_cents.\nIf disputed is true, retain round-half-up(net_due_cents * retain_bps/10000); otherwise retain 0. pay_cents = net_due_cents - retain.\nAn invoice is HOLD with pay_cents=0 if duplicate=true OR vendor_blocked=true, with no exception for either condition.\nIt is also HOLD with pay_cents=0 if computed pay_cents > approval_limit_cents, unless an approval_exception exists with signed_day <= today_day <= expires_day AND exception_limit_cents >= computed pay_cents.\nIf there is no hold, status=PAY even when pay_cents=0. The output is the authorized amount to pay today, not the invoice face value.\nReturn only a JSON object with exactly these fields: id (invoice id), status (PAY or HOLD), pay_cents (integer >=0), reason (at most 25 words).\n",
+  "case_hash": "d4d2e816f78b880b43d7a8a154016af4010f0a15209d2fca1aaf37cf5aa69721",
+  "gold_hash": "bc7d699130f32387da4705ac0bd430ee6b75efe463241b11f930e9c6230bece5",
+  "unit": "one invoice per request",
+  "tuning": "No changes after freezing either split",
+  "retry": "One retry only for transport failure or invalid structured output. Both attempts charged.",
+  "selection": "All 72 test cases; no output-based exclusions or error injection",
+  "scoring": "Exact pair (status, pay_cents); independent integer and Decimal gold implementations",
+  "price_scenario": "GPT cost per standalone invoice is unknown and parameterized; Claude total_cost_usd is a list-price equivalent, not cash billed",
+  "evaluation": "Routing counterfactuals reuse standalone GPT baseline; full GPT invoice cost and time charged per selected escalation"
+}

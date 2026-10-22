@@ -11,7 +11,14 @@ notebooks/NN-short-name/
   README.md             topic introduction, worked examples, question, explained results and visuals, how to run
   data/                 inputs, caches of every model response, results tables
   figures/              PNGs saved by the notebook (used by README.md)
+
+econ/                    economics experiments grouped at the owner's request
+  README.md              introduction and comparison of the economics experiments
+  NN-short-name/         the same notebook, README, data and figures layout as above
 ```
+
+Notebook numbers are global across `notebooks/` and `econ/`. Economics notebooks follow all the same
+claim, reproduction and explanation requirements. Each remains self-contained within its own folder.
 
 ## Git workflow
 
@@ -35,12 +42,12 @@ issue, and close the proposal when the notebook's PR merges. The root `README.md
 Several agents may build notebooks at the same time. To keep two of them from picking the same `NN`, claim
 the number with a GitHub issue before you create any file for a new notebook.
 
-1. **Find the lowest free number**: the lowest `NN` not used by a folder in `notebooks/` on `origin/main`
+1. **Find the lowest free number**: the lowest `NN` not used by a folder in `notebooks/` or `econ/` on `origin/main`
    and not claimed by an open issue titled `Notebook NN: ...`.
 
    ```bash
    git fetch origin
-   git ls-tree -d --name-only origin/main notebooks/
+   git ls-tree -d --name-only origin/main notebooks/ econ/
    gh issue list --state open --search "Notebook in:title" --json number,title
    ```
 
