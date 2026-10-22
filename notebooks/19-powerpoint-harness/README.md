@@ -1,8 +1,8 @@
 # 19. PowerPoint harnesses and screenshot judges
 
-A committee changes its preferred project option before a meeting. The new investment and savings must reach the recommendation, scenario chart, payback calculations and final funding request. A deadline shift must also reach the roadmap without losing its dependencies. A deck can look finished while a chart label, table cell or decision threshold remains wrong.
+Preparing a presentation means shaping ideas and numbers into something an audience can follow. In a project review, the slides might compare a few options and explain the figures behind a recommendation. When the plan changes, keeping those figures and the timeline consistent helps the discussion stay clear.
 
-Layout helpers can reduce the work of placing objects, but a helper can also repeat a defect on every slide. An isolated 9/10 rating is difficult to interpret when deck length and content change. This experiment therefore combines matched feature comparisons with blinded, head-to-head judging of complete decks on the same brief, in both presentation orders.
+Language models can help draft these slides, but it is less clear which tools help them produce better decks. This experiment looks at reusable layout helpers and the ability to review screenshots. It also asks how best to compare the results: a 9/10 rating can be hard to interpret across decks of different lengths and complexity. Alongside individual scores, model judges compare complete decks made for the same brief.
 
 ## Question
 
