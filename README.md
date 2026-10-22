@@ -113,6 +113,14 @@ An analysis must help its reader make a decision. These experiments separate the
 | 15 | [Analytical writing and judge framing](notebooks/15-analytical-writing-style/) | A draft can contain the right numbers yet bury its decision in vague or repeated prose. On two fresh numerical cases in four genres (216 requested drafts), how do 27 writers fare under 30 model judges, and do author disclosure and an explicit prose audit change ratings of the same text? | Anonymous external clarity 88.9/100; audit 0.76 quoted issues per 100 words. Audit clarity change -1.66 points; neutral author-disclosure change -0.06. Model ratings on two cases, no human comprehension claim |
 | 17 | [Writing validation on longer documents](notebooks/17-writing-validation-extension/) | A prose flag can reflect reading difficulty, a factual error or taste. Reassess 108 cached drafts from 27 writers, then compare six writers on 24 fresh cases in four genres with realistic lengths (288 requested drafts), using only Codex and Claude judges. | Astra moves from sixth to first when the judge panel changes on the same 288 drafts; fresh prose concerns average 1.6% on old flagged passages. Warning effect -0.31/100; human results pending |
 
+## Creating presentations
+
+A generated deck must keep its facts correct while making a decision easy to see. These experiments test the authoring tools and review steps between a model's response and the slides an audience reads.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 19 | [PowerPoint harnesses and screenshot judges](notebooks/19-powerpoint-harness/) | A presentation edit can leave stale values or unreadable charts. Do helpers and screenshot review improve editable decks? Three models make 24 four-slide decks, then 24 harder eight-slide decks. Three frontier judges see only images; 48 matched pairs cover all four conditions and both feature comparisons. | Full paired grid: helpers 38.2% win credit against primitives; screenshots 61.1% against text. Scores and direct preference agree on 37/40 non-tied pairs. Two related briefs, no general ranking |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
@@ -153,6 +161,7 @@ python -m venv .venv
   `OPENROUTER_API_KEY` and logged-in `claude`, `codex` and `muse` CLIs.
 * New collection in 09, 11, 12 and 13: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
 * Notebook 13 verifies cached evidence before replay. For a new collection, use a separate copy and follow its README; keep the committed cache intact.
+* Notebook 19 replays the complete PowerPoint study offline. New collection uses explicit --live commands and requires Windows, PowerPoint and authenticated model CLIs.
 * Notebook 14 uses `PRIORLABS_API_KEY` and `NB_LIVE=1` for new collection, with a checked computation-token cap. Its default replay reads 48 saved responses without network access.
 * **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
