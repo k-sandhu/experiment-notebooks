@@ -93,6 +93,34 @@ The tools' effects do not simply add up. Helper credit fell from 48.6% with text
 
 The earlier individual ratings point in the same broad direction: helpers changed the average score by -1.1/100 and screenshots by +1.6/100. The [full comparison table](data/harder/paired_full/factors.csv) includes score changes and results excluding each deck maker's own vendor. With primitives, screenshot review still earned 68.8% under that second judge panel.
 
+## See the ablations on the same slide
+
+These examples hold the model, brief and slide fixed: GPT-6.1 Sol, the first brief (`pilot-00`), and slide 3's option comparison. We chose this slide to illustrate text-fit differences mentioned in the saved judges' reasons. All four images are original final-deck screenshots; click an image to inspect it at full size.
+
+Read across a row to compare text and screenshot review. Those are independent revisions of the same draft. Read down a column to compare primitives with optional helpers, keeping review mode fixed; those authoring setups start from different drafts.
+
+| Authoring tools | Text review | Screenshot review |
+|---|---|---|
+| Primitives | [![GPT primitives with text review: the lower-right callout runs past its bottom edge](data/harder/artifacts/180b0686bfd85db8/slide-3.png)](data/harder/artifacts/180b0686bfd85db8/slide-3.png) | [![GPT primitives with screenshot review: shorter callouts fit inside their boxes](data/harder/artifacts/3ac382cc672b488c/slide-3.png)](data/harder/artifacts/3ac382cc672b488c/slide-3.png) |
+| Helpers available | [![GPT helpers with text review: a wider tradeoff box and contained supporting text](data/harder/artifacts/499a039c76dbef27/slide-3.png)](data/harder/artifacts/499a039c76dbef27/slide-3.png) | [![GPT helpers with screenshot review: added comparison text and a lower-right callout reaching past its box](data/harder/artifacts/beba013335974f93/slide-3.png)](data/harder/artifacts/beba013335974f93/slide-3.png) |
+
+In the top row, the text-review version's words “more saving.” run past the bottom of the right-hand box. The screenshot-review version reorganizes the explanation into two shorter callouts that fit. That is a concrete example of the text-fit improvements judges cited when preferring the primitives-plus-screenshots deck.
+
+The bottom row shows why screenshot review is not an automatic improvement. It adds a comparison with Lean, but the right-hand paragraph now reaches past its box at “week 10 gate.” Under text review, the helper-enabled version instead uses a wider tradeoff box and keeps both explanations contained. The option-table values remain the same across all four slides. These layouts show the effect of offering the helper bundle; they do not identify a particular helper as the cause.
+
+The following numbers connect the pictured decks to the ablation results. They are preferences between the complete eight-slide decks, not scores for this slide alone. Each example pair has six judgments: three judges in both orders. The study average covers six deck pairs, three models on two briefs.
+
+| Change being tested | Other choice kept fixed | Win credit for the change, pictured decks | Win credit across the study |
+|---|---|---:|---:|
+| Add helpers | Text review | 91.7% | 48.6% |
+| Add helpers | Screenshot review | 0.0% | 27.8% |
+| Add screenshots | Primitives | 100.0% | 69.4% |
+| Add screenshots | Helpers | 16.7% | 52.8% |
+
+All six judgments preferred screenshot review for the pictured primitive decks. With helpers, four preferred text review and two tied. Helpers themselves received five wins and one tie under text review, but six losses under screenshot review. This example makes the interaction visible: the value of one feature depends on the other feature already present. The differences between the example and study averages also show why one attractive slide cannot establish the best harness.
+
+The [per-pair results](data/harder/paired_full/factors_by_pair.csv) and [saved judge reasons](data/harder/paired_full/judgments.json) retain the evidence behind these comparisons. Judges assessed the whole deck, so the callouts shown here illustrate only part of their reasoning.
+
 ## What the scores tell us
 
 Individual scores and direct comparisons usually agreed: the higher-scoring deck also won the head-to-head comparison in 37 of 40 pairs without a tie on either measure. Three pairs disagreed, and eight more were tied on at least one measure. GPT's mean individual score was 87.5/100, but the paired results give that number context by showing which alternatives judges preferred.
