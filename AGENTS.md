@@ -75,19 +75,57 @@ analysis. Treat this as an editorial standard. Every explanation must be support
 evidence or a named source. Give the subject enough space to make sense; short sentences do not require
 short explanations.
 
+### A gradual opening
+
+The opening is the beginning of a lesson for a curious reader, not an abstract for a specialist. A concrete
+first paragraph followed immediately by model names and results is still too abrupt. Give the reader time
+to become familiar with the subject before asking them to follow an experiment about it.
+
+- Begin with the everyday activity or need behind the topic. Explain what people are trying to accomplish
+  and what a useful outcome looks like. Start with one simple situation; do not pack several exceptions,
+  business rules or failure types into the first paragraph.
+- Explain why someone would care in human terms: time spent checking work, a payment made incorrectly,
+  an appointment that never gets booked, or a number that answers the wrong question. Develop the
+  connection instead of asserting that the topic is important.
+- Build one small, explicitly labelled illustrative example over several paragraphs. First establish the
+  ordinary case, then add one complication, and explain how a person would work through it. Use easy
+  numbers and familiar words. Save the full measured case and its exceptions for the later worked examples.
+- Introduce the underlying idea only after the example has made it useful. Explain what a term means and
+  why it is needed before adding another term. A paragraph that defines several unfamiliar terms at once
+  is still a barrier. Prefer everyday descriptions in the opening even when the technical terms are
+  defined elsewhere in the document.
+- Explain both sides of the proposed comparison in ordinary language before naming methods. A reader
+  should understand what changes between them and why that might help before seeing acronyms, software
+  names, model versions or a research-paper reference.
+- Let that explanation lead to a plain-language question. Then use a separate short section for the
+  study summary: what was compared, the essential size of the study, the main answer and one caveat.
+  Translate the answer back into the original situation. Detailed scores belong in the results section.
+- Keep pilot histories, follow-up protocols, cache paths, token counts, request budgets, API details,
+  provider outages, parsing rules and secondary scoring variants out of the opening. Place them in the
+  relevant method, results, limitations or reproduction section. Preserve the evidence when moving it.
+
+Allow roughly six to ten short paragraphs for this teaching introduction, with descriptive subheadings
+when they help. This is a pacing guide, not a quota: each paragraph should answer the next question a new
+reader would naturally have. Adding filler or repeating the stakes does not make an opening softer.
+Keep the notebook and README introductions equally welcoming; neither may depend on the other.
+
+Before accepting an opening, read it aloud with the model names, code and results hidden. A newcomer
+should be able to say what the subject is, why it matters, how the simple example works and what the two
+approaches do differently. If the reader needs a glossary or a later section to understand the comparison,
+rewrite the opening rather than adding a parenthetical definition to the abstract.
+
 ## Rules for notebooks
 
 - **Self-contained.** A notebook imports nothing from this repo. Helpers (CLI wrappers, caches, plot style)
   are defined inside the notebook, even if another notebook has the same code. Paths are relative to
   the notebook's folder.
-- **Introduce the topic first.** Open with several short markdown paragraphs that explain the topic in
-  everyday language, where it comes up, who uses the answer and why mistakes matter. Start with a concrete
-  situation and a simple example of the task. Explain the basic concepts and the ordinary approach before
-  introducing model names, metrics or experiment details. Let the difficulty in that example lead into
-  the research question. The opening may span several markdown cells.
+- **Introduce the topic gradually.** Follow the gradual-opening standard above. Teach the everyday task,
+  its importance and one small example before moving to the research question. The first markdown cell
+  need not contain the experiment or its answer. Use several cells if that gives each idea room to settle.
 - **Orient the reader before the code.** After the introduction, state the question, data and counts,
-  method in plain language, headline result and main caveat. Keep this summary before the Contents and
-  setup cells. Give readers enough context to understand the result before asking them to interpret it.
+  method in plain language, headline result and main caveat in a short study summary. Keep this summary
+  before the Contents and setup cells. Include only the details needed to understand the comparison;
+  move the run ledger and additional analyses to their later sections.
 - **Structure:** topic introduction and simple example, question and summary, contents and workflow
   diagram, setup and configuration, data (with a look at it), method with worked examples, results (charts,
   tables and interpretation), error analysis with concrete examples, limitations, how to reproduce,
@@ -199,18 +237,20 @@ the README, reading code or inspecting a cache file.
 
 Write each notebook's `README.md` as a standalone illustrated explanation for someone new to the subject.
 It should provide enough background, examples and analysis to understand the work without reading code or
-following a link to the notebook. Open gently, like a lecturer introducing an unfamiliar topic. In order:
+following a link to the notebook. Follow the gradual-opening standard above, like a lecturer introducing
+an unfamiliar topic to a reader with no background. In order:
 
-1. Introduce the topic through a concrete situation. Explain what the task is, who needs it and why the
-   answer matters. Spend several short paragraphs on the background needed to understand the experiment.
-   Define unfamiliar concepts in plain language as they appear.
-2. Show a small example of the task and what a useful answer looks like. Explain the ordinary approach
-   and where it becomes difficult, including what a mistake costs. Use this difficulty to motivate the
-   experimental design; explain choices such as paired controls or a fixed call budget before naming them.
+1. Introduce the everyday subject and its purpose before the experimental problem. Explain who needs the
+   answer and why it matters. Build the necessary background over several short paragraphs, one new idea
+   at a time. An opening anecdote alone is not enough preparation for a technical summary.
+2. Develop a small example from the ordinary case to one complication. Explain how a person would solve
+   it, what can go wrong and what that mistake changes. Describe the alternative approaches in everyday
+   language. Introduce technical names only after the reader understands the choices they name.
 3. State the question: what is compared, on what data and with what counts. Explain why the comparison
    would help someone make a decision.
-4. Give the result in plain numbers, translate it into the original situation and state the caveat that
-   most affects its use. Introduce the metric before asking the reader to interpret a score.
+4. In a short study summary, give the main result in plain numbers, translate it into the original
+   situation and state the caveat that most affects its use. Introduce the metric before asking the reader
+   to interpret a score. Keep the opening free of secondary results and collection bookkeeping.
 
 Then develop the evidence as a connected explanation:
 
@@ -305,7 +345,9 @@ guide (WikiProject AI Cleanup) and from studies of words whose frequency jumped 
 ### Do
 
 - **Introduce the topic before the findings.** Give notebook and README openings room to explain the
-  subject, its importance and a concrete example before presenting the experimental result.
+  subject, its importance and a slowly developed example before presenting the experimental result.
+  Start with everyday language and introduce one unfamiliar idea at a time. A compressed abstract after
+  a friendly first paragraph does not meet this standard.
 - **Lead result paragraphs with the finding and its number.** Once the task and metric are explained,
   write "Claude Opus 5.5 read every marked test on 24 forms (F1 1.00)", not "The results reveal interesting
   patterns across models". Follow the number with its meaning and the evidence needed to interpret it.
@@ -370,7 +412,10 @@ Prefer a table or a number over an adjective.
 When adding or revising a notebook or its README, read the rendered README and the notebook with code
 cells hidden or skipped. Check that:
 
-- The opening teaches the topic, shows why it matters and gives a simple example before the result.
+- The opening teaches the everyday subject at a gradual pace, explains why it matters and develops a
+  simple example before the result. Both approaches make sense without knowing their technical names.
+- The transition into the study summary stays readable. No unexplained acronyms, dense lists of new
+  terms, pilot histories or collection bookkeeping interrupt the introduction.
 - A new reader can explain the question, data, methods and main result using only the narrative and visuals.
 - The README stands on its own and includes the worked examples required above, drawn from traceable data
   or clearly labelled as illustrations.

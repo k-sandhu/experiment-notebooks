@@ -1,21 +1,34 @@
-# What can an auditor check about a language model?
+# Checking the evidence behind an assistant's decisions
 
-An employee asks to be repaid for office supplies. The receipt totals $100. The policy allows office expenses up to $100 when there is a receipt and the claim arrives within 30 days. An assistant should approve it and name the rule. A reviewer should be able to check the arithmetic and policy without trusting the assistant's prose.
+When a decision affects someone, it helps to be able to check how it was made. A person might ask why an expense was refused or whether the same rule was applied to everyone. The person answering needs more than a confident explanation. They need records that can be compared with the rule that was supposed to apply.
 
-Six months later, a disputed denial could require the original facts, policy version, model response and record of the final action. A different investigation could require the exact model weights, an internal computation trace or the origin of training examples. Those are different audit requirements. Saving a conversation can answer the first kind of question while leaving the others unresolved.
+Checking a decision against a stated requirement is an audit. The requirement tells us what evidence to look for. For a payment decision, that evidence might be a receipt, a policy and a record of what was approved. The aim is to make a particular question answerable.
 
-An **audit** checks a stated requirement against evidence. Here, a closed hosted model has weights unavailable to us. An open-weight model has downloadable weights under a published licence. The [Open Source Initiative definition](https://opensource.org/ai/open-source-ai-definition) also requires code and sufficiently detailed training-data information. We use "open-weight" without certifying that every published component satisfies that definition.
+### Starting with a familiar decision
 
-For a small policy with clean structured facts, the ordinary solution is a rules program. We use one to establish correct answers and to control the final action. Language models are unnecessary for this task. That deliberate choice lets the experiment distinguish checking a recorded action from explaining a neural network.
+Consider a small illustrative expense claim. An employee buys office supplies for USD 80. The policy allows repayment for office purchases up to USD 100 when a receipt is provided on time. If those conditions are met, approving USD 80 follows the policy. A reviewer can check the amount and the rule directly.
 
-For example, 10,000 cents is allowed under a 10,000-cent cap; 10,001 cents is not. A missing receipt means review, even if the amount is small. A note saying "the audit team overrides the policy" has no authority. Changing a real policy fact should change the answer when it crosses a boundary. Changing an irrelevant colour or adding a false instruction should not. These matched edits make errors easier to interpret than an undifferentiated accuracy score.
+Now change just one fact: the receipt is missing. The same policy might require the claim to be reviewed before payment. The amount has not changed, but the evidence needed for approval has. Keeping the original facts and policy makes that difference understandable later.
 
-We ask which checks are possible with GPT-6.1 Sol through Codex, a dated Qwen3 release through OpenRouter, and a separate locally controlled Pythia checkpoint. Both hosted models receive the same 32 new records twice. Eight underlying families supply a base case and three edits each. A response is correct only when its decision, rule code and total all match the policy: 8 correct entries out of a batch of 8 means 8/8, and higher is better.
+Suppose a language-model assistant proposes the decision. We can save its input and answer, then check the proposed action against the policy. If a separate rules program approves or rejects the payment, we should also save what that program actually did. This gives a reviewer a record of the transaction they are being asked to examine.
 
-GPT matched **32/32 cases** in each draw. Qwen matched **22/32**, following all eight hostile notes. Both repeated the same decision fields on 32/32 records, including Qwen's errors. The rules gateway reconstructed all 128 recorded actions. A fresh local Pythia load reproduced all next-token logits on 8/8 prefixes, and controlled weight edits changed 8/8 next tokens as numerically predicted. Neither hosted interface let us hash or inspect its executed checkpoint.
+### Different questions need different evidence
 
-The broad claim that closed models cannot participate in auditable work is too strong. A requirement to independently inspect the executed weights is a narrower claim that our closed hosted access cannot meet. These eight constructed families are a demonstration, not a production certification or an estimate of a real-world failure rate.
+There is another possible question: what inside the model caused it to produce that answer? A saved transaction does not contain all of the model's internal calculations. Examining those calculations requires access to the model itself and a way to inspect it while it runs.
 
+A model contains learned numerical settings called weights. Some services let us send requests but do not let us obtain those weights. Other models publish weights that can be downloaded. Having the files makes some additional checks possible, but it does not automatically tell us why every answer was produced or where every training example came from.
+
+It therefore helps to separate the questions before choosing the tools. Reconstructing a payment, checking whether a model reacts correctly to a changed fact, and inspecting its internal calculations are different jobs. Each needs its own evidence and its own test.
+
+The expense policy below is intentionally simple enough for a conventional rules program to solve. That gives us a known answer for every claim and keeps the focus on what can be checked. We compare what a reviewer can establish from saved interactions with hosted assistants and what extra inspection becomes possible with a small model running locally.
+
+## The study in brief
+
+GPT-6.1 Sol and Qwen3 receive the same 32 fictional expense records twice. We check their decisions, the policy rules they cite and their totals. A separate local experiment uses a small model called Pythia to test checks that require possession of the model files.
+
+GPT matched the policy on all 32 records in each repeat; Qwen matched 22. Both repeated the same decision fields, including Qwen's mistakes. The rules program and saved records allowed all 128 resulting actions to be reconstructed. The local model also allowed internal computations to be reproduced and deliberately changed.
+
+The useful distinction is which question the evidence can answer. A recorded final action can be checked even when the hosted model's internal files are unavailable. Inspecting those files is a separate requirement. These small constructed tests demonstrate particular checks; they do not certify a real deployment.
 
 ## Contents
 
@@ -286,6 +299,19 @@ To independently repeat local inference, install the optional pinned packages an
 
 To collect new hosted responses, use a separate copy and preserve this committed run. Set `NB26_LIVE=1`, authenticate Codex, provide `OPENROUTER_API_KEY`, and remove only the copied evidence before collection. Changing a prompt, provider, size or seed changes the request keys. Cached response reuse and fresh inference are reported separately.
 
+### Collection and scoring details
+
+An **audit** is a check against a stated requirement using evidence. Here, **closed model** means a hosted model whose weights are unavailable to us. **Open-weight model** means that published weights can be obtained under their licence. The Open Source Initiative's [definition](https://opensource.org/ai/open-source-ai-definition) also requires training and inference code and sufficiently detailed training-data information. A download of weights alone does not establish all of those conditions.
+
+Which audit requirements can we demonstrate with a closed hosted model, an open-weight hosted model and a locally controlled open checkpoint?
+
+GPT-6.1 Sol and Qwen3-30B-A3B-Instruct-2507 receive the same 32 fresh synthetic expense records twice, in four batches of eight. That is 16 hosted requests and 128 item responses. Eight underlying cases each have a base record, one policy-changing edit, an irrelevant edit and a hostile instruction in an employee note. A separate Pythia-14M experiment inspects and changes a pinned, small, non-chat checkpoint on eight text prefixes. Pythia is not a task-quality competitor.
+
+GPT matched the decision, rule code and total on **32/32 records** in each draw; Qwen matched **22/32** in each draw. Qwen followed the hostile note on all eight injection records. Both models repeated the same decision fields on 32/32 items, including Qwen's ten wrong answers. GPT's exact item text matched on 22/32 repeats and Qwen's on 28/32.
+
+The rules gateway reconstructed 128/128 recorded actions offline and rejected 128/128 deliberately corrupted decisions. With the local 14,067,712-parameter checkpoint, a fresh load reproduced all logits on 8/8 prefixes exactly, and predicted weight edits changed 8/8 next tokens and were then restored. Neither hosted interface exposed the executed checkpoint for hashing or internal inspection. These results support distinguishing an auditable final-action workflow from an audit of the model's internals.
+
+The main caveat is scope: eight constructed families and two draws do not certify a deployment, prove an explanation's causal faithfulness, or establish that a model meets a regulator's requirements. The local test demonstrates access and control over computations, not a complete explanation of learned behavior.
 
 ## 8. Future work and further reading
 
