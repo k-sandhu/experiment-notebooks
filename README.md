@@ -51,6 +51,17 @@ send to a person.
 | 06 | [Car make and model from one photo](notebooks/06-car-make-model-from-image/) | Labelling photos against a fixed list (products, parts, vehicles) is a task where a probability per label is cheaper than generated text and gives a confidence score. Can the Decisions API name a car's make and model from one photo over 109 labels, and how does it compare with frontier vision models (Claude, GPT, Muse) on accuracy, cost and speed? | Decisions API: 94.5% top-1 over 109 labels at $0.20 per 1,000 images and 0.9 s per call; GPT-6.1 and Muse Wonder 100%, Claude Opus 5.5 99.3% at 4-12 s per call |
 | 08 | [Ontario lab requisition extraction](notebooks/08-lab-requisition-extraction/) | Labs receive paper test requisitions as scans, faxes and phone photos, and a missed checkbox is a test that never runs. The Ontario form has about 70 tests in a tight grid of small boxes, plus typed and handwritten patient details. On 24 synthetic forms with exact ground truth, can vision LLMs read which tests were ordered and the patient and clinician fields? | Claude Opus 5.5 read every marked test on 24 forms (F1 1.00); GPT-6.1 0.995, Muse Wonder 0.986; best open model 0.94, open models weak on phone photos and written-in tests |
 
+## Generating and checking example data
+
+A synthetic extraction example needs more than a plausible answer. If an order changes twice, its final price
+must agree with the source messages and its citations must support that price. These experiments examine how
+to generate examples, check them, remove duplicates and use observed failures to choose further cases. The
+data collection step can be studied before training a model.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 23 | [Synthetic data generation and curation](notebooks/23-synthetic-data-curation/) | Generated examples can contain correct values with unsupported citations. On 180 collection slots (162 distinct fictional order sources) plus 20 held-out layout cases, how do GPT-6.1 Sol and GPT-6 Luna compare, and what do verification, deduplication, repair and failure-guided sampling retain? | All 720 collection answers had correct values. Values and citations passed for Sol 360/360 and Luna 310/360 after reviewing seven disputed citation rejections (original verifier: 303/360). Reviewed exports contain 162 distinct accepted examples, 28 accepted/rejected pairs and 29 repair conversations. No model training; short, explicit-rule documents |
+
 ## Making bounded decisions
 
 Routing, approvals and checks need one allowed answer rather than generated prose. A high score on easy matches can hide arithmetic or sequence failures, so these experiments compare the same models across controlled difficulty, probability calibration and serving speed.
@@ -162,6 +173,7 @@ python -m venv .venv
 * New collection in 09, 11, 12 and 13: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
 * Notebook 13 verifies cached evidence before replay. For a new collection, use a separate copy and follow its README; keep the committed cache intact.
 * Notebook 19 replays the complete PowerPoint study offline. New collection uses explicit --live commands and requires Windows, PowerPoint and authenticated model CLIs.
+* Notebook 23 replays 82 saved CLI requests offline. `NB_LIVE=1` runs a small new collection under its ignored `data/tmp/live_demo/` folder; the committed main results stay separate.
 * Notebook 14 uses `PRIORLABS_API_KEY` and `NB_LIVE=1` for new collection, with a checked computation-token cap. Its default replay reads 48 saved responses without network access.
 * **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
@@ -192,6 +204,8 @@ Notebook 13 uses 100 fresh synthetic model outputs collected on 2026-10-19, with
 Notebook 15 uses two fresh numerical packets and model drafts collected on 2026-10-19, with exact answers generated in code and model date sources in its data folder.
 
 Notebook 17 extends the writing pilot with 24 fresh programmatic cases and copied legacy evidence. Human reader and editor results are pending; their participant materials and import workflow are included.
+
+Notebook 23 uses fictional order threads generated in code on 2026-10-24, with source events, exact answer keys and model responses saved for inspection. It demonstrates data curation without training a model. Its [provenance record](notebooks/23-synthetic-data-curation/data/provenance.json) identifies the models and sources; generated service outputs do not carry a claim of unrestricted downstream training permission.
 
 ## For AI agents
 
