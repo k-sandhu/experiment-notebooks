@@ -1,20 +1,34 @@
-# 25. Collecting rewards from knowledge work in OpenEnv
+# Checking whether an assistant completed the work
 
-A colleague asks an assistant to move a budget meeting to the first time that two people are free. The assistant must read the calendars, choose a slot, update the existing meeting and stop. A message saying that the meeting was moved is only a claim. The calendar database shows whether the work happened.
+Asking someone to arrange a meeting sounds simple. There is a reason for the meeting, a few people who need to attend, and a time to find. The job is finished when the right appointment is on the calendar and the people involved can use it.
 
-Financial analysis has the same distinction. An analyst may need growth in quarterly software revenue, while a data team may need the cash total after removing an old duplicate row. A fluent answer can use the wrong period, keep both versions of a record or round a number incorrectly. These mistakes matter when another process acts on the answer.
+A computer assistant might help with this work. It can be given a way to read a calendar and a way to change it. To decide whether that help is useful, we need to look at the calendar afterwards. A message saying "done" does not tell us whether the appointment has the right time or guests.
 
-An **environment** is the small world in which the assistant acts. It supplies tools and observations and may return a **reward**, a number used to score behaviour. A **trajectory**, also called a rollout, is the sequence of model responses, tool actions and observations from one attempt. Reinforcement learning can use rewarded trajectories to change a policy, the model that chooses actions. This experiment collects and inspects that evidence. It loads no model weights and performs no parameter updates.
+### Following one small job
 
-Consider two busy calendars on 27 October. Alice is occupied until 14:30 UTC. Bob is free from 14:30 to 15:30. A 45-minute handoff can start at 14:30 and end at 15:15. A useful assistant creates one event at those times and invites Bob. Creating another copy on the second calendar can earn another successful API response while violating the instruction to create exactly one event. This example motivates checking both the environment's native rewards and the requested final result.
+Consider an illustrative meeting request. Alice and Bob need 45 minutes together. Alice is busy until 2:30 in the afternoon, and Bob is free from 2:30 until 3:30. A meeting from 2:30 to 3:15 fits both calendars. A person arranging it would check the two schedules, create the appointment and invite Bob.
 
-The question is how two recent, inexpensive open-weight policies compare with GPT-6.1 Sol and GPT-6 Luna when collecting trajectories in three official [OpenEnv environments](https://huggingface.co/docs/openenv/environments): Calendar, FinQA and REPL. Four newly authored tasks per environment receive three repeated attempts per policy: 12 tasks and 144 baseline trajectories. The financial and reconciliation tasks use fresh public records; the calendar tasks use fictional office records created for this experiment.
+Now suppose an assistant creates the appointment but forgets the invitation. The calendar software may report that the event was created successfully. The original job is still incomplete because Bob has not been included. A successful individual action and a successful piece of work are different things to check.
 
-The main measure is **exact task completion**: reward 1 when the requested result and required constraints hold, and 0 otherwise. For example, one successful attempt out of three gives 1/3, or 33.3%, for that task-policy group. Native reward is kept alongside this measure because the three environments use different scoring rules.
+The same distinction can matter when reading figures. An assistant may find a revenue number correctly but use a yearly total when the question asks about a quarter. Each small step can look reasonable while the final answer misses the request. We need a check that follows the purpose of the job all the way to its outcome.
 
-The baseline result is Granite 4.2 8B: 16/36; Nemotron 3.5 Lightning: 35/36; GPT-6.1 Sol: 35/36; GPT-6 Luna: 33/36. There are 20 additional continuation trajectories from 10 eligible prefixes. All results use the frozen collection from 24 October 2026. The main caveat is the small, deliberately bounded task set: four task designs per environment cannot establish a general model ranking. Financial answers are checked at the precision the task explicitly requests. This is stricter than FinQA's native tolerance.
+### Keeping enough evidence to check
 
-A second question is why the stronger policies are harder to improve with these collected rewards. The added analysis measures their remaining errors, the scarcity of mixed reward groups, verifier blind spots and the limited headroom from extra sampling. It separates those observations from an illustrative probability calculation and from research about actual weight updates.
+One way to inspect the work is to save the whole attempt. We keep the original request, the assistant's actions, the information returned to it, and the final state or answer. That record lets a reviewer see where a mistake entered the process, instead of having only a final score.
+
+We call that saved attempt a trajectory, or rollout. It is simply the record that lets us follow the job from the initial request to the outcome. We can then give the attempt a score: 1 when the whole job was completed and 0 otherwise. The record helps explain why it received that score.
+
+Trying the same job more than once can show whether an assistant completes it consistently. It can also produce examples of successful and unsuccessful approaches. Such records may later be useful for training, but collecting and scoring them does not itself change the assistant.
+
+The study below compares four assistants on the same small office tasks. We want to know how often the work is actually completed, whether the software's own success signals agree with that result, and what the saved attempts reveal about mistakes. For an assistant that already succeeds most of the time, we also ask how much useful failure evidence remains to collect.
+
+## The study in brief
+
+Each of four assistants makes three attempts at each of 12 tasks: arranging calendar events, answering questions from financial tables, and reconciling data records. That gives 36 attempts per assistant and 144 in the main comparison. The tasks run through OpenEnv, which supplies the tools and records their responses.
+
+Granite 4.2 8B completed 16 of 36 attempts exactly. Nemotron 3.5 Lightning and GPT-6.1 Sol each completed 35; GPT-6 Luna completed 33. Completion means meeting the requested result and its conditions, rather than merely receiving a successful response from a tool.
+
+The saved examples show why the final check matters, including extra calendar changes and answers that miss the requested numerical precision. These are results for only four task designs in each area. They support inspecting how these attempts succeeded or failed, rather than a general ranking of the assistants.
 
 ## Contents
 
@@ -335,7 +349,15 @@ A later weight-update run would also need the exact sampled policy/tokenizer rev
 
 No optimizer, backward pass or model-weight load appears in the notebook. The saved audit records `weight_updates=0`. The exact reward rules and the behaviour they favour deserve review before using any of them to train a model.
 
+### Collection and scoring details
 
+The question is how two recent, inexpensive open-weight policies compare with GPT-6.1 Sol and GPT-6 Luna when collecting trajectories in three official [OpenEnv environments](https://huggingface.co/docs/openenv/environments): Calendar, FinQA and REPL. Four newly authored tasks per environment receive three repeated attempts per policy: 12 tasks and 144 baseline trajectories. The financial and reconciliation tasks use fresh public records; the calendar tasks use fictional office records created for this experiment.
+
+The main measure is **exact task completion**: reward 1 when the requested result and required constraints hold, and 0 otherwise. For example, one successful attempt out of three gives 1/3, or 33.3%, for that task-policy group. Native reward is kept alongside this measure because the three environments use different scoring rules.
+
+The baseline result is Granite 4.2 8B: 16/36; Nemotron 3.5 Lightning: 35/36; GPT-6.1 Sol: 35/36; GPT-6 Luna: 33/36. There are 20 additional continuation trajectories from 10 eligible prefixes. All results use the frozen collection from 24 October 2026. The main caveat is the small, deliberately bounded task set: four task designs per environment cannot establish a general model ranking. Financial answers are checked at the precision the task explicitly requests. This is stricter than FinQA's native tolerance.
+
+A second question is why the stronger policies are harder to improve with these collected rewards. The added analysis measures their remaining errors, the scarcity of mixed reward groups, verifier blind spots and the limited headroom from extra sampling. It separates those observations from an illustrative probability calculation and from research about actual weight updates.
 
 ## 10. Limits and what the evidence supports
 
