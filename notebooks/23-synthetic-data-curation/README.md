@@ -1,21 +1,36 @@
-# Synthetic data needs an answer key and a reason to keep each row
+# Making useful practice examples from fictional orders
 
-An operations analyst receives a message thread saying an order changed twice. One reply quotes an old price, another cancels the order, and a later message confirms the SKU. A useful dataset row must describe the final order and point to the messages that support each field. A fluent-looking row can still be wrong if it uses an outdated value or cites a sentence that merely repeats the obsolete value.
+An order can be easy to describe in conversation and awkward to put into a table. A customer asks for something, a colleague confirms it, and another message changes the quantity. Someone preparing the order needs to bring those messages together into one current record.
 
-For example, suppose a thread says “Order O-481 is 4 cases of part AX-7,” then defines each case as 12 units. The quantity in individual units is 48, and both messages support it. A row that says 48 but cites only the first message has the right value and incomplete evidence. That distinction matters when generated examples will be reviewed, used to test extraction software, or considered for a later training project.
+A language-model assistant can be asked to do that reading. Before relying on it, we need examples that show what a correct record looks like. Those examples let us check whether the assistant finds the final quantity, price and other details, rather than simply copying the first values it sees.
 
-Synthetic data means records made for an experiment rather than copied from real people or businesses. It can provide exact answers, but generation alone does not make it useful. A curation pipeline must check values, evidence, variety, duplicates, difficult cases, and whether a suggested repair actually fixed the failure. This experiment studies that pipeline on newly authored fictional order threads.
+We can make fictional messages for this purpose. That gives us control over what happened and lets us keep an answer key. These made-up records are called synthetic data. They let us practise with changes and mistakes without using a real customer's correspondence.
 
-Recursive self-improvement (RSI) research often studies loops in which systems propose tasks, produce solutions, check them, and use observed weaknesses to guide later data collection ([Shi et al., 2026](https://arxiv.org/abs/2605.14392); [Zhao et al., 2025](https://arxiv.org/abs/2505.03335)). Here, the models’ weights stay fixed. The experiment tests the data pipeline around that loop: generating exact-answer tasks, checking answers and evidence, removing semantic duplicates, attempting bounded repairs, and adapting which cases are sampled. It does not train a model or test recursive self-improvement.
+### A small order to work through
 
-## Experiment summary
+Consider this illustrative exchange. The first message says, "Please send four boxes of notebooks." A second message explains that each box contains twelve notebooks. If our table records individual notebooks, its quantity should be 48. We get that number by combining the requested box count with the number in each box.
 
-The first protocol contains 180 collection slots and 20 layout-audit cases. In collection, GPT-6 Luna passed 303/360 responses and GPT-6.1 Sol passed 360/360; on the audit they passed 18/20 and 20/20. The score requires valid schema, seven exact values, and sufficient citations. The cases use a small set of explicit rules, and repeated responses to one case are correlated. A separate post-hoc status-evidence sensitivity review accepts 310/360 Luna and 360/360 Sol collection responses; the frozen strict counts remain the primary result.
+Now suppose we also want the assistant to show where its answer came from. Pointing only to the first message is not enough to explain 48. A reader also needs the second message, which supplies the conversion. The value can be right while its supporting evidence is incomplete.
 
-A separate eight-case interface pilot produced 32 original responses. 32/32 had all seven values correct and 30/32 passed the evidence check too (GPT-6 Luna 14/16 accepted; GPT-6.1 Sol 16/16 accepted). It is saved under `data/pilot/` and is not included in the main totals. Each pilot batch used 19,105–19,799 input tokens and 904 output tokens; the four calls took 10.9–16.6 seconds each. Most input usage is CLI instruction and setup overhead, so these token counts are not the size of the message text alone.
+That matters when another person checks the record. With both messages identified, the person can follow the calculation. With only the first, they have to search for the missing detail or take the answer on trust. A useful example therefore needs both a correct answer and a clear connection to its source.
 
+### Choosing which examples to keep
 
-The harder follow-up uses 64 longer procurement packs and 16 layout-audit cases. It asks for the units still to ship and the net unit price after rebates. Sol passes all 128 collection answers. Luna has 127 wrong-value answers and one value-correct answer with insufficient evidence. All 24 selected repairs pass, but add zero newly solved cases because Sol already covers all 64 sources. This exposes a limit of this data-generation method: it produces corrections for Luna without finding an observed Sol error. The documents and task semantics changed, so these results are reported separately from the first protocol.
+Making more fictional orders is only the beginning. We still have to decide which answers are suitable to keep. Repeating the same easy order many times adds volume, but it may tell us little about whether an assistant handles a change in quantity or a cancelled order.
+
+One approach is to work through a fixed selection of cases. Another is to use the mistakes already observed to choose more examples of the difficult kinds. A rejected answer can also be sent for correction, then checked again. These choices affect which examples survive and what those examples can teach us about the assistant's limits.
+
+This process of checking and selecting records is called curation. The question is whether it produces a useful set of examples with answers we can inspect. A growing pile of accepted records is not sufficient by itself; we also need to know which kinds of mistakes remain and whether a correction adds anything new.
+
+The experiment below follows that process from fictional messages to accepted or rejected answers. It compares two assistants, checks their values and evidence, and examines corrections and the choice of later cases. It collects material for possible future use; it does not retrain either assistant.
+
+## The study in brief
+
+We compare GPT-6 Luna and GPT-6.1 Sol on fictional order messages with exact answer keys. The first collection selects an order 180 times, sometimes reusing the same case, and asks each model for two answers per selection. An answer passes only when all seven requested fields are correct and each has enough supporting evidence.
+
+Sol passed all 360 answers. Luna passed 303: its values were correct in all 360, but 57 answers had insufficient evidence. This is the distinction in the small example above, where a correct quantity still needs the messages that justify it.
+
+A separate, harder follow-up uses 64 longer order documents. Sol passed all 128 collection answers; Luna passed none under the complete check. All 24 selected corrections passed, but none added a source case that Sol had not already solved. The main limit is the deliberately constructed task: these results describe the examples we generated, not order handling in general.
 
 ## Contents
 
@@ -785,6 +800,16 @@ Files for inspection:
 - [Reviewed accepted examples](data/exports_reviewed/accepted_examples.jsonl), [reviewed preference pairs](data/exports_reviewed/preference_pairs.jsonl), [reviewed repair conversations](data/exports_reviewed/repair_conversations.jsonl), and [reviewed rejected examples](data/exports_reviewed/rejected_examples.jsonl)
 - [Post-review report](data/adjudication.json), [recorded environment](data/environment.json), and the [frozen strict export history](data/exports/)
 - [Saved figures](figures/)
+
+### Collection and scoring details
+
+Recursive self-improvement (RSI) research often studies loops in which systems propose tasks, produce solutions, check them, and use observed weaknesses to guide later data collection ([Shi et al., 2026](https://arxiv.org/abs/2605.14392); [Zhao et al., 2025](https://arxiv.org/abs/2505.03335)). Here, the models’ weights stay fixed. The experiment tests the data pipeline around that loop: generating exact-answer tasks, checking answers and evidence, removing semantic duplicates, attempting bounded repairs, and adapting which cases are sampled. It does not train a model or test recursive self-improvement.
+
+The first protocol contains 180 collection slots and 20 layout-audit cases. In collection, GPT-6 Luna passed 303/360 responses and GPT-6.1 Sol passed 360/360; on the audit they passed 18/20 and 20/20. The score requires valid schema, seven exact values, and sufficient citations. The cases use a small set of explicit rules, and repeated responses to one case are correlated. A separate post-hoc status-evidence sensitivity review accepts 310/360 Luna and 360/360 Sol collection responses; the frozen strict counts remain the primary result.
+
+A separate eight-case interface pilot produced 32 original responses. 32/32 had all seven values correct and 30/32 passed the evidence check too (GPT-6 Luna 14/16 accepted; GPT-6.1 Sol 16/16 accepted). It is saved under `data/pilot/` and is not included in the main totals. Each pilot batch used 19,105–19,799 input tokens and 904 output tokens; the four calls took 10.9–16.6 seconds each. Most input usage is CLI instruction and setup overhead, so these token counts are not the size of the message text alone.
+
+The harder follow-up uses 64 longer procurement packs and 16 layout-audit cases. It asks for the units still to ship and the net unit price after rebates. Sol passes all 128 collection answers. Luna has 127 wrong-value answers and one value-correct answer with insufficient evidence. All 24 selected repairs pass, but add zero newly solved cases because Sol already covers all 64 sources. This exposes a limit of this data-generation method: it produces corrections for Luna without finding an observed Sol error. The documents and task semantics changed, so these results are reported separately from the first protocol.
 
 ## 11. Harder realistic follow-up
 
