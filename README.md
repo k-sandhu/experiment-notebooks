@@ -72,7 +72,8 @@ Demand, weather and traffic histories are easy to collect, but fitting and maint
 Once a model can run a query or edit a file, a wrong answer becomes a wrong action. These notebooks test the
 layers between what a model writes and what it changes: whether it respects written permissions (05, 09), what
 should enforce them when it does not (10), how agents hand work to each other (07), whether one model can grade
-another (11), and whether review loops make a model more reliable at regulated work (12).
+another (11), and whether review loops make a model more reliable at regulated work (12). A later audit needs
+the original facts and action as well as evidence about the model itself (26).
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
@@ -82,6 +83,7 @@ another (11), and whether review loops make a model more reliable at regulated w
 | 10 | [Code execution guardrails](notebooks/10-code-execution-guardrails/) | When a model proposes a forbidden action, the code that decides whether to run it is the last guard, and a string check on the path is easy to get past. On 22 requests with known right answers (8 permitted, 14 forbidden), what do five enforcement designs let through, and how much legitimate work does each block? | A path-prefix check let through 5/14 forbidden actions. Typed operations on resolved paths let through 0/14 and kept all 8 permitted ones. Read-only also allowed 0/14 but blocked 4/8 permitted actions |
 | 11 | [Using LLM judges](notebooks/11-llm-judges/) | A model that grades answers can reward a polished mistake or approve the better of two bad answers. On 120 fresh test scenarios after 24 development cases, how do Claude and GPT compare under three judging prompts and both answer orders, and what do presentation, references, parsing and review rules change? | Original pilot preserved: 96/96. New study: recovery removed 94 formatting failures; 4/1,440 ratings still had a wrong choice or acceptance label. Agreement with recovery handled 99/120 cases with 0 observed errors; structured synthetic tasks, not human-preference validation |
 | 12 | [Tax workpaper harnesses](notebooks/12-tax-research-harnesses/) | An S-Corporation tax workpaper is mechanical but unforgiving: one misclassified ledger line flows into every shareholder's numbers, and some cases need an accountant's judgment. On 12 fictional 2025 US S-Corps, do detailed instructions, a self-review pass, feedback from a custom validator or the smolagents agent framework give more fully correct workpapers than one direct call, at the same model and call budget? | No. Qwen3.8 Flash's direct call got 12/12, and review steps only matched or lowered that (generic self-review with detailed instructions: 9/12). Gemma 4 31B got 0/12 in every setup. All 24 Qwen framework runs failed because the provider rejects the framework's default tool setting |
+| 26 | [What can an auditor check about a model?](notebooks/26-model-auditability/) | A disputed automated decision needs evidence of the facts, rule and action; inspecting the neural network needs different access. On 32 fresh expense-policy records per model, repeated twice, what can hosted GPT and Qwen establish, and what extra checks can a pinned local checkpoint support? | GPT 32/32 policy answers vs Qwen 22/32 per draw; both repeat all decision fields. Rules reconstruct 128/128 actions. Local Pythia replays and changes 8/8 computations; neither hosted interface exposes executed weights. Small constructed test, no deployment certification |
 
 ## Recognising model outputs
 
@@ -168,6 +170,8 @@ python -m venv .venv
 * Notebook 16 forecasts six public series through TSFM.ai. Its own `requirements.txt` pins the fitted-baseline libraries; replay needs no key. New collection requires `TS16_LIVE=1` and `TSFMAI_API_KEY`.
 
 Notebook 15 uses strict offline replay with an evidence manifest and a $10 OpenRouter guard. Its README gives model coverage and limits.
+
+Notebook 26 compares policy checks, repeat requests, ledger reconstruction and local checkpoint inspection. Default replay is offline; its README records the access limits, failed provider calls and separately reported costs.
 
 Notebook 18 uses 768 fresh synthetic cases, all four decision models and strict offline replay. Its README records provider pins, scoring audits, diagnostics and reported spend.
 
