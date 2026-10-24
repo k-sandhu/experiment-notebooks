@@ -1,57 +1,36 @@
-# Collecting rewards from Hugging Face RL environments
+# Learning from an assistant's attempts at a task
 
-A small robot has a map, a starting square and an exit. It can ask to move up,
-down, left or right. A route written in one answer may look plausible, but a
-wrong turn can put the robot somewhere else. To judge the behaviour we need to
-record what it actually did and what happened after each move.
+Some jobs require a sequence of actions. To get through a maze, for example, we choose a direction, see where we arrived, and choose the next direction. A wrong turn changes what we need to do next. Judging the attempt means looking at what happened along the way as well as where it ended.
 
-An **environment** supplies that feedback. It presents an observation, accepts an
-action and returns a new observation and a reward. A **rollout** is one complete
-attempt, including the messages, actions and feedback. In reinforcement learning
-(RL), a trainer uses many such attempts to change the model's weights, the numbers
-that determine its predictions. This notebook stops at collecting and checking
-the evidence a trainer would consume.
+That is a useful starting point for thinking about computer assistants that can act. Instead of returning one finished piece of text, an assistant may take a step and receive feedback before continuing. We need a record of those steps if we want to check its work or use the experience to improve it later.
 
-For an illustrative two-move route, the robot receives -0.05 after the first
-move and +10 when it reaches the exit. Its native return is 9.95, the sum of
-those two rewards. We also record a separate outcome reward of 1 for reaching
-the exit within the move limit and 0 otherwise. Keeping these apart prevents a
-movement penalty from being mistaken for an answer to whether the task succeeded.
+### One attempt, a step at a time
 
-The ordinary approach is to collect a fixed number of attempts for every task.
-But four failures give a group-relative trainer no indication of which attempt
-was better. Four successes have the same problem. We therefore examine reward
-variation, a rule for stopping uninformative groups early, and a recent sampler
-that chooses where to collect another group.
+Imagine an illustrative maze with an exit two moves away. A robot moves right and then up, reaching the exit. If it moves left first and meets a wall, it needs to choose again. The map and the movement rules let us check each move without relying on the robot's description of how well it did.
 
-## Question and experiment summary
+We can give the robot feedback as numbers. Suppose each ordinary move earns -0.05 and arriving at the exit earns +10. The successful two-move route earns 9.95 in total. These numbers are called rewards. They express the scoring rule we chose for the task.
 
-Can two small open-weight models produce traceable action/reward data through real
-OpenEnv environments, and how do recent collection rules change the available
-signal without changing any model weights?
+We may also want a simpler answer: did the robot reach the exit before running out of moves? We can record 1 for yes and 0 for no. That tells us something different from the total reward. A record of the actual moves lets us understand both numbers.
 
-The design uses four newly generated mazes and four generated reasoning questions,
-Llama 3.2 3B and Gemma 3 4B through OpenRouter, and four separately seeded attempts per
-model/task. A second collection round samples two tasks per model using RIDGE,
-then collects four new attempts on each. That is 80 episodes in total, with a
-600-request cap and a $2 conservative billing ceiling. Every public-network model
-request is cached. Local OpenEnv WebSocket servers execute the actual reset/step
-loop again during replay.
+The world that accepts moves and returns feedback is called an environment. One saved attempt through that world is called a rollout. Keeping the attempt gives us evidence to inspect: what the assistant was shown, what it chose, and what happened next.
 
-The 80 attempts produced 74 scored outcomes and six provider errors, using 336
-measured action requests. Only **2 of 13 complete initial groups** mixed success
-and failure. One additional all-failed maze group received a nonzero conditional
-coverage signal. RIDGE selected four reasoning groups in the second round; three
-were complete and none mixed outcomes. Its selection did not establish an
-improvement in this sample.
+### Deciding which attempts are useful
 
-On the 13 complete initial groups, SARA's recorded-prefix replay uses 193 action
-requests instead of 261, 26.1% fewer, and retains both mixed groups. All audit
-tails were actually collected. Spend including two setup probes was $0.015311
-provider-reported plus at most $0.001867 reserved for requests without a reported
-charge. Model weight updates: 0. This is a fixed-policy collection demonstration;
-the small task pool and hosted-checkpoint uncertainty limit what a later trainer
-could conclude.
+Suppose we can afford only a limited amount of practice. One simple plan is to try every task four times. Another is to stop repeating a task when the first attempts all end the same way, leaving more time for other tasks. We could also use the results so far to choose which task to try next.
+
+Those choices matter when we want to compare better and worse attempts at the same task. A group containing both successes and failures gives us an observed contrast. Four successes, or four failures, gives us no such contrast under the simple yes-or-no score. Stopping early might save effort, but it might also miss a different outcome on the next try.
+
+Some training methods use these comparisons to change how a model responds in future. That is part of reinforcement learning: learning from actions and their rewards. Before doing that training, we need to know whether the collected attempts and scores provide useful evidence at all.
+
+This experiment studies that earlier step. It records assistants attempting small tasks, checks the feedback, and compares ways of spending the collection effort. It leaves the models unchanged, so collecting a better set of attempts must not be mistaken for demonstrating a better trained model.
+
+## The study in brief
+
+Two small assistants, Llama 3.2 3B and Gemma 3 4B, attempt four generated mazes and four reasoning tasks. OpenEnv, software that runs these tasks and returns feedback, records what happens. The study collects 80 attempts and examines both stopping repeated tasks early and choosing which tasks to attempt next.
+
+Only 2 of the 13 complete initial groups contained both success and failure. When an early-stopping rule was replayed against the saved attempts, it used 193 model requests instead of 261 while retaining both of those groups. The separate task-selection round did not establish an improvement.
+
+This shows a possible saving in collecting useful contrasts on this small task set. It does not show improved model ability: no training was performed, and the stopping result comes from replaying decisions against attempts already collected.
 
 ## Contents
 
@@ -637,6 +616,35 @@ Llama log probabilities are retained when returned. The selected Gemma endpoint
 does not support that option, so they are absent rather than reconstructed. The
 model catalogue, endpoint snapshots and `provenance.json` document this difference.
 Latency is a sum of request durations, not an end-to-end benchmark or a GPU runtime.
+
+### Collection and scoring details
+
+Can two small open-weight models produce traceable action/reward data through real
+OpenEnv environments, and how do recent collection rules change the available
+signal without changing any model weights?
+
+The design uses four newly generated mazes and four generated reasoning questions,
+Llama 3.2 3B and Gemma 3 4B through OpenRouter, and four separately seeded attempts per
+model/task. A second collection round samples two tasks per model using RIDGE,
+then collects four new attempts on each. That is 80 episodes in total, with a
+600-request cap and a $2 conservative billing ceiling. Every public-network model
+request is cached. Local OpenEnv WebSocket servers execute the actual reset/step
+loop again during replay.
+
+The 80 attempts produced 74 scored outcomes and six provider errors, using 336
+measured action requests. Only **2 of 13 complete initial groups** mixed success
+and failure. One additional all-failed maze group received a nonzero conditional
+coverage signal. RIDGE selected four reasoning groups in the second round; three
+were complete and none mixed outcomes. Its selection did not establish an
+improvement in this sample.
+
+On the 13 complete initial groups, SARA's recorded-prefix replay uses 193 action
+requests instead of 261, 26.1% fewer, and retains both mixed groups. All audit
+tails were actually collected. Spend including two setup probes was $0.015311
+provider-reported plus at most $0.001867 reserved for requests without a reported
+charge. Model weight updates: 0. This is a fixed-policy collection demonstration;
+the small task pool and hosted-checkpoint uncertainty limit what a later trainer
+could conclude.
 
 ## 12. Future work and further reading
 
