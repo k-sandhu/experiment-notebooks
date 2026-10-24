@@ -10,9 +10,12 @@ Recursive self-improvement (RSI) research often studies loops in which systems p
 
 ## Experiment summary
 
-The full run contains 180 collection slots and 20 layout-audit cases. In collection, GPT-6 Luna passed 303/360 responses and GPT-6.1 Sol passed 360/360; on the audit they passed 18/20 and 20/20. The score requires valid schema, seven exact values, and sufficient citations. The cases use a small set of explicit rules, and repeated responses to one case are correlated. A separate post-hoc status-evidence sensitivity review accepts 310/360 Luna and 360/360 Sol collection responses; the frozen strict counts remain the primary result.
+The first protocol contains 180 collection slots and 20 layout-audit cases. In collection, GPT-6 Luna passed 303/360 responses and GPT-6.1 Sol passed 360/360; on the audit they passed 18/20 and 20/20. The score requires valid schema, seven exact values, and sufficient citations. The cases use a small set of explicit rules, and repeated responses to one case are correlated. A separate post-hoc status-evidence sensitivity review accepts 310/360 Luna and 360/360 Sol collection responses; the frozen strict counts remain the primary result.
 
 A separate eight-case interface pilot produced 32 original responses. 32/32 had all seven values correct and 30/32 passed the evidence check too (GPT-6 Luna 14/16 accepted; GPT-6.1 Sol 16/16 accepted). It is saved under `data/pilot/` and is not included in the main totals. Each pilot batch used 19,105–19,799 input tokens and 904 output tokens; the four calls took 10.9–16.6 seconds each. Most input usage is CLI instruction and setup overhead, so these token counts are not the size of the message text alone.
+
+
+The harder follow-up uses 64 longer procurement packs and 16 layout-audit cases. It asks for the units still to ship and the net unit price after rebates. Sol passes all 128 collection answers. Luna has 127 wrong-value answers and one value-correct answer with insufficient evidence. All 24 selected repairs pass, but add zero newly solved cases because Sol already covers all 64 sources. This exposes a limit of this data-generation method: it produces corrections for Luna without finding an observed Sol error. The documents and task semantics changed, so these results are reported separately from the first protocol.
 
 ## Contents
 
@@ -26,7 +29,8 @@ A separate eight-case interface pilot produced 32 original responses. 32/32 had 
 - [8. Audit and error analysis](#8-audit-and-error-analysis)
 - [9. Limitations](#9-limitations)
 - [10. Reproduction and cost](#10-reproduction-and-cost)
-- [11. Future work and further reading](#11-future-work-and-further-reading)
+- [11. Harder realistic follow-up](#11-harder-realistic-follow-up)
+- [12. Future work and further reading](#12-future-work-and-further-reading)
 
 ```mermaid
 flowchart LR
@@ -47,9 +51,18 @@ flowchart LR
     exports --> review["Post-collection evidence review<br/>7 status-citation decisions reversed"]
     review --> reviewed["Reviewed exports<br/>162 examples, 28 pairs, 29 repair conversations"]
     reviewed --> results
+    hard_events["Hard follow-up: fresh structured events<br/>32 shared, then 16 fixed + 16 adaptive cases"] --> hard_docs["Long procurement packs<br/>open balances and discounted unit prices"]
+    hard_docs --> hard_models["Sol and Luna through codex exec<br/>256 collection + 32 audit answers"]
+    hard_audit["16 cases generated after selection<br/>new layout, one draw per model"] --> hard_models
+    hard_models --> hard_verify["Hard verifier<br/>values checked separately from evidence"]
+    hard_verify -->|"prior shared value failures; one further round"| hard_events
+    hard_verify -->|"24 selected original failures; one attempt each"| hard_repair["Sol repairs Luna outputs<br/>source and failed-field feedback, no gold"]
+    hard_verify --> hard_exports["64 accepted cases + 64 value-error pairs<br/>24 repair records; zero newly solved cases"]
+    hard_repair --> hard_exports
+    hard_exports --> results
 ```
 
-The diagram counts collection slots, not model requests. A request contains at most ten cases. For one example, the generator creates a structured order and its exact final answer, renders the events into a message thread, and sends only the task instructions and thread to a model. The verifier compares the returned fields and cited message IDs with the source events. A failed candidate may be sent to the other model with the original output and field-level reasons. That adds supervision from the verifier, though the repair request never includes the answer key.
+The first branch uses batches of at most ten cases. The harder branch uses batches of four and keeps its sources and responses in a separate cache. Its fixed and adaptive arms receive equal original-answer budgets. Counts label source cases, response rows or repair items explicitly. For one example, the generator creates a structured order and its exact final answer, renders the events into a message thread, and sends only the task instructions and thread to a model. The verifier compares the returned fields and cited message IDs with the source events. A failed candidate may be sent to the other model with the original output and field-level reasons. That adds supervision from the verifier, though the repair request never includes the answer key.
 
 ## 1. Task and question
 
@@ -69,6 +82,8 @@ The table separates collection from the sealed layout audit. “All fields exact
 The verifier accepted 663/720 original collection responses (92.1%) after checking all seven values and their citations. GPT-6.1 Sol accepted 360/360 and GPT-6 Luna accepted 303/360; Sol's observed acceptance rate was 15.8 points higher in this fixed sample. On the 20-case layout audit, Sol accepted 20/20 and Luna accepted 18/20. These are descriptive counts from the cases and prompt batches in this run. The full workflow and the limits of this sample are explained below.
 
 ## 2. Setup
+
+The hard-v2 live smoke-size knob is `N_HARD_LIVE_CASES = 8` in the setup cell. It changes only the isolated live demonstration; the saved main replay remains fixed.
 
 The notebook uses Python to generate cases, call the two installed Codex models through their CLI, validate output, and save the results. It imports no project helper at run time: fixture generation, transport, scoring, and plotting are embedded below as code cells. The normal run is offline and reads cached replies. A cache miss stops the notebook; setting `NB_LIVE=1` explicitly permits a new Codex call.
 
@@ -771,16 +786,1005 @@ Files for inspection:
 - [Post-review report](data/adjudication.json), [recorded environment](data/environment.json), and the [frozen strict export history](data/exports/)
 - [Saved figures](figures/)
 
-## 11. Future work and further reading
+## 11. Harder realistic follow-up
+
+The first protocol used short, deliberately structured message threads. This follow-up keeps the same seven output fields but gives the models longer, denser document packs with realistic purchasing and fulfillment details. It tests a more demanding extraction and curation setting; it is a new protocol, not a matched benchmark against the first round.
+
+The most important semantic change is the meaning of two fields. `quantity_units` is the open balance still owed, rather than the original order quantity. `unit_price_cents` is the net price per individual unit after applicable discounts and adjustments. A row can therefore repeat a plausible number and still be wrong if it describes the original order rather than the remaining balance. Its citations also need to support the current balance and net price.
+
+The documents are fictional and generated programmatically from source records by agent-authored code. No model-generated document prose appears in the inference inputs. The fixture builder supplies an executable answer key and creates varied long-form records around it. This makes the source fresh while leaving an important limit: the rules and answer key are designed together, so the results do not measure performance on naturally occurring procurement files.
+
+The harder protocol uses 32 shared collection cases, then 16 fixed and 16 failure-guided cases, plus 16 audit cases. Each collection case gets two draws from each model; each audit case gets one. Long prompts use batches of four. At most 24 original failures can be sent for a repair attempt to the other model. Repair feedback includes the original answer and verifier reasons, but no gold answer. The audit cases use held-out document layouts, not new business rules.
+
+```mermaid
+flowchart LR
+    generated["Generated long procurement packs<br/>32 shared + 16 fixed + 16 adaptive collection"] --> batch["Hard-v2: 72 planned generation requests<br/>batches of four; up to 7 repair requests, 88-call hard cap"]
+    batch --> sol["GPT-6.1 Sol<br/>codex exec, JSON answer + evidence"]
+    batch --> luna["GPT-6 Luna<br/>codex exec, JSON answer + evidence"]
+    sol --> verify["Open balance, net unit price, other fields and citations"]
+    luna --> verify
+    verify -->|"failed collection items, max 24"| repair["Other model gets original + verifier feedback, no gold"]
+    repair --> verify
+    audit["16 held-out-layout cases, one draw per model"] --> sol
+    audit --> luna
+    verify --> exports["Metrics, error categories, repairs and exports"]
+    exports --> saved["Separate hard-v2 cache + figures"]
+```
+
+This branch uses a new protocol and its own cache; it is not a matched comparison with v1.
+
+The table below reports each model's collection results and the separate held-out-layout audit.
+
+### What the new examples add
+
+The hard run uses a different document length, task semantics, batch size, and sampling configuration from the first protocol. The two runs share the model aliases and broad extraction goal, but their scores are not a controlled comparison. A changed score can reflect any of those protocol changes, so this notebook reports each round separately.
+
+The verifier still separates output shape, field values, and citations. Here, value errors require special attention: the final answer asks for the balance outstanding after all accepted credits, shipments, returns, and amendments, and for the per-unit price after applicable discounts. The verifier's field-level error labels make it possible to distinguish those mistakes from citation-only rejections.
+
+The arithmetic makes the task concrete. If an approved line has 7 cartons of 9 pieces and 3 loose pieces, its gross quantity is 66. If posted dispatches total 32 and an accepted return reopens 4, the current open balance is 66 − (32 − 4) = 38 units. A carton price of 56.47 with a 20% rebate becomes 56.47 × 0.80 ÷ 9 = 5.0195 per unit, rounded once to 5.02 in the source currency. The model must first identify which order, line, revisions and ledger rows apply, then do both calculations and cite current evidence.
+
+### The exact task
+
+Each model receives the following full instruction, followed by the generated case document. In a batch, the runner asks for one such answer per case ID.
+
+```text
+Extract the final state of the target ORDER and LINE identified at the top of the pack, as of its cutoff.
+Return exactly {"case_id": supplied ID, "answer": {...}, "evidence": {...}} as JSON.
+answer has exactly order_id (string), sku (string), quantity_units (integer or null),
+unit_price_cents (integer or null), currency (three-letter code or null), ship_date
+(YYYY-MM-DD or null), status (active, cancelled, ambiguous). No Boolean or float
+is an integer. evidence has the same seven keys, each a nonempty list of distinct
+source-document IDs. No extra keys. A batched wrapper may request a results array.
+
+The task is LINE extraction, not the sum of the whole purchase order. A SKU can
+occur on another order. Only the target order AND target line count. Use approved
+documents issued at or before the cutoff. Higher REVISION wins separately for
+each stated field; timestamps, inbox position and document ID do not break equal-
+revision ties. Partial changes retain all unstated fields. Quoted/archive and
+draft material cannot change an approved value. Apply a conditional amendment
+only when its named gate has an approved RELEASED result before the cutoff.
+An approved HOLD means it does not apply. A future gate/document has no effect.
+Conflicting values at the highest approved applicable revision make the affected
+output null and status ambiguous; never choose a tie by display order.
+
+quantity_units means OPEN individual units, not original ordered units or shipped
+units: (current cartons * units per carton + current loose units) minus the signed
+sum of POSTED ledger units for the target order and line through the cutoff.
+Positive ledger units are dispatches; negative units are accepted returns that
+reopen demand. Draft/memo rows, future rows and other orders/lines do not count.
+The ledger contains one row per unique posting reference; do not count subtotals.
+
+unit_price_cents is the current NET price per individual unit. Take the current
+list price per CARTON, apply the current rebate code's percentage from the
+contract, divide by units per carton, then round ONCE to the nearest integer
+cent, with exact half-cents rounded UP. Do not round the carton rebate first.
+Use decimal/rational arithmetic; never infer tax, freight or invoice credit into
+the unit price. Amounts in the table are decimal currency amounts, not cents.
+
+Cancellation sets quantity_units, unit_price_cents, currency and ship_date to null,
+while retaining order_id and sku. A higher-revision reinstatement restores active
+status and uses the latest approved commercial terms and the full eligible ledger;
+it does not reset shipment totals. An explicitly withdrawn date is null without
+making an otherwise resolved order ambiguous.
+
+Cite all current source documents needed to establish each field. Quantity needs
+the applicable order/amendment terms, carton definition and eligible ledger. Price
+needs current list-price and rebate-code terms, carton definition and rebate
+contract. Applied conditional terms also need the gate decision. A conflict needs
+the contradictory current documents. A cancellation needs its status document.
+Relevant source documents for the same target line may be added as context,
+including clearly marked historical context, without penalty, provided all
+necessary current support is present. Context alone cannot establish a value.
+Never use an unrelated order's document as evidence. Source IDs identify entire
+document groups, so a cited table can also contain distractor rows.
+```
+
+The table counts individual model responses. Exact-field accuracy checks the seven stored values; evidence acceptance also checks their source citations. These are response-level descriptions of the fixed cases, with repeated draws and batched prompts sharing inputs.
+
+| Model | Responses | Exact fields | Evidence accepted |
+|---|---:|---:|---:|
+| GPT-6 Luna | 128 | 1/128 | 0/128 |
+| GPT-6.1 Sol | 128 | 128/128 | 128/128 |
+
+Audit results: GPT-6 Luna 1/16 accepted; GPT-6.1 Sol 16/16 accepted. The audit contains only 16 cases.
+
+![Hard-v2 value and evidence errors](<figures/hard_v2/value_and_evidence_errors.png>)
+
+The stacked bars count original collection responses once each. The green segment is accepted; red means at least one of the seven values was wrong; purple marks invalid output shape; amber marks a citation-only failure; gray marks transport failure. Across both models, 127 responses had wrong field values and 1 failed only evidence. The categories are exclusive, so the bar totals match the response counts.
+
+![Hard-v2 family value errors](<figures/hard_v2/family_value_errors.png>)
+
+Each cell is the number of original responses without all seven exact field values, divided by responses in that model-family cell. A blank cell means no responses were sampled. The largest raw count was in pack_discount (16 responses), but family sizes and repeated draws differ, so compare the printed fractions as well as counts.
+
+![Hard-v2 repair transitions](<figures/hard_v2/repair_transitions.png>)
+
+Rows show the original error class and columns show the cross-model repair result. Each number counts repair items, not CLI requests. The run attempted 24 repairs and 24 passed the verifier. Those accepted repairs added 0 new distinct accepted cases beyond the originals.
+
+![Hard-v2 collection difficulty](<figures/hard_v2/collection_difficulty.png>)
+
+The left panel counts collection cases with any model/draw value or schema failure within each arm; the right panel shows family allocation. shared: 32/32 cases had a value/schema failure; fixed: 16/16 cases had a value/schema failure; adaptive: 16/16 cases had a value/schema failure. 32/32 observed shared cases had a value/schema failure, including every observed case in every family; adaptive weights therefore stayed uniform at 0.125 per family. Fixed and adaptive each sampled two cases per family and both had a value/schema failure on all 16 cases, so this run shows no adaptive discrimination. Adaptive sampling was exploratory and only used prior shared value/schema failures; the bars do not establish that it improves future model performance.
+
+The saved error-category totals are accepted: 128; field_value_failure: 127; schema_failure: 0; evidence_only_failure: 1; transport_failure: 0. They classify observed disagreements; they do not by themselves explain why a model made a particular choice.
+
+### Remaining headroom for the stronger model
+
+With the answer key available after generation, GPT-6.1 Sol had correct values on 64/64 cases on its first draw and on 64/64 when either of its two draws could be selected. Choosing any original draw from either model covers 64/64; including repairs leaves that oracle coverage at 64/64. These are ceilings that assume an answer-key-aware selector. The experiment does not implement that selector or train a stronger model.
+
+The run exported 64 natural preference pairs whose rejected response had a typed value error and 0 whose rejected response failed citations alone. Every observed typed value error was in Luna's responses; Sol had none on these generated cases. 64 cases had both an accepted original response and a value-error response, with 0 involving a Sol value error. A citation-only rejection supplies a different lesson from a wrong balance or price, so these counts should not be collapsed into one generic error total.
+
+Cross-model repairs add 0 new cases with all seven correct values and 0 new accepted cases beyond original coverage. Sol made 24 repair attempts, with 24 accepted; Luna made 0, with 0 accepted. A repair can fix one response without adding a new case to a curated dataset.
+
+![Oracle selection coverage on 64 collection cases](<figures/hard_v2/headroom.png>)
+
+Each bar counts cases with at least one response whose seven values match the key. Moving right adds available outputs and uses the answer key to choose among them. This is a post-hoc upper bound, not deployable model selection, and it says nothing about the effect of training on the resulting data.
+
+These results expose a data-generation bottleneck for Sol on this task. The 64 value-error preference pairs correct Luna's mistakes; none corrects an observed Sol mistake. Difficulty needs to be calibrated to the model being improved. Luna failed on every family's initial cases, so its failures also gave the sampler no basis for preferring one family.
+
+Correct examples could still help in training, but this experiment does not measure that benefit. The verifier checks a generated rule system, so its labels are not independent human judgments. Demonstrating an improvement would require a training update, compute accounting and a separate evaluation that was not used to select data.
+
+### Worked hard cases
+
+The examples below come from the saved hard-v2 records and are selected by the helper's stated categories. They show the source pack, gold answer, selected model answer, score and any repair outcome available for that case. Example selection does not replace the aggregate counts.
+
+### Hard example 1: field-value failure (`hard-018da4e4958ef5a348fd`)
+
+Representative source excerpt (the full generated pack is available in the saved case record):
+
+```text
+TARGET ORDER: PO-779684
+TARGET LINE: L03
+CASE ID: hard-018da4e4958ef5a348fd
+EXTRACT CUTOFF: 2026-10-24T12:00:00Z
+Procurement handoff: extract this line's open balance and net individual-unit price. The inbox is not sorted by authority. Other lines and a separate order are included for reconciliation.
+[D01] Approved purchase order
+[D02] Warehouse carton master
+[D03] Approved rebate schedule
+[D04] Approved scoped amendment
+[D05] Dispatch and accepted-return ledger
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-779684",
+  "sku": "RIV-653-2",
+  "quantity_units": 38,
+  "unit_price_cents": 502,
+  "currency": "USD",
+  "ship_date": "2026-11-10",
+  "status": "active"
+}
+```
+
+Selected row from GPT-6 Luna, draw 0, candidate `hard-018da4e4958ef5a348fd:gpt-6-luna:generate:0`:
+
+```json
+{
+  "case_id": "hard-018da4e4958ef5a348fd",
+  "answer": {
+    "order_id": "PO-779684",
+    "sku": "RIV-653-2",
+    "quantity_units": 28,
+    "unit_price_cents": 502,
+    "currency": "USD",
+    "ship_date": "2026-11-10",
+    "status": "active"
+  },
+  "evidence": {
+    "order_id": [
+      "D01"
+    ],
+    "sku": [
+      "D01"
+    ],
+    "quantity_units": [
+      "D01",
+      "D02",
+      "D05"
+    ],
+    "unit_price_cents": [
+      "D04",
+      "D02",
+      "D03"
+    ],
+    "currency": [
+      "D01"
+    ],
+    "ship_date": [
+      "D01"
+    ],
+    "status": [
+      "D01"
+    ]
+  }
+}
+```
+
+Verifier result: rejected; reasons `["Wrong value: quantity_units"]`; error kind `field_value_failure`.
+
+Measured value comparison: quantity_units: expected 38, observed 28.
+
+Operational effect: the open-balance error is -10 individual units; the unit-price error is +0.00 in USD per unit.
+
+Worked balance and price: 7 cartons × 9 units + 3 loose units − (18 + 14 − 4) posted net units = 38 units open. The current list price is 5,647 cents per carton with a 20% rebate, so 5,647 × 0.80 ÷ 9 = 501.96 cents, rounded once to 502 cents per unit. The model's 28-unit balance is 10 units too low; its 502-cent price is correct.
+
+The case received two draws per model. This table keeps those repeated responses visible:
+
+| Model | Draw | Open units | Unit cents | Status | Other wrong fields | Outcome |
+|---|---:|---:|---:|---|---|---|
+| GPT-6 Luna | 0 | 28 | 502 | active | none | field_value_failure |
+| GPT-6 Luna | 1 | 35 | 498 | active | none | field_value_failure |
+| GPT-6.1 Sol | 0 | 38 | 502 | active | none | accepted |
+| GPT-6.1 Sol | 1 | 38 | 502 | active | none | accepted |
+
+Repair outcomes for this case: GPT-6.1 Sol repair accepted
+
+Before and after:
+
+```json
+{
+  "before": {
+    "case_id": "hard-018da4e4958ef5a348fd",
+    "answer": {
+      "order_id": "PO-779684",
+      "sku": "RIV-653-2",
+      "quantity_units": 28,
+      "unit_price_cents": 502,
+      "currency": "USD",
+      "ship_date": "2026-11-10",
+      "status": "active"
+    },
+    "evidence": {
+      "order_id": [
+        "D01"
+      ],
+      "sku": [
+        "D01"
+      ],
+      "quantity_units": [
+        "D01",
+        "D02",
+        "D05"
+      ],
+      "unit_price_cents": [
+        "D04",
+        "D02",
+        "D03"
+      ],
+      "currency": [
+        "D01"
+      ],
+      "ship_date": [
+        "D01"
+      ],
+      "status": [
+        "D01"
+      ]
+    }
+  },
+  "after": {
+    "case_id": "hard-018da4e4958ef5a348fd",
+    "answer": {
+      "order_id": "PO-779684",
+      "sku": "RIV-653-2",
+      "quantity_units": 38,
+      "unit_price_cents": 502,
+      "currency": "USD",
+      "ship_date": "2026-11-10",
+      "status": "active"
+    },
+    "evidence": {
+      "order_id": [
+        "D01"
+      ],
+      "sku": [
+        "D01"
+      ],
+      "quantity_units": [
+        "D01",
+        "D02",
+        "D05"
+      ],
+      "unit_price_cents": [
+        "D04",
+        "D02",
+        "D03"
+      ],
+      "currency": [
+        "D01"
+      ],
+      "ship_date": [
+        "D01"
+      ],
+      "status": [
+        "D01"
+      ]
+    }
+  }
+}
+```
+
+Full request and raw CLI reply: [`data/hard_v2/cache/3ea098378d24f91033f119f48fcaf8ddc315d1024ab0ddce6cc5c187915ac8e7.json`](<data/hard_v2/cache/3ea098378d24f91033f119f48fcaf8ddc315d1024ab0ddce6cc5c187915ac8e7.json>).
+
+### Hard example 2: evidence-only boundary (`hard-b0b4a037d9e6d95598af`)
+
+Representative source excerpt (the full generated pack is available in the saved case record):
+
+```text
+TARGET ORDER: PO-605967
+TARGET LINE: L02
+CASE ID: hard-b0b4a037d9e6d95598af
+EXTRACT CUTOFF: 2026-10-24T12:00:00Z
+Procurement handoff: extract this line's open balance and net individual-unit price. The inbox is not sorted by authority. Other lines and a separate order are included for reconciliation.
+[D01] Approved purchase order
+[D02] Warehouse carton master
+[D03] Approved rebate schedule
+[D04] Approved scoped amendment
+[D07] Dispatch and accepted-return ledger
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-605967",
+  "sku": "CLP-785-1",
+  "quantity_units": 58,
+  "unit_price_cents": 1522,
+  "currency": "EUR",
+  "ship_date": "2026-11-09",
+  "status": "active"
+}
+```
+
+Selected row from GPT-6 Luna, draw 1, candidate `hard-b0b4a037d9e6d95598af:gpt-6-luna:generate:1`:
+
+```json
+{
+  "case_id": "hard-b0b4a037d9e6d95598af",
+  "answer": {
+    "order_id": "PO-605967",
+    "sku": "CLP-785-1",
+    "quantity_units": 58,
+    "unit_price_cents": 1522,
+    "currency": "EUR",
+    "ship_date": "2026-11-09",
+    "status": "active"
+  },
+  "evidence": {
+    "order_id": [
+      "D01"
+    ],
+    "sku": [
+      "D01"
+    ],
+    "quantity_units": [
+      "D01",
+      "D05",
+      "D02",
+      "D07"
+    ],
+    "unit_price_cents": [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    "currency": [
+      "D01"
+    ],
+    "ship_date": [
+      "D04"
+    ],
+    "status": [
+      "D01"
+    ]
+  }
+}
+```
+
+Verifier result: rejected; reasons `["Insufficient current support or unrelated evidence: quantity_units"]`; error kind `evidence_only_failure`.
+
+All seven values match the answer key, but the verifier rejected citation support: quantity_units omits D04.
+
+Worked balance and price: 10 cartons × 8 units + 4 loose units − (15 + 15 − 4) posted net units = 58 units open. The current carton price is 16,233 cents with a 25% rebate, so 16,233 × 0.75 ÷ 8 = 1,521.84 cents, rounded to 1,522 cents. This draw returned both values but cited revision 3 message D05 for the balance; revision 4 message D04 is the current supporting source.
+
+The case received two draws per model. This table keeps those repeated responses visible:
+
+| Model | Draw | Open units | Unit cents | Status | Other wrong fields | Outcome |
+|---|---:|---:|---:|---|---|---|
+| GPT-6 Luna | 0 | 30 | 1522 | active | none | field_value_failure |
+| GPT-6 Luna | 1 | 58 | 1522 | active | none | evidence_only_failure |
+| GPT-6.1 Sol | 0 | 58 | 1522 | active | none | accepted |
+| GPT-6.1 Sol | 1 | 58 | 1522 | active | none | accepted |
+
+Full request and raw CLI reply: [`data/hard_v2/cache/3c55b9fec8b5fba6808be17cd631614277b6cd6f942a041af0a9391f7425d101.json`](<data/hard_v2/cache/3c55b9fec8b5fba6808be17cd631614277b6cd6f942a041af0a9391f7425d101.json>).
+
+### Hard example 3: model or draw disagreement (`hard-087666ff03bb44eb0d01`)
+
+Representative source excerpt (the full generated pack is available in the saved case record):
+
+```text
+TARGET ORDER: PO-814674
+TARGET LINE: L05
+CASE ID: hard-087666ff03bb44eb0d01
+EXTRACT CUTOFF: 2026-10-24T12:00:00Z
+Procurement handoff: extract this line's open balance and net individual-unit price. The inbox is not sorted by authority. Other lines and a separate order are included for reconciliation.
+[D01] Approved purchase order
+[D02] Warehouse carton master
+[D03] Approved rebate schedule
+[D05] Dispatch and accepted-return ledger
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-814674",
+  "sku": "RIV-278-4",
+  "quantity_units": 38,
+  "unit_price_cents": 1340,
+  "currency": "EUR",
+  "ship_date": "2026-11-11",
+  "status": "active"
+}
+```
+
+Selected row from GPT-6 Luna, draw 0, candidate `hard-087666ff03bb44eb0d01:gpt-6-luna:generate:0`:
+
+```json
+{
+  "case_id": "hard-087666ff03bb44eb0d01",
+  "answer": {
+    "order_id": "PO-814674",
+    "sku": "RIV-278-4",
+    "quantity_units": 32,
+    "unit_price_cents": 1340,
+    "currency": "EUR",
+    "ship_date": "2026-11-11",
+    "status": "active"
+  },
+  "evidence": {
+    "order_id": [
+      "D01"
+    ],
+    "sku": [
+      "D01"
+    ],
+    "quantity_units": [
+      "D01",
+      "D02",
+      "D05"
+    ],
+    "unit_price_cents": [
+      "D01",
+      "D02",
+      "D03"
+    ],
+    "currency": [
+      "D01"
+    ],
+    "ship_date": [
+      "D01"
+    ],
+    "status": [
+      "D01"
+    ]
+  }
+}
+```
+
+Verifier result: rejected; reasons `["Wrong value: quantity_units"]`; error kind `field_value_failure`.
+
+Measured value comparison: quantity_units: expected 38, observed 32.
+
+Operational effect: the open-balance error is -6 individual units; the unit-price error is +0.00 in EUR per unit.
+
+Worked balance and price: 9 cartons × 6 units + 2 loose units − (12 + 12 − 6) posted net units = 38 units open. The current carton price is 8,040 cents with no rebate, so 8,040 ÷ 6 = 1,340 cents per unit. The selected Luna response says 32 units, while the Sol responses pass; an amendment for the same SKU on another order does not change this order's balance.
+
+The case received two draws per model. This table keeps those repeated responses visible:
+
+| Model | Draw | Open units | Unit cents | Status | Other wrong fields | Outcome |
+|---|---:|---:|---:|---|---|---|
+| GPT-6 Luna | 0 | 32 | 1340 | active | none | field_value_failure |
+| GPT-6 Luna | 1 | 41 | 1340 | active | none | field_value_failure |
+| GPT-6.1 Sol | 0 | 38 | 1340 | active | none | accepted |
+| GPT-6.1 Sol | 1 | 38 | 1340 | active | none | accepted |
+
+Repair outcomes for this case: GPT-6.1 Sol repair accepted
+
+Before and after:
+
+```json
+{
+  "before": {
+    "case_id": "hard-087666ff03bb44eb0d01",
+    "answer": {
+      "order_id": "PO-814674",
+      "sku": "RIV-278-4",
+      "quantity_units": 32,
+      "unit_price_cents": 1340,
+      "currency": "EUR",
+      "ship_date": "2026-11-11",
+      "status": "active"
+    },
+    "evidence": {
+      "order_id": [
+        "D01"
+      ],
+      "sku": [
+        "D01"
+      ],
+      "quantity_units": [
+        "D01",
+        "D02",
+        "D05"
+      ],
+      "unit_price_cents": [
+        "D01",
+        "D02",
+        "D03"
+      ],
+      "currency": [
+        "D01"
+      ],
+      "ship_date": [
+        "D01"
+      ],
+      "status": [
+        "D01"
+      ]
+    }
+  },
+  "after": {
+    "case_id": "hard-087666ff03bb44eb0d01",
+    "answer": {
+      "order_id": "PO-814674",
+      "sku": "RIV-278-4",
+      "quantity_units": 38,
+      "unit_price_cents": 1340,
+      "currency": "EUR",
+      "ship_date": "2026-11-11",
+      "status": "active"
+    },
+    "evidence": {
+      "order_id": [
+        "D01"
+      ],
+      "sku": [
+        "D01"
+      ],
+      "quantity_units": [
+        "D01",
+        "D02",
+        "D05"
+      ],
+      "unit_price_cents": [
+        "D01",
+        "D02",
+        "D03"
+      ],
+      "currency": [
+        "D01"
+      ],
+      "ship_date": [
+        "D01"
+      ],
+      "status": [
+        "D01"
+      ]
+    }
+  }
+}
+```
+
+Full request and raw CLI reply: [`data/hard_v2/cache/fa539a16cd3ef2b08785f414b682d7603acf7a0035bc777d00f5cde54ec3752c.json`](<data/hard_v2/cache/fa539a16cd3ef2b08785f414b682d7603acf7a0035bc777d00f5cde54ec3752c.json>).
+
+### Hard example 4: additional measured case (`hard-102aa2621753fa05e991`)
+
+Representative source excerpt (the full generated pack is available in the saved case record):
+
+```text
+TARGET ORDER: PO-427142
+TARGET LINE: L04
+CASE ID: hard-102aa2621753fa05e991
+EXTRACT CUTOFF: 2026-10-24T12:00:00Z
+Procurement handoff: extract this line's open balance and net individual-unit price. The inbox is not sorted by authority. Other lines and a separate order are included for reconciliation.
+[D01] Approved purchase order
+[D02] Warehouse carton master
+[D03] Approved rebate schedule
+[D10] Dispatch and accepted-return ledger
+[D07] Approved scoped amendment
+[D04] Approved scoped amendment
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-427142",
+  "sku": "CLP-627-3",
+  "quantity_units": 59,
+  "unit_price_cents": 1068,
+  "currency": "USD",
+  "ship_date": "2026-11-03",
+  "status": "active"
+}
+```
+
+Selected row from GPT-6 Luna, draw 0, candidate `hard-102aa2621753fa05e991:gpt-6-luna:generate:0`:
+
+```json
+{
+  "case_id": "hard-102aa2621753fa05e991",
+  "answer": {
+    "order_id": "PO-427142",
+    "sku": "CLP-627-3",
+    "quantity_units": 53,
+    "unit_price_cents": 10705,
+    "currency": "USD",
+    "ship_date": "2026-11-03",
+    "status": "active"
+  },
+  "evidence": {
+    "order_id": [
+      "D01"
+    ],
+    "sku": [
+      "D01"
+    ],
+    "quantity_units": [
+      "D04",
+      "D02",
+      "D10"
+    ],
+    "unit_price_cents": [
+      "D01",
+      "D07",
+      "D03",
+      "D02"
+    ],
+    "currency": [
+      "D01"
+    ],
+    "ship_date": [
+      "D01",
+      "D04"
+    ],
+    "status": [
+      "D01"
+    ]
+  }
+}
+```
+
+Verifier result: rejected; reasons `["Wrong value: quantity_units", "Insufficient current support or unrelated evidence: quantity_units", "Wrong value: unit_price_cents"]`; error kind `field_value_failure`.
+
+Measured value comparison: quantity_units: expected 59, observed 53; unit_price_cents: expected 1068, observed 10705.
+
+Operational effect: the open-balance error is -6 individual units; the unit-price error is +96.37 in USD per unit.
+
+Worked balance and price: 7 cartons × 8 units + 3 loose units − (3 + 3 − 1 − 5) posted net units = 59 units open. The current list price is 9,766 cents per carton with a 12.5% rebate, so 9,766 × 0.875 ÷ 8 = 1,067.53 cents, rounded to 1,068 cents. A HOLD keeps the conditional release inactive; the observed Luna draws instead return 53 units and, in one draw, a price of 10,705 cents.
+
+The case received two draws per model. This table keeps those repeated responses visible:
+
+| Model | Draw | Open units | Unit cents | Status | Other wrong fields | Outcome |
+|---|---:|---:|---:|---|---|---|
+| GPT-6 Luna | 0 | 53 | 10705 | active | none | field_value_failure |
+| GPT-6 Luna | 1 | None | None | active | currency, ship_date | field_value_failure |
+| GPT-6.1 Sol | 0 | 59 | 1068 | active | none | accepted |
+| GPT-6.1 Sol | 1 | 59 | 1068 | active | none | accepted |
+
+Repair outcomes for this case: GPT-6.1 Sol repair accepted
+
+Before and after:
+
+```json
+{
+  "before": {
+    "case_id": "hard-102aa2621753fa05e991",
+    "answer": {
+      "order_id": "PO-427142",
+      "sku": "CLP-627-3",
+      "quantity_units": 53,
+      "unit_price_cents": 10705,
+      "currency": "USD",
+      "ship_date": "2026-11-03",
+      "status": "active"
+    },
+    "evidence": {
+      "order_id": [
+        "D01"
+      ],
+      "sku": [
+        "D01"
+      ],
+      "quantity_units": [
+        "D04",
+        "D02",
+        "D10"
+      ],
+      "unit_price_cents": [
+        "D01",
+        "D07",
+        "D03",
+        "D02"
+      ],
+      "currency": [
+        "D01"
+      ],
+      "ship_date": [
+        "D01",
+        "D04"
+      ],
+      "status": [
+        "D01"
+      ]
+    }
+  },
+  "after": {
+    "case_id": "hard-102aa2621753fa05e991",
+    "answer": {
+      "order_id": "PO-427142",
+      "sku": "CLP-627-3",
+      "quantity_units": 59,
+      "unit_price_cents": 1068,
+      "currency": "USD",
+      "ship_date": "2026-11-03",
+      "status": "active"
+    },
+    "evidence": {
+      "order_id": [
+        "D01"
+      ],
+      "sku": [
+        "D01"
+      ],
+      "quantity_units": [
+        "D01",
+        "D04",
+        "D02",
+        "D10",
+        "D09"
+      ],
+      "unit_price_cents": [
+        "D07",
+        "D02",
+        "D03",
+        "D09"
+      ],
+      "currency": [
+        "D01"
+      ],
+      "ship_date": [
+        "D04",
+        "D09"
+      ],
+      "status": [
+        "D01"
+      ]
+    }
+  }
+}
+```
+
+Full request and raw CLI reply: [`data/hard_v2/cache/50068b7b3b4b415032ba4f52dc94dc9f65f457bc65e2709f917eefee8a1cc663.json`](<data/hard_v2/cache/50068b7b3b4b415032ba4f52dc94dc9f65f457bc65e2709f917eefee8a1cc663.json>).
+
+### Hard example 5: additional measured case (`hard-10cf77fdc769fd9d89a0`)
+
+Representative source excerpt (the full generated pack is available in the saved case record):
+
+```text
+TARGET ORDER: PO-429968
+TARGET LINE: L04
+CASE ID: hard-10cf77fdc769fd9d89a0
+EXTRACT CUTOFF: 2026-10-24T12:00:00Z
+Procurement handoff: extract this line's open balance and net individual-unit price. The inbox is not sorted by authority. Other lines and a separate order are included for reconciliation.
+[D01] Approved purchase order
+[D02] Warehouse carton master
+[D03] Approved rebate schedule
+[D07] Dispatch and accepted-return ledger
+[D05] Approved account-status notice
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-429968",
+  "sku": "CLP-714-3",
+  "quantity_units": 33,
+  "unit_price_cents": 2418,
+  "currency": "USD",
+  "ship_date": "2026-10-30",
+  "status": "active"
+}
+```
+
+Selected row from GPT-6 Luna, draw 0, candidate `hard-10cf77fdc769fd9d89a0:gpt-6-luna:generate:0`:
+
+```json
+{
+  "case_id": "hard-10cf77fdc769fd9d89a0",
+  "answer": {
+    "order_id": "PO-429968",
+    "sku": "CLP-714-3",
+    "quantity_units": null,
+    "unit_price_cents": null,
+    "currency": null,
+    "ship_date": null,
+    "status": "active"
+  },
+  "evidence": {
+    "order_id": [
+      "D01"
+    ],
+    "sku": [
+      "D01"
+    ],
+    "quantity_units": [
+      "D01",
+      "D02",
+      "D05",
+      "D07"
+    ],
+    "unit_price_cents": [
+      "D01",
+      "D03",
+      "D02",
+      "D05"
+    ],
+    "currency": [
+      "D01",
+      "D05"
+    ],
+    "ship_date": [
+      "D01",
+      "D05"
+    ],
+    "status": [
+      "D04",
+      "D05"
+    ]
+  }
+}
+```
+
+Verifier result: rejected; reasons `["Wrong value: quantity_units", "Wrong value: unit_price_cents", "Wrong value: currency", "Wrong value: ship_date"]`; error kind `field_value_failure`.
+
+Measured value comparison: quantity_units: expected 33, observed None; unit_price_cents: expected 2418, observed None; currency: expected 'USD', observed None; ship_date: expected '2026-10-30', observed None.
+
+The case received two draws per model. This table keeps those repeated responses visible:
+
+| Model | Draw | Open units | Unit cents | Status | Other wrong fields | Outcome |
+|---|---:|---:|---:|---|---|---|
+| GPT-6 Luna | 0 | None | None | active | currency, ship_date | field_value_failure |
+| GPT-6 Luna | 1 | None | None | active | currency, ship_date | field_value_failure |
+| GPT-6.1 Sol | 0 | 33 | 2418 | active | none | accepted |
+| GPT-6.1 Sol | 1 | 33 | 2418 | active | none | accepted |
+
+Repair outcomes for this case: GPT-6.1 Sol repair accepted
+
+Before and after:
+
+```json
+{
+  "before": {
+    "case_id": "hard-10cf77fdc769fd9d89a0",
+    "answer": {
+      "order_id": "PO-429968",
+      "sku": "CLP-714-3",
+      "quantity_units": null,
+      "unit_price_cents": null,
+      "currency": null,
+      "ship_date": null,
+      "status": "active"
+    },
+    "evidence": {
+      "order_id": [
+        "D01"
+      ],
+      "sku": [
+        "D01"
+      ],
+      "quantity_units": [
+        "D01",
+        "D02",
+        "D05",
+        "D07"
+      ],
+      "unit_price_cents": [
+        "D01",
+        "D03",
+        "D02",
+        "D05"
+      ],
+      "currency": [
+        "D01",
+        "D05"
+      ],
+      "ship_date": [
+        "D01",
+        "D05"
+      ],
+      "status": [
+        "D04",
+        "D05"
+      ]
+    }
+  },
+  "after": {
+    "case_id": "hard-10cf77fdc769fd9d89a0",
+    "answer": {
+      "order_id": "PO-429968",
+      "sku": "CLP-714-3",
+      "quantity_units": 33,
+      "unit_price_cents": 2418,
+      "currency": "USD",
+      "ship_date": "2026-10-30",
+      "status": "active"
+    },
+    "evidence": {
+      "order_id": [
+        "D01"
+      ],
+      "sku": [
+        "D01"
+      ],
+      "quantity_units": [
+        "D01",
+        "D02",
+        "D05",
+        "D07"
+      ],
+      "unit_price_cents": [
+        "D01",
+        "D02",
+        "D03",
+        "D05"
+      ],
+      "currency": [
+        "D01",
+        "D05"
+      ],
+      "ship_date": [
+        "D01",
+        "D05"
+      ],
+      "status": [
+        "D05"
+      ]
+    }
+  }
+}
+```
+
+Full request and raw CLI reply: [`data/hard_v2/cache/50068b7b3b4b415032ba4f52dc94dc9f65f457bc65e2709f917eefee8a1cc663.json`](<data/hard_v2/cache/50068b7b3b4b415032ba4f52dc94dc9f65f457bc65e2709f917eefee8a1cc663.json>).
+
+### Reading the hard results
+
+Longer documents increase the amount of source text that must be searched and reconciled, but a lower acceptance rate alone would not establish why. The error categories and case examples show whether an observed miss involved the remaining balance, net price, another field, output shape, evidence, or transport. Explanations below describe measured patterns; they do not assign a cause that the experiment did not isolate.
+
+The records are synthetic and programmed from answerable source events. A read-only audit checked all 80 generated sources against the separate reference reducer and gold answers; the reviewer was not a procurement-domain human annotator. The saved [source audit](<data/hard_v2/source_review.md>), [pipeline audit](<data/hard_v2/pipeline_review.md>) and [separate pilot review](<data/hard_v2/pilot_review.md>) preserve those checks. Hard-v2 changes document length, task semantics, batch size, and sampling from v1, so the two rounds are not a controlled comparison. The audit holds out layout only, not business rules. Of 64 collection cases, 56 ended active and 8 were ambiguous. No finally-cancelled collection case was tested; eight cases contained cancellation followed by reinstatement. No human adjudication of all documents or citations is measured, model aliases are not dated snapshots, and neither round trains model weights. This run uses low reasoning, batches of four, and disabled tools for both models; it measures one constrained inference setup, not either model's maximum attainable performance. The aggregate results cannot identify whether document length, batching, or another factor caused a particular error.
+
+### Reproducing hard-v2
+
+The default hard-v2 cell replays its own request cache under `data/hard_v2/`. It does not reuse v1 responses. Setting `NB_HARD_LIVE=1` runs a new seeded eight-source pilot under `data/tmp/hard_live_demo/`; each run uses a fresh isolated directory and does not overwrite the main hard-v2 cache or the collected pilot at `data/hard_v2/pilot/`. A full new collection requires a separate result copy and fresh request keys. To replay the complete notebook from caches, run `python -m nbconvert --to notebook --execute --inplace notebooks/23-synthetic-data-curation/23_synthetic_data_curation.ipynb` from the repository root.
+
+The main run records 288 original candidate rows, 24 repair attempts, and 78 CLI requests. It used 1,906,049 input tokens and 48,515 output tokens; collection orchestration took 222.1 seconds. The separate eight-case pilot had 32 original responses (GPT-6 Luna 2/16 accepted; GPT-6.1 Sol 16/16 accepted) and used 8 CLI requests. It is not part of main totals. Across main and pilot the run made 86 new requests, using 2,100,539 input and 53,359 output tokens. Token usage includes Codex CLI setup overhead. The CLI reports no USD price, so cash cost is unknown, not zero.
+
+
+## 12. Future work and further reading
 
 The linked sources were checked on October 24, 2026. The generated examples support a narrow extraction study; the follow-up work below addresses the remaining uncertainty.
 
 ### Future work
 
-- Increase the collection to at least 100 distinct source cases per arm and compare per-case accepted response rates with batch-clustered intervals. This run has 162 semantic collection cases, and each model returns several correlated items in one CLI batch.
-- Add four new order rules and new renderer templates, then measure exact fields and evidence acceptance on a sealed split. The current audit changes layout but shares the same eight semantic families, so it does not test rule transfer.
-- Have two human reviewers label a stratified sample of 40 raw threads and candidate citations, then measure agreement with the programmatic verifier. The present verifier checks generated source events and does not judge whether the rendered thread communicates them naturally.
-- Train or adapt a small extraction model only after rights review, then compare its held-out exact-field and citation scores with a no-training baseline. This notebook exports 162 accepted semantic cases but measures no downstream training value.
+- Build a matched difficulty ladder between v1 (Sol 360/360 accepted; Luna 310/360 under the reviewed policy) and hard-v2 (Sol 128/128; Luna 0/128). Vary document length and business-rule density one at a time, then compare per-case field and citation outcomes. Add one-case batches and higher reasoning as paired settings under a fixed token budget; this run used batches of four and low reasoning.
+- Double hard-v2 to at least 128 source slots while preserving the family mix. Measure case-level acceptance and field correctness with uncertainty clustered by case; 127 original responses had value errors, and repeated draws share each case.
+- Expand the held-out audit with new business rules and measure field and citation acceptance separately. The current audit changes document layout while retaining the generated rules, so it does not test semantic transfer.
+- Ask procurement specialists to annotate a stratified sample of long packs for answer correctness, citation sufficiency and source naturalness. The run had one evidence-only rejection, while the larger issue was value errors; human review would test where the programmatic verifier agrees with people.
+- Train on a controlled subset of the exported preference and repair data, then evaluate on newly authored, held-out rules and layouts. The current repairs add 0 new distinct accepted cases, so the learning test should measure generalization rather than just fixing already covered rows.
 
 ### Further reading
 

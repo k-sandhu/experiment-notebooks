@@ -56,11 +56,12 @@ send to a person.
 A synthetic extraction example needs more than a plausible answer. If an order changes twice, its final price
 must agree with the source messages and its citations must support that price. These experiments examine how
 to generate examples, check them, remove duplicates and use observed failures to choose further cases. The
-data collection step can be studied before training a model.
+data collection step can be studied before training a model. Harder examples also reveal whether a repair
+solves a case the stronger model previously missed, or repeats an answer it could already produce.
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
-| 23 | [Synthetic data generation and curation](notebooks/23-synthetic-data-curation/) | Generated examples can contain correct values with unsupported citations. On 180 collection slots (162 distinct fictional order sources) plus 20 held-out layout cases, how do GPT-6.1 Sol and GPT-6 Luna compare, and what do verification, deduplication, repair and failure-guided sampling retain? | All 720 collection answers had correct values. Values and citations passed for Sol 360/360 and Luna 310/360 after reviewing seven disputed citation rejections (original verifier: 303/360). Reviewed exports contain 162 distinct accepted examples, 28 accepted/rejected pairs and 29 repair conversations. No model training; short, explicit-rule documents |
+| 23 | [Synthetic data generation and curation](notebooks/23-synthetic-data-curation/) | Generated examples need correct values and supporting sources. What do verification, deduplication, repair and failure-guided sampling retain from GPT-6.1 Sol and GPT-6 Luna? The first protocol uses 180 short collection slots plus 20 layout-audit cases; a separate harder protocol uses 64 procurement packs plus 16 audit cases, with shipment reconciliation, discounts and scoped amendments. | All 720 first-protocol answers had correct values. Harder packs expose 127 Luna value errors in 128 collection answers; Sol passes 128/128. Sol repairs 24/24 selected failures, but adds zero newly solved cases. The harder run retains 64 accepted examples, 64 value-error preference pairs and 24 repair conversations. It exposes a ceiling in this task for Sol, without training a model or demonstrating a performance gain. |
 
 ## Making bounded decisions
 
@@ -173,7 +174,7 @@ python -m venv .venv
 * New collection in 09, 11, 12 and 13: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
 * Notebook 13 verifies cached evidence before replay. For a new collection, use a separate copy and follow its README; keep the committed cache intact.
 * Notebook 19 replays the complete PowerPoint study offline. New collection uses explicit --live commands and requires Windows, PowerPoint and authenticated model CLIs.
-* Notebook 23 replays 82 saved CLI requests offline. `NB_LIVE=1` runs a small new collection under its ignored `data/tmp/live_demo/` folder; the committed main results stay separate.
+* Notebook 23 replays 82 original and 78 harder-round CLI requests offline. `NB_LIVE=1` runs a small new first-protocol collection; `NB_HARD_LIVE=1` runs a small harder collection. Fresh results stay under ignored `data/tmp/` paths, separate from both committed main runs and pilots.
 * Notebook 14 uses `PRIORLABS_API_KEY` and `NB_LIVE=1` for new collection, with a checked computation-token cap. Its default replay reads 48 saved responses without network access.
 * **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
