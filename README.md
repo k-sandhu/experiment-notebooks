@@ -74,6 +74,8 @@ layers between what a model writes and what it changes: whether it respects writ
 should enforce them when it does not (10), how agents hand work to each other (07), whether one model can grade
 another (11), and whether review loops make a model more reliable at regulated work (12).
 
+Reward collection repeats a task and scores each attempt. A group containing both a success and a failure gives a learning method an outcome contrast. Notebook 27 tests whether choosing where to collect more attempts finds more of that contrast within a fixed call budget, without changing model weights.
+
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
 | 05 | [Text-to-SQL safety](notebooks/05-text-to-sql-safety/) | A text-to-SQL assistant turns an analyst's plain-English question into SQL that runs on a live database, so one bad query can change data or leak personal details. Given a written read-only policy, how often do 8 open-weight models write a query that breaks it on 29 policy-breaking requests, compared with Claude, GPT and Muse, and do they still answer 23 legitimate questions? | Claude, GPT, Muse Wonder and 6 of 8 open models: 0 violations on 29 policy-breaking requests. Mistral Small 4: 7 (one an `UPDATE` hidden in a "refused" reply); Gemma 4 31B: 3 |
@@ -82,6 +84,7 @@ another (11), and whether review loops make a model more reliable at regulated w
 | 10 | [Code execution guardrails](notebooks/10-code-execution-guardrails/) | When a model proposes a forbidden action, the code that decides whether to run it is the last guard, and a string check on the path is easy to get past. On 22 requests with known right answers (8 permitted, 14 forbidden), what do five enforcement designs let through, and how much legitimate work does each block? | A path-prefix check let through 5/14 forbidden actions. Typed operations on resolved paths let through 0/14 and kept all 8 permitted ones. Read-only also allowed 0/14 but blocked 4/8 permitted actions |
 | 11 | [Using LLM judges](notebooks/11-llm-judges/) | A model that grades answers can reward a polished mistake or approve the better of two bad answers. On 120 fresh test scenarios after 24 development cases, how do Claude and GPT compare under three judging prompts and both answer orders, and what do presentation, references, parsing and review rules change? | Original pilot preserved: 96/96. New study: recovery removed 94 formatting failures; 4/1,440 ratings still had a wrong choice or acceptance label. Agreement with recovery handled 99/120 cases with 0 observed errors; structured synthetic tasks, not human-preference validation |
 | 12 | [Tax workpaper harnesses](notebooks/12-tax-research-harnesses/) | An S-Corporation tax workpaper is mechanical but unforgiving: one misclassified ledger line flows into every shareholder's numbers, and some cases need an accountant's judgment. On 12 fictional 2025 US S-Corps, do detailed instructions, a self-review pass, feedback from a custom validator or the smolagents agent framework give more fully correct workpapers than one direct call, at the same model and call budget? | No. Qwen3.8 Flash's direct call got 12/12, and review steps only matched or lowered that (generic self-review with detailed instructions: 9/12). Gemma 4 31B got 0/12 in every setup. All 24 Qwen framework runs failed because the provider rejects the framework's default tool setting |
+| 27 | [Hard knowledge work and adaptive reward collection](notebooks/27-adaptive-knowledge-rollouts/) | Scheduling several appointments, closing a revised ledger and choosing a feasible purchase plan need correct tool actions. On 12 fresh cases plus two harder five-appointment cases, does abandoning unanimous two-attempt probes collect more groups containing both success and failure than uniform groups of four, at the same call budget, for GPT-6.1 Sol and GPT-6 Luna? No weight updates. | At 180 calls per allocator, Luna yields 4 uniform versus 3 adaptive mixed groups; Sol is correct on all 70 known attempts and yields zero. The separate 64-call stress arms yield Luna 1 versus 0 mixed groups; Sol remains 12/12. Small task banks; adaptive reaches more cases but does not improve observed contrast yield. |
 
 ## Recognising model outputs
 
@@ -170,6 +173,9 @@ python -m venv .venv
 Notebook 15 uses strict offline replay with an evidence manifest and a $10 OpenRouter guard. Its README gives model coverage and limits.
 
 Notebook 18 uses 768 fresh synthetic cases, all four decision models and strict offline replay. Its README records provider pins, scoring audits, diagnostics and reported spend.
+
+
+Notebook 27 uses strict offline replay and records two equal-call comparisons, a separate pilot and a preserved transport-failure run. Its README explains the CLI-only collection protocol and unknown dollar billing.
 
 ## Data and licences
 
