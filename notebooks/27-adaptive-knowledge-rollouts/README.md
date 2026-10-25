@@ -1,28 +1,36 @@
-# Hard knowledge work and adaptive reward collection
+# Choosing which tasks an assistant should try again
 
-A buyer needs five kinds of equipment before a project starts. Each supplier has a price list, but the cheapest line item may arrive too late. Shipping depends on which suppliers are used. Discounts depend on the whole order. A cheaper plan can also break a carbon limit or a capacity rule.
+Buying supplies is a familiar kind of planning. We decide what is needed, compare offers and work out the total before placing an order. A useful plan has to fit the whole purchase. Choosing an attractive price for each item separately may not produce the best final bill.
 
-The ordinary approach is to read the workbook, remove impossible quotes, calculate each remaining plan and check the best one against every rule. An assistant can do the same work through a Python tool. The useful answer is a feasible buying plan with a correct total. A plausible explanation with the wrong total still causes the wrong purchasing decision.
+An assistant could help by reading the offers and doing the comparisons. To check its work, we would want the selected items, the final total and enough detail to see how it arrived there. The answer matters because someone may use it to place the order.
 
-Consider a small **illustrative** example. Supplier X offers item A for USD 100 and B for USD 130. Supplier Y offers A for USD 110 and B for USD 100. Each used supplier charges USD 20 shipping. Buying the cheapest individual items costs USD 240 after two shipping fees. Buying both from Y costs USD 230. There is no measured model response in this example; it explains why the task needs a global calculation.
+### A small buying decision
 
-The same pattern appears in other office work. Moving one appointment can block another. Closing a payable ledger requires the latest record that was actually known at the close, rather than a later correction. This experiment uses three such tasks with exact, code-generated answers and real OpenEnv tools.
+Consider an illustrative order for two items. Supplier X sells the first for USD 100 and the second for USD 130. Supplier Y sells the first for USD 110 and the second for USD 100. If we look only at item prices, buying the first from X and the second from Y looks best: the items total USD 200.
 
-The harder follow-up plans a day of project reviews. In an illustrative calculation, moving a priority-3 review by 30 minutes costs 90 penalty points. A follow-up outside its free handoff window can add another 240 points. A low-movement agenda can therefore cost more than a different valid agenda. The assistant must compare the whole plan while preserving availability and ordering rules.
+Now add a USD 20 shipping charge from each supplier used. The split order costs USD 240. Buying both items from Y costs USD 210 for the goods and USD 20 for one shipment, or USD 230. A small extra rule changes the best choice. We have to compare complete plans, including their shipping, rather than stop at the cheapest price on each row.
 
-A **rollout** is one saved attempt: the task, the model's proposed actions, the tool observations and the final result. A **reward** is the score assigned to that attempt. Here it is 1 for the complete requested outcome and 0 for a known failure. An attempt that exhausts its full task action allowance without the correct outcome receives 0. An interruption by the overall collection budget or a transport outage has an unknown reward. Weights are the learned parameters that determine a model's responses. This experiment collects evidence without loading or updating them.
+Realistic tasks can add more conditions, such as a delivery deadline or a limit on what a supplier can provide. This study builds fictional tasks with explicit conditions and an exact answer, so we can check whether an assistant's whole plan works. Calendar planning and financial calculations give us other settings for the same kind of careful checking.
 
-Repeating one task can produce a group of rewards. A **mixed group** contains a success and a failure. Such contrast is useful for illustrating group-relative reward methods: the collected data identifies better and worse attempts on the same task. It does not establish that training on them would improve a model.
+### Spending the effort to learn from mistakes
 
-Uniform collection takes four attempts on the same case. Adaptive collection first tries two: if their rewards agree, it abandons that group and moves to the next case; if they differ, it fills the group to four. The question is which method collects more complete mixed groups at the same budget.
+Suppose we ask an assistant to try a task several times and save what happens. One attempt may succeed while another fails. Looking at both gives us an observed difference to investigate. If every attempt succeeds, the record tells us less about how the assistant fails on that task.
 
-One CLI invocation starts the Codex command-line program once and is the budget unit. Token use and elapsed time are measured separately.
+Each attempt takes time and model requests. With a limited collection budget, we have a choice about where to spend them. One simple rule is to finish four attempts on each selected task. This gives every selected group the same number of tries, even when the early outcomes all look alike.
 
-The latest follow-up uses a stronger difficulty pilot, then four new 12-review cases with conditional handoff costs. At the selected level, Sol produces 2 successes and 6 failures in eight completed calibration attempts, including both outcomes on the same input. 8/8 satisfy every hard scheduling constraint; reward 1 also requires the exact minimum cost. The pilot is excluded from the comparison.
+Another rule is to try twice first. If one attempt succeeds and the other fails, collect two more. If both outcomes agree, stop that group and move on. This may avoid repeated work, but it carries a risk: two successes do not tell us whether the third attempt would have failed.
 
-On the four fresh cases, Sol has 6/8 uniform successes and 3/9 adaptive successes. At exactly **180 CLI calls per model and collector**, uniform collects 2 complete mixed Sol groups and adaptive collects 2. Luna collects 0 and 0 mixed groups. A group contains four completed known outcomes and counts as mixed only when both 0 and 1 appear. These are small descriptive samples from two task blocks. Each action uses a fresh CLI invocation with visible history; private reasoning is not carried between edits. The result describes that tool workflow. No model parameters are updated. Section 12 gives the fresh-case evidence.
+The study calls the first approach uniform collection and the second adaptive collection. A group containing both success and failure is called a mixed group. We count complete groups of four so that both approaches must produce the same kind of evidence. The question is whether changing where we spend the effort produces more of those groups for the same request budget.
 
-The earlier six-review comparison produced 29/29 known Sol successes and no mixed Sol groups, despite a failure in its separate pilot. That failed transfer motivates the stronger calibration here. The earlier scheduling, ledger and purchasing experiments remain separate evidence in sections 1 through 11; section 12 contains the current handoff-cost comparison.
+This study records and compares attempts. A mixed group may provide a useful comparison for later training, but we do not change either assistant here. The immediate goal is to understand what evidence the two collection rules actually produce.
+
+## The study in brief
+
+The latest comparison gives GPT-6.1 Sol and GPT-6 Luna four new project-review calendars. Each day has 12 reviews. A valid agenda must respect availability and ordering rules; the best agenda also minimizes movement and charges for delayed handoffs. A model request returns one calendar action, so a complete attempt can need several requests.
+
+For each model, uniform and adaptive collection each receive 180 requests. We count complete groups of four attempts containing both a success and a failure. Both methods collect two mixed Sol groups. Neither collects a mixed Luna group: no completed Luna attempt succeeds at this difficulty. Sol produces both successful and failed plans, which provides the outcome contrast requested for this follow-up. No weights are updated.
+
+Adaptive collection does not produce more mixed groups in this run. There are only four authored cases in two task blocks, so this is a small descriptive comparison. Earlier buying, financial and calendar studies remain separate evidence in sections 1 through 11. Section 12 explains the latest tasks and results.
 
 ## Contents
 
@@ -69,6 +77,8 @@ One quote-selection case travels through the lower path as follows. The code cre
 
 
 ## 1. Configuration and access
+
+A saved attempt is called a rollout. It contains the task, the proposed actions and the observations returned by the tools. Its reward is 1 for the complete requested outcome and 0 for a known failure. An attempt that reaches its full action allowance without the correct outcome receives 0. An interruption by the collection budget or a transport outage stays unknown. The same distinction applies to every phase below.
 
 The defaults replay saved evidence. `LIVE` is false unless `NB27_LIVE=1` is explicitly set. The visible size controls are `MODELS`, `CALLS_PER_ARM`, `N_BLOCKS`, `N_TASKS_PER_ENV`, `GROUP_SIZE` and `MAX_ACTIONS`. Replaying does not launch a model or a calendar server.
 
@@ -1084,6 +1094,23 @@ python -m pip install -e data/tmp/OpenEnv/envs/calendar_env -e data/tmp/OpenEnv/
 
 Use authenticated `codex` CLI access. The optional live cell in section 12 uses four settings at the top of the notebook. Keep `FRONTIER_NEW_RUN_ID=None` for replay. To collect new trajectories, set a fresh short run ID and enable `NB27_LIVE=1`. The small default, 72 calls per collector, one block and two models, caps the run at 288 invocations. It creates a separate protocol and `data/frontier_v5/live-<run-id>/` directory; the displayed frozen comparison remains separate. Calendar needs local loopback ports. Nested model calls stay disabled. A paused or pending request requires an audit; it must not silently be submitted again.
 
+
+### Earlier collection and scoring details
+
+The question is whether an online allocator can collect more complete mixed groups than uniform collection under the same number of policy calls. The tested policies are `gpt-6.1-sol` and `gpt-6-luna`, both called through `codex exec` with medium reasoning. The dataset has 12 comparison cases, four in each of Calendar, FinQA and REPL, divided into two disjoint blocks. Six other cases were used for a separate pilot.
+
+Both allocators receive 90 CLI invocations per model per block, or 180 per model and allocator. That is 720 primary comparison calls. Errors count against the cap. Every counted mixed group must contain exactly four completed, known-reward trajectories. The model, tools, task stream, horizon and reward checker are fixed within the comparison.
+
+GPT-6.1 Sol: 0 uniform versus 0 adaptive mixed groups from 180 calls per allocator. GPT-6 Luna: 4 uniform versus 3 adaptive mixed groups from 180 calls per allocator.
+
+The primary run saved 134 trajectories: 128 have known rewards, of which 112 succeed, and 6 are unfinished or otherwise unknown. One CLI invocation starts the command-line program once and is the budget unit; token use and time are measured separately. The selected task mixture makes an adaptive arm's success rate unsuitable as a claim of improved model accuracy.
+
+The largest caveat is the small number of full groups, from two task blocks. There was also an earlier interrupted run: 792 of its 960 calls failed in transport. Its raw data is retained, and it is excluded from the allocator ranking. The separately registered primary run uses a circuit breaker. Neither run performs weight updates.
+
+A separately registered follow-up adds two five-appointment planning cases and another 256 calls, with exactly 64 per policy and allocator. It follows the initial saturation finding and is reported separately. The stronger tasks and their measured outcomes appear in section 10.
+
+In that stress follow-up, GPT-6.1 Sol succeeds on 12/12 known collected trajectories.
+In that stress follow-up, GPT-6 Luna succeeds on 4/10 known collected trajectories.
 
 ## 14. Future work and further reading
 
