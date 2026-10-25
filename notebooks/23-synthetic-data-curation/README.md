@@ -17,6 +17,9 @@ A separate eight-case interface pilot produced 32 original responses. 32/32 had 
 
 The harder follow-up uses 64 longer procurement packs and 16 layout-audit cases. It asks for the units still to ship and the net unit price after rebates. Sol passes all 128 collection answers. Luna has 127 wrong-value answers and one value-correct answer with insufficient evidence. All 24 selected repairs pass, but add zero newly solved cases because Sol already covers all 64 sources. This exposes a limit of this data-generation method: it produces corrections for Luna without finding an observed Sol error. The documents and task semantics changed, so these results are reported separately from the first protocol.
 
+
+The Sol-miss follow-up uses a separate generator and protocol. The pilot found 1, 0, 1 Sol value/schema miss cases across its three eight-case levels, never reaching the two-miss threshold; the declared level-three fallback was used. In 48 collection cases, Sol returned all seven values correctly on 45/48 cases and Luna on 0/48. On the separate 12-case audit, Sol passed 12/12 and Luna 0/12. A fresh Sol retry and Sol repair each corrected and passed all three selected Sol misses; Luna cross-repair passed 0/3. Both Sol arms recover the same three cases, and neither establishes a training gain. Its responses and scores remain separate from v1 and hard-v2.
+
 ## Contents
 
 - [1. Task and question](#1-task-and-question)
@@ -30,7 +33,8 @@ The harder follow-up uses 64 longer procurement packs and 16 layout-audit cases.
 - [9. Limitations](#9-limitations)
 - [10. Reproduction and cost](#10-reproduction-and-cost)
 - [11. Harder realistic follow-up](#11-harder-realistic-follow-up)
-- [12. Future work and further reading](#12-future-work-and-further-reading)
+- [12. Testing whether a model can recover its own extraction misses](#12-testing-whether-a-model-can-recover-its-own-extraction-misses)
+- [13. Future work and further reading](#13-future-work-and-further-reading)
 
 ```mermaid
 flowchart LR
@@ -60,9 +64,15 @@ flowchart LR
     hard_verify --> hard_exports["64 accepted cases + 64 value-error pairs<br/>24 repair records; zero newly solved cases"]
     hard_repair --> hard_exports
     hard_exports --> results
+    sol_v3_seed["Fresh v3 pilot ladder<br/>24 cases, 48 answers, 24 CLI requests"] --> sol_v3_level["Freeze level 3<br/>declared fallback; threshold not met"]
+    sol_v3_level --> sol_v3_original["48 collection + 12 audit cases<br/>Sol and Luna via codex exec; 120 original answers"]
+    sol_v3_original --> sol_v3_select["Verifier selects 3 Sol collection misses<br/>audit excluded; cap 24 unused"]
+    sol_v3_select --> sol_v3_arms["Blind Sol retry, Sol repair, Luna repair<br/>9 answers in 6 paired CLI requests"]
+    sol_v3_arms --> sol_v3_results["Re-verify values and evidence<br/>paired recoveries, new cases, token use"]
+    sol_v3_results -. "new protocol; separate cache" .-> results
 ```
 
-The first branch uses batches of at most ten cases. The harder branch uses batches of four and keeps its sources and responses in a separate cache. Its fixed and adaptive arms receive equal original-answer budgets. Counts label source cases, response rows or repair items explicitly. For one example, the generator creates a structured order and its exact final answer, renders the events into a message thread, and sends only the task instructions and thread to a model. The verifier compares the returned fields and cited message IDs with the source events. A failed candidate may be sent to the other model with the original output and field-level reasons. That adds supervision from the verifier, though the repair request never includes the answer key.
+The first branch uses batches of at most ten cases. The harder branch uses batches of four and keeps its sources and responses in a separate cache. Its fixed and adaptive arms receive equal original-answer budgets. The third branch uses two-case batches, selects three Sol collection misses after scoring the originals, and leaves the twelve audit cases out of repair. Counts label source cases, response rows or repair items explicitly. For one example, the generator creates a structured order and its exact final answer, renders the events into a message thread, and sends only the task instructions and thread to a model. The verifier compares the returned fields and cited message IDs with the source events. A failed candidate may be sent to the other model with the original output and field-level reasons. That adds supervision from the verifier, though the repair request never includes the answer key.
 
 ## 1. Task and question
 
@@ -83,7 +93,7 @@ The verifier accepted 663/720 original collection responses (92.1%) after checki
 
 ## 2. Setup
 
-The hard-v2 live smoke-size knob is `N_HARD_LIVE_CASES = 8` in the setup cell. It changes only the isolated live demonstration; the saved main replay remains fixed.
+The hard-v2 live smoke-size knob is `N_HARD_LIVE_CASES = 8`. Sol-v3 also shows `SOL_V3_LIVE = False` and `N_SOL_LIVE_CASES = 8`; its optional eight-case demonstration writes to `data/tmp/sol_v3_live_demo` and leaves saved results in place.
 
 The notebook uses Python to generate cases, call the two installed Codex models through their CLI, validate output, and save the results. It imports no project helper at run time: fixture generation, transport, scoring, and plotting are embedded below as code cells. The normal run is offline and reads cached replies. A cache miss stops the notebook; setting `NB_LIVE=1` explicitly permits a new Codex call.
 
@@ -1774,19 +1784,700 @@ The default hard-v2 cell replays its own request cache under `data/hard_v2/`. It
 The main run records 288 original candidate rows, 24 repair attempts, and 78 CLI requests. It used 1,906,049 input tokens and 48,515 output tokens; collection orchestration took 222.1 seconds. The separate eight-case pilot had 32 original responses (GPT-6 Luna 2/16 accepted; GPT-6.1 Sol 16/16 accepted) and used 8 CLI requests. It is not part of main totals. Across main and pilot the run made 86 new requests, using 2,100,539 input and 53,359 output tokens. Token usage includes Codex CLI setup overhead. The CLI reports no USD price, so cash cost is unknown, not zero.
 
 
-## 12. Future work and further reading
+## 12. Testing whether a model can recover its own extraction misses
+
+The first two protocols found no GPT-6.1 Sol value error in the generated collection. Hard-v2 produced 64 long procurement packs; Sol returned all seven values correctly for every collection response. Its partner model, Luna, made many errors, and cross-model repair produced candidate correction data for Luna, but no training was run and its learning value is unmeasured. Sol already covered every source case. That left an unanswered practical question: can a controlled increase in case difficulty create real Sol errors, and if so, which one-call response strategy can correct them?
+
+This third round uses a pilot difficulty ladder as a design screen. At each level it presents a small batch of new source cases to Sol and Luna, then checks both returned answers against the fixture key. The pilot stops at the first level with at least two Sol value or schema failures; if none of the three levels reaches that threshold, the study records the miss and proceeds at the highest tested level rather than changing the rule after seeing results. The ladder is not part of the main test set or an estimate of the models' ordinary error rate.
+
+The pilot found 1, 0, 1 Sol value/schema miss cases across its three eight-case levels, never reaching the two-miss threshold; the declared level-three fallback was used. In 48 collection cases, Sol returned all seven values correctly on 45/48 cases and Luna on 0/48. On the separate 12-case audit, Sol passed 12/12 and Luna 0/12. A fresh Sol retry and Sol repair each corrected and passed all three selected Sol misses; Luna cross-repair passed 0/3. Both Sol arms recover the same three cases, and neither establishes a training gain.
+
+The main study has 48 collection cases and 12 separate audit cases. For selected cases with an original Sol miss, it compares three one-call interventions: a fresh Sol retry that receives no prior answer or feedback, a Sol self-repair that receives its original answer and verifier feedback, and a Luna cross-repair with the same feedback. The primary recovery measure is all seven values correct; schema validity and citation sufficiency are reported separately as the stricter acceptance check. The comparison asks which calls recover the original error, which add a new fully correct case, and whether a correction changes values, citations, both, or neither. Each result is conditional on the difficulty-enriched selection rule. It does not measure model training, a general capability increase, or how either model performs across arbitrary documents.
+
+```mermaid
+flowchart LR
+    docs["Fresh rendered procurement records"] --> pilot["Sol + Luna pilot ladder<br/>up to 3 levels × 8 cases"]
+    pilot -->|"level 3; threshold not met"| main["48 collection + 12 separate audit cases"]
+    main --> originals["Sol and Luna originals<br/>one answer per case"]
+    originals -->|"3 Sol value/schema misses"| paired["Three calls per selected case<br/>blind retry, Sol repair, Luna repair"]
+    paired --> verify["Value, schema and evidence checks"]
+    originals --> verify
+    verify --> outcomes["Paired recovery, new-case coverage, usage"]
+    outcomes -. "separate v3 protocol and cache" .-> prior["Earlier notebook results"]
+```
+
+### Why run a third round
+
+Hard-v2 produced candidate correction data for Luna, but no training was run and its training value is unmeasured. It did not produce a Sol value failure. An intervention can only repair the errors that appear in its input. This round therefore first tests a bounded, declared range of source difficulty. It uses the first level reaching two Sol misses, or the highest declared level if none does. It uses a separate cache, seed and protocol so that previous candidates, repairs and labels do not change case selection.
+
+### Pilot difficulty ladder
+
+The pilot ladder advances through three predeclared levels. Each level uses eight fresh source cases and one response per model. The run stops after the first level that reaches at least two GPT-6.1 Sol value or schema failures; if the threshold is not reached, it retains level three as the selected setting and reports the threshold miss. It records every case and response, including levels before the stop, and keeps all pilot records out of the main metrics and exports. Reaching the threshold only shows that the chosen generator can produce failures under this prompt and decoding setup; it does not establish a natural failure rate.
+
+The ladder stopped at level 3 after 24 cases and 24 CLI requests. The declared threshold was not met; selection reason: Highest declared level; no level reached the declared Sol-error threshold.
+
+| Level | Cases | Sol value/schema miss cases | Requests | Threshold |
+|---:|---:|---:|---:|---|
+| 1 | 8 | 1 | 8 | not met |
+| 2 | 8 | 0 | 8 | not met |
+| 3 | 8 | 1 | 8 | not met |
+
+None of the three eight-case levels met the two-miss threshold. All 24 cases and their 48 answers remain saved, including the zero-miss middle level. The fallback chooses a setting for the main run; it does not turn a failed threshold into evidence that difficulty was calibrated successfully.
+
+### Main cases and selection
+
+The main collection has 48 fresh cases and a 12-case audit. Original model answers are collected under the frozen low-reasoning, two-case-batch setup. The audit is excluded from adaptive selection and repair. From eligible main collection cases, the selection rule orders cases by stable ID and chooses at most 24 with a Sol value or schema error. All three eligible cases were selected, and their original Sol candidate IDs are preserved. A selected case remains in the denominator even if one or more intervention calls fail.
+
+Because selection depends on a Sol miss, intervention outcomes are conditional on a deliberately difficult subset. The saved report lists eligible, selected and unselected cases, the error that made each case eligible, and whether Luna had already solved it. A correction to a case Sol missed is different from a case neither original model solved; both counts matter for judging whether the pipeline adds usable coverage.
+
+### Three paired one-call interventions
+
+For each selected Sol miss, the study compares three calls against the same source pack. Fresh retry asks Sol to answer again without seeing its prior answer. Sol self-repair receives that answer and the field-level verifier feedback. Luna cross-repair receives the same failed Sol answer and the same feedback. None receives gold values or gold evidence. The three calls have the same case, output schema, batch size, reasoning level and runner limits; each intervention is one attempt with no automatic retry.
+
+```mermaid
+flowchart LR
+    source["Selected case + task instructions"] --> fresh["GPT-6.1 Sol fresh retry<br/>codex exec, no prior answer"]
+    source --> self["GPT-6.1 Sol self-repair<br/>codex exec, original answer + feedback"]
+    source --> cross["GPT-6 Luna cross-repair<br/>codex exec, same answer + feedback"]
+    original["Original Sol miss"] --> self
+    original --> cross
+    fresh --> verifier["Same value, schema and citation verifier"]
+    self --> verifier
+    cross --> verifier
+    verifier --> outcomes["Paired recovery and unique-case coverage"]
+```
+
+The fresh retry isolates another answer attempt from the benefit of seeing a diagnosis. The two repair calls compare the model that made the mistake with its cross-model partner while holding the feedback constant. “Self-repair” here means a second Sol call with external verifier feedback; it is not intrinsic self-correction without outside feedback. The feedback exposes failed fields selected by a verifier that has the synthetic source record and exact key, information that would not be available automatically in ordinary documents. The three arms have the same number of calls, but the repair payloads include extra material and actual token use differs, so this is not an equal-compute comparison. The saved request ledger is the record of the exact prompt, output and usage for each arm.
+
+### Task instructions and scoring
+
+The extraction task retains the seven fields from hard-v2. The new source packs, business rules and expected values are generated before any model call and stored separately from prompts. The exact instruction appears below. Five measured examples then show source excerpts, reference calculations and observed answers.
+
+The following is the exact shared task instruction used for the original and intervention prompts:
+
+```text
+Reconcile the target purchase ORDER and LINE in the source packet as of its cutoff.
+Return exactly {case_id, answer, evidence}. answer has exactly order_id (string),
+sku (string), quantity_units (integer or null), unit_price_cents (integer or null),
+currency (three-letter string or null), ship_date (YYYY-MM-DD or null), status
+(active/cancelled/ambiguous). evidence has the same seven keys, each a nonempty
+list of distinct document IDs. A batch wrapper may request a results array.
+
+quantity_units is OPEN individual units for the target line: current approved
+ordered units minus net allocated physical shipments after corrections, voids,
+reversals and accepted returns. Same-SKU lines remain separate lines.
+
+Commercial terms: only APPROVED rows recorded by the cutoff and effective by the
+cutoff qualify. Resolve EACH FIELD separately. A line-scoped value overrides an
+order default, regardless of relative authority. Within the same scope choose
+higher authority (Controller=3, Buyer=2, Planner=1), then later effective timestamp,
+then higher revision. Recorded timestamp is an availability filter, never a
+precedence tie-break. Blank fields do not clear an older value. This packet has
+no equal-priority contradictory approvals. Unapproved proposals and future
+effective/recorded rows do not apply. Purchase-order line values have authority
+0 and the order's issue date. Partial amendments retain all unstated fields.
+
+Physical ledger: select the highest row revision for each logical event ID among
+rows recorded by cutoff; exact duplicate copies of that same event/revision count
+once. The selected row replaces older revisions completely. VOID rows do not
+count. Also exclude selected events occurring after cutoff or belonging to another
+order. A POSTED REVERSAL removes the referenced shipment completely, including
+its selected correction; do not subtract its quantity a second time. A reversal
+whose selected revision is VOID has no effect. A RETURN is a positive returned
+quantity, subtracted from dispatched demand: use the referenced shipment's UOM,
+SKU, occurred timestamp and allocation key, not the return date's UOM master.
+Returns on a removed shipment do not count. All eligible returns here are valid
+accepted returns. Shipments and returns do not change ordered units.
+
+UOM master: choose the latest effective-from date no later than the shipment's
+occurred date, for that exact SKU and UOM. Convert quantity to individual units,
+then apply the allocation key's target-line share. Allocation shares sum to 100%
+and conversions produce exact individual-unit integers in these source records.
+Do not allocate a whole shipment to the target merely because its SKU matches.
+
+Price: choose the resolved price plan, then the highest minimum-quantity tier
+not exceeding CURRENT ORDERED units, before deducting any shipments. Gross tier
+prices are per individual unit. Apply rebate A, then rebate B to the discounted
+remainder (not their sum), then ADD the plan's per-unit fee and SUBTRACT its
+per-unit credit. Convert currency amounts to cents and round ONCE at the end:
+nearest integer cent, exact half-cents UP. Do not round intermediate discounts,
+fees or carton conversions; use exact decimal/rational arithmetic. Currency is
+the resolved commercial currency. Freight/tax invoice totals are not unit-price
+adjustments unless the plan explicitly lists a per-unit fee/credit.
+
+The order status remains active unless an approved order-status notice changes
+it. Shipment VOID/reversal is not cancellation of the purchase order. Do not
+invent ambiguity merely because different revisions or different lines differ.
+
+Evidence must include current value-bearing sources and calculation inputs.
+Quantity needs resolved ordered terms, line/SKU identification, UOM master,
+allocation schedule and physical ledger. Price needs the chosen plan, its tier
+quantity and the pricing schedule. Relevant additional packet context is allowed
+without penalty, but context alone cannot replace required current sources.
+Citation order does not matter. Never cite the unrelated-order-only document as
+support for target fields. Wrong values and incomplete citations are separate
+checks; a source citation does not make an incorrect calculation correct.
+```
+
+The complete case-specific documents, model, stage, feedback when applicable, and runner settings are stored in each cache entry's canonical request. The worked examples below connect source excerpts to these saved responses.
+
+The baseline table counts one original answer per model per source case. “All seven values” requires every value to match the exact reference. “Fully accepted” also requires valid JSON structure and sufficient source citations. An answer with six correct values still fails the all-seven case score.
+
+| Split | Model | Responses | Schema valid | All seven values | Fully accepted |
+|---|---:|---:|---:|---:|---:|
+| Collection | GPT-6.1 Sol | 48 | 48/48 | 45/48 | 45/48 |
+| Collection | GPT-6 Luna | 48 | 48/48 | 0/48 | 0/48 |
+| Audit | GPT-6.1 Sol | 12 | 12/12 | 12/12 | 12/12 |
+| Audit | GPT-6 Luna | 12 | 12/12 | 0/12 | 0/12 |
+
+Sol passed 45/48 collection cases (93.75%), leaving three genuine value failures for the intervention comparison. Luna passed 0/48. All 120 originals had valid structure, so the difference comes from extracted values rather than broken JSON. Sol's 12/12 audit result leaves no observed audit error to repair; twelve cases sharing the generator's rules cannot establish a general performance ceiling.
+
+Compare the pilot's bars with the dashed two-miss threshold. Each bar counts Sol failures among eight new cases at that level; the vertical axis is a count, not a percentage.
+
+![No pilot level reached the two-miss threshold](figures/sol_v3/pilot_ladder.png)
+
+Sol missed 1/8, 0/8 and 1/8 cases at levels one, two and three. The declared fallback selected level three even though it did not reach the threshold. Increasing ledger length did not produce a monotonic increase in errors in this small screen. Different seeds also changed the source values, so the bars do not isolate the effect of length.
+
+The next figure groups original collection answers by the six generator families. Each model has eight cases per family; compare the labelled Sol and Luna bars against that denominator.
+
+![Sol passed 45 of 48 collection cases while Luna passed none](figures/sol_v3/baseline_by_family.png)
+
+Sol passed 7/8 cases in shipment revisions, dated units and returns, and effective authority, and 8/8 in each other family. Luna passed 0/8 in every family. These families share most business rules. A miss in the dated-units family does not establish that unit conversion caused it; the examples below show the numerical mismatch without inferring an internal cause.
+
+The intervention table uses the same three originally failed Sol cases in every row. Four values were originally wrong across those cases. The final column counts fields that were correct before the intervention and became wrong afterward; it does not measure the size of errors in fields already wrong.
+
+| Intervention | Cases | All seven values | Fully accepted | Original wrong values fixed | Previously correct fields now wrong |
+|---|---:|---:|---:|---:|---:|
+| Fresh Sol retry | 3 | 3/3 | 3/3 | 4/4 | 0 |
+| Sol self-repair | 3 | 3/3 | 3/3 | 4/4 | 0 |
+| Luna cross-repair | 3 | 0/3 | 0/3 | 0/4 | 0 |
+
+Both Sol methods fixed the same three cases and all four wrong values. No case succeeded only with feedback, so these observations show no advantage for repair over another Sol attempt. Luna fixed none of the four wrong values and increased their numerical errors, although it introduced no error in a previously correct field. The cohort has only three cases, too few to estimate a dependable recovery rate.
+
+The paired outcome chart compares the count with all values correct against the count fully accepted. A gap would indicate a structural or citation problem after the values were corrected. Each arm has the same three source cases.
+
+![Fresh retry and Sol repair both recover the same three original misses](figures/sol_v3/paired_repair_outcomes.png)
+
+Fresh retry and Sol repair each passed 3/3 on both measures; Luna passed 0/3. Across the collection, selecting a verified answer from either successful Sol intervention expands coverage from 45 to 48 distinct cases. Combining both Sol arms still adds three cases, not six. This selection uses the exact answer key and does not show that a later unassisted model would improve.
+
+The final chart counts wrong fields in original Sol collection answers. One answer may contribute to more than one bar, so field counts need not equal the number of failed cases.
+
+![Sol's three failed answers contain three quantity errors and one price error](figures/sol_v3/failure_field_counts.png)
+
+The three failed answers contain three wrong quantities and one wrong price. All other fields and all required citations passed. The price failure sits at an exact 908.5-cent rounding boundary, explained in example 3. The quantities require reconciling corrected movements and returns; the output alone does not identify which arithmetic or extraction step produced their error.
+
+The primary recovery measure is whether an intervention changes an originally incorrect Sol answer into an answer with all seven values correct. Supporting measures separate schema validity and citation sufficiency; full acceptance requires all three. A repair may fix the original miss, leave it unchanged, create a different value error, or return a correct value with weak citations. The case-level table preserves those outcomes instead of counting every response as a new solved example.
+
+### Measured examples
+
+The five cases below were selected by stable IDs from the saved collection: all three original Sol value misses and two ordinary Sol successes. Each includes relevant source text, the expected answer, both models' original answers, and all three measured intervention outcomes for each miss. No example of a self-only or cross-repair success occurred; the three miss cases show that boundary directly.
+
+#### Example 1: Measured Sol miss (`recon-04f699622fa7f55b9095`)
+
+Selected rendered evidence from the saved source packet (the complete packet is in `data/sol_v3/cases.jsonl`):
+
+```text
+[P01] Signed purchase order
+Order PO-719901 | Issued 2026-10-15T08:00:00Z | Status active
+Order defaults apply only where a line has no explicit value. Empty cells mean inherit, not missing approval.
+Default currency | Default requested date | Default price plan
+CAD | 2026-11-09 | PLAN-A
+Line | SKU | Ordered individual units | Price plan | Requested date | Currency
+L04 | CLP-811 | 22119 | INHERIT | INHERIT | INHERIT
+[P02] Commercial approval register
+Order PO-719901
+Scope ALL means order default; a named line is its own override. Authority ranks: Controller 3, Buyer 2, Planner 1. Recorded time controls availability, effective time controls when an approved change applies. Blank fields do not amend the prior value.
+Approval | Line scope | Authority | Revision | Effective UTC | Recorded UTC | Approved | Changed fields
+AP-03 | L04 | 2 | 4 | 2026-10-21T10:00:00Z | 2026-10-22T09:00:00Z | YES | ordered_units=24219
+AP-01 | ALL | 3 | 7 | 2026-10-20T09:00:00Z | 2026-10-20T09:20:00Z | YES | price_plan=PLAN-B; ship_date=2026-11-14
+AP-05 | L04 | 3 | 9 | 2026-10-23T11:00:00Z | 2026-10-24T12:30:00Z | YES | ordered_units=29119; price_plan=PLAN-A
+AP-04 | L04 | 1 | 99 | 2026-10-23T10:00:00Z | 2026-10-23T10:30:00Z | YES | ordered_units=28119; ship_date=2026-11-20
+AP-08 | L04 | 3 | 11 | 2026-10-23T12:00:00Z | 2026-10-23T12:10:00Z | NO | price_plan=PLAN-B
+AP-09 | L04 | 2 | 5 | 2026-10-21T10:00:00Z | 2026-10-23T09:00:00Z | YES | ordered_units=24569
+AP-06 | L04 | 3 | 10 | 2026-10-24T13:00:00Z | 2026-10-24T11:00:00Z | YES | ordered_units=30119
+AP-10 | L04 | 2 | 1 | 2026-10-22T10:00:00Z | 2026-10-23T09:10:00Z | YES | ship_date=2026-11-13
+AP-02 | L04 | 2 | 2 | 2026-10-18T08:00:00Z | 2026-10-18T09:00:00Z | YES | price_plan=PLAN-C; ship_date=2026-11-12
+[P03] Effective-dated warehouse UOM master
+Individual-unit factors below are effective from the listed calendar date. A shipment uses its occurred date, not its ingestion date. An accepted return uses its original shipment's UOM and occurred date even when the packaging master changed before the return.
+SKU | UOM | Effective from | Individual units per UOM
+CLP-811 | BOX | 2026-01-01 | 12
+CLP-811 | BOX | 2026-10-20 | 10
+CLP-811 | CASE | 2026-01-01 | 24
+CLP-811 | CASE | 2026-10-21 | 30
+CLP-811 | EA | 2026-01-01 | 1
+[P04] Approved shipment allocation schedule
+Allocation keys divide a movement across purchase lines. Apply the share after converting to individual units. The same key is inherited by a return against that shipment. Keys are stable during this reconciliation period.
+AL-1 | L04 | 25%
+AL-2 | L04 | 75%
+AL-3 | L04 | 50%
+[P05] Approved net-price schedules
+Select the resolved line price plan and use current approved ordered units for tier qualification. Open balance after shipments is not the tier quantity. Gross prices and adjustments are currency amounts per individual unit, not carton prices.
+Plan | Tier minimum ordered units | Gross/unit | Rebate A | Rebate B | Fee/unit | Credit/unit
+PLAN-C | 24000 | 10.74 | 5% | 5% | 0.0325 | 0.0125
+[P06] Physical movement revision export
+Order accounts include PO-719901 and a reference order. All quantities are positive magnitudes; kind defines their effect.
+Rows are ingestion records, not additive invoice lines. Resolve logical event ID and row revision before summing. Exact repeated copies may appear from export overlap. POSTED is effective physical activity; VOID is the selected revision's withdrawal.
+Event | Row rev | Kind | Order | SKU | Qty | UOM | Allocation | Reference | Occurred UTC | Recorded UTC | State
+RT-01 | 1 | RETURN | PO-719901 | CLP-811 | 4 | ORIGINAL | ORIGINAL | SH-04 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-02 | 1 | RETURN | PO-719901 | CLP-811 | 4 | ORIGINAL | ORIGINAL | SH-01 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-03 | 1 | RETURN | PO-719901 | CLP-811 | 4 | ORIGINAL | ORIGINAL | SH-10 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-719901",
+  "sku": "CLP-811",
+  "quantity_units": 21547,
+  "unit_price_cents": 971,
+  "currency": "CAD",
+  "ship_date": "2026-11-13",
+  "status": "active"
+}
+```
+
+Sol misses the open balance by 10 units. AP-09 fixes approved demand at 24,569; AP-05 is recorded after cutoff. The full eligible P06 movement ledger for L04 contributes 2,808 CASE units, 360 BOX units and 70 EA units. Three accepted returns each remove 4 CASE × 24 units × 75% = 72, for 216 total. Open balance is 24,569 − (2,808 + 360 + 70 − 216) = 21,547. The SH-01 revision replaces its earlier rows; the current shipment rows use the UOM factors in P03. For price, AP-02 selects PLAN-C and the 24,000-unit tier: 1,074 × 0.95 × 0.95 + 3.25 − 1.25 = 971.285 cents, rounded once to 971.
+
+The original Sol response item below comes from the saved CLI response. It is formatted for reading, with its values and citations unchanged; the surrounding batch contains one other case.
+
+```json
+{
+  "case_id": "recon-04f699622fa7f55b9095",
+  "answer": {
+    "order_id": "PO-719901",
+    "sku": "CLP-811",
+    "quantity_units": 21537,
+    "unit_price_cents": 971,
+    "currency": "CAD",
+    "ship_date": "2026-11-13",
+    "status": "active"
+  },
+  "evidence": {
+    "order_id": [
+      "P01"
+    ],
+    "sku": [
+      "P01"
+    ],
+    "quantity_units": [
+      "P01",
+      "P02",
+      "P03",
+      "P04",
+      "P06"
+    ],
+    "unit_price_cents": [
+      "P01",
+      "P02",
+      "P05"
+    ],
+    "currency": [
+      "P01"
+    ],
+    "ship_date": [
+      "P02"
+    ],
+    "status": [
+      "P01"
+    ]
+  }
+}
+```
+
+Parsing preserves those seven answer values. Six match the reference and `quantity_units` does not, so the case-level all-seven score is 0, even though 6/7 individual fields and 7/7 citation sets pass. The verifier rejects it for the wrong quantity, not its references. [The original request and raw batch reply](data/sol_v3/cache/66250d7e31e276a105c9a7fc98fe23681d9540759cb5186843b86909caea4575.json) preserve the full input and output.
+
+The repair receives that original item, the same complete source packet, and this exact feedback:
+
+```json
+{
+  "failed_fields": [
+    "quantity_units"
+  ],
+  "schema_failed": false,
+  "evidence_failed_fields": [],
+  "categories": [
+    "value"
+  ]
+}
+```
+
+The feedback identifies the failed field but never supplies 21,547. Sol's returned repair has 21,547 units and keeps the other six values and citations; it scores 7/7 values and is accepted. [The repair request and raw reply](data/sol_v3/cache/08c967f98c95f5e4e895ce04d70eb1f117f80db1a944214b0c22faf921b67060.json) make that handoff inspectable. The fresh retry receives neither the original answer nor these diagnostic flags.
+
+Measured answers, with value correctness separated from evidence and final acceptance:
+
+| Attempt | Open units | Unit cents | Status | Seven values exact | All field citations supported | Accepted |
+|---|---:|---:|---|---|---|---|
+| Original (GPT-6.1 Sol) | 21537 | 971 | active | no | yes | no |
+| Original (GPT-6 Luna) | 22556 | 1055 | active | no | yes | no |
+| Fresh Sol retry (GPT-6.1 Sol) | 21547 | 971 | active | yes | yes | yes |
+| Sol self-repair (GPT-6.1 Sol) | 21547 | 971 | active | yes | yes | yes |
+| Luna cross-repair (GPT-6 Luna) | 21513 | 971 | active | no | yes | no |
+
+Both Sol follow-ups remove the ten-unit discrepancy. Luna changes the quantity to 21,513, increasing the absolute error from 10 to 34 units; its citations still pass. A document reference establishes where to check a calculation, not that the calculation is right.
+
+#### Example 2: Measured Sol miss (`recon-80db4a9463ee61051565`)
+
+Selected rendered evidence from the saved source packet (the complete packet is in `data/sol_v3/cases.jsonl`):
+
+```text
+[P01] Signed purchase order
+Order PO-477983 | Issued 2026-10-15T08:00:00Z | Status active
+Order defaults apply only where a line has no explicit value. Empty cells mean inherit, not missing approval.
+Default currency | Default requested date | Default price plan
+USD | 2026-11-09 | PLAN-A
+Line | SKU | Ordered individual units | Price plan | Requested date | Currency
+L04 | CLP-525 | 22596 | INHERIT | INHERIT | INHERIT
+[P02] Commercial approval register
+Order PO-477983
+Scope ALL means order default; a named line is its own override. Authority ranks: Controller 3, Buyer 2, Planner 1. Recorded time controls availability, effective time controls when an approved change applies. Blank fields do not amend the prior value.
+Approval | Line scope | Authority | Revision | Effective UTC | Recorded UTC | Approved | Changed fields
+AP-03 | L04 | 2 | 4 | 2026-10-21T10:00:00Z | 2026-10-22T09:00:00Z | YES | ordered_units=24696
+AP-05 | L04 | 3 | 9 | 2026-10-23T11:00:00Z | 2026-10-24T12:30:00Z | YES | ordered_units=29596; price_plan=PLAN-A
+AP-02 | L04 | 2 | 2 | 2026-10-18T08:00:00Z | 2026-10-18T09:00:00Z | YES | price_plan=PLAN-C; ship_date=2026-11-12
+AP-04 | L04 | 1 | 99 | 2026-10-23T10:00:00Z | 2026-10-23T10:30:00Z | YES | ordered_units=28596; ship_date=2026-11-20
+AP-09 | L04 | 2 | 5 | 2026-10-21T10:00:00Z | 2026-10-23T09:00:00Z | YES | ordered_units=25046
+AP-10 | L04 | 2 | 1 | 2026-10-22T10:00:00Z | 2026-10-23T09:10:00Z | YES | ship_date=2026-11-13
+AP-01 | ALL | 3 | 7 | 2026-10-20T09:00:00Z | 2026-10-20T09:20:00Z | YES | price_plan=PLAN-B; ship_date=2026-11-14
+AP-06 | L04 | 3 | 10 | 2026-10-24T13:00:00Z | 2026-10-24T11:00:00Z | YES | ordered_units=30596
+AP-08 | L04 | 3 | 11 | 2026-10-23T12:00:00Z | 2026-10-23T12:10:00Z | NO | price_plan=PLAN-B
+[P03] Effective-dated warehouse UOM master
+Individual-unit factors below are effective from the listed calendar date. A shipment uses its occurred date, not its ingestion date. An accepted return uses its original shipment's UOM and occurred date even when the packaging master changed before the return.
+SKU | UOM | Effective from | Individual units per UOM
+CLP-525 | BOX | 2026-01-01 | 12
+CLP-525 | BOX | 2026-10-20 | 10
+CLP-525 | CASE | 2026-01-01 | 24
+CLP-525 | CASE | 2026-10-21 | 30
+CLP-525 | EA | 2026-01-01 | 1
+[P04] Approved shipment allocation schedule
+Allocation keys divide a movement across purchase lines. Apply the share after converting to individual units. The same key is inherited by a return against that shipment. Keys are stable during this reconciliation period.
+AL-1 | L04 | 25%
+AL-2 | L04 | 75%
+AL-3 | L04 | 50%
+[P05] Approved net-price schedules
+Select the resolved line price plan and use current approved ordered units for tier qualification. Open balance after shipments is not the tier quantity. Gross prices and adjustments are currency amounts per individual unit, not carton prices.
+Plan | Tier minimum ordered units | Gross/unit | Rebate A | Rebate B | Fee/unit | Credit/unit
+PLAN-C | 24000 | 15.57 | 5% | 12.5% | 0.045 | 0.025
+[P06] Physical movement revision export
+Order accounts include PO-477983 and a reference order. All quantities are positive magnitudes; kind defines their effect.
+Rows are ingestion records, not additive invoice lines. Resolve logical event ID and row revision before summing. Exact repeated copies may appear from export overlap. POSTED is effective physical activity; VOID is the selected revision's withdrawal.
+Event | Row rev | Kind | Order | SKU | Qty | UOM | Allocation | Reference | Occurred UTC | Recorded UTC | State
+RT-03 | 1 | RETURN | PO-477983 | CLP-525 | 4 | ORIGINAL | ORIGINAL | SH-10 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-02 | 1 | RETURN | PO-477983 | CLP-525 | 4 | ORIGINAL | ORIGINAL | SH-01 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-01 | 1 | RETURN | PO-477983 | CLP-525 | 4 | ORIGINAL | ORIGINAL | SH-04 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-477983",
+  "sku": "CLP-525",
+  "quantity_units": 21812,
+  "unit_price_cents": 1296,
+  "currency": "USD",
+  "ship_date": "2026-11-13",
+  "status": "active"
+}
+```
+
+Sol misses the open balance by 60 units. AP-09 gives 25,046 ordered units; the later-recorded AP-05 is outside cutoff. Eligible L04 movement totals are 2,952 CASE + 410 BOX + 88 EA = 3,450 units. Three referenced CASE returns remove 216, leaving 3,234 net shipped; 25,046 − 3,234 = 21,812 open units. AP-02 selects PLAN-C; the 24,000-unit tier price is 1,557 × 0.95 × 0.875 + 4.50 − 2.50 = 1,296.25625 cents, rounded to 1,296. Luna cross-repair returned 21,716, which is 96 units low.
+
+Measured answers, with value correctness separated from evidence and final acceptance:
+
+| Attempt | Open units | Unit cents | Status | Seven values exact | All field citations supported | Accepted |
+|---|---:|---:|---|---|---|---|
+| Original (GPT-6.1 Sol) | 21752 | 1296 | active | no | yes | no |
+| Original (GPT-6 Luna) | 20516 | 1348 | active | no | yes | no |
+| Fresh Sol retry (GPT-6.1 Sol) | 21812 | 1296 | active | yes | yes | yes |
+| Sol self-repair (GPT-6.1 Sol) | 21812 | 1296 | active | yes | yes | yes |
+| Luna cross-repair (GPT-6 Luna) | 21716 | 1296 | active | no | yes | no |
+
+Both Sol follow-ups recover the missing 60 units and pass every check. Luna leaves a 96-unit shortfall. A pipeline that accepted every revised answer merely because it differed from the original would retain this incorrect row.
+
+#### Example 3: Measured Sol miss (`recon-846f392a960804bf5282`)
+
+Selected rendered evidence from the saved source packet (the complete packet is in `data/sol_v3/cases.jsonl`):
+
+```text
+[P01] Signed purchase order
+Order PO-298362 | Issued 2026-10-15T08:00:00Z | Status active
+Order defaults apply only where a line has no explicit value. Empty cells mean inherit, not missing approval.
+Default currency | Default requested date | Default price plan
+CAD | 2026-11-09 | PLAN-A
+Line | SKU | Ordered individual units | Price plan | Requested date | Currency
+L04 | CLP-305 | 22600 | INHERIT | INHERIT | INHERIT
+[P02] Commercial approval register
+Order PO-298362
+Scope ALL means order default; a named line is its own override. Authority ranks: Controller 3, Buyer 2, Planner 1. Recorded time controls availability, effective time controls when an approved change applies. Blank fields do not amend the prior value.
+Approval | Line scope | Authority | Revision | Effective UTC | Recorded UTC | Approved | Changed fields
+AP-03 | L04 | 2 | 4 | 2026-10-21T10:00:00Z | 2026-10-22T09:00:00Z | YES | ordered_units=24700
+AP-05 | L04 | 3 | 9 | 2026-10-23T11:00:00Z | 2026-10-24T12:30:00Z | YES | ordered_units=29600; price_plan=PLAN-A
+AP-10 | L04 | 2 | 1 | 2026-10-22T10:00:00Z | 2026-10-23T09:10:00Z | YES | ship_date=2026-11-13
+AP-02 | L04 | 2 | 2 | 2026-10-18T08:00:00Z | 2026-10-18T09:00:00Z | YES | price_plan=PLAN-C; ship_date=2026-11-12
+AP-01 | ALL | 3 | 7 | 2026-10-20T09:00:00Z | 2026-10-20T09:20:00Z | YES | price_plan=PLAN-B; ship_date=2026-11-14
+AP-08 | L04 | 3 | 11 | 2026-10-23T12:00:00Z | 2026-10-23T12:10:00Z | NO | price_plan=PLAN-B
+AP-09 | L04 | 2 | 5 | 2026-10-21T10:00:00Z | 2026-10-23T09:00:00Z | YES | ordered_units=25050
+AP-06 | L04 | 3 | 10 | 2026-10-24T13:00:00Z | 2026-10-24T11:00:00Z | YES | ordered_units=30600
+AP-04 | L04 | 1 | 99 | 2026-10-23T10:00:00Z | 2026-10-23T10:30:00Z | YES | ordered_units=28600; ship_date=2026-11-20
+[P03] Effective-dated warehouse UOM master
+Individual-unit factors below are effective from the listed calendar date. A shipment uses its occurred date, not its ingestion date. An accepted return uses its original shipment's UOM and occurred date even when the packaging master changed before the return.
+SKU | UOM | Effective from | Individual units per UOM
+CLP-305 | BOX | 2026-01-01 | 12
+CLP-305 | BOX | 2026-10-20 | 10
+CLP-305 | CASE | 2026-01-01 | 24
+CLP-305 | CASE | 2026-10-21 | 30
+CLP-305 | EA | 2026-01-01 | 1
+[P04] Approved shipment allocation schedule
+Allocation keys divide a movement across purchase lines. Apply the share after converting to individual units. The same key is inherited by a return against that shipment. Keys are stable during this reconciliation period.
+AL-1 | L04 | 25%
+AL-2 | L04 | 75%
+AL-3 | L04 | 50%
+[P05] Approved net-price schedules
+Select the resolved line price plan and use current approved ordered units for tier qualification. Open balance after shipments is not the tier quantity. Gross prices and adjustments are currency amounts per individual unit, not carton prices.
+Plan | Tier minimum ordered units | Gross/unit | Rebate A | Rebate B | Fee/unit | Credit/unit
+PLAN-C | 24000 | 11.84 | 12.5% | 12.5% | 0.045 | 0.025
+[P06] Physical movement revision export
+Order accounts include PO-298362 and a reference order. All quantities are positive magnitudes; kind defines their effect.
+Rows are ingestion records, not additive invoice lines. Resolve logical event ID and row revision before summing. Exact repeated copies may appear from export overlap. POSTED is effective physical activity; VOID is the selected revision's withdrawal.
+Event | Row rev | Kind | Order | SKU | Qty | UOM | Allocation | Reference | Occurred UTC | Recorded UTC | State
+RT-03 | 1 | RETURN | PO-298362 | CLP-305 | 4 | ORIGINAL | ORIGINAL | SH-10 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-02 | 1 | RETURN | PO-298362 | CLP-305 | 4 | ORIGINAL | ORIGINAL | SH-01 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-01 | 1 | RETURN | PO-298362 | CLP-305 | 4 | ORIGINAL | ORIGINAL | SH-04 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-298362",
+  "sku": "CLP-305",
+  "quantity_units": 21788,
+  "unit_price_cents": 909,
+  "currency": "CAD",
+  "ship_date": "2026-11-13",
+  "status": "active"
+}
+```
+
+Sol misses two fields. For quantity, AP-09 gives 25,050 ordered units. Valid L04 shipments contribute 3,096 CASE + 300 BOX + 82 EA = 3,478; three accepted returns remove 216, so 25,050 − (3,478 − 216) = 21,788. For price, AP-02 selects PLAN-C at the 24,000-unit tier. Sequential 12.5% rebates give 1,184 × 0.875 × 0.875 = 906.5 cents; adding the 4.50-cent fee and subtracting the 2.50-cent credit yields 908.5. The declared half-up rule gives 909; Sol returned 908, consistent with ties-to-even, though the output does not reveal why. Luna cross-repair returned 21,465 units and 482 cents, 323 units and 427 cents below the expected values. This did not add a new wrong field: the other five fields stayed correct.
+
+Measured answers, with value correctness separated from evidence and final acceptance:
+
+| Attempt | Open units | Unit cents | Status | Seven values exact | All field citations supported | Accepted |
+|---|---:|---:|---|---|---|---|
+| Original (GPT-6.1 Sol) | 21778 | 908 | active | no | yes | no |
+| Original (GPT-6 Luna) | 29198 | 511 | active | no | yes | no |
+| Fresh Sol retry (GPT-6.1 Sol) | 21788 | 909 | active | yes | yes | yes |
+| Sol self-repair (GPT-6.1 Sol) | 21788 | 909 | active | yes | yes | yes |
+| Luna cross-repair (GPT-6 Luna) | 21465 | 482 | active | no | yes | no |
+
+The two Sol follow-ups fix both the ten-unit balance error and the one-cent rounding error. Luna leaves errors of 323 units and 427 cents. Re-verification is necessary even when the repair receives an accurate diagnosis.
+
+Across the three selected Sol misses, each original had valid citations for all seven fields; rejection came from incorrect values. A fresh Sol retry and a verifier-guided Sol repair each corrected and passed all three. Luna cross-repair passed none. The cross answers changed rather than copying the original: their existing value errors grew, while fields that had originally been correct remained correct. The metric `new wrong fields = 0` therefore does not mean the cross answers were unchanged or improved.
+
+#### Example 4: Measured Sol success (`recon-0766b619f8765b016872`)
+
+Selected rendered evidence from the saved source packet (the complete packet is in `data/sol_v3/cases.jsonl`):
+
+```text
+[P01] Signed purchase order
+Order PO-276360 | Issued 2026-10-15T08:00:00Z | Status active
+Order defaults apply only where a line has no explicit value. Empty cells mean inherit, not missing approval.
+Default currency | Default requested date | Default price plan
+EUR | 2026-11-09 | PLAN-A
+Line | SKU | Ordered individual units | Price plan | Requested date | Currency
+L03 | RIV-404 | 22758 | INHERIT | INHERIT | INHERIT
+[P02] Commercial approval register
+Order PO-276360
+Scope ALL means order default; a named line is its own override. Authority ranks: Controller 3, Buyer 2, Planner 1. Recorded time controls availability, effective time controls when an approved change applies. Blank fields do not amend the prior value.
+Approval | Line scope | Authority | Revision | Effective UTC | Recorded UTC | Approved | Changed fields
+AP-02 | L03 | 2 | 2 | 2026-10-18T08:00:00Z | 2026-10-18T09:00:00Z | YES | price_plan=PLAN-C; ship_date=2026-11-12
+AP-01 | ALL | 3 | 7 | 2026-10-20T09:00:00Z | 2026-10-20T09:20:00Z | YES | price_plan=PLAN-B; ship_date=2026-11-14
+AP-03 | L03 | 2 | 4 | 2026-10-21T10:00:00Z | 2026-10-22T09:00:00Z | YES | ordered_units=24858
+AP-09 | L03 | 2 | 5 | 2026-10-21T10:00:00Z | 2026-10-23T09:00:00Z | YES | ordered_units=25208
+AP-06 | L03 | 3 | 10 | 2026-10-24T13:00:00Z | 2026-10-24T11:00:00Z | YES | ordered_units=30758
+AP-05 | L03 | 3 | 9 | 2026-10-23T11:00:00Z | 2026-10-24T12:30:00Z | YES | ordered_units=29758; price_plan=PLAN-A
+AP-04 | L03 | 1 | 99 | 2026-10-23T10:00:00Z | 2026-10-23T10:30:00Z | YES | ordered_units=28758; ship_date=2026-11-20
+AP-08 | L03 | 3 | 11 | 2026-10-23T12:00:00Z | 2026-10-23T12:10:00Z | NO | price_plan=PLAN-B
+AP-10 | L03 | 2 | 1 | 2026-10-22T10:00:00Z | 2026-10-23T09:10:00Z | YES | ship_date=2026-11-13
+[P03] Effective-dated warehouse UOM master
+Individual-unit factors below are effective from the listed calendar date. A shipment uses its occurred date, not its ingestion date. An accepted return uses its original shipment's UOM and occurred date even when the packaging master changed before the return.
+SKU | UOM | Effective from | Individual units per UOM
+RIV-404 | BOX | 2026-01-01 | 20
+RIV-404 | BOX | 2026-10-20 | 16
+RIV-404 | CASE | 2026-01-01 | 24
+RIV-404 | CASE | 2026-10-21 | 30
+RIV-404 | EA | 2026-01-01 | 1
+[P04] Approved shipment allocation schedule
+Allocation keys divide a movement across purchase lines. Apply the share after converting to individual units. The same key is inherited by a return against that shipment. Keys are stable during this reconciliation period.
+AL-1 | L03 | 25%
+AL-2 | L03 | 75%
+AL-3 | L03 | 50%
+[P05] Approved net-price schedules
+Select the resolved line price plan and use current approved ordered units for tier qualification. Open balance after shipments is not the tier quantity. Gross prices and adjustments are currency amounts per individual unit, not carton prices.
+Plan | Tier minimum ordered units | Gross/unit | Rebate A | Rebate B | Fee/unit | Credit/unit
+PLAN-C | 24000 | 6.84 | 7.5% | 12.5% | 0.0275 | 0.0125
+[P06] Physical movement revision export
+Order accounts include PO-276360 and a reference order. All quantities are positive magnitudes; kind defines their effect.
+Rows are ingestion records, not additive invoice lines. Resolve logical event ID and row revision before summing. Exact repeated copies may appear from export overlap. POSTED is effective physical activity; VOID is the selected revision's withdrawal.
+Event | Row rev | Kind | Order | SKU | Qty | UOM | Allocation | Reference | Occurred UTC | Recorded UTC | State
+RT-02 | 1 | RETURN | PO-276360 | RIV-404 | 4 | ORIGINAL | ORIGINAL | SH-01 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-03 | 1 | RETURN | PO-276360 | RIV-404 | 4 | ORIGINAL | ORIGINAL | SH-10 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-01 | 1 | RETURN | PO-276360 | RIV-404 | 4 | ORIGINAL | ORIGINAL | SH-04 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-276360",
+  "sku": "RIV-404",
+  "quantity_units": 21272,
+  "unit_price_cents": 555,
+  "currency": "EUR",
+  "ship_date": "2026-11-13",
+  "status": "active"
+}
+```
+
+This ordinary Sol success combines ledger reconciliation and tiered pricing. AP-09 sets ordered demand at 25,208 units. Eligible shipments contribute 3,600 CASE + 464 BOX + 88 EA = 4,152; three accepted returns subtract 216, leaving 3,936 shipped and 21,272 open units. AP-02 selects PLAN-C, and the 24,000-unit ordered tier uses 684 cents gross. The two rebates apply in sequence: 684 × 0.925 × 0.875 + 2.75 − 1.25 = 554.71875 cents, which rounds to 555.
+
+Measured answers, with value correctness separated from evidence and final acceptance:
+
+| Attempt | Open units | Unit cents | Status | Seven values exact | All field citations supported | Accepted |
+|---|---:|---:|---|---|---|---|
+| Original (GPT-6.1 Sol) | 21272 | 555 | active | yes | yes | yes |
+| Original (GPT-6 Luna) | 20174 | 604 | active | no | yes | no |
+
+Sol passes this ordinary case on its first attempt. Luna misses both displayed numerical fields. This source is excluded from the Sol repair cohort because selection requires a Sol failure, not merely disagreement between the models.
+
+#### Example 5: Measured Sol success (`recon-08e5076fb7fde1e5ed19`)
+
+Selected rendered evidence from the saved source packet (the complete packet is in `data/sol_v3/cases.jsonl`):
+
+```text
+[P01] Signed purchase order
+Order PO-747377 | Issued 2026-10-15T08:00:00Z | Status active
+Order defaults apply only where a line has no explicit value. Empty cells mean inherit, not missing approval.
+Default currency | Default requested date | Default price plan
+CAD | 2026-11-09 | PLAN-A
+Line | SKU | Ordered individual units | Price plan | Requested date | Currency
+L04 | VAL-216 | 22720 | INHERIT | INHERIT | INHERIT
+[P02] Commercial approval register
+Order PO-747377
+Scope ALL means order default; a named line is its own override. Authority ranks: Controller 3, Buyer 2, Planner 1. Recorded time controls availability, effective time controls when an approved change applies. Blank fields do not amend the prior value.
+Approval | Line scope | Authority | Revision | Effective UTC | Recorded UTC | Approved | Changed fields
+AP-05 | L04 | 3 | 9 | 2026-10-23T11:00:00Z | 2026-10-24T12:30:00Z | YES | ordered_units=29720; price_plan=PLAN-A
+AP-09 | L04 | 2 | 5 | 2026-10-21T10:00:00Z | 2026-10-23T09:00:00Z | YES | ordered_units=25170
+AP-10 | L04 | 2 | 1 | 2026-10-22T10:00:00Z | 2026-10-23T09:10:00Z | YES | ship_date=2026-11-13
+AP-02 | L04 | 2 | 2 | 2026-10-18T08:00:00Z | 2026-10-18T09:00:00Z | YES | price_plan=PLAN-C; ship_date=2026-11-12
+AP-08 | L04 | 3 | 11 | 2026-10-23T12:00:00Z | 2026-10-23T12:10:00Z | NO | price_plan=PLAN-B
+AP-06 | L04 | 3 | 10 | 2026-10-24T13:00:00Z | 2026-10-24T11:00:00Z | YES | ordered_units=30720
+AP-04 | L04 | 1 | 99 | 2026-10-23T10:00:00Z | 2026-10-23T10:30:00Z | YES | ordered_units=28720; ship_date=2026-11-20
+AP-03 | L04 | 2 | 4 | 2026-10-21T10:00:00Z | 2026-10-22T09:00:00Z | YES | ordered_units=24820
+AP-01 | ALL | 3 | 7 | 2026-10-20T09:00:00Z | 2026-10-20T09:20:00Z | YES | price_plan=PLAN-B; ship_date=2026-11-14
+[P03] Effective-dated warehouse UOM master
+Individual-unit factors below are effective from the listed calendar date. A shipment uses its occurred date, not its ingestion date. An accepted return uses its original shipment's UOM and occurred date even when the packaging master changed before the return.
+SKU | UOM | Effective from | Individual units per UOM
+VAL-216 | BOX | 2026-01-01 | 12
+VAL-216 | BOX | 2026-10-20 | 10
+VAL-216 | CASE | 2026-01-01 | 24
+VAL-216 | CASE | 2026-10-21 | 30
+VAL-216 | EA | 2026-01-01 | 1
+[P04] Approved shipment allocation schedule
+Allocation keys divide a movement across purchase lines. Apply the share after converting to individual units. The same key is inherited by a return against that shipment. Keys are stable during this reconciliation period.
+AL-1 | L04 | 25%
+AL-2 | L04 | 75%
+AL-3 | L04 | 50%
+[P05] Approved net-price schedules
+Select the resolved line price plan and use current approved ordered units for tier qualification. Open balance after shipments is not the tier quantity. Gross prices and adjustments are currency amounts per individual unit, not carton prices.
+Plan | Tier minimum ordered units | Gross/unit | Rebate A | Rebate B | Fee/unit | Credit/unit
+PLAN-C | 24000 | 5.47 | 12.5% | 2.5% | 0.0325 | 0.025
+[P06] Physical movement revision export
+Order accounts include PO-747377 and a reference order. All quantities are positive magnitudes; kind defines their effect.
+Rows are ingestion records, not additive invoice lines. Resolve logical event ID and row revision before summing. Exact repeated copies may appear from export overlap. POSTED is effective physical activity; VOID is the selected revision's withdrawal.
+Event | Row rev | Kind | Order | SKU | Qty | UOM | Allocation | Reference | Occurred UTC | Recorded UTC | State
+RT-03 | 1 | RETURN | PO-747377 | VAL-216 | 4 | ORIGINAL | ORIGINAL | SH-10 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-02 | 1 | RETURN | PO-747377 | VAL-216 | 4 | ORIGINAL | ORIGINAL | SH-01 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+RT-01 | 1 | RETURN | PO-747377 | VAL-216 | 4 | ORIGINAL | ORIGINAL | SH-04 | 2026-10-24T10:15:00Z | 2026-10-24T10:20:00Z | POSTED
+```
+
+Expected answer:
+
+```json
+{
+  "order_id": "PO-747377",
+  "sku": "VAL-216",
+  "quantity_units": 22024,
+  "unit_price_cents": 467,
+  "currency": "CAD",
+  "ship_date": "2026-11-13",
+  "status": "active"
+}
+```
+
+This second ordinary Sol success shows why a return uses its referenced shipment's packaging rule. AP-09 gives 25,170 ordered units. The selected shipment totals are 3,024 CASE + 270 BOX + 68 EA = 3,362 units. The three 4-CASE returns each use the referenced October 18 shipment's 24-unit CASE factor and 75% allocation, removing 72 each. Open units are 25,170 − (3,362 − 216) = 22,024. PLAN-C at the 24,000-unit tier gives 547 × 0.875 × 0.975 + 3.25 − 2.50 = 467.409375 cents, rounded to 467.
+
+Measured answers, with value correctness separated from evidence and final acceptance:
+
+| Attempt | Open units | Unit cents | Status | Seven values exact | All field citations supported | Accepted |
+|---|---:|---:|---|---|---|---|
+| Original (GPT-6.1 Sol) | 22024 | 467 | active | yes | yes | yes |
+| Original (GPT-6 Luna) | 21625 | 522 | active | no | yes | no |
+
+Sol also passes this case on its first attempt, while Luna returns the wrong balance and price. Together these two ordinary examples show that the three repaired cases are exceptions within Sol's 45 original successes, not representative of every long packet.
+
+### What the comparison can and cannot say
+
+The paired design can describe which intervention recovered the selected original errors under this prompt and call budget. It cannot show that Sol improved generally, that errors are caused by a particular document feature, or that the repairs would help after training. The original and intervention answers share case text, and selection on original failure makes the selected sample unlike a random set of documents.
+
+Sol answered 45/48 collection cases with all seven values correct at baseline; Luna answered 0/48. Choosing any original answer from either model covers 45/48 cases. Adding the intervention answers raises that oracle coverage to 48/48, a gain of 3 cases in this cohort. Fresh retry and Sol repair each recover the same three selected misses; Luna cross-repair adds none. Sol also passed all 12/12 audit cases, a measured ceiling on that small audit sample. These are answer-selection bounds, not observed training gains or claims about future capability.
+
+The audit cases are held out from selection and repair. They measure only the declared layout or source variation. A fixed set of 12 cases is a descriptive check, not evidence of broad generalization. The tool records token usage and elapsed time, while Codex CLI does not provide a USD charge for these subscription calls; report cash cost as unavailable rather than zero.
+
+### Limitations
+
+The pilot tests 24 cases and did not reach its two-miss threshold; main intervention cases are selected for an original Sol value or schema miss. Results therefore describe a difficulty-enriched, selected subset. The 12-case audit is separate and excluded from selection. The main source families share most rules, so they are not isolated difficulty ablations; the v3 generator produces active orders by design, so no finally cancelled order was tested. Model aliases are not dated snapshots. Both models used low reasoning, batches of two, and disabled tools, so this is one inference setup rather than either model's performance ceiling. Prompt lengths differ by intervention because repairs include the previous answer and external verifier feedback; calls are matched by item count, not token or compute cost. The feedback is privileged: the verifier knows the exact synthetic record. A counterfactual check that added P01 to quantity citations where that missing source alone caused rejection changed zero acceptances among 129 main answers, but that narrow result does not establish that the verifier is generally correct. No model weights are updated, so corrected answers are candidate correction data, not evidence of training benefit. Synthetic source rules and programmatic scoring may not match naturally occurring purchasing records.
+
+### Reproducing the v3 round
+
+The normal notebook path replays only the saved v1, hard-v2 and Sol-miss-v3 caches. A missing cache entry must stop offline replay. The pilot ladder, main collection and intervention arms use separate request keys and directories. A live smoke run requires an explicit setting and a separate temporary root; it must not replace the saved pilot or main artifacts.
+
+The main run had 66 CLI requests, 0 transport failures and 0 batch parse failures. It used 1,883,887 input tokens and 39,083 output tokens. Calls per arm were:
+
+| Call group | CLI requests | Item attempts | Input tokens | Output tokens | Subprocess seconds |
+|---|---:|---:|---:|---:|---:|
+| audit | 12 | 24 | 347,166 | 7,092 | 121.9 |
+| cross repair | 2 | 3 | 50,220 | 416 | 10.0 |
+| fresh retry | 2 | 3 | 51,057 | 1,238 | 20.0 |
+| original collection | 48 | 96 | 1,383,838 | 28,988 | 487.8 |
+| self repair | 2 | 3 | 51,606 | 1,349 | 26.5 |
+
+Each intervention used two CLI requests for its three cases, because the runner batches at most two cases. The seconds column sums subprocess durations; parallel calls overlap, so it is not wall-clock duration or a latency benchmark. Sol repair used 51,606 input and 1,349 output tokens, compared with 51,057 and 1,238 for fresh retry.
+
+Pilot ladder requests are separate: 24 across 24 cases. Across all 90 pilot and main requests, usage was 2,536,509 input tokens and 50,306 output tokens. These are subscription CLI token counts; USD cost is unavailable, not zero. Cached replay makes no model calls.
+
+The v3 study uses fixed model aliases, low reasoning, disabled tools and batches of two. Its findings describe this single inference setup. Any follow-up that changes batch size, reasoning or source length should pair conditions on the same cases and report usage as well as accuracy.
+
+
+## 13. Future work and further reading
 
 The linked sources were checked on October 24, 2026. The generated examples support a narrow extraction study; the follow-up work below addresses the remaining uncertainty.
 
 ### Future work
 
-- Build a matched difficulty ladder between v1 (Sol 360/360 accepted; Luna 310/360 under the reviewed policy) and hard-v2 (Sol 128/128; Luna 0/128). Vary document length and business-rule density one at a time, then compare per-case field and citation outcomes. Add one-case batches and higher reasoning as paired settings under a fixed token budget; this run used batches of four and low reasoning.
-- Double hard-v2 to at least 128 source slots while preserving the family mix. Measure case-level acceptance and field correctness with uncertainty clustered by case; 127 original responses had value errors, and repeated draws share each case.
-- Expand the held-out audit with new business rules and measure field and citation acceptance separately. The current audit changes document layout while retaining the generated rules, so it does not test semantic transfer.
-- Ask procurement specialists to annotate a stratified sample of long packs for answer correctness, citation sufficiency and source naturalness. The run had one evidence-only rejection, while the larger issue was value errors; human review would test where the programmatic verifier agrees with people.
-- Train on a controlled subset of the exported preference and repair data, then evaluate on newly authored, held-out rules and layouts. The current repairs add 0 new distinct accepted cases, so the learning test should measure generalization rather than just fixing already covered rows.
+- Repeat the recovery comparison on a larger collection with independently authored source templates. The three selected Sol misses were all recovered by both Sol arms, so more misses are needed to estimate whether that pattern holds.
+- Compare one-case and two-case batches, and low versus higher reasoning, on the same source packs with token use reported. This run used low reasoning and batches of two; it cannot explain why the three Sol misses occurred.
+- Change one source rule at a time, such as revision authority, returns, unit conversion or tier rounding. The current families share most rules, and the pilot miss counts were 1, 0 and 1, so the ladder does not show a monotonic difficulty effect.
+- Give the extractor a calculator or a small ledger-reconciliation tool on paired source packs. Measure balance and rounding errors plus tool cost; all four original Sol field errors here were numerical, but the current run disabled tools.
+- If a later, separately approved study trains on these candidates, reserve new templates and a new model snapshot for evaluation. This notebook collected correction data but did not test whether training changes performance.
 
 ### Further reading
+
+The links were checked on October 24, 2026.
+
+- [Large Language Models Cannot Self-Correct Reasoning Yet](https://arxiv.org/abs/2310.01798) (Huang et al., 2024). Studies self-correction without external feedback; the v3 self-repair arm instead receives field labels from an external verifier with access to the synthetic answer key.
 
 - [Learning to Build the Environment: Self-Evolving Reasoning RL via Verifiable Environment Synthesis](https://arxiv.org/abs/2605.14392) (Shi et al., 2026). Motivates executable task generation, verification, difficulty calibration and novelty checks; this notebook does not reproduce its training procedure.
 - [Self-Evolve With a Reference: Anchored Training of Tool-Integrated Agents](https://arxiv.org/abs/2610.09856) (Liao et al., 2026). Motivates distinguishing curriculum-selection signals from correctness and learning; this notebook uses exact references, not historical policy anchors.
