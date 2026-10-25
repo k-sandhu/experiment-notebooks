@@ -1,0 +1,204 @@
+# Replay complete trajectories and allocator decisions from frozen local data.
+F=DATA/'frontier_v5'
+frontier_protocol=read_json(F/'comparison_protocol.json')
+assert frontier_protocol['no_weight_updates'] and not frontier_protocol['export_train_ready']
+for rel,expected in frontier_protocol['inputs_sha256'].items():assert hashlib.sha256((DATA/rel).read_bytes()).hexdigest()==expected,rel
+frontier_tasks=read_json(F/'tasks_comparison.json');FT={t['task_id']:t for t in frontier_tasks}
+frontier_episodes=[read_json(p) for p in sorted((F/'comparison/episodes').glob('*.json'))];FE={e['episode_id']:e for e in frontier_episodes}
+frontier_calls={p.stem:read_json(p) for p in sorted((F/'comparison/cache').glob('*.json'))}
+frontier_schedules=[read_json(p) for p in sorted((F/'comparison/schedules').glob('*.json'))]
+assert len(frontier_schedules)==8
+erows=[];grows=[];crows=[];exports=[];seen=set()
+for e in frontier_episodes:
+    t=FT[e['task_id']];v=verify_calendar(t,e['initial_state'],e['verification']['final_state'],'All availability calendars were not read before writing' not in e['verification']['details'])
+    if e['reward'] is not None:assert e['reward']==(0 if e['status']=='policy_tool_violation' else v['reward'])
+    else:assert e['stop_reason'] in {'budget_cap','transport_error','circuit_breaker'}
+    for step in e['trace']:
+        c=frontier_calls[step['cache_key']];assert c['complete'] and digest(c['request'])==c['key']
+        assert c['request']['model']==MODELS[e['policy']] and c['text']==step['raw_text']
+        assert c['request']['sample_id']['episode_id']==e['episode_id']
+    failure_type=None
+    if e['reward']==0:failure_type='protocol violation' if e['status']=='policy_tool_violation' else ('action horizon' if e['stop_reason']=='horizon' else ('feasible nonoptimal plan' if v['feasible'] else 'business constraint violation'))
+    erows.append(dict(episode_id=e['episode_id'],policy=e['policy'],allocator=e['sample']['allocator'],block=e['sample']['block'],task_id=e['task_id'],reward=e['reward'],calls=len(e['trace']),stop_reason=e['stop_reason'],feasible=v['feasible'],objective_minutes=v['objective_minutes'],optimum_minutes=v['optimum_minutes'],gap_minutes=v['objective_gap_minutes'] if v['feasible'] else None,status=e['status'],failure_type=failure_type))
+for s in frontier_schedules:
+    assert s['complete'] and s['used']==s['cap']==90
+    keys=[x['cache_key'] for x in s['ledger']]
+    actual=[k for k,c in frontier_calls.items() if c['request']['policy']==s['policy'] and c['request']['sample_id']['sample']['allocator']==s['allocator'] and c['request']['sample_id']['sample']['block']==s['block']]
+    assert len(keys)==len(set(keys))==90 and set(keys)==set(actual)
+    assert not seen.intersection(keys);seen.update(keys)
+    for item in s['ledger']:
+        c=frontier_calls[item['cache_key']];u=c.get('usage',{})
+        crows.append(dict(policy=s['policy'],allocator=s['allocator'],block=s['block'],**item,status=c['status'],input_tokens=u.get('input_tokens',0),cached_input_tokens=u.get('cached_input_tokens',0),output_tokens=u.get('output_tokens',0),reasoning_output_tokens=u.get('reasoning_output_tokens',0),elapsed_s=c.get('elapsed_s',0),usage_reported=bool(u)))
+    for g in s['groups']:
+        es=[FE[x] for x in g['episodes']];rs=[e['reward'] for e in es];known=[r for r in rs if r is not None];complete=len(rs)==len(known)==4;mixed=complete and 0<sum(known)<4
+        for h in g['predictor_history']:assert h['p_effective']==(1.0 if 0<h['successes']<h['n'] else (4-h['n'])/5)
+        if g['decision']=='abandon_unanimous_probe':assert s['allocator']=='adaptive' and len(known)==2 and len(set(known))==1
+        grows.append(dict(policy=s['policy'],allocator=s['allocator'],block=s['block'],task_id=g['task_id'],group_id=g['group_id'],complete=bool(complete),mixed=bool(mixed),successes=sum(known),known=len(known),rewards=rs,decision=g['decision'],start_call=g['start_call'],end_call=g['end_call']))
+        if complete:
+            for e,r in zip(es,rs):exports.append(dict(episode_id=e['episode_id'],policy=s['policy'],allocator=s['allocator'],task_id=g['task_id'],group_id=g['group_id'],reward=r,rloo_advantage=r-(sum(rs)-r)/3,messages=e['initial_messages'],trace=e['trace'],train_ready=False,missing=['attested fixed weights and tokenizer','token IDs','policy log probabilities','action token masks'],note='Collection-only diagnostic. Deterministic adaptive abandonment changes pair inclusion; no unbiased full-pool gradient claim. No weight updates.'))
+assert len(seen)==len(frontier_calls)==720
+frontier_ed=pd.DataFrame(erows);frontier_gd=pd.DataFrame(grows);frontier_cd=pd.DataFrame(crows);srows=[]
+for label in MODELS:
+    for alloc in ['uniform','adaptive']:
+        es=frontier_ed[(frontier_ed.policy==label)&(frontier_ed.allocator==alloc)];gs=frontier_gd[(frontier_gd.policy==label)&(frontier_gd.allocator==alloc)];cs=frontier_cd[(frontier_cd.policy==label)&(frontier_cd.allocator==alloc)]
+        srows.append(dict(policy=label,allocator=alloc,calls=len(cs),episodes=len(es),known=int(es.reward.notna().sum()),successes=int(es.reward.sum()),failures=int((es.reward==0).sum()),complete_groups=int(gs.complete.sum()),mixed_groups=int(gs.mixed.sum()),all_pass_groups=int((gs.complete&(gs.successes==4)).sum()),all_fail_groups=int((gs.complete&(gs.successes==0)).sum()),abandoned_groups=int((gs.decision=='abandon_unanimous_probe').sum()),unknown_outcomes=int(es.reward.isna().sum()),covered_tasks=int(es.task_id.nunique()),input_tokens=int(cs.input_tokens.sum()),cached_input_tokens=int(cs.cached_input_tokens.sum()),output_tokens=int(cs.output_tokens.sum()),reasoning_output_tokens=int(cs.reasoning_output_tokens.sum()),call_seconds=float(cs.elapsed_s.sum()),usage_missing=int((~cs.usage_reported).sum())))
+frontier_summary=pd.DataFrame(srows)
+prefix_rows=[]
+for g in grows:
+    if g['allocator']=='uniform' and g['complete']:
+        prefix_same=len(set(g['rewards'][:2]))==1
+        prefix_rows.append(dict(policy=g['policy'],task_id=g['task_id'],group_id=g['group_id'],rewards=g['rewards'],prefix_unanimous=prefix_same,full_group_mixed=g['mixed'],mixed_group_would_be_abandoned=bool(prefix_same and g['mixed'])))
+frontier_prefix_audit=pd.DataFrame(prefix_rows);frontier_prefix_audit.to_csv(F/'uniform_prefix_audit.csv',index=False,lineterminator='\n');save_json(F/'uniform_prefix_audit.json',prefix_rows)
+for name,df in [('summary',frontier_summary),('episodes',frontier_ed),('groups',frontier_gd),('calls',frontier_cd)]:df.to_csv(F/(name+'.csv'),index=False,lineterminator='\n')
+with (F/'rollouts_diagnostic.jsonl').open('w',encoding='utf-8',newline='\n') as f:
+    for row in exports:f.write(canonical(row)+'\n')
+calibration_tasks={t['task_id']:t for p in sorted(F.glob('tasks_calibration*.json')) for t in read_json(p)}
+calibration_dirs=[p for p in sorted(F.glob('calibration*')) if p.is_dir()]
+calibration_episodes=[read_json(p) for folder in calibration_dirs for p in sorted((folder/'episodes').glob('*.json'))]
+calibration_calls=[read_json(p) for folder in calibration_dirs for p in sorted((folder/'cache').glob('*.json'))]
+calibration_call_map={c['key']:c for c in calibration_calls};calibration_seen=set()
+for c in calibration_calls:assert c['complete'] and digest(c['request'])==c['key']
+for e in calibration_episodes:
+    for step in e['trace']:
+        c=calibration_call_map[step['cache_key']];assert c['text']==step['raw_text'] and c['request']['sample_id']['episode_id']==e['episode_id']
+        assert c['key'] not in calibration_seen;calibration_seen.add(c['key'])
+assert calibration_seen==set(calibration_call_map)
+calrows=[]
+for e in calibration_episodes:
+    t=calibration_tasks[e['task_id']]
+    if e['reward'] is not None:assert e['reward']==verify_calendar(t,e['initial_state'],e['verification']['final_state'],'All availability calendars were not read before writing' not in e['verification']['details'])['reward']
+    calrows.append(dict(cohort=e['phase'],stop_reason=e['stop_reason'],task_id=e['task_id'],level=t['level'],episode_id=e['episode_id'],replicate=e['sample']['replicate'],reward=e['reward'],calls=len(e['trace']),feasible=e['verification']['feasible'],objective_minutes=e['verification']['objective_minutes'],optimum_minutes=e['verification']['optimum_minutes']))
+frontier_calibration=pd.DataFrame(calrows);frontier_calibration.to_csv(F/'calibration_results.csv',index=False,lineterminator='\n')
+save_json(F/'results.json',dict(protocol=frontier_protocol['protocol'],summary=srows,groups=grows,uniform_prefix_audit=prefix_rows,comparison_calls=720,calibration_calls=len(calibration_calls),calibration=calrows,no_weight_updates=True,weights_loaded_or_updated=False,train_ready=False,comparison_cli_billed_usd=None,authoring_reported_list_usd=read_json(F/read_json(F/'selection.json').get('authoring_file','authoring.json'))['reported_list_usd']))
+display(frontier_summary[['policy','allocator','calls','known','successes','failures','mixed_groups','complete_groups','abandoned_groups','unknown_outcomes']])
+
+ids=sorted(frontier_calibration.task_id.unique(),key=lambda tid:(calibration_tasks[tid]['level'],'fees' in tid,tid));cohorts=sorted(frontier_calibration.cohort.unique(),key=lambda c:min(e['started'] for e in calibration_episodes if e['phase']==c));pairs=[(c,r) for c in cohorts for r in sorted(frontier_calibration[frontier_calibration.cohort==c].replicate.unique())]
+fig,ax=plt.subplots(figsize=(10,max(4,.48*len(pairs)+1.8)))
+for j,tid in enumerate(ids):
+    for i,(cohort,rep) in enumerate(pairs):
+        z=frontier_calibration[(frontier_calibration.task_id==tid)&(frontier_calibration.cohort==cohort)&(frontier_calibration.replicate==rep)]
+        if z.empty:continue
+        q=z.iloc[0];known=pd.notna(q.reward);mark=str(int(q.reward)) if known else ('?' if q.calls else '-');color=('#186e79' if q.reward==1 else '#a54438') if known else '#999999'
+        ax.scatter(j,i,s=440,marker='s',color=color);ax.text(j,i,mark,ha='center',va='center',color='white',fontsize=11)
+_labels=[str(calibration_tasks[tid]['level'])+' reviews'+('\nwith fees' if 'fees' in tid else '')+'\ncase '+tid.rsplit('-',1)[-1] for tid in ids]
+ax.set_xticks(range(len(ids)),_labels);ax.set_yticks(range(len(pairs)),[(('180s' if c=='calibration' else c.replace('calibration_','')+' / 600s')+' repeat '+str(r)) for c,r in pairs]);ax.set_ylim(-.6,len(pairs)-.4);ax.set_xlim(-.6,len(ids)-.4);ax.set_xlabel('1 = valid optimum; 0 = known failure; ? = interrupted; - = not started');ax.set_ylabel('Separate calibration cohorts');ax.set_title(f"Sol calibration: {int(frontier_calibration.reward.sum())} successes, {int((frontier_calibration.reward==0).sum())} failures, {int(frontier_calibration.reward.isna().sum())} unknown slots")
+ax.invert_yaxis()
+fig.savefig(FIGURES/'frontier5_calibration.png',bbox_inches='tight');show_figure(fig)
+
+fig,axes=plt.subplots(1,2,figsize=(11,4.3),sharey=True)
+for ax,label in zip(axes,MODELS):
+    for x,alloc in enumerate(['uniform','adaptive']):
+        z=frontier_gd[(frontier_gd.policy==label)&(frontier_gd.allocator==alloc)];values=[int(z[z.block==b].mixed.sum()) for b in range(2)]
+        ax.bar(x,sum(values),color=COLORS[alloc],width=.6);ax.text(x,sum(values)+.09,str(sum(values)),ha='center',fontweight='bold')
+        for b,value in enumerate(values):ax.scatter(x+[-.12,.12][b],value,marker=['o','s'][b],facecolors='white',edgecolors='black',zorder=4)
+    ax.set_xticks([0,1],['Uniform','Adaptive']);ax.set_title(label);ax.set_ylabel('Complete mixed groups of four');ax.set_ylim(-.12,max(3,int(frontier_summary.mixed_groups.max())+1))
+axes[0].plot([],[],marker='o',mfc='white',mec='black',ls='',label='Block 0');axes[0].plot([],[],marker='s',mfc='white',mec='black',ls='',label='Block 1');axes[0].legend()
+_ys=frontier_summary.set_index(['policy','allocator'])
+fig.suptitle('180 calls each: Sol '+str(int(_ys.loc[('GPT-6.1 Sol','uniform'),'mixed_groups']))+' vs '+str(int(_ys.loc[('GPT-6.1 Sol','adaptive'),'mixed_groups']))+'; Luna '+str(int(_ys.loc[('GPT-6 Luna','uniform'),'mixed_groups']))+' vs '+str(int(_ys.loc[('GPT-6 Luna','adaptive'),'mixed_groups']))+' mixed groups (uniform vs adaptive)')
+fig.savefig(FIGURES/'frontier5_yield.png',bbox_inches='tight');show_figure(fig)
+
+fig,axes=plt.subplots(1,2,figsize=(11,4.2))
+for ax,label in zip(axes,MODELS):
+    for i,alloc in enumerate(['uniform','adaptive']):
+        z=frontier_summary[(frontier_summary.policy==label)&(frontier_summary.allocator==alloc)].iloc[0];k,n=int(z.successes),int(z.known)
+        ax.bar(i,k/n if n else 0,color=COLORS[alloc]);ax.text(i,(k/n if n else 0)+.04,f'{k}/{n}',ha='center')
+    ax.set_xticks([0,1],['Uniform','Adaptive']);ax.set_ylim(0,1.15);ax.set_ylabel('Success fraction among known outcomes');ax.set_title(label)
+_sol=frontier_summary[frontier_summary.policy=='GPT-6.1 Sol'];_luna=frontier_summary[frontier_summary.policy=='GPT-6 Luna']
+fig.suptitle(f"Collected attempts: Sol {int(_sol.successes.sum())}/{int(_sol.known.sum())}; Luna {int(_luna.successes.sum())}/{int(_luna.known.sum())} successes")
+fig.savefig(FIGURES/'frontier5_success.png',bbox_inches='tight');show_figure(fig)
+
+fig,axes=plt.subplots(1,2,figsize=(12,4.8))
+for ax,label in zip(axes,MODELS):
+    ids=[t['task_id'] for t in frontier_tasks];m=np.full((2,len(ids)),np.nan)
+    for i,alloc in enumerate(['uniform','adaptive']):
+        for j,tid in enumerate(ids):
+            z=frontier_ed[(frontier_ed.policy==label)&(frontier_ed.allocator==alloc)&(frontier_ed.task_id==tid)];n=int(z.reward.notna().sum());k=int(z.reward.sum())
+            if n:m[i,j]=k/n
+            ax.text(j,i,f'{k}/{n}' if n else ('unknown only' if len(z) else 'unseen'),ha='center',va='center',zorder=3,color='white' if n and k/n>.6 else 'black',fontsize=9)
+    ax.imshow(np.ma.masked_invalid(m),vmin=0,vmax=1,cmap='YlGnBu',aspect='auto');ax.set_xticks(range(len(ids)),ids,rotation=25,ha='right');ax.set_yticks([0,1],['Uniform','Adaptive']);ax.set_title(label);ax.set_xlabel('Fresh held-out tasks: successes / known attempts')
+fig.suptitle(f"Four fresh cases: {int(_sol.failures.sum())} known Sol failures and {int(_luna.failures.sum())} known Luna failures")
+fig.savefig(FIGURES/'frontier5_coverage.png',bbox_inches='tight');show_figure(fig)
+
+# Select the first Sol failure by stable episode ID, preferring the held-out
+# comparison. Retain its actual response rather than constructing a failure.
+choices=sorted([e for e in frontier_episodes if e['policy']=='GPT-6.1 Sol' and e['reward']==0 and e['stop_reason']=='policy_finish' and e['status']=='ok'],key=lambda e:e['episode_id'])
+if not choices:choices=sorted([e for e in calibration_episodes if e['reward']==0 and e['stop_reason']=='policy_finish' and e['status']=='ok'],key=lambda e:e['episode_id'])
+frontier_failure=choices[0];ft=FT.get(frontier_failure['task_id'],calibration_tasks.get(frontier_failure['task_id']));after={r['event_id']:r for r in frontier_failure['verification']['final_state']['events']}
+panel=[]
+for j,sp in enumerate(ft['specs']):
+    eid='target-'+str(j);panel.append(dict(review=j,people=', '.join(sp['people']),weight=sp['weight'],duration_minutes=15*sp['duration'],original_start=next(r['start'] for r in ft['records'] if r['event_id']==eid),oracle_start=ft['expected'][eid]['start'],observed_start=after[eid]['start_datetime'],observed_end=after[eid]['end_datetime']))
+save_json(F/'failure_example.json',dict(episode_id=frontier_failure['episode_id'],task_id=ft['task_id'],phase=frontier_failure['phase'],reward=frontier_failure['reward'],calls=len(frontier_failure['trace']),verification={k:v for k,v in frontier_failure['verification'].items() if k!='final_state'},rows=panel))
+fig,axes=plt.subplots(1,2,figsize=(11,5.5),sharey=True);base=datetime.datetime(2026,11,6,9,tzinfo=datetime.timezone.utc)
+for ax,observed in zip(axes,[False,True]):
+    for j,sp in enumerate(ft['specs']):
+        row=panel[j];stamp=row['observed_start'] if observed else row['oracle_start'];s=(datetime.datetime.fromisoformat(iso_time(stamp))-base).total_seconds()/3600
+        ax.barh(j,sp['duration']/4,left=s,height=.45,color='#a54438' if observed else '#186e79');ax.text(s+sp['duration']/8,j,'R'+str(j),va='center',ha='center',color='white',fontsize=9)
+        for b in set(b for p in sp['people'] for b in ft['busy'][p]):ax.barh(j,.25,left=b/4,height=.75,facecolor='none',edgecolor='#777777',hatch='///',linewidth=.5,zorder=0)
+    ax.set_yticks(range(len(panel)),['R'+str(j)+' '+ '/'.join(p[0].upper() for p in sp['people'])+'; w='+str(sp['weight']) for j,sp in enumerate(ft['specs'])]);ax.set_xticks(range(0,max(8,ft['horizon_units']//4)+1,2),[f'{9+h:02d}:00' for h in range(0,max(8,ft['horizon_units']//4)+1,2)]);ax.set_xlim(0,max(8,ft['horizon_units']/4));ax.set_xlabel('UTC on 6 November 2026',fontsize=11);ax.tick_params(labelsize=10);ax.set_title(('Observed Sol: invalid' if not frontier_failure['verification']['feasible'] else 'Observed Sol: valid, higher cost') if observed else 'One certified valid optimum',fontsize=12)
+v=frontier_failure['verification'];finding='Sol finishes a valid plan above the minimum cost' if v['feasible'] else 'Sol finishes a schedule that violates the task constraints';fig.suptitle(ft['task_id']+': '+finding,fontsize=12)
+axes[0].set_title(f"Valid optimum: {v['optimum_minutes']} penalty points",fontsize=12);axes[1].set_title(('Invalid' if not v['feasible'] else 'Valid, higher cost')+f": raw cost {v['objective_minutes']} penalty points",fontsize=12)
+fig.savefig(FIGURES/'frontier5_failure.png',bbox_inches='tight');show_figure(fig)
+display(pd.DataFrame(panel));display(Markdown('Saved Sol failure `'+frontier_failure['episode_id']+'`: '+str(v['details'])))
+
+print('Comparison: 720 cached CLI invocations. Calibration:',len(calibration_calls),'cached invocations. Billed policy dollars: unavailable. No weight updates.')
+
+# Secondary diagnostics. These never change rewards or collector decisions.
+sol_complete=frontier_ed[(frontier_ed.policy=='GPT-6.1 Sol')&(frontier_ed.status=='ok')&(frontier_ed.stop_reason=='policy_finish')&frontier_ed.reward.notna()].copy()
+sol_valid=sol_complete[sol_complete.feasible].copy();sol_valid['excess_percent']=100*sol_valid.gap_minutes/sol_valid.optimum_minutes
+quality=dict(completed=len(sol_complete),valid=int(sol_complete.feasible.sum()),invalid=int((~sol_complete.feasible).sum()),optimal=int((sol_complete.reward==1).sum()),feasible_nonoptimal=int(((sol_complete.feasible)&(sol_complete.reward==0)).sum()),median_valid_excess_percent=float(sol_valid.excess_percent.median()),max_valid_excess_percent=float(sol_valid.excess_percent.max()))
+quality['failed_within_one_percent']=int(((sol_valid.reward==0)&(sol_valid.excess_percent<=1)).sum())
+quality['posthoc_diagnostic']=True
+sol_valid.to_csv(F/'sol_valid_costs.csv',index=False,lineterminator='\n');saved=read_json(F/'results.json');saved['sol_quality_diagnostics']=quality;save_json(F/'results.json',saved)
+fig,axes=plt.subplots(1,2,figsize=(11,4.6));labels=['Valid optimum','Valid, higher cost','Constraint error'];values=[quality['optimal'],quality['feasible_nonoptimal'],quality['invalid']]
+bars=axes[0].bar(range(3),values,color=['#186e79','#b17b2d','#a54438'])
+for b,n in zip(bars,values):axes[0].text(b.get_x()+b.get_width()/2,n+.12,str(n),ha='center')
+axes[0].set_xticks(range(3),labels,rotation=15,ha='right');axes[0].set_ylabel('Completed Sol attempts');axes[0].set_title('Separate feasibility from minimum cost');axes[0].set_ylim(0,max(values)+2)
+ids=[t['task_id'] for t in frontier_tasks]
+for _,r in sol_valid.iterrows():
+    x=ids.index(r.task_id)+(int(r.episode_id[:4],16)/65535-.5)*.18
+    axes[1].scatter(x,r.excess_percent,marker='o' if r.reward==1 else 'x',color=COLORS[r.allocator],s=46)
+axes[1].axhline(0,color='black',lw=.8,ls='--');axes[1].set_xticks(range(len(ids)),ids,rotation=25,ha='right');axes[1].set_ylabel('Extra total penalty cost above optimum (%)');axes[1].set_title('Valid plans: circle = optimum, x = higher cost');axes[1].set_ylim(-.3,max(.8,float(sol_valid.excess_percent.max())+.5));axes[1].set_xlabel('Invalid plans are excluded from cost regret')
+for alloc in ['uniform','adaptive']:axes[1].scatter([],[],color=COLORS[alloc],label=alloc.capitalize())
+axes[1].legend();axes[1].set_xlim(-.5,len(ids)-.5)
+for j,tid in enumerate(ids):
+    if not (sol_valid.task_id==tid).any():axes[1].text(j,.08,'no completed\nvalid plan',transform=axes[1].get_xaxis_transform(),ha='center',va='bottom',fontsize=9,color='#555555')
+fig.suptitle(f"Sol: {quality['optimal']} optima, {quality['feasible_nonoptimal']} valid higher-cost plans, {quality['invalid']} constraint "+('error' if quality['invalid']==1 else 'errors'))
+fig.savefig(FIGURES/'frontier5_quality.png',bbox_inches='tight');show_figure(fig)
+
+# Resource accounting is a measured secondary result, not a matched budget.
+order=[(p,a) for p in MODELS for a in ['uniform','adaptive']]
+fig,axes=plt.subplots(1,2,figsize=(12,4.8));labels=[]
+for i,(policy,allocator) in enumerate(order):
+    z=frontier_summary[(frontier_summary.policy==policy)&(frontier_summary.allocator==allocator)].iloc[0]
+    assert z.output_tokens>=z.reasoning_output_tokens
+    reason=z.reasoning_output_tokens/1000;other=(z.output_tokens-z.reasoning_output_tokens)/1000
+    axes[0].bar(i,reason,color='#2e5671',label='Reasoning' if i==0 else None)
+    axes[0].bar(i,other,bottom=reason,color='#c5cbd0',edgecolor='#555555',hatch='///',label='Other output' if i==0 else None)
+    axes[0].text(i,(reason+other)*1.015,f'{reason+other:,.1f}',ha='center',fontsize=9)
+    axes[1].bar(i,z.call_seconds/3600,color=COLORS[allocator]);axes[1].text(i,z.call_seconds/3600*1.015,f'{z.call_seconds/3600:.2f}',ha='center',fontsize=9)
+    labels.append(policy.replace('GPT-','')+'\n'+allocator)
+for ax in axes:ax.set_xticks(range(4),labels,rotation=15,ha='right');ax.margins(y=.18)
+axes[0].set_ylabel('Reported output tokens (thousands)');axes[0].set_title('Reasoning is included in total output');axes[0].legend()
+axes[1].set_ylabel('Summed model-call time (hours)');axes[1].set_title('Call duration is not parallel wall time')
+fig.suptitle('Every bar uses 180 calls; measured output and time differ')
+fig.savefig(FIGURES/'frontier5_effort.png',bbox_inches='tight');show_figure(fig)
+
+_cal_resource_rows=[]
+for _cohort in sorted({c['request']['protocol'].replace('27-adaptive-v5-','') for c in calibration_calls},key=lambda cohort:min(c['started'] for c in calibration_calls if c['request']['protocol'].replace('27-adaptive-v5-','')==cohort)):
+    _cs=[c for c in calibration_calls if c['request']['protocol'].replace('27-adaptive-v5-','')==_cohort]
+    _cal_resource_rows.append(dict(cohort=_cohort,calls=len(_cs),input_tokens=sum(c.get('usage',{}).get('input_tokens',0) for c in _cs),output_tokens=sum(c.get('usage',{}).get('output_tokens',0) for c in _cs),reasoning_output_tokens=sum(c.get('usage',{}).get('reasoning_output_tokens',0) for c in _cs),summed_call_seconds=sum(c.get('elapsed_s',0) for c in _cs),usage_missing=sum(not c.get('usage') for c in _cs)))
+pd.DataFrame(_cal_resource_rows).to_csv(F/'calibration_resources.csv',index=False,lineterminator='\n')
+_saved=read_json(F/'results.json');_saved['calibration_resources']=_cal_resource_rows;save_json(F/'results.json',_saved)
+
+def _api_errors(episodes):
+    rows=[]
+    for e in episodes:
+        for s in e['trace']:
+            obs=s.get('observation',{}).get('tool_result') or {}
+            if isinstance(obs,dict) and (obs.get('isError') or int(obs.get('status_code',200))>=400):rows.append(dict(episode_id=e['episode_id'],task_id=e['task_id'],turn=s['turn'],status_code=obs.get('status_code'),text=str(obs.get('text','')),timezone_binding='timeZone' in str(obs.get('text',''))))
+    return rows
+_cal_errors=_api_errors(calibration_episodes);_comparison_errors=_api_errors(frontier_episodes)
+_api_audit=dict(calibration_errors=_cal_errors,comparison_errors=_comparison_errors,calibration_count=len(_cal_errors),calibration_timezone_count=sum(x['timezone_binding'] for x in _cal_errors),comparison_count=len(_comparison_errors),comparison_timezone_count=sum(x['timezone_binding'] for x in _comparison_errors),clarified_before_comparison=True)
+save_json(F/'api_error_audit.json',_api_audit);_saved=read_json(F/'results.json');_saved['api_error_audit']=_api_audit;save_json(F/'results.json',_saved)
+
+_health=list((F/'health/cache').glob('*.json'));_saved=read_json(F/'results.json');_saved['health_probe_calls']=len(_health);save_json(F/'results.json',_saved)

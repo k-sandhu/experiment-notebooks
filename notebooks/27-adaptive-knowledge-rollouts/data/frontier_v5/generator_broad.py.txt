@@ -1,0 +1,184 @@
+"""Fresh planning fixtures. Exhaustive branch-and-bound plus independent MILP."""
+from pathlib import Path
+import json,random,datetime as dt,sqlite3,hashlib,math
+import numpy as np
+from scipy.optimize import milp,Bounds,LinearConstraint
+from scipy.sparse import lil_matrix
+
+def frontier_stamp(s):
+    return (dt.datetime(2026,11,6,9)+dt.timedelta(minutes=15*s)).isoformat()+'Z'
+
+def overlap(a,b):return a[0]<b[1] and b[0]<a[1]
+
+def solve_frontier(specs,busy,precedence):
+    n=len(specs); allowed=[]
+    for sp in specs:
+        allowed.append([s for s in sp['options'] if not any(overlap((s,s+sp['duration']),(b,b+1)) for p in sp['people'] for b in busy[p])])
+    if any(not x for x in allowed):return None
+    costs=[[sp['weight']*abs(s-sp['old']) for s in opts] for sp,opts in zip(specs,allowed)]
+    # Binary compatibility encodes room occupancy and both directions of every
+    # precedence rule. Domain propagation is independent of the MILP below.
+    compatibility=[]
+    for j,opts in enumerate(allowed):
+        per_option=[]
+        for s in opts:
+            masks=[]
+            for k,others in enumerate(allowed):
+                bits=0
+                for q,t in enumerate(others):
+                    good=j==k or not overlap((s,s+specs[j]['duration']),(t,t+specs[k]['duration']))
+                    for a,b,g in precedence:
+                        if (a,b)==(j,k) and s+specs[j]['duration']+g>t:good=False
+                        if (a,b)==(k,j) and t+specs[k]['duration']+g>s:good=False
+                    if good:bits|=1<<q
+                masks.append(bits)
+            per_option.append(masks)
+        compatibility.append(per_option)
+    ordered=[sorted(range(len(opts)),key=lambda q:(costs[j][q],opts[q])) for j,opts in enumerate(allowed)]
+    best=[math.inf,None];nodes=0;feasible_leaves=0;seen={}
+    def search(domains,assigned,cost,chosen):
+        nonlocal nodes,feasible_leaves
+        nodes+=1
+        if nodes>2000000:raise RuntimeError('Exact primary node cap; reject this candidate before policy calls')
+        remaining=[j for j in range(n) if not (assigned>>j)&1]
+        if not remaining:
+            feasible_leaves+=1
+            if cost<best[0]:best[:]=[cost,tuple(chosen)]
+            return
+        bound=cost
+        for j in remaining:
+            q=next(q for q in ordered[j] if (domains[j]>>q)&1);bound+=costs[j][q]
+        if bound>=best[0]:return
+        state=(assigned,tuple(domains))
+        if seen.get(state,math.inf)<=cost:return
+        seen[state]=cost
+        j=min(remaining,key=lambda q:(domains[q].bit_count(),-specs[q]['weight'],q))
+        for q in ordered[j]:
+            if not (domains[j]>>q)&1:continue
+            child=list(domains);child[j]=0;valid=True
+            for k in remaining:
+                if k==j:continue
+                child[k]&=compatibility[j][q][k]
+                if not child[k]:valid=False;break
+            if not valid:continue
+            values=list(chosen);values[j]=allowed[j][q]
+            search(child,assigned|(1<<j),cost+costs[j][q],values)
+    search([(1<<len(opts))-1 for opts in allowed],0,0,[None]*n)
+    if best[1] is None:return None
+
+    # Independently encode one binary per review/start. Pairwise incompatibility
+    # rows cover shared-room overlaps and every precedence violation.
+    variables=[(j,s) for j,opts in enumerate(allowed) for s in opts]; rows=[];lb=[];ub=[]
+    for j in range(n):rows.append([k for k,(r,s) in enumerate(variables) if r==j]);lb.append(1);ub.append(1)
+    for a,(i,s) in enumerate(variables):
+        for b in range(a):
+            j,t=variables[b]
+            if i==j:continue
+            incompatible=overlap((s,s+specs[i]['duration']),(t,t+specs[j]['duration']))
+            for u,v,g in precedence:
+                if (u,v)==(i,j) and s+specs[i]['duration']+g>t:incompatible=True
+                if (u,v)==(j,i) and t+specs[j]['duration']+g>s:incompatible=True
+            if incompatible:rows.append([a,b]);lb.append(-np.inf);ub.append(1)
+    A=lil_matrix((len(rows),len(variables)))
+    for i,row in enumerate(rows):A[i,row]=1
+    c=np.array([specs[j]['weight']*abs(s-specs[j]['old']) for j,s in variables],float)
+    result=milp(c,integrality=np.ones(len(c)),bounds=Bounds(0,1),constraints=LinearConstraint(A.tocsr(),lb,ub),options={'time_limit':120,'mip_rel_gap':0.0})
+    assert result.success,(result.message,n)
+    assert round(result.fun)==best[0],(result.fun,best)
+    ms=[None]*n
+    for x,(j,s) in zip(result.x,variables):
+        if x>.5:ms[j]=s
+    assert all(s is not None for s in ms)
+    return dict(starts=list(best[1]),cost_units=int(best[0]),search_nodes=nodes,visited_feasible_leaves=feasible_leaves,milp_cost_units=int(round(result.fun)),milp_starts=ms,allowed_after_availability=allowed)
+
+def make_frontier(seed,n,task_id,phase,data_root,wording):
+    rng=random.Random(seed); horizon=4*n; people=['alice','bob','carol','dan']; pairs=[['alice','bob'],['carol','dan'],['alice','carol'],['bob','dan'],['alice','dan'],['bob','carol']]
+    precedence=[[j,j+n//2,j%2] for j in range(n//2)]
+    for attempt in range(300):
+        busy={p:sorted(rng.sample(range(horizon),2)) for p in people}
+        specs=[]
+        for j in range(n):
+            duration=(3 if j%2==0 else 2)
+            specs.append(dict(index=j,people=pairs[j%6],duration=duration,weight=rng.choice([1,2,3,4,5]),old=rng.randrange(horizon-duration+1),options=sorted(rng.sample(range(horizon-duration+1),min(n+7,horizon-duration+1)))))
+        solution=solve_frontier(specs,busy,precedence)
+        if solution:break
+    else:raise AssertionError('No feasible generated case')
+    records=[]
+    for p,slots in busy.items():
+        for k,s in enumerate(slots):records.append(dict(event_id=f'busy-{p}-{k}',calendar_id='cal-'+p,user_id='alice',summary=p.title()+' protected '+str(k),start=frontier_stamp(s),end=frontier_stamp(s+1)))
+    for j,sp in enumerate(specs):records.append(dict(event_id='target-'+str(j),calendar_id='cal-'+sp['people'][0],user_id='alice',summary='Project review '+str(j),start=frontier_stamp(sp['old']),end=frontier_stamp(sp['old']+sp['duration'])))
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from calendar_env.server.database.models import Base,User,Calendar
+    from calendar_env.server.database.models.event import Event
+    from calendar_env.server.database.models.acl import ACLs,Scope,AclRole,ScopeType
+    db=data_root/'tmp'/(task_id+'.sqlite')
+    if db.exists():db.unlink()
+    eng=create_engine('sqlite:///'+str(db));Base.metadata.create_all(eng)
+    with Session(eng) as ses:
+        for p in people:ses.add(User(user_id=p,email=p+'@example.test',name=p.title(),static_token='nb27-fictional-'+p,timezone='UTC'))
+        ses.commit()
+        for p in people:
+            ses.add(Calendar(calendar_id='cal-'+p,user_id='alice',summary=p.title()+' managed availability',time_zone='UTC',is_primary=p=='alice'));ses.add(Scope(id='scope-'+p,type=ScopeType.user,value=p+'@example.test'))
+        ses.commit()
+        for p in people:ses.add(ACLs(id='owner-'+p,calendar_id='cal-'+p,user_id='alice',scope_id='scope-alice',role=AclRole.owner))
+        for row in records:ses.add(Event(event_id=row['event_id'],calendar_id=row['calendar_id'],user_id='alice',summary=row['summary'],start_datetime=dt.datetime.fromisoformat(row['start'].replace('Z','')),end_datetime=dt.datetime.fromisoformat(row['end'].replace('Z','')),start_timezone='UTC',end_timezone='UTC'))
+        ses.commit()
+    eng.dispose()
+    with sqlite3.connect(db) as con:sql='\n'.join(x for x in con.iterdump() if x.startswith('INSERT INTO'))+'\n'
+    (data_root/'calendar'/(task_id+'.sql')).write_text(sql,encoding='utf-8',newline='\n')
+    public=[dict(review=j,title='Project review '+str(j),calendar='cal-'+sp['people'][0],people=sp['people'],duration_minutes=15*sp['duration'],weight=sp['weight'],allowed_start_UTC=[frontier_stamp(s) for s in sp['options']]) for j,sp in enumerate(specs)]
+    prompt=wording+' '+json.dumps(dict(reviews=public,precedence=[[i,j,15*g] for i,j,g in precedence]),separators=(',',':'))
+    return dict(task_id=task_id,environment='calendar',family=f'{n}-review frontier planning',phase=phase,created='2026-10-24',seed=seed,people=people,date='2026-11-06',level=n,prompt=prompt,records=records,specs=specs,busy=busy,precedence=precedence,horizon_units=horizon,expected={'target-'+str(j):dict(start=frontier_stamp(s),end=frontier_stamp(s+specs[j]['duration'])) for j,s in enumerate(solution['starts'])},oracle=dict(solution,objective_minutes=15*solution['cost_units'],witness_calls=5+n),generator_attempt=attempt)
+
+def structural_plan_count(task,stop_after=10000,node_cap=2000000):
+    specs=task['specs'];allowed=task['oracle']['allowed_after_availability'];prec=task['precedence'];n=len(specs);compat=[]
+    for j,opts in enumerate(allowed):
+        row=[]
+        for s in opts:
+            masks=[]
+            for k,other in enumerate(allowed):
+                bits=0
+                for q,t in enumerate(other):
+                    good=j==k or not overlap((s,s+specs[j]['duration']),(t,t+specs[k]['duration']))
+                    for a,b,g in prec:
+                        if (a,b)==(j,k) and s+specs[j]['duration']+g>t:good=False
+                        if (a,b)==(k,j) and t+specs[k]['duration']+g>s:good=False
+                    if good:bits|=1<<q
+                masks.append(bits)
+            row.append(masks)
+        compat.append(row)
+    nodes=0;count=0;stopped=None
+    def visit(domains,assigned):
+        nonlocal nodes,count,stopped
+        nodes+=1
+        if nodes>node_cap:stopped='node_cap';return
+        remaining=[j for j in range(n) if not (assigned>>j)&1]
+        if not remaining:
+            count+=1
+            if count>=stop_after:stopped='threshold'
+            return
+        j=min(remaining,key=lambda k:(domains[k].bit_count(),k));bits=domains[j]
+        while bits and not stopped:
+            bit=bits&-bits;q=bit.bit_length()-1;bits^=bit;child=list(domains);child[j]=0;good=True
+            for k in remaining:
+                if k==j:continue
+                child[k]&=compat[j][q][k]
+                if not child[k]:good=False;break
+            if good:visit(child,assigned|(1<<j))
+    visit([(1<<len(x))-1 for x in allowed],0)
+    return dict(feasible_plans_seen=count,complete_enumeration=stopped is None,stop=stopped,search_nodes=nodes,required_lower_bound=stop_after,threshold_met=count>=stop_after)
+
+def make_filtered_frontier(base_seed,n,task_id,phase,data_root,wording):
+    trials=[]
+    for proposal in range(30):
+        # Calibration seeds are even and evaluation seeds are odd, including
+        # every rejected numerical proposal. The two streams cannot collide.
+        seed=2*(base_seed+10000*proposal)+(1 if phase=='comparison' else 0)
+        try:t=make_frontier(seed,n,task_id,phase,data_root,wording)
+        except (RuntimeError,AssertionError) as exc:
+            trials.append(dict(seed=seed,accepted=False,reason=str(exc)[:150]));continue
+        structural=structural_plan_count(t);trials.append(dict(seed=seed,accepted=structural['threshold_met'],structural=structural))
+        if structural['threshold_met']:
+            t['structural_choice_audit']=structural;t['generation_proposals']=trials;return t
+    raise RuntimeError('No numerically certified high-choice fixture within proposal cap')

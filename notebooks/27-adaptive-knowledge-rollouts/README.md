@@ -4,29 +4,25 @@ A buyer needs five kinds of equipment before a project starts. Each supplier has
 
 The ordinary approach is to read the workbook, remove impossible quotes, calculate each remaining plan and check the best one against every rule. An assistant can do the same work through a Python tool. The useful answer is a feasible buying plan with a correct total. A plausible explanation with the wrong total still causes the wrong purchasing decision.
 
-Consider a small **illustrative** example. Supplier X offers item A for $100 and B for $130. Supplier Y offers A for $110 and B for $100. Each used supplier charges $20 shipping. Buying the cheapest individual items costs $240 after two shipping fees. Buying both from Y costs $230. There is no measured model response in this example; it explains why the task needs a global calculation.
+Consider a small **illustrative** example. Supplier X offers item A for USD 100 and B for USD 130. Supplier Y offers A for USD 110 and B for USD 100. Each used supplier charges USD 20 shipping. Buying the cheapest individual items costs USD 240 after two shipping fees. Buying both from Y costs USD 230. There is no measured model response in this example; it explains why the task needs a global calculation.
 
 The same pattern appears in other office work. Moving one appointment can block another. Closing a payable ledger requires the latest record that was actually known at the close, rather than a later correction. This experiment uses three such tasks with exact, code-generated answers and real OpenEnv tools.
 
-A **rollout** is one saved attempt: the task, the model's proposed actions, the tool observations and the final result. A **reward** is the score assigned to that attempt. Here it is 1 for the complete requested outcome and 0 for a known failure. An unfinished attempt or a transport outage has an unknown reward. Weights are the learned parameters that determine a model's responses. This experiment collects evidence without loading or updating them.
+The harder follow-up plans a day of project reviews. In an illustrative calculation, moving a priority-3 review by 30 minutes costs 90 penalty points. A follow-up outside its free handoff window can add another 240 points. A low-movement agenda can therefore cost more than a different valid agenda. The assistant must compare the whole plan while preserving availability and ordering rules.
+
+A **rollout** is one saved attempt: the task, the model's proposed actions, the tool observations and the final result. A **reward** is the score assigned to that attempt. Here it is 1 for the complete requested outcome and 0 for a known failure. An attempt that exhausts its full task action allowance without the correct outcome receives 0. An interruption by the overall collection budget or a transport outage has an unknown reward. Weights are the learned parameters that determine a model's responses. This experiment collects evidence without loading or updating them.
 
 Repeating one task can produce a group of rewards. A **mixed group** contains a success and a failure. Such contrast is useful for illustrating group-relative reward methods: the collected data identifies better and worse attempts on the same task. It does not establish that training on them would improve a model.
 
-The question is whether an online allocator can collect more complete mixed groups than uniform collection under the same number of policy calls. The tested policies are `gpt-6.1-sol` and `gpt-6-luna`, both called through `codex exec` with medium reasoning. The dataset has 12 comparison cases, four in each of Calendar, FinQA and REPL, divided into two disjoint blocks. Six other cases were used for a separate pilot.
+Uniform collection takes four attempts on the same case. Adaptive collection first tries two: if their rewards agree, it abandons that group and moves to the next case; if they differ, it fills the group to four. The question is which method collects more complete mixed groups at the same budget.
 
-Both allocators receive 90 CLI invocations per model per block, or 180 per model and allocator. That is 720 primary comparison calls. Errors count against the cap. Every counted mixed group must contain exactly four completed, known-reward trajectories. The model, tools, task stream, horizon and reward checker are fixed within the comparison.
+One CLI invocation starts the Codex command-line program once and is the budget unit. Token use and elapsed time are measured separately.
 
-GPT-6.1 Sol: 0 uniform versus 0 adaptive mixed groups from 180 calls per allocator. GPT-6 Luna: 4 uniform versus 3 adaptive mixed groups from 180 calls per allocator.
+The latest follow-up uses a stronger difficulty pilot, then four new 12-review cases with conditional handoff costs. At the selected level, Sol produces 2 successes and 6 failures in eight completed calibration attempts, including both outcomes on the same input. 8/8 satisfy every hard scheduling constraint; reward 1 also requires the exact minimum cost. The pilot is excluded from the comparison.
 
-The primary run saved 134 trajectories: 128 have known rewards, of which 112 succeed, and 6 are unfinished or otherwise unknown. One CLI invocation starts the command-line program once and is the budget unit; token use and time are measured separately. The selected task mixture makes an adaptive arm's success rate unsuitable as a claim of improved model accuracy.
+On the four fresh cases, Sol has 6/8 uniform successes and 3/9 adaptive successes. At exactly **180 CLI calls per model and collector**, uniform collects 2 complete mixed Sol groups and adaptive collects 2. Luna collects 0 and 0 mixed groups. A group contains four completed known outcomes and counts as mixed only when both 0 and 1 appear. These are small descriptive samples from two task blocks. Each action uses a fresh CLI invocation with visible history; private reasoning is not carried between edits. The result describes that tool workflow. No model parameters are updated. Section 12 gives the fresh-case evidence.
 
-The largest caveat is the small number of full groups, from two task blocks. There was also an earlier interrupted run: 792 of its 960 calls failed in transport. Its raw data is retained, and it is excluded from the allocator ranking. The separately registered primary run uses a circuit breaker. Neither run performs weight updates.
-
-A separately registered follow-up adds two five-appointment planning cases and another 256 calls, with exactly 64 per policy and allocator. It follows the initial saturation finding and is reported separately. The stronger tasks and their measured outcomes appear in section 10.
-
-In that stress follow-up, GPT-6.1 Sol succeeds on 12/12 known collected trajectories.
-In that stress follow-up, GPT-6 Luna succeeds on 4/10 known collected trajectories.
-
+The earlier six-review comparison produced 29/29 known Sol successes and no mixed Sol groups, despite a failure in its separate pilot. That failed transfer motivates the stronger calibration here. The earlier scheduling, ledger and purchasing experiments remain separate evidence in sections 1 through 11; section 12 contains the current handoff-cost comparison.
 
 ## Contents
 
@@ -40,8 +36,10 @@ In that stress follow-up, GPT-6 Luna succeeds on 4/10 known collected trajectori
 - [8. Coverage, tokens and time](#8-coverage-tokens-and-time)
 - [9. Why frontier improvement stays difficult](#9-why-frontier-improvement-stays-difficult)
 - [10. Five-appointment planning stress test](#10-five-appointment-planning-stress-test)
-- [11. Limits, spend and reproduction](#11-limits-spend-and-reproduction)
-- [12. Future work and further reading](#12-future-work-and-further-reading)
+- [11. Finding Sol's planning boundary](#11-finding-sols-planning-boundary)
+- [12. A stronger planning boundary and fresh comparison](#12-a-stronger-planning-boundary-and-fresh-comparison)
+- [13. Limits, spend and reproduction](#13-limits-spend-and-reproduction)
+- [14. Future work and further reading](#14-future-work-and-further-reading)
 
 ```mermaid
 flowchart TD
@@ -56,6 +54,15 @@ flowchart TD
   result --> stressdata["Separate difficulty follow-up<br/>2 new code-generated planning cases"]
   stressdata --> stressauthor["Claude Opus 5.5 via claude -p<br/>1 more wording call"]
   stressauthor --> stress["2 policies x 2 allocators<br/>256 calls, 64 per arm"]
+  stress --> frontierwording["Claude Opus 5.5 via claude -p<br/>1 new wording call"]
+  frontierwording --> frontierpilot["New difficulty calibration<br/>2 six-review cases, 8 attempts, 89 calls"]
+  frontierpilot --> frontierfresh["4 new frozen scheduling cases<br/>Disjoint seeds; no model screening"]
+  frontierfresh --> frontierarms["2 policies x 2 collectors x 2 blocks<br/>720 calls, 180 per policy and collector"]
+  frontierarms --> frontierresult["Exact task rewards and mixed groups<br/>No weight updates"]
+  frontierresult --> strongerwording["Claude Opus 5.5 via claude -p<br/>1 final wording call"]
+  strongerwording --> strongerpilot["Stronger difficulty calibration<br/>40 scheduled slots, 591 CLI calls + 1 health probe"]
+  strongerpilot --> strongerfresh["4 new 12-review cases<br/>720 comparison calls, same 180 per collector"]
+  strongerfresh --> strongerresult["Both genuine Sol outcomes<br/>exact rewards, saved trajectories; no updates"]
 ```
 
 One quote-selection case travels through the lower path as follows. The code creates the workbook and computes every feasible plan's cost. The policy receives the business rules and a preview; the complete workbook lives in the REPL's `context` variable. Its JSON response chooses a tool. The environment executes that action and returns an observation. A final integer is compared with the exact minimum. Four independent attempts on that same case form one candidate reward group.
@@ -484,17 +491,571 @@ The diagnostic classifies this final plan as **feasible but nonoptimal**. Its we
 This harder task bank tests a different point on the difficulty scale. All-success groups leave little reward contrast; all-failure groups also leave little contrast. Useful signal requires reachable successes, meaningful failures and a checker that distinguishes them. The observed mixed-group counts show what this small collection actually obtained.
 
 
-## 11. Limits, spend and reproduction
+## 11. Finding Sol's planning boundary
+
+The earlier three-environment comparison gave Sol 70/70 known successes. The five-review follow-up gave it another 12/12. Those observations did not locate a task boundary. This follow-up deliberately searches for one before collecting the next comparison. A difficulty pilot answers whether the tasks can produce both rewards; it does not supply evaluation results.
+
+### A separate difficulty pilot
+
+The prepared ladder has six, seven, eight and nine reviews, with two generated cases at each level. Every review has a duration, two people, a movement weight and a list of allowed times. All reviews share one room. Protected availability, candidate times and precedence must all hold at once. At the selected level there are 13 listed times per review, or 4,826,809 combinations before filtering. More choices can make a valid schedule easier to find while making it harder to establish the cheapest complete schedule.
+
+All numerical records were authored on 24 October 2026, after Sol's documented 30 April 2026 cutoff and Luna's 18 May 2026 cutoff. The event date, 6 November 2026, is a fictional business date. Final wording comes from Claude Opus 5.5; numerical answers come from code. The synthetic fixtures are CC0-1.0, and their creation dates and model sources are saved in `data/frontier_v4/provenance.json` and `environment.json`.
+
+Each review has a fixed business priority, called its movement weight. The objective is weighted movement in minutes. Moving a weight-3 review by 30 minutes contributes 90; moving a weight-1 review by 15 minutes contributes 15. Their total is 105 weighted minutes. Lower is better among valid schedules. Reward 1 requires a valid schedule with the globally minimum total. Any equally good optimum is accepted. A valid but more expensive schedule receives 0, as does a schedule that breaks a constraint. For an invalid schedule, a low raw cost is not a useful alternative to the minimum valid cost.
+
+One exact search enumerates assignments. It skips a partial plan only when even its cheapest possible completion costs more than a valid plan already found. A second, independently encoded mixed-integer linear program (MILP) chooses one candidate time per review and excludes incompatible pairs. Both solvers agree on all eight prepared calibration optima and all four fresh comparison optima. A known valid plan also passes through the actual Calendar tools on every case. The models receive the business rules and observations; they do not receive the solver, gold schedules or verifier feedback during an attempt.
+
+Every rollout has 24 actions. A correct plan needs four availability reads, 6 edits and finish, or 11 actions at the chosen level. This leaves 13 actions for checks and repairs. The available tools and medium reasoning setting are the same for uniform and adaptive collection. The task's Calendar tool space has no Python optimizer. This measures the configured workflow; a model supplied with a solver could have a different boundary.
+
+The calibration rule was recorded before its calls: begin with two attempts on each case, then add two confirmation attempts when both outcomes appear. Stop at a level with success and failure on the same case. Transport errors and unfinished attempts do not meet that condition. Two pre-call amendments correct the default date bound and retain the earlier 180-call comparison budget. Both are time-stamped before the first tested-policy call. The pilot used only the 6-review level; the harder prepared levels were not needed and have no policy outcomes.
+
+| Calibration case   |   Completed known outcomes |   Successes |   Failures |   Unknown |   Policy calls |
+|:-------------------|---------------------------:|------------:|-----------:|----------:|---------------:|
+| calibration-6-0    |                          4 |           3 |          1 |         0 |             44 |
+| calibration-6-1    |                          4 |           4 |          0 |         0 |             45 |
+
+Sol's 7 successes and 1 failures across 8 known calibration attempts locate an observed boundary in this configured task. The same numerical case has both outcomes, so the contrast cannot be explained solely by one case being easier than another. Eight attempts are a calibration sample, not a precise accuracy estimate. All calibration calls are reported separately from the 720-call comparison.
+
+![Each square is one actual Sol calibration attempt, labeled with its exact binary reward.](figures/frontier_calibration.png)
+
+Columns identify fixed task inputs; rows identify repeated attempts. A 1 is a valid optimal plan, a 0 is a known task failure, and a question mark would mean unknown. The repeated outcomes show why one successful demonstration was insufficient. They do not reveal the model's internal sampling seed or prove that its served weights were identical throughout.
+
+### Fresh cases and equal budgets
+
+After calibration, the selected difficulty was recorded and four new cases were generated from prespecified disjoint seeds. No candidate evaluation case was tested and discarded. Feasibility filtering used only the exact solvers. Both collectors then received the same frozen stream of two tasks per block. Uniform completes groups of four. Adaptive probes two attempts, abandons a unanimous pair and completes a mixed pair to four. The Beta predictor, threshold 0.45 and fixed group size are unchanged from the earlier comparison, so this rerun changes the task difficulty rather than tuning the collector after seeing its outcome.
+
+```mermaid
+flowchart TD
+  wording["Claude Opus 5.5 via claude -p<br/>1 wording call; numeric gold comes from code"] --> ladder
+  ladder["Seeded difficulty ladder<br/>6 to 9 reviews, 8 prepared calibration cases"] --> check["Branch-and-bound + independent MILP<br/>8 matching optima and native Calendar witnesses"]
+  check --> pilot["GPT-6.1 Sol via codex exec<br/>2 cases x 4 attempts, 89 calls"]
+  pilot --> select["Freeze selected level: 6 reviews<br/>Same case has both rewards"]
+  select --> fresh["Generate 4 new cases from disjoint seeds<br/>2 disjoint task blocks, gold hidden from policies"]
+  fresh --> run["2 policies x 2 collectors x 2 blocks<br/>90 calls each, 720 calls total"]
+  run --> score["Official OpenEnv Calendar<br/>replay actions and verify final business state"]
+  score --> yield["Count complete mixed groups of 4<br/>Keep unknown outcomes, tokens and time"]
+  yield --> stop["Saved traces + diagnostic advantages<br/>No parameter updates"]
+```
+
+
+For example, one fresh case enters both collectors with identical records and rules. Each model call proposes a single Calendar action. The environment returns the actual tool result. At finish, the saved final state is checked against the business constraints and certified optimum. The collector sees the completed reward and decides whether to continue that group. It cannot inspect the outcomes of uncollected attempts.
+
+```mermaid
+flowchart LR
+  task["Frozen task + accumulated observations"] --> model["GPT-6.1 Sol or GPT-6 Luna<br/>codex exec, medium reasoning<br/>one JSON action"]
+  model --> calendar["Official OpenEnv Calendar<br/>list, inspect, patch or finish"]
+  calendar -->|"Not finished: append observation and wait for next call"| task
+  calendar -->|"Finished"| verifier["Check exact final state<br/>reward 0 or 1"]
+  verifier --> allocator["Uniform: continue to 4<br/>Adaptive: stop unanimous 2, otherwise 4"]
+  allocator -->|"New attempt: reset database and history; weights fixed"| task
+```
+
+Each of the eight model, collector and block arms is capped at 90 CLI invocations, including malformed responses. Two blocks give 180 per model and collector, exactly the earlier primary budget. The last attempt can be cut short by the cap; its reward remains unknown and it cannot complete a mixed group. Calls are matched, while tokens, elapsed time and billed dollars are not. Calibration is an additional, separately disclosed cost.
+
+### What the harder comparison collected
+
+Compare the bar heights for total complete mixed groups. The circle and square show the two separate block counts; they are not confidence intervals. A group is counted only after four known outcomes and only if it contains a success and a failure.
+
+![Uniform and adaptive complete mixed-group totals at exactly 180 calls each, with the two block counts shown as points.](figures/frontier_yield.png)
+
+| Policy      | Allocator   |   Calls |   Known |   Successes |   Failures |   Complete groups |   Mixed groups |   Abandoned groups |   Unknown outcomes |
+|:------------|:------------|--------:|--------:|------------:|-----------:|------------------:|---------------:|-------------------:|-------------------:|
+| GPT-6.1 Sol | uniform     |     180 |      14 |          14 |          0 |                 2 |              0 |                  0 |                  2 |
+| GPT-6.1 Sol | adaptive    |     180 |      15 |          15 |          0 |                 0 |              0 |                  7 |                  1 |
+| GPT-6 Luna  | uniform     |     180 |      11 |           1 |         10 |                 2 |              0 |                  0 |                  2 |
+| GPT-6 Luna  | adaptive    |     180 |      11 |           1 |         10 |                 1 |              1 |                  3 |                  2 |
+
+GPT-6.1 Sol produced 0 uniform and 0 adaptive mixed groups at 180 calls each. Uniform completed 2 full groups; adaptive completed 0 and abandoned 7 unanimous probes. The arms had 2 and 1 unknown outcomes. A difference of +0 groups describes this small run and does not establish a general allocator advantage.
+
+GPT-6 Luna produced 0 uniform and 1 adaptive mixed groups at 180 calls each. Uniform completed 2 full groups; adaptive completed 1 and abandoned 3 unanimous probes. The arms had 2 and 2 unknown outcomes. A difference of +1 groups describes this small run and does not establish a general allocator advantage.
+
+| Policy      |   Block |   Uniform mixed groups |   Adaptive mixed groups |   Calls per collector |
+|:------------|--------:|-----------------------:|------------------------:|----------------------:|
+| GPT-6.1 Sol |       0 |                      0 |                       0 |                    90 |
+| GPT-6.1 Sol |       1 |                      0 |                       0 |                    90 |
+| GPT-6 Luna  |       0 |                      0 |                       0 |                    90 |
+| GPT-6 Luna  |       1 |                      0 |                       1 |                    90 |
+
+GPT-6.1 Sol block 0 yields 0 uniform and 0 adaptive mixed groups. GPT-6.1 Sol block 1 yields 0 uniform and 0 adaptive mixed groups. GPT-6 Luna block 0 yields 0 uniform and 0 adaptive mixed groups. GPT-6 Luna block 1 yields 0 uniform and 1 adaptive mixed groups. The two blocks use different task seeds. Their counts show how much of the total comes from each small task stream. With only two blocks, a narrow error bar would overstate the evidence. Repeated attempts on the same case are also not independent samples of different office tasks.
+
+![Successes divided by known outcomes for each fixed policy and collector; unfinished attempts are excluded from the denominator and reported separately.](figures/frontier_success.png)
+
+GPT-6.1 Sol completed 14/14 successful known uniform attempts and 15/15 successful known adaptive attempts. These rates describe the collected task mixtures. Adaptive stopping changes which case gets the next attempt, so a higher pooled fraction would not mean the fixed model improved.
+
+GPT-6 Luna completed 1/11 successful known uniform attempts and 1/11 successful known adaptive attempts. These rates describe the collected task mixtures. Adaptive stopping changes which case gets the next attempt, so a higher pooled fraction would not mean the fixed model improved.
+
+![Per-task successes and known-attempt counts for the four new cases, with unvisited cells labeled.](figures/frontier_coverage.png)
+
+Each cell gives successes divided by known attempts on one frozen task. This table of outcomes makes coverage and within-case failures visible. Different denominators come from actual action costs and adaptive stopping. The small cells can change after one additional attempt; they do not rank broad subject-matter ability.
+
+### Actual successes, failures and collector decisions
+
+The following cases are selected by a fixed, inspectable rule: the first calibration task with both outcomes, then the first relevant saved episode or group by stable ID. They illustrate the mechanisms visible in the full outcome table. They are not a substitute for that table.
+
+#### Example 1: the same calibration input produces both rewards
+
+Case `calibration-6-0` has the following actual inputs. Protected intervals are {"alice": [14, 22], "bob": [14, 17], "carol": [5, 13], "dan": [2, 4]} in 15-minute units after 09:00 UTC. For example, unit 4 covers 10:00 to 10:15. The precedence triples `[[0, 2, 1], [2, 4, 0], [1, 3, 1], [3, 5, 0]]` use the same 15-minute gap units.
+
+|   Review | People       |   Duration (min) |   Weight | Original UTC   |   Allowed time choices |
+|---------:|:-------------|-----------------:|---------:|:---------------|-----------------------:|
+|        0 | alice, bob   |               45 |        4 | 10:15          |                     13 |
+|        1 | carol, dan   |               30 |        1 | 09:00          |                     13 |
+|        2 | alice, carol |               45 |        1 | 10:45          |                     13 |
+|        3 | bob, dan     |               30 |        4 | 09:15          |                     13 |
+|        4 | alice, dan   |               45 |        4 | 14:30          |                     13 |
+|        5 | bob, carol   |               30 |        5 | 12:30          |                     13 |
+
+The certified minimum is 1170 weighted minutes. One minimum has starts `['09:45', '10:30', '12:45', '11:15', '14:45', '13:30']` in review-number order. Any different schedule with the same minimum and no violations also passes. The exact instructions below include every allowed time.
+
+<details><summary>Exact task instructions supplied to the tested policies</summary>
+
+```text
+You are Alice, and you coordinate four managed availability calendars: cal-alice, cal-bob, cal-carol and cal-dan.
+
+**Task:** Reschedule every numbered project review on 6 November 2026, moving them together as a single bundle.
+
+**Procedure**
+1. Read all four calendars before making your first write.
+2. Patch every existing project review to its new start time.
+3. Call finish when done.
+
+**Preservation requirements**
+- Keep each review's event ID, title, calendar ownership, duration and attendees unchanged.
+- Do not alter any protected event.
+
+**Availability rules**
+- When checking availability, ignore every existing (old) project review, since all of them are being moved.
+- Every other event blocks the person whose calendar it appears on.
+- Each review must fit the availability of every person listed in its specification.
+
+**Scheduling constraints**
+- No two project reviews may overlap, even if their attendees differ, because they all use the same review room.
+- Each review may start only at one of the allowed UTC start times listed in its specification.
+- Each precedence rule [i, j, gap_minutes] means review i must end at least gap_minutes before review j starts.
+
+**Objective**
+- Minimize the sum, over all reviews, of the review's weight multiplied by the absolute difference in minutes between its new start and its original start.
+- Any schedule that achieves the minimum total is accepted. There is no tie-break.
+
+**Limits**
+- You have 24 actions in total. Reads, writes, optional checks and finish all count toward this limit.
+- No Python tool is available in this Calendar environment.
+
+The numbered review specifications and precedence rules follow. {"reviews":[{"review":0,"title":"Project review 0","calendar":"cal-alice","people":["alice","bob"],"duration_minutes":45,"weight":4,"allowed_start_UTC":["2026-11-06T09:00:00Z","2026-11-06T09:15:00Z","2026-11-06T09:45:00Z","2026-11-06T10:15:00Z","2026-11-06T10:30:00Z","2026-11-06T10:45:00Z","2026-11-06T11:00:00Z","2026-11-06T12:15:00Z","2026-11-06T12:30:00Z","2026-11-06T12:45:00Z","2026-11-06T13:15:00Z","2026-11-06T13:45:00Z","2026-11-06T14:30:00Z"]},{"review":1,"title":"Project review 1","calendar":"cal-carol","people":["carol","dan"],"duration_minutes":30,"weight":1,"allowed_start_UTC":["2026-11-06T09:45:00Z","2026-11-06T10:00:00Z","2026-11-06T10:15:00Z","2026-11-06T10:30:00Z","2026-11-06T10:45:00Z","2026-11-06T11:00:00Z","2026-11-06T11:15:00Z","2026-11-06T12:15:00Z","2026-11-06T13:15:00Z","2026-11-06T13:30:00Z","2026-11-06T14:15:00Z","2026-11-06T14:30:00Z","2026-11-06T15:00:00Z"]},{"review":2,"title":"Project review 2","calendar":"cal-alice","people":["alice","carol"],"duration_minutes":45,"weight":1,"allowed_start_UTC":["2026-11-06T09:00:00Z","2026-11-06T09:15:00Z","2026-11-06T09:30:00Z","2026-11-06T10:15:00Z","2026-11-06T10:45:00Z","2026-11-06T11:00:00Z","2026-11-06T11:15:00Z","2026-11-06T11:30:00Z","2026-11-06T11:45:00Z","2026-11-06T12:00:00Z","2026-11-06T12:45:00Z","2026-11-06T13:45:00Z","2026-11-06T14:00:00Z"]},{"review":3,"title":"Project review 3","calendar":"cal-bob","people":["bob","dan"],"duration_minutes":30,"weight":4,"allowed_start_UTC":["2026-11-06T09:00:00Z","2026-11-06T09:45:00Z","2026-11-06T10:00:00Z","2026-11-06T10:15:00Z","2026-11-06T10:30:00Z","2026-11-06T10:45:00Z","2026-11-06T11:15:00Z","2026-11-06T11:30:00Z","2026-11-06T11:45:00Z","2026-11-06T12:00:00Z","2026-11-06T12:45:00Z","2026-11-06T13:15:00Z","2026-11-06T14:15:00Z"]},{"review":4,"title":"Project review 4","calendar":"cal-alice","people":["alice","dan"],"duration_minutes":45,"weight":4,"allowed_start_UTC":["2026-11-06T09:00:00Z","2026-11-06T09:45:00Z","2026-11-06T10:00:00Z","2026-11-06T10:30:00Z","2026-11-06T10:45:00Z","2026-11-06T11:15:00Z","2026-11-06T11:30:00Z","2026-11-06T12:15:00Z","2026-11-06T12:45:00Z","2026-11-06T13:00:00Z","2026-11-06T13:30:00Z","2026-11-06T14:00:00Z","2026-11-06T14:45:00Z"]},{"review":5,"title":"Project review 5","calendar":"cal-bob","people":["bob","carol"],"duration_minutes":30,"weight":5,"allowed_start_UTC":["2026-11-06T09:30:00Z","2026-11-06T10:15:00Z","2026-11-06T10:30:00Z","2026-11-06T11:00:00Z","2026-11-06T11:15:00Z","2026-11-06T12:00:00Z","2026-11-06T12:15:00Z","2026-11-06T12:30:00Z","2026-11-06T13:15:00Z","2026-11-06T13:30:00Z","2026-11-06T13:45:00Z","2026-11-06T14:30:00Z","2026-11-06T15:00:00Z"]}],"precedence":[[0,2,15],[2,4,0],[1,3,15],[3,5,0]]}
+```
+
+</details>
+
+|   Repeat | Saved episode            |   Reward | Observed starts UTC                      |   Calls | Feasible   |   Raw weighted minutes |
+|---------:|:-------------------------|---------:|:-----------------------------------------|--------:|:-----------|-----------------------:|
+|        0 | 7352609b88c28a00ceb95dcf |        1 | 09:45, 10:30, 12:45, 11:15, 14:45, 13:30 |      11 | True       |                   1170 |
+|        1 | dca747f877a3f32d53e86725 |        0 | 09:45, 10:30, 12:45, 11:15, 14:45, 12:00 |      11 | False      |                   1020 |
+|        2 | 7ff2c7c735743b92d1ab6311 |        1 | 09:45, 10:30, 12:45, 11:15, 14:45, 13:30 |      11 | True       |                   1170 |
+|        3 | 2059ebfbb46ef4e1be4c9e79 |        1 | 09:45, 10:30, 12:45, 11:15, 14:45, 13:30 |      11 | True       |                   1170 |
+
+The successful attempt meets every constraint and the exact minimum. A failed attempt can have a lower raw cost because it uses an unavailable time; that does not beat the best feasible plan. All repeats started from a fresh copy of the same database. The complete actions and observations are saved in [repeat 0](data/frontier_v4/calibration/episodes/7352609b88c28a00ceb95dcf.json), [repeat 1](data/frontier_v4/calibration/episodes/dca747f877a3f32d53e86725.json), [repeat 2](data/frontier_v4/calibration/episodes/7ff2c7c735743b92d1ab6311.json), [repeat 3](data/frontier_v4/calibration/episodes/2059ebfbb46ef4e1be4c9e79.json).
+
+#### Example 2: a complete successful attempt
+
+Sol episode `0345427a20ab1a18652b5256` on `frontier-02` is a measured comparison success. It uses 13 calls and finishes with cost 945, equal to the independently certified 945. The ordered starts are `['11:00', '09:00', '12:00', '10:30', '13:15', '14:30']`. The trace includes the availability reads, individual edits and finish; no solver output is in the model context.
+
+One exact raw response in this successful trace is:
+
+```json
+{"tool":"patch_event","arguments":{"calendarId":"cal-alice","eventId":"target-0","start":{"dateTime":"2026-11-06T11:00:00Z","timeZone":"UTC"},"end":{"dateTime":"2026-11-06T11:45:00Z","timeZone":"UTC"}}}
+```
+
+The parser reads tool `patch_event`, event `target-0` and start `2026-11-06T11:00:00Z`. The native tool response alone is an intermediate result. Reward 1 comes only from the checked final state after all actions. The [saved complete trace](data/frontier_v4/comparison/episodes/0345427a20ab1a18652b5256.json) links the response to its request and observations.
+
+#### Example 3: a real Sol failure
+
+Episode `dca747f877a3f32d53e86725` on `calibration-6-0` is a measured calibration failure after 11 calls. The verifier records: `Review 5: protected availability conflict for carol; Schedule does not have minimum weighted movement`. Its raw weighted movement is 1020; the minimum valid movement is 1170. The final state is infeasible, so its raw movement cannot be treated as a valid cheaper alternative.
+
+![A saved Sol failure beside one certified optimum; hatched intervals mark protected availability for the people in each review.](figures/frontier_failure.png)
+
+Each row is a review. Bar width is its duration, the horizontal axis is UTC time, and `w` is its movement weight. Initials identify Alice, Bob, Carol and Dan. Hatched intervals are protected times for either participant in that row. The left panel is one valid optimum; the right is the actual final state. Shared-room and precedence rules also apply across rows, so absence of a hatched overlap alone does not prove validity.
+
+|   Review | People       |   Weight |   Duration (min) | Original UTC   | One optimum UTC   | Observed UTC   |
+|---------:|:-------------|---------:|-----------------:|:---------------|:------------------|:---------------|
+|        0 | alice, bob   |        4 |               45 | 10:15          | 09:45             | 09:45 to 10:30 |
+|        1 | carol, dan   |        1 |               30 | 09:00          | 10:30             | 10:30 to 11:00 |
+|        2 | alice, carol |        1 |               45 | 10:45          | 12:45             | 12:45 to 13:30 |
+|        3 | bob, dan     |        4 |               30 | 09:15          | 11:15             | 11:15 to 11:45 |
+|        4 | alice, dan   |        4 |               45 | 14:30          | 14:45             | 14:45 to 15:30 |
+|        5 | bob, carol   |        5 |               30 | 12:30          | 13:30             | 12:00 to 12:30 |
+
+The table gives the actual original, oracle and observed times. The oracle column is one accepted optimum, not a requirement to copy that particular schedule. A model has to coordinate the whole bundle, since an individually accepted edit can still break availability or make another review impossible. This example is the first Sol failure by stable episode ID among completed, valid-action fresh attempts, with a calibration fallback if there is no such fresh failure. Protocol violations and horizon truncations are kept separate. Its frequency is represented in the known failure counts above.
+
+#### Example 4: an actual early-abandonment decision
+
+Group `4521b1d723a88763d773-0` is GPT-6 Luna on `frontier-03`. Its observed rewards are `[0, 0]`. After two unanimous results, the recorded predictor is `(4 - 2) / 5 = 0.4`, below the frozen threshold 0.45. Adaptive collection stops this group and moves to the next task. It does not label the uncollected third or fourth attempt. This is one of 10 abandoned groups across both policies. A rare opposite reward could still have appeared, which is why abandonment can lose useful contrast.
+
+#### Example 5: a saved mixed group and diagnostic advantages
+
+Group `4521b1d723a88763d773-1` is GPT-6 Luna, adaptive, on `frontier-04`. Its four actual rewards are `[0, 1, 0, 0]`. Comparing each reward with the mean of its other three gives leave-one-out advantages `[-0.3333, 1.0, -0.3333, -0.3333]`. These are arithmetic comparisons of saved outcomes, not gradients. The group counts once in the primary mixed-group total. The [diagnostic JSONL export](data/frontier_v4/rollouts_diagnostic.jsonl) retains its complete traces and marks every row `train_ready=false`.
+
+The separate hindsight audit finds 0 of 4 completed uniform groups that are mixed despite a unanimous first pair. The audit uses only fully saved uniform groups; it is not an estimate of what the independent adaptive arm would have sampled at the same call index.
+
+### What the comparison says about frontier improvement
+
+The six-review pilot removes the earlier all-success demonstration: the same task can now yield a correct plan and a concrete constraint error. That creates observable contrast for a group-relative reward comparison. It does not show that the fixed model becomes better after a later attempt. Every attempt starts fresh, and neither collector changes its weights or receives a repaired solution from an earlier rollout.
+
+The hard part has several measured pieces. A successful API edit can still produce an invalid bundle. A full four-attempt group costs many action calls. An early unanimous pair can conceal a later opposite reward. Finding mixed outcomes therefore requires task design, a trustworthy business verifier and sufficient collection budget. The observed group counts measure that collection problem, not the effectiveness of a future optimizer step.
+
+| Policy      | Allocator   |   Input tokens |   Cached input tokens |   Output tokens |   Call seconds |
+|:------------|:------------|---------------:|----------------------:|----------------:|---------------:|
+| GPT-6.1 Sol | uniform     |        4173243 |               1917952 |          179243 |         5769.7 |
+| GPT-6.1 Sol | adaptive    |        4180182 |               1917568 |          190100 |         6095.6 |
+| GPT-6 Luna  | uniform     |        8841604 |               6205312 |          190133 |         2589.5 |
+| GPT-6 Luna  | adaptive    |        8856921 |               6259712 |          206564 |         2741.8 |
+
+At 180 invocations each, GPT-6.1 Sol uses 4,173,243 input and 179,243 output tokens with uniform collection, versus 4,180,182 input and 190,100 output tokens with adaptive collection. Summed call durations are 5,769.7 and 6,095.6 seconds.
+
+At 180 invocations each, GPT-6 Luna uses 8,841,604 input and 190,133 output tokens with uniform collection, versus 8,856,921 input and 206,564 output tokens with adaptive collection. Summed call durations are 2,589.5 and 2,741.8 seconds.
+
+Input tokens include the CLI's context overhead. Cached input is a reported subset of input, not an additional token count. Call seconds are summed durations, not elapsed wall time with eight arms running concurrently. Billed dollars are unavailable from this policy interface. The resource differences prevent a claim of equal tokens, compute or spend despite equal invocation caps.
+
+The 720 comparison invocations have saved statuses `{'ok': 699, 'invalid_json': 19, 'policy_tool_violation': 2}`. An invalid JSON response consumes a call and receives format feedback; it does not automatically become the final task reward. No transport failure is counted as reward 0. The full cache includes every request, raw response and parse result, including errors. The calibration's 89 invocations all returned valid actions.
+
+| Policy     | Final failure type            |   Known failures |
+|:-----------|:------------------------------|-----------------:|
+| GPT-6 Luna | action horizon                |                1 |
+| GPT-6 Luna | business constraint violation |               10 |
+| GPT-6 Luna | feasible nonoptimal plan      |                7 |
+| GPT-6 Luna | protocol violation            |                2 |
+
+These are final failed-attempt categories, not counts of every intermediate error message. A protocol violation means the policy used a host tool outside the supplied action space. An action-horizon failure means it did not complete the requested outcome within 24 actions. Completed valid-action attempts are classified separately as constraint violations or feasible but nonoptimal plans. The calibrated Sol failure is a completed business constraint error, not a protocol or horizon failure.
+
+Recent research was checked again on 24 October 2026. [CERO](https://arxiv.org/abs/2610.09679) (Zong et al., 2026) studies prompt exposure and budget pacing across a training horizon; this experiment has no such horizon. [Adaptive Decoding Methods for Token-Efficient Reinforcement Learning](https://arxiv.org/abs/2610.25860) (Li et al., 2026) studies token-support schedules during training; the fixed CLI does not expose that control. The unchanged [SARA-inspired stopping rule](https://arxiv.org/abs/2607.26253) isolates task difficulty here. None of those training gains is claimed as reproduced. [PAIR](https://arxiv.org/abs/2608.11368) explains why adaptively observed contrast pairs need special inclusion accounting. Deterministic abandonment in this demo cannot provide an unbiased full-pool gradient estimate.
+
+[Diagnosing and Correcting Reward Hacking in Verifiable Instruction Following](https://arxiv.org/abs/2610.19525) (Yoon et al., 2026) gives another reason to audit rewards: satisfying an output constraint can miss the underlying requested answer. Here, the audited outcome is the actual business state. This study does not test that paper's training method or establish that this verifier covers unmodeled office preferences.
+
+The four fresh cases are authored simulations of scheduling work, not a representative office workload. Calibration intentionally targets a boundary in this model and tool configuration. Two blocks cannot establish a general allocator ranking. Unknown outcomes, selection and undisclosed serving details remain limits. The supported next step is a larger matched-budget collection study on more unseen cases, with the same transparent verifier.
+
+## 12. A stronger planning boundary and fresh comparison
+
+The six-review pilot produced one real Sol availability error, but all 29 known fresh Sol attempts succeeded. That is why one failed demonstration was an inadequate stopping rule for the requested comparison. The complete 720-call six-review run remains in section 11 and `data/frontier_v4/`. Its outcomes are not pooled into the result below.
+
+### Tightening the pilot before generating new comparison cases
+
+The next protocol requires between two and six successes in eight completed attempts at one difficulty level, with both rewards on the same case. A protocol violation, action-horizon ending or transport interruption does not qualify. It starts at eight reviews, tries nine when the success count is above six, and backs down to seven when it is below two. All attempted stages are retained. This is an authored experimental rule intended to avoid the earlier one-error result, not a claim that eight attempts precisely estimate a success probability.
+
+The selected task has 12 reviews, four people and 19 listed candidate times per review, or 2,213,314,919,066,161 unfiltered combinations. As before, every review must avoid both participants' protected times. All reviews share a room. Precedence rules constrain their order. The objective is minimum total penalty points. Moving a review contributes its weight times the movement in minutes. Each listed handoff adds a fixed charge unless its destination starts between its source end and the stated free-gap deadline, inclusive. Handoffs are soft costs: a plan may pay a charge and still be valid. The separate precedence rules remain mandatory. Business priorities are fixed input numbers. Any valid minimum is accepted, even when its schedule differs from the saved witness.
+
+Raw combination counts do not measure difficulty by themselves. A complete enumeration of the earlier prepared cases finds 446 and 220 valid six-review plans, 16 and 29 eight-review plans, and 4,556 and 197 nine-review plans. These counts are saved in `data/frontier_v4/structural_difficulty_audit.json`. Tight constraints can remove most alternatives. This is a structural observation, not proof that the remaining plan count caused a performance difference.
+
+The 24-action allowance and medium reasoning setting are unchanged from the six-review phase. The known valid witness uses four reads, 12 edits and finish, or 17 actions, leaving 7 for checks and repairs. The Calendar action space still has no Python optimizer, so this experiment tests that specific workflow rather than an unrestricted capability ceiling.
+
+The first nine-review cohort was interrupted when one call reached the 180-second client deadline after its model turn began. The circuit breaker stopped new calls. Its partial and not-started slots retain unknown rewards. A separately logged availability probe succeeded in 4.4 seconds. A time-stamped amendment then increased the client deadline to 600 seconds and registered a fresh eight-slot cohort on the same numerical inputs. The recovery pilot uses that 600-second guard. A separate pre-comparison amendment increases the guard to 1,200 seconds for both evaluation collectors after a completed pilot call takes more than nine minutes. A client cutoff remains an unknown outcome. The experiment matches calls, not time. The interrupted cohort does not count toward the selected pilot's eight completed outcomes.
+
+The ladder first used the previously prepared seven-, eight- and nine-review inputs. Eight reviews produced eight successes, and the longer-deadline nine-review cohort also produced eight successes. A broader twelve-review graph, with at least 10,000 feasible schedules witnessed per case, again produced eight successes. All those attempts remain in the table. A time-stamped amendment then added conditional handoff charges and extended only the development-call cap from 576 to 1,152 before the new calls. The final comparison cap remains 180 calls per model and collector. Claude Opus 5.5 wrote the new task wording; code generates every number and the two exact solvers establish the answers. Four new evaluation cases are generated only after the selected level is recorded, with disjoint seeds and no tested-model screening. Branch-and-bound and an independently encoded mixed-integer linear program agree on every minimum. The four new optimal plans also pass through the actual Calendar API. Numeric records are CC0-1.0 and postdate both documented model training cutoffs.
+
+| Cohort                |   Reviews | Calibration case     |   Known |   Successes |   Failures |   Unknown |   Calls |
+|:----------------------|----------:|:---------------------|--------:|------------:|-----------:|----------:|--------:|
+| calibration           |         8 | calibration-8-0      |       4 |           4 |          0 |         0 |      59 |
+| calibration           |         8 | calibration-8-1      |       4 |           4 |          0 |         0 |      53 |
+| calibration           |         9 | calibration-9-0      |       1 |           1 |          0 |         3 |      28 |
+| calibration           |         9 | calibration-9-1      |       0 |           0 |          0 |         4 |      18 |
+| calibration_broad12   |        12 | calibration-12-0     |       4 |           4 |          0 |         0 |      71 |
+| calibration_broad12   |        12 | calibration-12-1     |       4 |           4 |          0 |         0 |      71 |
+| calibration_fees12    |        12 | calibration-fees12-0 |       4 |           0 |          4 |         0 |      84 |
+| calibration_fees12    |        12 | calibration-fees12-1 |       4 |           2 |          2 |         0 |      87 |
+| calibration_recovery9 |         9 | calibration-9-0      |       4 |           4 |          0 |         0 |      61 |
+| calibration_recovery9 |         9 | calibration-9-1      |       4 |           4 |          0 |         0 |      59 |
+
+At the selected 12-review level there are 2 successes and 6 failures among eight completed attempts. Across all attempted pilot levels, 33 outcomes are known and 591 policy calls are spent. These counts are development data, excluded from the 720 comparison calls. A mixed outcome on the same case establishes observed variation under fixed inputs; it does not establish an exact future error rate or attest to immutable served weights.
+
+![Actual Sol calibration outcomes across every attempted difficulty stage, labeled 1 for a valid optimum and 0 for a known failure.](figures/frontier5_calibration.png)
+
+Each column is a fixed input and each row identifies a repeat in one calibration stage. Stages run from earliest at the top to latest at the bottom; the labels show their client deadlines. A printed 1 or 0 is known; `?` is an interrupted attempt; `-` is a scheduled slot that made no model call after the circuit breaker. Unused prepared levels have no policy outcomes and do not appear. The selected cohort satisfies the tighter rule. Unknown slots are not substituted for failures.
+
+The native Calendar binding advertised an optional `timeZone` field but rejected a dateTime-only edit. A controlled same-event, same-instant check records HTTP 400 without `timeZone` and HTTP 200 with `timeZone: UTC`, in `data/frontier_v5/serialization_audit.json`. Before any fresh comparison call, a recorded amendment made the field required in the displayed schema and stated the serialization rule in the initial observation. Both collectors receive this clarified interface. The original calibration still contains 8 API errors, including 8 with the timezone-binding message. This clarification changes the interface between pilot and evaluation, so pilot accuracy is not assumed to transfer unchanged. Numerical tasks, scoring, model settings and action limits remain the same.
+
+The conditional fee-task ladder was registered after the initial fee cohort started, but before its first completed outcome: start at twelve reviews, go down by two if fewer than two of eight attempts succeed, or up by two if more than six succeed. It permits at most three fee cohorts. A selected level still needs two to six completed successes and same-case contrast. This does not assume that review count alone measures difficulty.
+
+Each new fee fixture has 12 conditional handoff rules, including 6 cross-pair soft orderings, alongside 6 mandatory precedence rules. A numerical filter requires the movement-only optimum to be at least 60 penalty points worse when its actual handoff charges are counted. Thus the added costs affect the decision. This filter never consults model outcomes. Exact search with domain propagation and an independently encoded MILP agree on the optimum. Counting stops after 10,000 valid schedules, so the stored count is a witnessed lower bound. The valid native witness takes 17 of the 24 actions.
+
+For a small illustrative calculation, a review moved 30 minutes with weight 3 costs 90 points. If a 240-point handoff charge also applies, its contribution becomes 330 points. A destination exactly at the free-gap deadline pays zero; one minute later pays the full charge. The actual task uses 15-minute candidate starts. The verifier tests this inclusive boundary. Charges add another decision tradeoff; they do not make a late handoff an invalid schedule.
+
+| Cohort                |   Calls |   Input tokens |   Output tokens |   Reasoning output tokens |   Summed call seconds |   Usage missing |
+|:----------------------|--------:|---------------:|----------------:|--------------------------:|----------------------:|----------------:|
+| calibration           |     158 |        4003694 |          236577 |                    226162 |                7387.1 |               1 |
+| calibration_recovery9 |     120 |        3243192 |          228770 |                    220708 |                6893.1 |               0 |
+| calibration_broad12   |     142 |        4401157 |          204187 |                    194298 |                6116.8 |               0 |
+| calibration_fees12    |     171 |        5592025 |          563780 |                    551750 |               15126.2 |               0 |
+
+Development uses 1,233,314 reported output tokens across 591 calls and 35,523.2 summed call seconds. The 1 calls with missing usage contribute no token estimate, so reported totals omit their unknown usage. Reasoning output is a subset of total output, and summed duration differs from parallel elapsed time. None of this development cost is included in the matched 720-call comparison.
+
+### A fresh matched-budget comparison
+
+```mermaid
+flowchart TD
+  previous["Six-review comparison retained<br/>Sol 29/29 known successes, 0 mixed groups"] --> pilot["Stronger preregistered pilot<br/>8 cases, 40 scheduled slots, 591 CLI calls"]
+  pilot --> select["Select 12 reviews<br/>2 to 6 successes in 8 completed attempts<br/>same case has both rewards"]
+  select --> fresh["4 new seeded cases<br/>2 disjoint blocks; independent exact solvers"]
+  fresh --> witness["Official Calendar witnesses<br/>all 4 valid optimum schedules pass"]
+  witness --> arms["8 parallel arms: 2 policies x 2 collectors x 2 blocks<br/>90 calls each; 720 total"]
+  arms --> reward["Calendar action/observation loops<br/>terminal business reward 0 or 1"]
+  reward --> save["Wait for all 8 arms to reach their caps<br/>known outcomes, unknown cutoffs, mixed groups<br/>tokens, time, caches; no weight updates"]
+```
+
+
+Each policy, collector and block arm receives exactly 90 CLI invocations, giving 180 per policy and collector. The final incomplete attempt remains unknown. Uniform completes groups of four. The unchanged adaptive rule probes two, abandons unanimous pairs and continues mixed pairs to four. It uses only observed rewards from that group. The task stream, action allowance, tools, scoring and model settings are identical between collectors within this run. Tokens and elapsed time are measured separately and are not matched by the invocation cap.
+
+For interrupted records, the top-level `reward` is null. The nested `verification.reward` describes the captured partial state and must not be used as a completed-task label. Only known top-level rewards are eligible for a full group.
+
+Each model call returns one JSON action through `codex exec`. The native Calendar environment executes it and returns an observation. Within an attempt, that observation is appended to the next request. At finish, the exact final state supplies the reward. Between attempts, the database and history reset; only the collector retains the binary outcomes used for its stopping decision. The call graph in section 11 applies unchanged.
+
+Each action is a fresh CLI invocation with the observable conversation history. Private reasoning is not carried between those invocations. This is a defined scaffold choice, and it can increase repeated planning work compared with a native persistent tool session. The experiment measures the requested model and settings in this workflow.
+
+![Complete mixed groups at 180 invocations per policy and collector, with individual block counts as circle and square markers.](figures/frontier5_yield.png)
+
+| Policy      | Allocator   |   Calls |   Known |   Successes |   Failures |   Complete groups |   Mixed groups |   Abandoned groups |   Unknown outcomes |
+|:------------|:------------|--------:|--------:|------------:|-----------:|------------------:|---------------:|-------------------:|-------------------:|
+| GPT-6.1 Sol | uniform     |     180 |       8 |           6 |          2 |                 2 |              2 |                  0 |                  2 |
+| GPT-6.1 Sol | adaptive    |     180 |       9 |           3 |          6 |                 2 |              2 |                  0 |                  2 |
+| GPT-6 Luna  | uniform     |     180 |       8 |           0 |          8 |                 2 |              0 |                  0 |                  2 |
+| GPT-6 Luna  | adaptive    |     180 |      11 |           0 |         11 |                 0 |              0 |                  5 |                  2 |
+
+GPT-6.1 Sol yields 2 uniform versus 2 adaptive complete mixed groups, a difference of +0 at 180 calls each. Uniform completes 2 full groups; adaptive completes 2 and abandons 0 unanimous probes. The arms retain 2 and 2 unknown outcomes.
+
+The adaptive GPT-6.1 Sol arm abandons no groups in this run. Any difference in mixed-group yield therefore has no observed budget savings from that rule to explain it. The two arms make separate CLI calls, and a small difference can arise from their sampled responses.
+
+GPT-6 Luna yields 0 uniform versus 0 adaptive complete mixed groups, a difference of +0 at 180 calls each. Uniform completes 2 full groups; adaptive completes 0 and abandons 5 unanimous probes. The arms retain 2 and 2 unknown outcomes.
+
+| Policy      |   Block |   Uniform mixed |   Adaptive mixed |   Calls each |
+|:------------|--------:|----------------:|-----------------:|-------------:|
+| GPT-6.1 Sol |       0 |               1 |                1 |           90 |
+| GPT-6.1 Sol |       1 |               1 |                1 |           90 |
+| GPT-6 Luna  |       0 |               0 |                0 |           90 |
+| GPT-6 Luna  |       1 |               0 |                0 |           90 |
+
+GPT-6.1 Sol block 0 contributes 1 uniform and 1 adaptive groups. GPT-6.1 Sol block 1 contributes 1 uniform and 1 adaptive groups. GPT-6 Luna block 0 contributes 0 uniform and 0 adaptive groups. GPT-6 Luna block 1 contributes 0 uniform and 0 adaptive groups. These are two task streams, not confidence intervals. A single additional group could change this small comparison; the observed totals do not establish a general allocator ranking.
+
+![Successes among known attempts for the fixed Sol and Luna policies; budget-interrupted attempts are reported separately.](figures/frontier5_success.png)
+
+GPT-6.1 Sol succeeds on 6/8 known uniform attempts and 3/9 known adaptive attempts. Adaptive selection changes which task gets another attempt, so these pooled fractions describe the collected mixtures. They are not evidence that the model learned between attempts.
+
+GPT-6 Luna succeeds on 0/8 known uniform attempts and 0/11 known adaptive attempts. Adaptive selection changes which task gets another attempt, so these pooled fractions describe the collected mixtures. They are not evidence that the model learned between attempts.
+
+Every one of the 19 known GPT-6 Luna attempts receives 0 under the exact-minimum score. Adaptive obtains 11 known attempts versus uniform's 8, but neither observes a success or a complete mixed group. More collected failures do not increase this contrast metric. The sample does not prove that the true success probability is zero, and the experiment does not test another training objective.
+
+![Per-case successes and known-attempt counts on the four unseen comparison cases.](figures/frontier5_coverage.png)
+
+Each cell prints successes / known attempts. The fill runs from pale yellow at zero successes to dark blue when every known attempt succeeds. White cells have no completed outcome; an unknown-only cell contains budget-cut attempts and cannot be read as zero accuracy.
+
+Sol has 3/4 uniform successes on both `frontier5-01` and `frontier5-03`, versus 2/4 and 1/4 with adaptive collection. Adaptive adds one known failure on `frontier5-02`. Both Sol arms have only unknown outcomes on `frontier5-04`. Four authored inputs therefore do not mean four fully evaluated Sol cases. The cap can exclude a long unfinished attempt, so the known-outcome fraction need not equal the success rate on all started work.
+
+Luna's adaptive arm completes known attempts on all four cases, with counts 2, 2, 4 and 3, and no successes. Uniform has four known failures on each of `frontier5-01` and `frontier5-03`; its other cells are unknown-only. The wider adaptive coverage adds observed failures without increasing mixed-group yield. This small input bank limits conclusions about other office tasks.
+
+### A same-input calibration success and failure
+
+Case `calibration-fees12-1` has certified minimum 4725 penalty points. One optimum starts reviews in order at `['13:30', '11:30', '18:30', '10:15', '16:30', '15:00', '14:15', '12:15', '19:15', '20:00', '17:45', '15:45']`. A weight-3 move of 30 minutes contributes 90 points; the total adds all review movements and every applicable fixed handoff charge. Reward 1 also requires every availability, room, duration, preservation and precedence constraint.
+
+|   Repeat | Episode ID               |   Reward | Feasible   |   Raw penalty points |   Excess if feasible (%) |   Calls |
+|---------:|:-------------------------|---------:|:-----------|-----------------------:|-------------------------:|--------:|
+|        0 | 99dfccde993e71f411ca5f33 |        1 | True       |                   4725 |                    0     |      18 |
+|        1 | b21a8533ecf7df605ffea8ad |        0 | True       |                   4935 |                    4.444 |      24 |
+|        2 | 9b6816759a8706838db85e30 |        1 | True       |                   4725 |                    0     |      21 |
+|        3 | af20de6d74dde864178d69d4 |        0 | True       |                   4770 |                    0.952 |      24 |
+
+The certified optimum combines 2685 movement points with 2040 handoff points. The repeated attempts have the following actual breakdown.
+
+|   Repeat |   Movement points |   Handoff points |   Total points |   Reward |
+|---------:|------------------:|-----------------:|---------------:|---------:|
+|        0 |              2685 |             2040 |           4725 |        1 |
+|        1 |              2115 |             2820 |           4935 |        0 |
+|        2 |              2685 |             2040 |           4725 |        1 |
+|        3 |              2730 |             2040 |           4770 |        0 |
+
+The input is unchanged between these attempts. All eight selected calibration plans satisfy the hard constraints. Their binary failures come from higher total cost. The actual repeated traces are [repeat 0](data/frontier_v5/calibration_fees12/episodes/99dfccde993e71f411ca5f33.json), [repeat 1](data/frontier_v5/calibration_fees12/episodes/b21a8533ecf7df605ffea8ad.json), [repeat 2](data/frontier_v5/calibration_fees12/episodes/9b6816759a8706838db85e30.json), [repeat 3](data/frontier_v5/calibration_fees12/episodes/af20de6d74dde864178d69d4.json).
+
+<details><summary>Exact task question, including every candidate time and precedence rule</summary>
+
+```text
+You are Alice, and you coordinate four managed availability calendars: cal-alice, cal-bob, cal-carol and cal-dan.
+
+**Task:** Reschedule every numbered project review on 6 November 2026, moving them together as a single bundle.
+
+**Procedure**
+1. Read all four calendars before making your first write.
+2. Patch every existing project review to its new start time.
+3. Call finish when done.
+
+**Preservation requirements**
+- Keep each review's event ID, title, calendar ownership, duration and attendees unchanged.
+- Do not alter any protected event.
+
+**Availability rules**
+- When checking availability, ignore every existing (old) project review, since all of them are being moved.
+- Every other event blocks the person whose calendar it appears on.
+- Each review must fit the availability of every person listed in its specification.
+
+**Scheduling constraints**
+- No two project reviews may overlap, even if their attendees differ, because they all use the same review room.
+- Each review may start only at one of the allowed UTC start times listed in its specification.
+- Each precedence rule [i, j, gap_minutes] means review i must end at least gap_minutes before review j starts. All precedence rules are mandatory.
+
+**Objective**
+- The objective is total penalty points.
+- **Movement points:** Moving a review costs its weight multiplied by the absolute difference in minutes between its new start and its original start.
+- **Handoff charges:** Each listed handoff has a source review, a destination review, a fixed charge and a free_gap_minutes value. Add the fixed charge once if the destination review either:
+  - starts before the source review ends, or
+  - starts more than free_gap_minutes after the source review ends.
+- A destination start within the interval from source end to source end plus free_gap_minutes, inclusive of both endpoints, incurs no handoff charge.
+- A listed handoff charge applies even when the two reviews have different attendees.
+- Handoff rules are soft costs, not hard precedence constraints.
+- Minimize total movement points plus all applicable handoff charges.
+- Any schedule that achieves the global minimum total is accepted. There is no tie-break.
+
+**Limits**
+- You have 24 actions in total. Reads, writes, optional checks and finish all count toward this limit.
+- No Python tool is available in this Calendar environment.
+
+The numbered review specifications, precedence rules and handoff charges follow. {"reviews":[{"review":0,"title":"Project review 0","calendar":"cal-alice","people":["alice","bob"],"duration_minutes":45,"weight":4,"allowed_start_UTC":["2026-11-06T09:15:00Z","2026-11-06T09:30:00Z","2026-11-06T10:00:00Z","2026-11-06T10:45:00Z","2026-11-06T12:00:00Z","2026-11-06T12:45:00Z","2026-11-06T13:30:00Z","2026-11-06T13:45:00Z","2026-11-06T14:15:00Z","2026-11-06T14:45:00Z","2026-11-06T15:00:00Z","2026-11-06T15:15:00Z","2026-11-06T15:30:00Z","2026-11-06T16:00:00Z","2026-11-06T16:30:00Z","2026-11-06T17:00:00Z","2026-11-06T18:15:00Z","2026-11-06T19:00:00Z","2026-11-06T19:45:00Z"]},{"review":1,"title":"Project review 1","calendar":"cal-carol","people":["carol","dan"],"duration_minutes":30,"weight":1,"allowed_start_UTC":["2026-11-06T10:15:00Z","2026-11-06T11:30:00Z","2026-11-06T12:30:00Z","2026-11-06T13:15:00Z","2026-11-06T13:30:00Z","2026-11-06T13:45:00Z","2026-11-06T14:30:00Z","2026-11-06T14:45:00Z","2026-11-06T16:00:00Z","2026-11-06T16:15:00Z","2026-11-06T16:30:00Z","2026-11-06T16:45:00Z","2026-11-06T17:15:00Z","2026-11-06T17:45:00Z","2026-11-06T18:00:00Z","2026-11-06T18:15:00Z","2026-11-06T18:30:00Z","2026-11-06T19:30:00Z","2026-11-06T20:30:00Z"]},{"review":2,"title":"Project review 2","calendar":"cal-alice","people":["alice","carol"],"duration_minutes":45,"weight":1,"allowed_start_UTC":["2026-11-06T09:45:00Z","2026-11-06T10:00:00Z","2026-11-06T10:15:00Z","2026-11-06T10:30:00Z","2026-11-06T12:15:00Z","2026-11-06T13:30:00Z","2026-11-06T13:45:00Z","2026-11-06T14:45:00Z","2026-11-06T15:15:00Z","2026-11-06T15:45:00Z","2026-11-06T16:15:00Z","2026-11-06T16:30:00Z","2026-11-06T16:45:00Z","2026-11-06T17:15:00Z","2026-11-06T17:30:00Z","2026-11-06T18:30:00Z","2026-11-06T18:45:00Z","2026-11-06T19:00:00Z","2026-11-06T19:15:00Z"]},{"review":3,"title":"Project review 3","calendar":"cal-bob","people":["bob","dan"],"duration_minutes":30,"weight":2,"allowed_start_UTC":["2026-11-06T09:30:00Z","2026-11-06T10:00:00Z","2026-11-06T10:15:00Z","2026-11-06T11:30:00Z","2026-11-06T12:45:00Z","2026-11-06T13:00:00Z","2026-11-06T13:45:00Z","2026-11-06T14:15:00Z","2026-11-06T14:30:00Z","2026-11-06T15:00:00Z","2026-11-06T16:00:00Z","2026-11-06T16:30:00Z","2026-11-06T17:00:00Z","2026-11-06T17:30:00Z","2026-11-06T18:30:00Z","2026-11-06T18:45:00Z","2026-11-06T19:45:00Z","2026-11-06T20:00:00Z","2026-11-06T20:15:00Z"]},{"review":4,"title":"Project review 4","calendar":"cal-alice","people":["alice","dan"],"duration_minutes":45,"weight":2,"allowed_start_UTC":["2026-11-06T09:15:00Z","2026-11-06T09:45:00Z","2026-11-06T10:00:00Z","2026-11-06T10:15:00Z","2026-11-06T10:30:00Z","2026-11-06T11:30:00Z","2026-11-06T12:15:00Z","2026-11-06T13:30:00Z","2026-11-06T13:45:00Z","2026-11-06T14:30:00Z","2026-11-06T14:45:00Z","2026-11-06T16:30:00Z","2026-11-06T16:45:00Z","2026-11-06T17:00:00Z","2026-11-06T17:30:00Z","2026-11-06T18:00:00Z","2026-11-06T19:00:00Z","2026-11-06T19:45:00Z","2026-11-06T20:00:00Z"]},{"review":5,"title":"Project review 5","calendar":"cal-bob","people":["bob","carol"],"duration_minutes":30,"weight":1,"allowed_start_UTC":["2026-11-06T09:00:00Z","2026-11-06T09:45:00Z","2026-11-06T10:15:00Z","2026-11-06T10:30:00Z","2026-11-06T10:45:00Z","2026-11-06T11:30:00Z","2026-11-06T11:45:00Z","2026-11-06T13:00:00Z","2026-11-06T13:30:00Z","2026-11-06T13:45:00Z","2026-11-06T14:30:00Z","2026-11-06T14:45:00Z","2026-11-06T15:00:00Z","2026-11-06T15:30:00Z","2026-11-06T16:00:00Z","2026-11-06T16:15:00Z","2026-11-06T17:30:00Z","2026-11-06T17:45:00Z","2026-11-06T20:15:00Z"]},{"review":6,"title":"Project review 6","calendar":"cal-alice","people":["alice","bob"],"duration_minutes":45,"weight":1,"allowed_start_UTC":["2026-11-06T09:30:00Z","2026-11-06T09:45:00Z","2026-11-06T10:00:00Z","2026-11-06T10:15:00Z","2026-11-06T10:30:00Z","2026-11-06T11:00:00Z","2026-11-06T11:30:00Z","2026-11-06T11:45:00Z","2026-11-06T12:00:00Z","2026-11-06T12:30:00Z","2026-11-06T14:15:00Z","2026-11-06T14:30:00Z","2026-11-06T15:30:00Z","2026-11-06T17:30:00Z","2026-11-06T17:45:00Z","2026-11-06T18:00:00Z","2026-11-06T18:30:00Z","2026-11-06T20:00:00Z","2026-11-06T20:15:00Z"]},{"review":7,"title":"Project review 7","calendar":"cal-carol","people":["carol","dan"],"duration_minutes":30,"weight":4,"allowed_start_UTC":["2026-11-06T09:00:00Z","2026-11-06T09:30:00Z","2026-11-06T10:15:00Z","2026-11-06T11:15:00Z","2026-11-06T11:30:00Z","2026-11-06T11:45:00Z","2026-11-06T12:15:00Z","2026-11-06T12:30:00Z","2026-11-06T12:45:00Z","2026-11-06T13:45:00Z","2026-11-06T14:00:00Z","2026-11-06T14:30:00Z","2026-11-06T16:00:00Z","2026-11-06T17:45:00Z","2026-11-06T18:30:00Z","2026-11-06T18:45:00Z","2026-11-06T19:00:00Z","2026-11-06T19:15:00Z","2026-11-06T20:00:00Z"]},{"review":8,"title":"Project review 8","calendar":"cal-alice","people":["alice","carol"],"duration_minutes":45,"weight":1,"allowed_start_UTC":["2026-11-06T09:15:00Z","2026-11-06T09:30:00Z","2026-11-06T09:45:00Z","2026-11-06T10:15:00Z","2026-11-06T11:15:00Z","2026-11-06T11:30:00Z","2026-11-06T12:15:00Z","2026-11-06T13:30:00Z","2026-11-06T14:30:00Z","2026-11-06T15:30:00Z","2026-11-06T15:45:00Z","2026-11-06T17:30:00Z","2026-11-06T17:45:00Z","2026-11-06T18:00:00Z","2026-11-06T18:15:00Z","2026-11-06T19:00:00Z","2026-11-06T19:15:00Z","2026-11-06T19:30:00Z","2026-11-06T19:45:00Z"]},{"review":9,"title":"Project review 9","calendar":"cal-bob","people":["bob","dan"],"duration_minutes":30,"weight":4,"allowed_start_UTC":["2026-11-06T11:00:00Z","2026-11-06T11:15:00Z","2026-11-06T11:45:00Z","2026-11-06T12:00:00Z","2026-11-06T12:45:00Z","2026-11-06T13:00:00Z","2026-11-06T13:30:00Z","2026-11-06T13:45:00Z","2026-11-06T14:15:00Z","2026-11-06T16:00:00Z","2026-11-06T16:30:00Z","2026-11-06T17:00:00Z","2026-11-06T17:15:00Z","2026-11-06T17:30:00Z","2026-11-06T18:15:00Z","2026-11-06T19:30:00Z","2026-11-06T19:45:00Z","2026-11-06T20:00:00Z","2026-11-06T20:30:00Z"]},{"review":10,"title":"Project review 10","calendar":"cal-alice","people":["alice","dan"],"duration_minutes":45,"weight":4,"allowed_start_UTC":["2026-11-06T09:15:00Z","2026-11-06T09:30:00Z","2026-11-06T10:30:00Z","2026-11-06T11:30:00Z","2026-11-06T11:45:00Z","2026-11-06T12:00:00Z","2026-11-06T12:15:00Z","2026-11-06T13:00:00Z","2026-11-06T13:30:00Z","2026-11-06T14:00:00Z","2026-11-06T14:15:00Z","2026-11-06T15:00:00Z","2026-11-06T15:15:00Z","2026-11-06T15:30:00Z","2026-11-06T15:45:00Z","2026-11-06T17:45:00Z","2026-11-06T18:00:00Z","2026-11-06T18:30:00Z","2026-11-06T19:45:00Z"]},{"review":11,"title":"Project review 11","calendar":"cal-bob","people":["bob","carol"],"duration_minutes":30,"weight":3,"allowed_start_UTC":["2026-11-06T11:00:00Z","2026-11-06T11:30:00Z","2026-11-06T12:30:00Z","2026-11-06T12:45:00Z","2026-11-06T13:30:00Z","2026-11-06T13:45:00Z","2026-11-06T14:00:00Z","2026-11-06T14:15:00Z","2026-11-06T15:15:00Z","2026-11-06T15:30:00Z","2026-11-06T15:45:00Z","2026-11-06T16:00:00Z","2026-11-06T16:15:00Z","2026-11-06T17:00:00Z","2026-11-06T17:15:00Z","2026-11-06T18:45:00Z","2026-11-06T19:45:00Z","2026-11-06T20:00:00Z","2026-11-06T20:30:00Z"]}],"precedence":[[0,6,0],[1,7,15],[2,8,0],[3,9,15],[4,10,0],[5,11,15]],"handoff_charges":[{"source_review":0,"destination_review":6,"free_gap_minutes":30,"fixed_penalty_points":540},{"source_review":1,"destination_review":7,"free_gap_minutes":45,"fixed_penalty_points":600},{"source_review":2,"destination_review":8,"free_gap_minutes":60,"fixed_penalty_points":480},{"source_review":3,"destination_review":9,"free_gap_minutes":75,"fixed_penalty_points":360},{"source_review":4,"destination_review":10,"free_gap_minutes":90,"fixed_penalty_points":420},{"source_review":5,"destination_review":11,"free_gap_minutes":30,"fixed_penalty_points":360},{"source_review":0,"destination_review":7,"free_gap_minutes":45,"fixed_penalty_points":300},{"source_review":1,"destination_review":8,"free_gap_minutes":60,"fixed_penalty_points":420},{"source_review":2,"destination_review":9,"free_gap_minutes":75,"fixed_penalty_points":240},{"source_review":3,"destination_review":10,"free_gap_minutes":90,"fixed_penalty_points":360},{"source_review":4,"destination_review":11,"free_gap_minutes":30,"fixed_penalty_points":360},{"source_review":5,"destination_review":6,"free_gap_minutes":45,"fixed_penalty_points":240}]}
+```
+
+</details>
+
+### A completed Sol error on a new case
+
+The fresh episode `079fe40ae30db80a7dc532ff` on `frontier5-01` finishes after 17 calls with reward 0. Its recorded mismatches are `Schedule does not have minimum total penalty points`. The final plan is feasible but more expensive than the optimum. Total penalty points is 8415, compared with the minimum valid cost of 7980. This is a completed business-task failure, not a transport, format or action-horizon substitute.
+
+The excess cost is 435 points, or 5.45%. All hard constraints pass. The exact-minimum score treats this higher-cost valid plan as reward 0; its practical cost gap remains visible rather than being equated with an invalid schedule.
+
+![A measured fresh Sol failure next to a certified valid optimum, with protected availability shown by hatching.](figures/frontier5_failure.png)
+
+Each row is one review, its width is duration, and the horizontal axis is UTC. Initials identify the people; `w` is the fixed business priority. Hatching marks protected time for either participant in that row. All rows also share the room and precedence constraints. The oracle panel shows one optimum; another valid schedule at the same minimum would pass.
+
+|   Review | People       |   Weight | Original UTC   | One optimum UTC   | Observed UTC   |
+|---------:|:-------------|---------:|:---------------|:------------------|:---------------|
+|        0 | alice, bob   |        2 | 18:45          | 13:30             | 12:45 to 13:30 |
+|        1 | carol, dan   |        4 | 16:00          | 15:45             | 14:15 to 14:45 |
+|        2 | alice, carol |        3 | 12:00          | 10:15             | 10:15 to 11:00 |
+|        3 | bob, dan     |        5 | 16:15          | 15:15             | 16:30 to 17:00 |
+|        4 | alice, dan   |        5 | 11:30          | 11:45             | 11:45 to 12:30 |
+|        5 | bob, carol   |        1 | 11:30          | 18:30             | 18:30 to 19:00 |
+|        6 | alice, bob   |        5 | 11:15          | 14:30             | 13:30 to 14:15 |
+|        7 | carol, dan   |        5 | 13:30          | 17:00             | 15:30 to 16:00 |
+|        8 | alice, carol |        5 | 11:45          | 11:00             | 11:00 to 11:45 |
+|        9 | bob, dan     |        4 | 11:15          | 16:30             | 17:30 to 18:00 |
+|       10 | alice, dan   |        2 | 12:30          | 12:45             | 14:45 to 15:30 |
+|       11 | bob, carol   |        4 | 20:00          | 19:30             | 19:30 to 20:00 |
+
+The observed plan has 5415 movement points and 3000 handoff points. The certified witness has 5460 movement points and 2520 handoff points. Their total difference is 435 points. The next table makes the conditional charges visible; a negative gap places the destination before the source ends and incurs a charge.
+
+|   Source review |   Destination review |   Free gap (min) |   Optimum gap (min) |   Optimum charge |   Observed gap (min) |   Observed charge |
+|----------------:|---------------------:|-----------------:|--------------------:|-----------------:|---------------------:|------------------:|
+|               0 |                    6 |               30 |                  15 |                0 |                    0 |                 0 |
+|               1 |                    7 |               45 |                  45 |                0 |                   45 |                 0 |
+|               2 |                    8 |               60 |                   0 |                0 |                    0 |                 0 |
+|               3 |                    9 |               75 |                  45 |                0 |                   30 |                 0 |
+|               4 |                   10 |               90 |                  15 |                0 |                  135 |               480 |
+|               5 |                   11 |               30 |                  30 |                0 |                   30 |                 0 |
+|               0 |                    7 |               45 |                 165 |              240 |                  120 |               240 |
+|               1 |                    8 |               60 |                -315 |              420 |                 -225 |               420 |
+|               2 |                    9 |               75 |                 330 |              360 |                  390 |               360 |
+|               3 |                   10 |               90 |                -180 |              420 |                 -135 |               420 |
+|               4 |                   11 |               30 |                 420 |              600 |                  420 |               600 |
+|               5 |                    6 |               45 |                -270 |              480 |                 -330 |               480 |
+
+The time differences and recorded violations connect the score to the actual requested work. A successful individual edit does not certify a correct bundle. This example is selected as the first completed, valid-action Sol failure by stable episode ID, rather than the most striking error. The [full fresh failure trace](data/frontier_v5/comparison/episodes/079fe40ae30db80a7dc532ff.json) contains every request, response, parsed action and native observation.
+
+A different measured failure is `b6643a0a00d3da1406e75354` on `frontier5-03`. Its verifier reports `Reviews 9,10: room overlap; Schedule does not have minimum total penalty points`. This is 1 of 17 completed Sol attempts with a hard-constraint error. It is selected because it is the first such case by stable ID; it illustrates a different failure type from a higher-cost valid plan.
+
+|   Review | Observed start UTC   | Observed end UTC   | One optimum start UTC   | One optimum end UTC   |
+|---------:|:---------------------|:-------------------|:------------------------|:----------------------|
+|        9 | 19:00                | 19:30              | 19:00                   | 19:30                 |
+|       10 | 18:30                | 19:15              | 20:00                   | 20:45                 |
+
+The two observed reviews compete for the same room. Their displayed time intervals overlap, while the displayed optimum intervals are nonoverlapping. The raw cost of an invalid plan is excluded from feasible-cost regret. The [constraint-failure trace](data/frontier_v5/comparison/episodes/b6643a0a00d3da1406e75354.json) preserves the actual reads, edits and finish action.
+
+### Feasibility and the size of the remaining cost gap
+
+The binary score deliberately requires the exact minimum. The following post hoc diagnostic separates a valid but higher-cost plan from an invalid plan. It never changes a reward or a collector decision. For example, cost 105 versus optimum 100 is 5% extra total penalty cost. Total penalty points combine weighted movement and conditional handoff costs across the complete agenda. They are the authored cost scale used to compare schedules.
+
+![Completed Sol plans split into valid optima, valid higher-cost schedules and constraint errors; valid-plan cost gaps are shown separately.](figures/frontier5_quality.png)
+
+Among 17 completed valid-action Sol attempts, 9 reach the minimum, 7 are feasible but more expensive, and 1 breaks a constraint. For the 16 feasible plans, median excess total penalty cost is 0.00% and the maximum is 9.94%. The dashed line marks the exact optimum. Invalid plans have no meaningful feasible-cost regret and are excluded from the right panel. Circles mark optima, crosses higher-cost valid plans; colors identify the collector. These are sampled outcomes, not a learning curve or a model update.
+
+Of the 7 valid higher-cost failures, 2 are within 1% of the minimum. A binary zero does not retain the size of that cost gap. The secondary cost diagnostic makes the remaining difference visible; it does not establish that a different reward would improve learning.
+
+### A completed success and the saved reward comparison
+
+Sol episode `08ca7ee9606e3ce1dcc37b8e` on fresh case `frontier5-03` succeeds after 24 calls. Its total penalty cost is 4755, equal to the certified minimum 4755, and every constraint passes. Its ordered UTC starts are `['09:45', '10:30', '13:00', '17:30', '18:15', '12:00', '15:30', '11:15', '14:30', '19:00', '20:00', '19:30']`. This is a separate measured success, not a repaired or invented continuation of the failed attempt.
+
+One exact raw model response is:
+
+```json
+{"tool":"patch_event","arguments":{"calendarId":"cal-alice","eventId":"target-0","start":{"dateTime":"2026-11-06T09:45:00Z","timeZone":"UTC"},"end":{"dateTime":"2026-11-06T10:30:00Z","timeZone":"UTC"}}}
+```
+
+The parser reads tool `patch_event`, event `target-0` and start `2026-11-06T09:45:00Z`. The native result records the edit. The final reward is calculated only after the whole bundle is checked. The [full success trace](data/frontier_v5/comparison/episodes/08ca7ee9606e3ce1dcc37b8e.json) provides the intermediate reads, edits and observations.
+
+Actual group `373853a396a75ef192c1-0` (GPT-6.1 Sol, uniform, `frontier5-03`) has rewards `[1, 1, 0, 1]`. Its leave-one-out scalar advantages are `[0.3333, 0.3333, -1.0, 0.3333]`. It counts once in the complete mixed-group total. These values compare saved outcomes with the other three attempts; they are not parameter gradients.
+
+The separate hindsight audit finds 1 of 4 completed uniform groups that are mixed despite a unanimous first pair. This examines fully saved uniform trajectories after collection. It does not give the adaptive collector future information.
+
+For example, uniform group `373853a396a75ef192c1-0` has actual rewards `[1, 1, 0, 1]`. Its first two agree, so the frozen adaptive rule would abandon that observed prefix at predictor 0.4, below threshold 0.45. The later opposite outcome was unavailable at that decision. This demonstrates a real missed-contrast pattern in the uniform records; it is not a claim that the independent adaptive arm would have produced those same later responses.
+
+Actual adaptive group `00d848651f245d6790ca-0` on `frontier5-03` stops after observed rewards `[0, 0]`. It follows the registered rule and leaves the next two outcomes unobserved. Abandonment saves action calls for other groups while accepting the risk illustrated by the hindsight audit.
+
+### What it costs to obtain the contrast
+
+| Policy      | Allocator   |   Input tokens |   Cached input tokens |   Output tokens |   Reasoning output tokens |   Call seconds |   Usage missing |
+|:------------|:------------|---------------:|----------------------:|----------------:|--------------------------:|---------------:|----------------:|
+| GPT-6.1 Sol | uniform     |        5733008 |               1901440 |          502644 |                    489986 |        12867   |               0 |
+| GPT-6.1 Sol | adaptive    |        5776307 |               1937408 |          447872 |                    435202 |        11566.9 |               0 |
+| GPT-6 Luna  | uniform     |       12322739 |               8302080 |          160141 |                    138607 |         2186   |               0 |
+| GPT-6 Luna  | adaptive    |       11489380 |               7378688 |          150077 |                    129958 |         2072.5 |               0 |
+
+At 180 calls each, GPT-6.1 Sol uses 5,733,008 input and 502,644 output tokens with uniform collection, versus 5,776,307 input and 447,872 output tokens with adaptive collection. Summed call times are 12,867.0 and 11,566.9 seconds.
+
+At 180 calls each, GPT-6 Luna uses 12,322,739 input and 160,141 output tokens with uniform collection, versus 11,489,380 input and 150,077 output tokens with adaptive collection. Summed call times are 2,186.0 and 2,072.5 seconds.
+
+![Each arm uses 180 calls; stacked output-token totals separate reasoning from other output, and the second panel shows summed call hours.](figures/frontier5_effort.png)
+
+The first panel stacks reported reasoning and other output, so the full height equals total output. Values are thousands of tokens. The second panel sums individual call durations in hours; overlapping calls make that different from elapsed run time. All four bars have the same 180-call limit. Different heights show the observed resource cost of these particular trajectories, not a causal efficiency ranking. Longer or more difficult attempts can change both the output count and how many completed groups fit the call cap.
+
+Input includes CLI context overhead, with cached input reported as a subset. Reasoning output is reported separately within total output, consistent with the [official reasoning-token accounting](https://developers.openai.com/api/docs/guides/reasoning). The two output columns must not be added. Equal invocations do not establish equal tokens, compute or billed dollars. The CLI does not report policy billing.
+
+The 720 invocations have statuses `{'ok': 699, 'invalid_json': 20, 'policy_tool_violation': 1}`. Invalid JSON consumes a call and receives format feedback. It is not automatically the final task reward. Protocol violations, full action-horizon endings and completed business errors are separated below. Budget interruptions and transport failures remain unknown.
+
+| Policy      | Final failure type            |   Known failures |
+|:------------|:------------------------------|-----------------:|
+| GPT-6 Luna  | business constraint violation |               17 |
+| GPT-6 Luna  | feasible nonoptimal plan      |                1 |
+| GPT-6 Luna  | protocol violation            |                1 |
+| GPT-6.1 Sol | business constraint violation |                1 |
+| GPT-6.1 Sol | feasible nonoptimal plan      |                7 |
+
+The longest recorded model call takes 626.7 seconds, including any interrupted calls. There are 2 calls with measured duration above the pilot's 600-second guard. These timings do not change a business reward.
+
+The new cases demonstrate completed Sol successes and business-task failures with the requested model and settings held fixed. The scarce resource is trustworthy within-task contrast under a limited collection budget. Simply making every task impossible would also remove that contrast. The difference between the failed six-review calibration transfer and this stricter pilot shows why task selection needs its own validation.
+
+Four authored cases and two blocks do not establish a general allocator ranking or a broad frontier capability ceiling. The tool space, action allowance and exact scoring determine this boundary. A Python solver, a different policy scaffold, more cases or a token budget could change it. Served weights and sampling seeds are not attested by the CLI. The independent oracles check these stated business rules; they do not prove that every real scheduling preference has been modeled.
+
+The [saved diagnostic export](data/frontier_v5/rollouts_diagnostic.jsonl) contains the actual complete groups and scalar advantages, with every row marked `train_ready=false`. There is no loss computation, optimizer step or model-weight update. The data still lacks action-token log probabilities, masks and a local behavior-policy checkpoint. The SARA, PAIR and recent research discussion in sections 4 and 11 applies unchanged; this phase changes the task objective and difficulty calibration while retaining the collector rule. The historical objective_minutes, optimum_minutes and gap_minutes cache fields contain penalty points for fee fixtures; the verifier also writes explicit objective_penalty_points and charge breakdowns.
+
+The fresh comparison records 0 API-error observations, including 0 timezone-binding errors. API errors consume actions and return feedback; they are not automatically terminal task failures. The [API error audit](data/frontier_v5/api_error_audit.json) separates them from final scheduling and cost errors.
+
+## 13. Limits, spend and reproduction
 
 This is a collection experiment on fictional, fully specified tasks. It does not measure broad professional expertise, human satisfaction, or work with ambiguous objectives. Calendar lacks a Python calculation tool, while REPL intentionally has one. Model-to-model comparisons within a task share that tool set. The two task blocks are small, trajectories may be correlated, and repeat attempts are not independent new business cases.
 
 The primary comparison was registered after inspecting an interrupted run. Its tasks and thresholds were retained, but the budget and outage handling changed. That is disclosed rather than treated as an untouched first test. The earlier data remain inspectable. A stronger replication would use unseen tasks, randomized launch timing and a token-budgeted engine with controllable decoding.
 
-The complete collection includes 720 primary comparison invocations, 256 stress-comparison invocations, 960 interrupted-run invocations, 64 pilot invocations, one CLI health probe and two authoring calls. The tested-policy interfaces do not report billed dollars. The two authoring calls report $0.085094 at list rates, which is not a subscription invoice. No OpenRouter request, optimizer step or weight update was made for this notebook.
+The final difficulty phase adds 591 calibration invocations, 1 availability probe and 720 comparison invocations. The six-review phase adds 89 and 720. With the 2,001 earlier policy calls, all phases total 4,122 tested-policy invocations. The final phase adds 1 wording call at USD 0.0364510 reported list cost. All 4 authoring calls together report USD 0.1417238 at list rates; actual policy and subscription billing remain unavailable. Model parameter updates: 0.
+
+The six-review follow-up adds 89 calibration calls and 720 fresh comparison calls, for 809 additional policy invocations. The third authoring call reports USD 0.0201788 at list rates. Through the six-review phase, the three authoring calls report USD 0.1052728 in total list metadata. Actual subscription billing and tested-policy dollars remain unavailable. No weight updates occurred.
+
+The earlier phases include 720 primary comparison invocations, 256 stress-comparison invocations, 960 interrupted-run invocations, 64 pilot invocations, one CLI health probe and two earlier authoring calls. The tested-policy interfaces do not report billed dollars. The two authoring calls report USD 0.085094 at list rates, which is not a subscription invoice. No OpenRouter request, optimizer step or weight update was made for this notebook.
 
 Frozen files and derived outputs are organized as follows:
 
 - `data/tasks.json`, `calendar/`, `finqa/` and `data_provenance.json` hold the fresh inputs and exact answers.
+- `data/frontier_v5/` holds the final calibration, selection, four new comparison cases, complete caches, protocols, tables and diagnostic export.
+- `data/frontier_v4/` holds the separate calibration, selection, fresh tasks, protocols, caches, episodes, schedules, rescored tables and diagnostic export. Frozen collector sources for calibration and comparison are distinct.
 - `data/stress_run/`, `stress_tasks.json`, `stress_summary.csv` and `preregistered_stress_protocol.json` hold the separately labeled follow-up.
 - `data/primary_run/` holds primary request-keyed caches, complete episode records and live schedule ledgers.
 - `data/cache/`, `episodes/` and `schedules/` preserve the pilot, health probe and interrupted original run.
@@ -508,7 +1069,7 @@ Replay uses Python 3.13.5 and the pinned `requirements-replay.txt`. From this no
 ```powershell
 python -m pip install -r requirements-replay.txt
 python -m ipykernel install --user --name openenv-rewards
-python -m nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=openenv-rewards 27_adaptive_knowledge_rollouts.ipynb
+python -m nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=openenv-rewards --ExecutePreprocessor.timeout=900 27_adaptive_knowledge_rollouts.ipynb
 ```
 
 Keep `NB27_LIVE` unset. The default replay verifies hashes and raises on missing evidence rather than calling a model. It needs no API key and does not require the environment packages. Figures and tables are recomputed from the same saved attempts.
@@ -521,10 +1082,10 @@ git -C data/tmp/OpenEnv checkout 21fbb0ecb2a3e74110b59cf38a1b195decc75c88
 python -m pip install -e data/tmp/OpenEnv/envs/calendar_env -e data/tmp/OpenEnv/envs/finqa_env -e data/tmp/OpenEnv/envs/repl_env
 ```
 
-Use authenticated `codex` CLI access, a new protocol and run directory, and explicit size caps before setting `NB27_LIVE=1`. Calendar needs local loopback ports. Nested model calls stay disabled. A paused or pending request requires an audit; it must not silently be submitted again.
+Use authenticated `codex` CLI access. The optional live cell in section 12 uses four settings at the top of the notebook. Keep `FRONTIER_NEW_RUN_ID=None` for replay. To collect new trajectories, set a fresh short run ID and enable `NB27_LIVE=1`. The small default, 72 calls per collector, one block and two models, caps the run at 288 invocations. It creates a separate protocol and `data/frontier_v5/live-<run-id>/` directory; the displayed frozen comparison remains separate. Calendar needs local loopback ports. Nested model calls stay disabled. A paused or pending request requires an audit; it must not silently be submitted again.
 
 
-## 12. Future work and further reading
+## 14. Future work and further reading
 
 Links were checked on 24 October 2026.
 
@@ -533,16 +1094,16 @@ Links were checked on 24 October 2026.
 - Repeat both allocators on at least 50 unseen cases per family and ten task blocks. Measure mixed-group yield with block-level uncertainty; the present full-group counts are too small for a stable general estimate.
 - Compare several probe lengths and group sizes under a fixed token budget. Measure both useful contrast and missed mixed groups; the two-probe illustration shows why aggressive abandonment can hurt.
 - Add randomized continuation with positive, logged probabilities. Audit pair-inclusion estimates before any training, because deterministic abandonment changes which contrast pairs are observed.
-- Add longer calendar plans and partially specified business rules, with independently checked feasibility and human adjudication where exact gold is unavailable. Measure whether the remaining policy saturation reflects task design rather than a broad capability ceiling.
-- After collection is validated, repeat with a small open-weight policy exposing weights, tokenizer, log probabilities and masks. Measure held-out improvement under a separately authorized training experiment. The current export has no such training attestation and performs no updates.
+- Give the same 12-review cases a Python optimization tool, keeping the task records and reward unchanged. Measure whether the observed Sol failures persist; the present Calendar action space requires planning without that solver.
+- Re-score these frozen trajectories with a graded cost reward that still rejects invalid schedules. Compare reward variance and useful within-task differences with the exact-minimum binary score. The recorded feasibility and cost-gap diagnostics motivate this test; it needs no weight updates.
 
 ### Further reading
 
 - [Early Verdicts, Better Budgets: Sequential Adaptive Rollout Allocation for Compute-Efficient RLVR](https://arxiv.org/abs/2607.26253) (Nomand et al., 2026). The source of the posterior predictor and stopping-rule comparison used here.
 - [Learning as Reasoning Unfolds: Progressive Rollout Allocation for Efficient Reinforcement Learning](https://arxiv.org/abs/2607.22002) (Jiang et al., 2026). A different progressive allocation strategy based on observed group variance.
 - [PAIR: Pairwise-Aware Inclusion Reweighting for Adaptive Rollout Allocation in RLVR](https://arxiv.org/abs/2608.11368) (Nomand et al., 2026). Explains the selection-bias problem for observed rollout pairs.
-- [SERA: Scale-Equalized Rollout Allocation for Maximum Likelihood Reinforcement Learning](https://arxiv.org/abs/2609.36552) (Chen et al., 2026). Shows why the allocation objective depends on the intended learning estimator.
-- [Where Groups Split: A Probe Prior for Nonzero Within-Group Variance in RL Post-Training](https://arxiv.org/abs/2610.25325) (Ellison et al., 2026). Uses a trained probe, a step deliberately outside this no-update study.
+- [CERO: Where and When to Allocate Rollouts for RL Post-Training](https://arxiv.org/abs/2610.09679) (Zong et al., 2026). Extends allocation to prompt exposure and budget pacing over a training horizon.
+- [Adaptive Decoding Methods for Token-Efficient Reinforcement Learning](https://arxiv.org/abs/2610.25860) (Li et al., 2026). Studies training-time token-support schedules that the fixed CLI policy does not expose.
 - [ToolSandbox: A Stateful, Conversational, Interactive Evaluation Benchmark for LLM Tool Use Capabilities](https://arxiv.org/abs/2408.04682) (Lu et al., 2024). Provides context for checking final tool state rather than accepting plausible action text.
 
-[Executed notebook](27_adaptive_knowledge_rollouts.ipynb) · [Saved summary](data/summary.csv) · [Frozen primary protocol](data/preregistered_primary_protocol.json)
+[Executed notebook](27_adaptive_knowledge_rollouts.ipynb) · [Latest saved summary](data/frontier_v5/summary.csv) · [Latest frozen protocol](data/frontier_v5/comparison_protocol.json) · [Earlier summary](data/summary.csv) · [Frozen primary protocol](data/preregistered_primary_protocol.json)

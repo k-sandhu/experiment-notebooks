@@ -1,0 +1,23 @@
+# This cell is an explicit, separately named collection demonstration.
+# Defaults replay all existing evidence without any model calls.
+if FRONTIER_NEW_RUN_ID is not None:
+    assert LIVE, 'Enable NB27_LIVE=1 explicitly before collecting paid CLI calls.'
+    assert re.fullmatch('[a-z0-9][a-z0-9-]{0,50}',FRONTIER_NEW_RUN_ID),'Use a fresh short lowercase run name.'
+    assert 1<=FRONTIER_NEW_BLOCKS<=2 and FRONTIER_NEW_CALLS_PER_ARM>=1
+    _new_namespace=dict(frontier_namespace)
+    # Functions keep their defining globals, so run the embedded source again
+    # in the new namespace, then redirect it before calling a model.
+    for _name,_source in frontier_sources.items():exec(_source,_new_namespace)
+    _run=DATA/'frontier_v4'/('live-'+FRONTIER_NEW_RUN_ID)
+    assert not _run.exists(), 'Existing evidence is preserved. Choose a new run ID.'
+    _run.mkdir()
+    for _key,_sub in [('CACHE','cache'),('EPISODES','episodes'),('SCHEDULES','schedules')]:
+        _new_namespace[_key]=_run/_sub;(_run/_sub).mkdir()
+    _new_namespace.update(PROTOCOL='27-adaptive-v4-live-'+FRONTIER_NEW_RUN_ID,RUN_DATA=_run,ARM_CALL_COUNTS={},CIRCUIT_BREAKER=threading.Event(),CALLS_PER_ARM=FRONTIER_NEW_CALLS_PER_ARM,N_BLOCKS=FRONTIER_NEW_BLOCKS,MODELS=FRONTIER_NEW_MODELS)
+    _new_namespace['save_json'](_run/'protocol.json',dict(created=now(),parent='frontier_v4/comparison_protocol.json',question='Fresh repeated collection on the existing four frozen cases; not a new task-generalization study.',models=FRONTIER_NEW_MODELS,calls_per_arm_block=FRONTIER_NEW_CALLS_PER_ARM,blocks=FRONTIER_NEW_BLOCKS,workers=4,total_cap=len(FRONTIER_NEW_MODELS)*2*FRONTIER_NEW_BLOCKS*FRONTIER_NEW_CALLS_PER_ARM,max_actions=24,group_size=4,probe_size=2,threshold=.45,inputs_sha256=frontier_namespace['frontier_protocol']['inputs_sha256'],no_weight_updates=True))
+    with ThreadPoolExecutor(max_workers=4) as _pool:
+        _futures=[_pool.submit(_new_namespace['run_arm'],_label,_alloc,_block,FRONTIER_NEW_CALLS_PER_ARM) for _label in FRONTIER_NEW_MODELS for _alloc in ['uniform','adaptive'] for _block in range(FRONTIER_NEW_BLOCKS)]
+        for _future in as_completed(_futures):_future.result()
+    print('New collection saved to',_run,'Billed CLI dollars unavailable. No weight updates.')
+else:
+    print('Optional live collection disabled. Frozen results above are replayed locally.')

@@ -1,0 +1,36 @@
+def verify_calendar(task,initial,final,read_before_write):
+    before={r['event_id']:r for r in initial['events']};after={r['event_id']:r for r in final['events']};notes=[];starts=[]
+    if set(after)!=set(before):notes.append('Event identities added or removed')
+    for eid,r in before.items():
+        got=after.get(eid,{})
+        for key,a in r.items():
+            if eid in task['expected'] and key in {'start_datetime','end_datetime'}:continue
+            b=got.get(key)
+            if key in {'start_datetime','end_datetime'} and b is not None and iso_time(a)==iso_time(b):continue
+            if a!=b:notes.append(eid+': changed '+key)
+    base=datetime.datetime(2026,11,6,9,tzinfo=datetime.timezone.utc)
+    for j,sp in enumerate(task['specs']):
+        row=after.get('target-'+str(j),{})
+        try:
+            start=datetime.datetime.fromisoformat(iso_time(row['start_datetime']));end=datetime.datetime.fromisoformat(iso_time(row['end_datetime']))
+            units=(start-base).total_seconds()/900
+            if units!=int(units):notes.append(f'Review {j}: start outside 15-minute grid')
+            s=int(units);starts.append(s)
+            if s not in sp['options']:notes.append(f'Review {j}: start not allowed')
+            if (end-start).total_seconds()!=900*sp['duration']:notes.append(f'Review {j}: duration changed')
+            for p in sp['people']:
+                if any(s<b+1 and b<s+sp['duration'] for b in task['busy'][p]):notes.append(f'Review {j}: protected availability conflict for {p}')
+        except (KeyError,ValueError,TypeError):notes.append(f'Review {j}: invalid time');starts.append(None)
+    if all(s is not None for s in starts):
+        for j,s in enumerate(starts):
+            for i in range(j):
+                if s<starts[i]+task['specs'][i]['duration'] and starts[i]<s+task['specs'][j]['duration']:notes.append(f'Reviews {i},{j}: room overlap')
+        for i,j,g in task['precedence']:
+            if starts[i]+task['specs'][i]['duration']+g>starts[j]:notes.append(f'Reviews {i},{j}: precedence violated')
+        cost=15*sum(sp['weight']*abs(s-sp['old']) for s,sp in zip(starts,task['specs']))
+    else:cost=None
+    if initial['attendees']!=final['attendees']:notes.append('Attendees changed')
+    if not read_before_write:notes.append('All availability calendars were not read before writing')
+    feasible=not notes;optimal=cost==task['oracle']['objective_minutes']
+    if not optimal:notes.append('Schedule does not have minimum weighted movement')
+    return dict(reward=int(feasible and optimal),details=notes,feasible=feasible,objective_minutes=cost,optimum_minutes=task['oracle']['objective_minutes'],objective_gap_minutes=None if cost is None else cost-task['oracle']['objective_minutes'],final_state=final)
