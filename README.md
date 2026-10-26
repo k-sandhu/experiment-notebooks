@@ -61,7 +61,7 @@ solves a case the stronger model previously missed, or repeats an answer it coul
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
-| 23 | [Synthetic data generation and curation](notebooks/23-synthetic-data-curation/) | Generated examples need exact values and evidence that supports them. After two protocols found no Sol value misses, a separate v3 generator tested a pilot ladder, then compared fresh retries and verifier-guided repairs on 48 long procurement cases plus 12 audit cases. | V3 Sol answered 45/48 collection cases and 12/12 audit cases with all seven values correct; Luna answered 0/48 and 0/12. The pilot's Sol miss counts were 1, 0 and 1, so it used the declared level-three fallback. Fresh Sol retry and Sol repair each corrected all 3 selected Sol misses; Luna cross-repair corrected 0/3, and neither Sol arm added distinct cases beyond the other. The small audit set was already 12/12 for Sol. No training was run, so correction data is not evidence of a performance gain. |
+| 23 | [Synthetic data generation and curation](notebooks/23-synthetic-data-curation/) | Generated extraction examples need exact values and inspectable evidence. After three earlier protocols, this follow-up compares a fresh high-reasoning Sol retry with feedback repair on genuine failures from 240 longer procurement packets, plus a separate 24-case audit. Does the repair package recover more cases than another attempt? | Sol returned all seven values correctly on 195/240 collection cases and 20/24 audit cases. On 45 selected genuine failures, fresh retry recovered 30/45 and feedback repair 36/45: 10 repair-only, 4 retry-only, 26 both and 5 neither. The +13.3-point difference has a paired 95% interval of -2.2 to 28.9 points. Every source passed independent audits before calls. No model was trained. |
 
 ## Making bounded decisions
 
@@ -194,7 +194,7 @@ python -m venv .venv
 * New collection in 09, 11, 12 and 13: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
 * Notebook 13 verifies cached evidence before replay. For a new collection, use a separate copy and follow its README; keep the committed cache intact.
 * Notebook 19 replays the complete PowerPoint study offline. New collection uses explicit --live commands and requires Windows, PowerPoint and authenticated model CLIs.
-* Notebook 23 replays 82 original and 78 harder-round CLI requests offline. `NB_LIVE=1` runs a small new first-protocol collection; `NB_HARD_LIVE=1` runs a small harder collection. Fresh results stay under ignored `data/tmp/` paths, separate from both committed main runs and pilots.
+* Notebook 23 replays its completed protocols and paired interventions offline, preserves interrupted service attempts, and recomputes 1,056 potential main targets from saved text. Live knobs default off; small fresh pilots write to isolated ignored data/tmp/ folders.
 * Notebook 14 uses `PRIORLABS_API_KEY` and `NB_LIVE=1` for new collection, with a checked computation-token cap. Its default replay reads 48 saved responses without network access.
 * **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
 * Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
@@ -234,7 +234,7 @@ Notebook 15 uses two fresh numerical packets and model drafts collected on 2026-
 
 Notebook 17 extends the writing pilot with 24 fresh programmatic cases and copied legacy evidence. Human reader and editor results are pending; their participant materials and import workflow are included.
 
-Notebook 23 uses fictional order threads generated in code on 2026-10-24, with source events, exact answer keys and model responses saved for inspection. It demonstrates data curation without training a model. Its [provenance record](notebooks/23-synthetic-data-curation/data/provenance.json) identifies the models and sources; generated service outputs do not carry a claim of unrestricted downstream training permission.
+Notebook 23 uses fictional order threads generated in code on 2026-10-24 and procurement packets generated on 2026-10-26. Source text, exact answer keys and available model responses are saved for inspection. It demonstrates data curation without training. Its [latest provenance record](notebooks/23-synthetic-data-curation/data/high_v4/provenance.json) records source audits, paired outcomes and service history; generated outputs do not carry a claim of unrestricted downstream training permission.
 
 ## For AI agents
 
