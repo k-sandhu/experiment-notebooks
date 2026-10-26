@@ -100,6 +100,8 @@ another (11), and whether review loops make a model more reliable at regulated w
 checks whether the work finished and how much useful feedback remains when a policy already succeeds often.
 A later audit needs the original facts and action as well as evidence about the model itself (26).
 
+Reward collection repeats a task and scores each attempt. A group containing both a success and a failure gives a learning method an outcome contrast. Notebook 27 tests whether choosing where to collect more attempts finds more of that contrast within a fixed call budget, without changing model weights.
+
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
 | 05 | [Text-to-SQL safety](notebooks/05-text-to-sql-safety/) | A text-to-SQL assistant turns an analyst's plain-English question into SQL that runs on a live database, so one bad query can change data or leak personal details. Given a written read-only policy, how often do 8 open-weight models write a query that breaks it on 29 policy-breaking requests, compared with Claude, GPT and Muse, and do they still answer 23 legitimate questions? | Claude, GPT, Muse Wonder and 6 of 8 open models: 0 violations on 29 policy-breaking requests. Mistral Small 4: 7 (one an `UPDATE` hidden in a "refused" reply); Gemma 4 31B: 3 |
@@ -111,6 +113,7 @@ A later audit needs the original facts and action as well as evidence about the 
 | 24 | [Collecting RL rollouts and rewards](notebooks/24-openenv-rewards/) | Training a small model through trial and error needs saved actions and checked rewards. With Llama 3.2 3B and Gemma 3 4B on eight fresh maze and reasoning tasks, how do fixed sampling, early stopping, state coverage and reward-based task selection change the collected signal? No model weights are updated. | 80 attempts: 74 scored outcomes and six provider errors. Only 2/13 complete initial groups contain both success and failure; conditional coverage adds scores to one further group. Early-stop replay uses 193 vs 261 action calls on complete groups; audit calls were actually collected. Total cost bound under $0.018 |
 | 25 | [Rewards from knowledge work](notebooks/25-knowledge-work-rollouts/) | A successful tool call can still leave a meeting wrong or a financial answer imprecise. On 12 fresh calendar, financial-table and cash-reconciliation tasks, how do two recent small open-weight policies compare with GPT-6.1 Sol and GPT-6 Luna across 144 attempts, and what makes further improvement harder near a high score? Collect native and exact rewards plus 20 prefix continuations, without updating weights. | Exact completion: Granite 16/36; Nemotron 35/36; Sol 35/36; Luna 33/36. Sol/Luna have only 1/12 and 2/12 mixed reward groups; native FinQA misses Sol's remaining precision error. 584 cached requests total; OpenRouter $0.0581; CLI dollar charges unavailable. Small task set, no general ranking or training-improvement claim |
 | 26 | [What can an auditor check about a model?](notebooks/26-model-auditability/) | A disputed automated decision needs evidence of the facts, rule and action; inspecting the neural network needs different access. On 32 fresh expense-policy records per model, repeated twice, what can hosted GPT and Qwen establish, and what extra checks can a pinned local checkpoint support? | GPT 32/32 policy answers vs Qwen 22/32 per draw; both repeat all decision fields. Rules reconstruct 128/128 actions. Local Pythia replays and changes 8/8 computations; neither hosted interface exposes executed weights. Small constructed test, no deployment certification |
+| 27 | [Hard knowledge work and adaptive reward collection](notebooks/27-adaptive-knowledge-rollouts/) | Rescheduling a workshop can reduce meeting movement yet create costly delays between reviews. Earlier scheduling, ledger and purchasing tasks produced only successful completed Sol attempts. On four fresh 12-review cases with handoff charges, does adaptive collection obtain more groups of four containing both success and failure than always collecting four? Compare GPT-6.1 Sol and GPT-6 Luna at 180 calls per model and collector. No weight updates. | Sol succeeds on 6/8 uniform and 3/9 adaptive attempts. Complete mixed groups: Sol 2 versus 2; Luna 0 versus 0 (uniform versus adaptive), at 180 calls each. Four fresh cases and two blocks give a descriptive comparison. Earlier runs and calibration costs remain separate. |
 
 ## Recognising model outputs
 
@@ -206,6 +209,8 @@ Notebook 18 uses 768 fresh synthetic cases, all four decision models and strict 
 Notebooks 21 and 22 are grouped under `econ/`. Each runs independently from its own directory and stops on a
 missing offline cache entry. Their READMEs distinguish measured usage from assumed business costs and explain
 the small live profiles and spending caps.
+
+Notebook 27 uses strict offline replay and records two equal-call comparisons, a separate pilot and a preserved transport-failure run. Its README explains the CLI-only collection protocol and unknown dollar billing.
 
 ## Data and licences
 

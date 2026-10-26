@@ -1,0 +1,89 @@
+def run_episode(label,task,sample,service=None,remaining=MAX_ACTIONS):
+    eid=digest(dict(protocol=PROTOCOL,policy=label,task=task['task_id'],sample=sample))[:24];path=EPISODES/(eid+'.json')
+    if path.exists():
+        record=read_json(path);assert record.get('complete') and record['protocol']==PROTOCOL;return record
+    if not LIVE:raise RuntimeError('Offline episode miss '+eid)
+    env=EpisodeEnvironment(task,eid,service);messages=initial_messages(task,env);initial=copy.deepcopy(messages)
+    trace=[];stop='horizon';status='ok';started=now()
+    try:
+        for turn in range(min(MAX_ACTIONS,remaining)):
+            if CIRCUIT_BREAKER.is_set():stop='circuit_breaker';break
+            rec=model_call(label,messages,dict(episode_id=eid,sample=sample,turn=turn))
+            entry=dict(turn=turn+1,cache_key=rec['key'],raw_text=rec['text'],status=rec['status'])
+            if rec['status'] in {'transport_error','policy_tool_violation'}:
+                trace.append(entry);stop=rec['status'];status=rec['status'];break
+            if rec['status']=='invalid_json':
+                obs={'error':'Return exactly one JSON object with tool and arguments. This consumed one action.','done':False,'reward':0};raw={}
+            else:
+                action=rec['parsed_action'];entry['action']=action
+                try:obs,raw=env.step(action)
+                except (ValueError,TypeError,KeyError) as exc:obs={'error':type(exc).__name__+': '+str(exc)[:700],'done':False,'reward':0};raw={}
+            entry.update(observation=obs,raw_observation=raw);trace.append(entry)
+            messages.extend([dict(role='assistant',content=rec['text']),dict(role='user',content=canonical(obs))])
+            if obs.get('done'):
+                # An internal step cap with no final answer is a truncation.
+                stop='environment_done' if task['environment']!='calendar' else 'policy_finish'
+                if task['environment']!='calendar' and env.verify().get('answer') is None:stop='horizon'
+                break
+        else:
+            if len(trace)<MAX_ACTIONS:stop='budget_cap'
+        verification=env.verify()
+        reward=None if stop in {'budget_cap','transport_error','circuit_breaker'} else verification['reward']
+        if stop=='policy_tool_violation':reward=0
+        record=dict(protocol=PROTOCOL,episode_id=eid,policy=label,task_id=task['task_id'],environment=task['environment'],family=task['family'],phase=task['phase'],sample=sample,initial_messages=initial,initial_state=env.initial,trace=trace,verification=verification,reward=reward,status=status,stop_reason=stop,terminated=stop in {'environment_done','policy_finish'},truncated=stop in {'budget_cap','horizon'},started=started,finished=now(),complete=True)
+        save_json(path,record);return record
+    finally:env.close()
+
+def run_pilot(label):
+    service=CalendarService('pilot-'+label)
+    try:
+        result=[]
+        for task in [t for t in ALL_TASKS if t['phase']=='pilot']:
+            r=run_episode(label,task,dict(phase='pilot',replicate=0),service)
+            result.append(r);print('PILOT',label,task['task_id'],r['reward'],len(r['trace']),r['stop_reason'],flush=True)
+        return result
+    finally:service.close()
+
+def task_order(block,cycle):
+    # Disjoint task sets between blocks, balanced by environment in each cycle.
+    groups={e:[t for t in TASKS if t['environment']==e][2*block:2*block+2] for e in ['calendar','finqa','repl']}
+    rng=random.Random(27000+100*block+cycle)
+    for group in groups.values():rng.shuffle(group)
+    envs=list(groups);rng.shuffle(envs)
+    return [groups[e][i] for i in range(2) for e in envs]
+
+def run_arm(label,allocator,block,cap=CALLS_PER_ARM):
+    schedule_id=digest(dict(protocol=PROTOCOL,label=label,allocator=allocator,block=block,cap=cap))[:20]
+    path=SCHEDULES/(schedule_id+'.json')
+    if path.exists():
+        schedule=read_json(path)
+        if schedule.get('complete'):return schedule
+    if not LIVE:raise RuntimeError('Offline schedule miss')
+    service=CalendarService(schedule_id);used=0;groups=[];ledger=[];cycle=0;group_index=0
+    try:
+        while used<cap:
+            for task in task_order(block,cycle):
+                group=dict(group_id=f'{schedule_id}-{group_index}',task_id=task['task_id'],episodes=[],decision='continue',start_call=used,predictor_history=[])
+                group_index+=1
+                for replicate in range(GROUP_SIZE):
+                    r=run_episode(label,task,dict(phase='comparison',allocator=allocator,block=block,cycle=cycle,group=group_index-1,replicate=replicate),service,remaining=cap-used)
+                    for entry in r['trace']:
+                        used+=1;ledger.append(dict(call=used,cache_key=entry['cache_key'],episode_id=r['episode_id'],group_id=group['group_id'],task_id=task['task_id'],turn=entry['turn']))
+                    group['episodes'].append(r['episode_id'])
+                    rs=[read_json(EPISODES/(eid+'.json'))['reward'] for eid in group['episodes']]
+                    if any(x is None for x in rs):group['decision']='unknown_or_budget';break
+                    n=len(rs);s=sum(rs);mixed=0<s<n
+                    # SARA Beta(1,1) predictor for a size-four group. A mixed
+                    # prefix is absorbing. Commit floor is fixed at four.
+                    peff=1.0 if mixed else (GROUP_SIZE-n)/(GROUP_SIZE+1)
+                    group['predictor_history'].append(dict(n=n,successes=s,p_effective=peff))
+                    if n==GROUP_SIZE:group['decision']='complete';break
+                    if allocator=='adaptive' and n>=PROBE_SIZE and peff<ABANDON_THRESHOLD:group['decision']='abandon_unanimous_probe';break
+                    if used>=cap:group['decision']='budget_cap';break
+                group['end_call']=used;groups.append(group)
+                schedule=dict(protocol=PROTOCOL,schedule_id=schedule_id,policy=label,allocator=allocator,block=block,cap=cap,used=used,groups=groups,ledger=ledger,complete=used==cap)
+                save_json(path,schedule)
+                print('ARM',label,allocator,block,'calls',used,'group',task['task_id'],group['decision'],'rewards',rs,flush=True)
+                if used>=cap or CIRCUIT_BREAKER.is_set():return schedule
+            cycle+=1
+    finally:service.close()
