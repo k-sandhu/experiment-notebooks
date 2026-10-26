@@ -1,0 +1,42 @@
+{
+  "protocol": "23-sol-v3",
+  "phase": "paired_main",
+  "config": {
+    "n_collection": 48,
+    "n_audit": 12,
+    "seed": 233024,
+    "audit_seed": 233924,
+    "max_selected": 24,
+    "batch_size": 2,
+    "max_workers": 4,
+    "timeout_s": 240,
+    "max_requests": 160,
+    "protocol": "23-sol-v3"
+  },
+  "task_instructions": "Reconcile the target purchase ORDER and LINE in the source packet as of its cutoff.\nReturn exactly {case_id, answer, evidence}. answer has exactly order_id (string),\nsku (string), quantity_units (integer or null), unit_price_cents (integer or null),\ncurrency (three-letter string or null), ship_date (YYYY-MM-DD or null), status\n(active/cancelled/ambiguous). evidence has the same seven keys, each a nonempty\nlist of distinct document IDs. A batch wrapper may request a results array.\n\nquantity_units is OPEN individual units for the target line: current approved\nordered units minus net allocated physical shipments after corrections, voids,\nreversals and accepted returns. Same-SKU lines remain separate lines.\n\nCommercial terms: only APPROVED rows recorded by the cutoff and effective by the\ncutoff qualify. Resolve EACH FIELD separately. A line-scoped value overrides an\norder default, regardless of relative authority. Within the same scope choose\nhigher authority (Controller=3, Buyer=2, Planner=1), then later effective timestamp,\nthen higher revision. Recorded timestamp is an availability filter, never a\nprecedence tie-break. Blank fields do not clear an older value. This packet has\nno equal-priority contradictory approvals. Unapproved proposals and future\neffective/recorded rows do not apply. Purchase-order line values have authority\n0 and the order's issue date. Partial amendments retain all unstated fields.\n\nPhysical ledger: select the highest row revision for each logical event ID among\nrows recorded by cutoff; exact duplicate copies of that same event/revision count\nonce. The selected row replaces older revisions completely. VOID rows do not\ncount. Also exclude selected events occurring after cutoff or belonging to another\norder. A POSTED REVERSAL removes the referenced shipment completely, including\nits selected correction; do not subtract its quantity a second time. A reversal\nwhose selected revision is VOID has no effect. A RETURN is a positive returned\nquantity, subtracted from dispatched demand: use the referenced shipment's UOM,\nSKU, occurred timestamp and allocation key, not the return date's UOM master.\nReturns on a removed shipment do not count. All eligible returns here are valid\naccepted returns. Shipments and returns do not change ordered units.\n\nUOM master: choose the latest effective-from date no later than the shipment's\noccurred date, for that exact SKU and UOM. Convert quantity to individual units,\nthen apply the allocation key's target-line share. Allocation shares sum to 100%\nand conversions produce exact individual-unit integers in these source records.\nDo not allocate a whole shipment to the target merely because its SKU matches.\n\nPrice: choose the resolved price plan, then the highest minimum-quantity tier\nnot exceeding CURRENT ORDERED units, before deducting any shipments. Gross tier\nprices are per individual unit. Apply rebate A, then rebate B to the discounted\nremainder (not their sum), then ADD the plan's per-unit fee and SUBTRACT its\nper-unit credit. Convert currency amounts to cents and round ONCE at the end:\nnearest integer cent, exact half-cents UP. Do not round intermediate discounts,\nfees or carton conversions; use exact decimal/rational arithmetic. Currency is\nthe resolved commercial currency. Freight/tax invoice totals are not unit-price\nadjustments unless the plan explicitly lists a per-unit fee/credit.\n\nThe order status remains active unless an approved order-status notice changes\nit. Shipment VOID/reversal is not cancellation of the purchase order. Do not\ninvent ambiguity merely because different revisions or different lines differ.\n\nEvidence must include current value-bearing sources and calculation inputs.\nQuantity needs resolved ordered terms, line/SKU identification, UOM master,\nallocation schedule and physical ledger. Price needs the chosen plan, its tier\nquantity and the pricing schedule. Relevant additional packet context is allowed\nwithout penalty, but context alone cannot replace required current sources.\nCitation order does not matter. Never cite the unrelated-order-only document as\nsupport for target fields. Wrong values and incomplete citations are separate\nchecks; a source citation does not make an incorrect calculation correct.\n",
+  "instructions_hash": "bac04ab0624e3c286d51f6ea278ed8c21a73affdb36584e065ca79bbfb1b866f",
+  "fixture_version": "23-procurement-v3",
+  "models": [
+    "gpt-6.1-sol",
+    "gpt-6-luna"
+  ],
+  "setting": "codex exec, isolated empty working directory, no tools, low reasoning effort",
+  "transport_version": "23-codex-cli-v1",
+  "cli_options_hash": "fb1aa89bd47e0d566a643672c90191f5d4fc9d035eda2b37782fb5ceb3cecfad",
+  "model_weights_updated": false,
+  "errors_guaranteed": false,
+  "selected_level": 3,
+  "pilot_ladder_hash": "d0c492a6aad9369b4255b681b5a7343e91789e6c1286fb3ada8549a081887134",
+  "pilot_threshold_met": false,
+  "selection_policy": "Only original Sol collection value/schema failures, stable case-ID order, up to max_selected; evidence-only/transport/Luna-only/audit excluded",
+  "interventions": {
+    "fresh_retry": "Fresh Sol generation; no original output or feedback",
+    "self_repair": "Sol gets its original output plus generic failed field/category flags; no expected values",
+    "cross_repair": "Luna gets exactly the same original output and feedback as Sol self-repair"
+  },
+  "pairing": "All three arms use the same selected cases and ordered batches; one request per arm per batch",
+  "audit": "Generated only after main selection closes; original baselines only, no repairs",
+  "planned_baseline_requests": 60,
+  "intervention_request_upper_bound": 36,
+  "combined_request_upper_bound": 120
+}
