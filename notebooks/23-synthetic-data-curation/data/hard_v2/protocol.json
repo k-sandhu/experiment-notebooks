@@ -1,0 +1,65 @@
+{
+  "protocol": "23-hard-v2",
+  "config": {
+    "seed": 232024,
+    "n_shared": 32,
+    "n_per_arm": 16,
+    "n_audit": 16,
+    "models": [
+      "gpt-6-luna",
+      "gpt-6.1-sol"
+    ],
+    "samples_per_model": 2,
+    "batch_size": 4,
+    "max_workers": 4,
+    "max_repairs": 24,
+    "max_calls": 88,
+    "timeout_s": 240,
+    "prior_errors": 1.0,
+    "prior_cases": 4.0,
+    "coverage_mixture": 0.5,
+    "protocol": "23-hard-v2"
+  },
+  "task_instructions": "Extract the final state of the target ORDER and LINE identified at the top of the pack, as of its cutoff.\nReturn exactly {\"case_id\": supplied ID, \"answer\": {...}, \"evidence\": {...}} as JSON.\nanswer has exactly order_id (string), sku (string), quantity_units (integer or null),\nunit_price_cents (integer or null), currency (three-letter code or null), ship_date\n(YYYY-MM-DD or null), status (active, cancelled, ambiguous). No Boolean or float\nis an integer. evidence has the same seven keys, each a nonempty list of distinct\nsource-document IDs. No extra keys. A batched wrapper may request a results array.\n\nThe task is LINE extraction, not the sum of the whole purchase order. A SKU can\noccur on another order. Only the target order AND target line count. Use approved\ndocuments issued at or before the cutoff. Higher REVISION wins separately for\neach stated field; timestamps, inbox position and document ID do not break equal-\nrevision ties. Partial changes retain all unstated fields. Quoted/archive and\ndraft material cannot change an approved value. Apply a conditional amendment\nonly when its named gate has an approved RELEASED result before the cutoff.\nAn approved HOLD means it does not apply. A future gate/document has no effect.\nConflicting values at the highest approved applicable revision make the affected\noutput null and status ambiguous; never choose a tie by display order.\n\nquantity_units means OPEN individual units, not original ordered units or shipped\nunits: (current cartons * units per carton + current loose units) minus the signed\nsum of POSTED ledger units for the target order and line through the cutoff.\nPositive ledger units are dispatches; negative units are accepted returns that\nreopen demand. Draft/memo rows, future rows and other orders/lines do not count.\nThe ledger contains one row per unique posting reference; do not count subtotals.\n\nunit_price_cents is the current NET price per individual unit. Take the current\nlist price per CARTON, apply the current rebate code's percentage from the\ncontract, divide by units per carton, then round ONCE to the nearest integer\ncent, with exact half-cents rounded UP. Do not round the carton rebate first.\nUse decimal/rational arithmetic; never infer tax, freight or invoice credit into\nthe unit price. Amounts in the table are decimal currency amounts, not cents.\n\nCancellation sets quantity_units, unit_price_cents, currency and ship_date to null,\nwhile retaining order_id and sku. A higher-revision reinstatement restores active\nstatus and uses the latest approved commercial terms and the full eligible ledger;\nit does not reset shipment totals. An explicitly withdrawn date is null without\nmaking an otherwise resolved order ambiguous.\n\nCite all current source documents needed to establish each field. Quantity needs\nthe applicable order/amendment terms, carton definition and eligible ledger. Price\nneeds current list-price and rebate-code terms, carton definition and rebate\ncontract. Applied conditional terms also need the gate decision. A conflict needs\nthe contradictory current documents. A cancellation needs its status document.\nRelevant source documents for the same target line may be added as context,\nincluding clearly marked historical context, without penalty, provided all\nnecessary current support is present. Context alone cannot establish a value.\nNever use an unrelated order's document as evidence. Source IDs identify entire\ndocument groups, so a cited table can also contain distractor rows.\n",
+  "instructions_hash": "79835adbbaf756b92023ddf98e90f64407fedc3fcddf44dcc7df6c1a4ffeb2b2",
+  "fixture_version": "23-hard-orders-v2",
+  "selection_policy": {
+    "signal": "Any returned original shared draw has a schema or field-value failure; semantic cases count once",
+    "excluded": [
+      "evidence-only failures",
+      "transport failures",
+      "fixed-arm outcomes",
+      "audit",
+      "repairs"
+    ],
+    "smoothing": {
+      "prior_errors": 1.0,
+      "prior_cases": 4.0
+    },
+    "uniform_mixture": 0.5,
+    "no_error_fallback": "uniform",
+    "coverage": "One slot per family when the arm size permits; largest-remainder allocation; deterministic shuffle"
+  },
+  "repair_policy": {
+    "within_each_source_model_priority": [
+      "field-value",
+      "schema",
+      "evidence-only",
+      "transport"
+    ],
+    "source_model_selection": "Alternate models in config order, skipping previously selected case IDs; priority is within each source queue, not global",
+    "maximum_one_attempt_per_case": true,
+    "target_model": "The other model",
+    "feedback": "Original output plus failed field names and verifier errors; no gold values",
+    "max_items": 24,
+    "max_batch_size": 4
+  },
+  "planned_generation_calls": 72,
+  "repair_call_upper_bound": 7,
+  "total_call_upper_bound": 79,
+  "hard_call_cap": 88,
+  "audit": "Disjoint cases generated after selection closes; never adapted on or repaired",
+  "model_errors_guaranteed": false,
+  "model_weights_updated": false,
+  "adaptive_effectiveness": "exploratory"
+}
