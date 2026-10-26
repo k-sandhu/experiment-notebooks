@@ -1,0 +1,475 @@
+{
+  "protocol": "23-scale-v5",
+  "phase": "pilot",
+  "config": {
+    "tiers": [
+      128,
+      192
+    ],
+    "seeds": [
+      255128,
+      255192
+    ],
+    "n_cases": 16,
+    "min_value_failures": 6,
+    "max_workers": 4,
+    "timeout_s": 900,
+    "max_physical_cli_requests": 3376,
+    "protocol": "23-scale-v5"
+  },
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "high",
+  "case_count_per_cli_request": 1,
+  "timeout_s": 900,
+  "max_workers": 4,
+  "transport_version": "23-scale-codex-cli-v1",
+  "dispatch_version": "23-scale-four-worker-waves-v1",
+  "cli_options": [
+    "exec",
+    "--skip-git-repo-check",
+    "--ephemeral",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "--sandbox",
+    "read-only",
+    "--disable",
+    "shell_tool",
+    "--disable",
+    "unified_exec",
+    "--disable",
+    "apps",
+    "--disable",
+    "plugins",
+    "--disable",
+    "multi_agent",
+    "--disable",
+    "browser_use",
+    "--disable",
+    "computer_use",
+    "--disable",
+    "image_generation",
+    "--disable",
+    "code_mode",
+    "--disable",
+    "code_mode_host",
+    "--disable",
+    "shell_snapshot",
+    "-c",
+    "model_reasoning_effort=\"high\"",
+    "--json",
+    "-"
+  ],
+  "fixture_version": "23-procurement-scale-v5",
+  "frozen_rule_source_sha256": {
+    "high_fixtures.py": "ff9479d80c93327d3cf0f4f854b1da89e5bd8d8b0db48707509f9cfe77e15547",
+    "high_material_audit.py": "cb8d8d6242936886b4f8ff865d7375d02a79d9562d29fc601650da9c6d584bb0",
+    "audit_high_rendered_sources.py": "b033e8ca7a90a385390155e4ee5e26fb2c8eed36f41129c30d9727e446560bf3"
+  },
+  "runtime_source_sha256": {
+    "scale_transport.py": "f5e82af94fae2f200badf9f14622ebaa32031269274534111418cbd435593b5c",
+    "scale_fixtures.py": "655991ade1e9b571be4b31b48383fddaa1077d3856a8bd60159e619b951a316d",
+    "scale_parallel.py": "11e8ef1da3db3a5ab527816a11b35b8ae29f00aa01a97d55620411b82e129f72",
+    "scale_experiment.py": "a9a16ceae0b03522f3286947c8c124ba8a95328f1be3d3aec2b16e180eb86812",
+    "collect_scale.py": "4d0bcd88574d850d1c892d109e9794d49bd9ffe19c0d87272ff29ce8f481b52a",
+    "high_fixtures.py": "ff9479d80c93327d3cf0f4f854b1da89e5bd8d8b0db48707509f9cfe77e15547",
+    "high_material_audit.py": "cb8d8d6242936886b4f8ff865d7375d02a79d9562d29fc601650da9c6d584bb0",
+    "audit_high_rendered_sources.py": "b033e8ca7a90a385390155e4ee5e26fb2c8eed36f41129c30d9727e446560bf3"
+  },
+  "task_instructions": "Reconcile the target ORDER and LINE as of the packet cutoff. Return exactly\n{case_id, answer, evidence}; answer has exactly order_id (string), sku (string),\nquantity_units (integer or null), unit_price_cents (integer or null), currency\n(three-letter string or null), ship_date (YYYY-MM-DD or null), status\n(active/cancelled/ambiguous). evidence has the same seven keys; each value is a\nnonempty list of distinct document IDs P01 through P06. A batch wrapper may ask\nfor a results array.\n\nRead all tables and use only the requested order/line. The same SKU can occur\non another line or order. quantity_units is OPEN individual units: current\napproved ordered demand minus NET allocated dispatched units, where accepted\nreturns reduce net dispatch. This packet's order remains active; shipment VOID,\nREVERSAL and RETURN do not cancel the purchase order.\n\nCommercial terms: resolve every field independently. An approved row qualifies\nonly if BOTH recorded and effective UTC timestamps are at or before cutoff\n(inclusive). Within a field: a line override beats an order default, then higher\nauthority wins (3 Controller, 2 Buyer, 1 Planner), then later effective timestamp,\nthen higher revision. Recorded timestamp filters availability only. INHERIT or\nunstated fields do not clear old values. The signed order has authority 0 and\nits issue timestamp. Other-line, unapproved, recorded-late and future-effective\nrows do not apply. This packet has no unresolved equal-priority conflicts.\n\nPhysical movements: group by logical Event ID across ingestion copies. Select\nthe HIGHEST ROW REVISION among copies recorded by cutoff; exact same-revision\ncopies count once. That selected row wholly replaces prior rows. Only then test\nits state, order and occurred timestamp. Selected VOID, another order and\noccurred-after-cutoff rows contribute zero; never fall back to an older revision.\nA POSTED, timely REVERSAL removes the referenced logical shipment, including its\nselected correction, ONCE. Multiple active reversals of the same shipment do not\nremove it twice. A VOID reversal has no effect. It is a control record, not a\nsecond negative quantity. Returns against removed/VOID shipments contribute zero.\n\nFor an active SHIP, select the exact SKU/UOM factor with latest effective_from\ndate on or before the SELECTED shipment's occurred calendar date. Select the\nallocation key's latest effective_from date on or before that SAME date. Multiply\nshipment quantity by individual-units-per-UOM and the target line's percent/100.\nAn allocation entirely to another line contributes zero. All contributions are\nwhole individual units; do not round allocations. Allocation shares total 100%.\nA RETURN is a positive accepted quantity in its ORIGINAL shipment handling units.\nUse the referenced SELECTED shipment's SKU, UOM, occurred date and allocation key,\nincluding that date's UOM and allocation versions, irrespective of return date.\nSubtract its converted allocated units from net dispatch. Do not use the original\nsuperseded row or the return date's new packaging/allocation schedule.\n\nPricing: use the resolved price plan and the highest tier minimum not exceeding\nCURRENT ORDERED demand, BEFORE movements. gross_cents is for an entire price pack\nof pack_units individual units, independent of warehouse UOM. Divide by pack_units;\napply tier rebate A then rebate B sequentially to that gross unit amount, using\nbasis points (100 bps = 1%). Then ADD fee_cents per individual unit and\npack_fee_cents/pack_units and SUBTRACT credit_cents per individual unit. These fees\nand credits are after rebates. Keep exact rational/decimal precision and round\nONCE at the final per-unit result to the nearest integer cent, exact halves UP.\nNever round a pack conversion, rebate or fractional-cent adjustment earlier.\nCurrency and requested ship date come from independently resolved commercial terms.\n\nEvidence: sources are P01 signed order/defaults/status, P02 approvals, P03 UOM,\nP04 dated allocations, P05 price schedules, P06 movement history. Cite sources\nneeded for current fields and arithmetic. Quantity requires current ordered\nterms plus P03/P04/P06; P01 is also needed if its ordered demand remains current.\nPrice requires the resolved plan, ordered demand for its tier and P05. SKU and\nactive order status are in P01. Order ID is stated in the packet header and P01.\nRelevant additional P01-P06 context is allowed without penalty; cite whole source\ngroups, not individual row IDs. Citation ordering is irrelevant. Do not omit\nneeded calculation sources merely because the numeric answer is correct.\n",
+  "instructions_hash": "7308e23ba06dba609d734ca7588ce972efe25c725534769f488f0248e14c3afb",
+  "storage": "Lossless full request and raw response per hash in deterministic gzip; source cases and compact independent audits are frozen once as gzipJSONL",
+  "eligibility": "Usable successful single-case response with valid schema and at least one incorrect typed value. Transport, parsing, schema-only and citation-only failures never count toward difficulty, accrual or selection.",
+  "infrastructure_stop": "At most max_workers requests per bounded wave. Wait for all current-wave tasks. On any infrastructure failure/exception retain all written raw caches and stop before the next wave. No automatic resubmission.",
+  "retry_boundary": "One CLI subprocess per full request, no orchestration retries. Internal CLI reconnects/network retries and exact inference draw counts are not independently disabled or guaranteed; diagnostics retained.",
+  "model_alias_scope": "The requested alias is fixed for this run, not an immutable dated model snapshot. Actual CLI metadata and request timestamps are retained; alias/time drift is not ruled out.",
+  "spend_usd": null,
+  "training_performed": false,
+  "blocks": [
+    {
+      "specification": {
+        "name": "tier_128",
+        "n": 16,
+        "seed": 255128,
+        "tier": 128,
+        "split": "pilot",
+        "start_index": 0
+      },
+      "source_path": "sources/tier_128.jsonl.gz",
+      "manifest": {
+        "all_passed": true,
+        "audit_compressed_sha256": "a63d046aa25df63d151116485c15b389d8b5c8a6fa87ed3c88d6e62c44dc8860",
+        "audit_file": "tier_128.jsonl.gz.audit.jsonl.gz",
+        "audit_gzip_sha256": "a63d046aa25df63d151116485c15b389d8b5c8a6fa87ed3c88d6e62c44dc8860",
+        "audit_jsonl_sha256": "488edc4fc24f4671a1fe97a59a4d962418a16268e1ebf112a2a2037a940a0c11",
+        "audit_path": "tier_128.jsonl.gz.audit.jsonl.gz",
+        "audit_uncompressed_sha256": "488edc4fc24f4671a1fe97a59a4d962418a16268e1ebf112a2a2037a940a0c11",
+        "case_ids_hash": "51d830731b1947e0d6bd18992d5d63dc4fd1ce0324d9901cecc1765cd531ca6f",
+        "case_index": [
+          {
+            "base_shipments": 128,
+            "case_id": "account-6f02f546203c12a79366",
+            "content_hash": "6bfa084f4d4f542e0c5228ba60c29af01ef83c6a44635538c06835a5d6a430a1",
+            "generation_index": 0,
+            "semantic_hash": "a4c9a31bda2b1a961de53a52b15f5f01295e62977b89ccde0eb4f1190fcb2484",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-cbdb7e9afff3281c432b",
+            "content_hash": "286c75b98893a813bccb7cdbda5740fce23cc8de06492f7dcde4b3dac1312f1c",
+            "generation_index": 1,
+            "semantic_hash": "d10fe9db256bffa370c67e6661a208f49aedab31a4d4fdd7fc7af30908afed62",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-55418ef885a924d49359",
+            "content_hash": "54bd9e5910dc0ec134fc0bd7f0ecdb6fd89f37f04855c96dc68390fea4bd56ab",
+            "generation_index": 2,
+            "semantic_hash": "347c0b6e70b730c6c1a5cff4f61163007da6e2c0ff48be05616f2d5dd21ff107",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-43f6a69348fbd481a149",
+            "content_hash": "d51405884a2f032f7140ee232131cad7acaedceaecbcf7eb2b611124360e128b",
+            "generation_index": 3,
+            "semantic_hash": "d779978bdac41298a837a5fdf0514ecc68996d74f92a2a4ca584bd82847689c0",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-02ce8cc1ef0de56f078c",
+            "content_hash": "67c2eef8c6a8a9aa9b83ca815d369b45faac3e254c7a615de44f388859aa84bd",
+            "generation_index": 4,
+            "semantic_hash": "658eb7ef8570a3176544632cfd26dfd1cf2beb3abbf864345e9430d346138b9b",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-11d2db5c1e53afaa785a",
+            "content_hash": "4907cad8e9ec6e87b0502c21f8690c82779400b3a2ca5020e60956d592bac859",
+            "generation_index": 5,
+            "semantic_hash": "83bb43f20916be8bac5fd4b465ee1aa0eb8c0e66a4e848d1f09af5d14074934a",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-3cbe2119fcc3348c4761",
+            "content_hash": "d878f2e09d2ba3643d9508f7b9e96a024a00399af4c19e66beaf011176b86868",
+            "generation_index": 6,
+            "semantic_hash": "6a16645e5ee05d077d895e34a9879ddcffc104ce93daf0bec4a7fafce20723d1",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-b227f1283832b8324fb5",
+            "content_hash": "964cd8d84b6883726a25df58fbd3960201fd942678e7b3d790b51bfb5e20cfea",
+            "generation_index": 7,
+            "semantic_hash": "685d7d7362feabe5f02037924f24edbc689802f210e8cf55b0e718bf2d9be96d",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-b7e35394d4ef0b7a0077",
+            "content_hash": "df35012aa3904d5c22ff90e640e4f9316aa7a13964670db2238adcd368dcc603",
+            "generation_index": 8,
+            "semantic_hash": "626c2bb51ffe8e639486d4f4d885bd47cff4b82daf3d283490dbac927b08ab2b",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-c313501f3f8ff50ad5fa",
+            "content_hash": "3529542b1651cddd616b6fb32479a132af4a7f9336dfe1c4100f82bcfa2d6bb3",
+            "generation_index": 9,
+            "semantic_hash": "371bc3e1caca1d445dca4787464f4c6d23cb8f1ce8042cce60e57d76d0e66995",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-b2f86104b86bb5e9bb1a",
+            "content_hash": "1cd6703ccdabccf56a9e4ab019afa0d9c9a0c1398245dabbc985c10a9dcc03dc",
+            "generation_index": 10,
+            "semantic_hash": "4fcd5813826b4cd78911e682aabbdb67a62b8f98594b32487a72863614736b7a",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-4b8f4f22f578e687b977",
+            "content_hash": "a45787e1d7ebe83d12f0b73b5ba91e2e6b51199bf13592af4cd10c48d372613c",
+            "generation_index": 11,
+            "semantic_hash": "35f9a11ffce65707c219c4b888028ce3713a6ba171f85b72011c1a81d7aa70b0",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-bc93a40924c015d76a2d",
+            "content_hash": "339886402c42c81aac4994061e0daac75dc81f3c51eb9d63517fe9f0cd9b91f3",
+            "generation_index": 12,
+            "semantic_hash": "9c59495631d9b51d63522ea25fff5ef87ae82364d7cdc9acd4c55bfcfdff5f18",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-5fd792b18ad1e284a41c",
+            "content_hash": "e49e38a24aa12b5d481cf2bfa3dfae196eed531b51275534ead9bd643dd34c8c",
+            "generation_index": 13,
+            "semantic_hash": "7bd2484f7478b467f872e2810abc41104ade71e8d4f0a2b53780e1d884faed12",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-a14fe8fae72d681d5f98",
+            "content_hash": "a1580431875324cdf501badbca34a5fd9ab1d7f78a49f952108cb311c503c9a5",
+            "generation_index": 14,
+            "semantic_hash": "c04be55d37bf5c3fc322c59e156252b15558c6d3018e5d3a71d80678819bdb45",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 128,
+            "case_id": "account-c3c23e7f0f9354fc6013",
+            "content_hash": "b0e02e80c98e7dad234c8d23c5169fc3d8d0c2589c2cd63aedb443b4f90ee774",
+            "generation_index": 15,
+            "semantic_hash": "68283dc4e2da5a3429f50b5c69c761337317c4cbca465ebdaa603f54234f690f",
+            "split": "pilot"
+          }
+        ],
+        "complete": true,
+        "compressed_sha256": "0cd1239cca5a1aa41aad13bb1cfecb06953a765d44c790fa3be7048145a56644",
+        "core_lf_sha256": {
+          "audit_high_rendered_sources.py": "b033e8ca7a90a385390155e4ee5e26fb2c8eed36f41129c30d9727e446560bf3",
+          "high_fixtures.py": "ff9479d80c93327d3cf0f4f854b1da89e5bd8d8b0db48707509f9cfe77e15547",
+          "high_material_audit.py": "cb8d8d6242936886b4f8ff865d7375d02a79d9562d29fc601650da9c6d584bb0"
+        },
+        "core_sha256": {
+          "audit_high_rendered_sources.py": "b033e8ca7a90a385390155e4ee5e26fb2c8eed36f41129c30d9727e446560bf3",
+          "high_fixtures.py": "ff9479d80c93327d3cf0f4f854b1da89e5bd8d8b0db48707509f9cfe77e15547",
+          "high_material_audit.py": "cb8d8d6242936886b4f8ff865d7375d02a79d9562d29fc601650da9c6d584bb0"
+        },
+        "corpus_file": "tier_128.jsonl.gz",
+        "corpus_gzip_sha256": "0cd1239cca5a1aa41aad13bb1cfecb06953a765d44c790fa3be7048145a56644",
+        "corpus_jsonl_sha256": "90570d5d5a703c7faa7f5a5f5df6fa34c071fe6221c4c81b4783093bd2097fd1",
+        "created_at": "2026-10-26",
+        "family_counts": {
+          "compound": 2,
+          "dated_uom_returns": 3,
+          "effective_authority": 3,
+          "shipment_revisions": 3,
+          "split_allocations": 2,
+          "tier_sequential_pricing": 3
+        },
+        "full_visible_text_audit": true,
+        "instructions_sha256": "0d74782473e7b1b8079f76f004aa87d0d2341bb8c37e4210b5b85acf3d7567b8",
+        "max_document_words": 7026,
+        "min_document_words": 6931,
+        "n_cases": 16,
+        "n_unique_ids": 16,
+        "n_unique_semantics": 16,
+        "semantic_hashes_hash": "4b406fee2c734f23b8aba619145c0dbd868bfc2989a891886fb9d753a5d70cab",
+        "tier_counts": {
+          "128": 16
+        },
+        "uncompressed_sha256": "90570d5d5a703c7faa7f5a5f5df6fa34c071fe6221c4c81b4783093bd2097fd1",
+        "version": "23-procurement-scale-v5"
+      }
+    },
+    {
+      "specification": {
+        "name": "tier_192",
+        "n": 16,
+        "seed": 255192,
+        "tier": 192,
+        "split": "pilot",
+        "start_index": 0
+      },
+      "source_path": "sources/tier_192.jsonl.gz",
+      "manifest": {
+        "all_passed": true,
+        "audit_compressed_sha256": "bc62e275ad77a6d10c15c40f2dbb1d62f5fb9161df4f9d2662aefb42d5da3f04",
+        "audit_file": "tier_192.jsonl.gz.audit.jsonl.gz",
+        "audit_gzip_sha256": "bc62e275ad77a6d10c15c40f2dbb1d62f5fb9161df4f9d2662aefb42d5da3f04",
+        "audit_jsonl_sha256": "4de5c2509618bae2c7805d57ff632529f9779d763fa3566189f33047c826a3da",
+        "audit_path": "tier_192.jsonl.gz.audit.jsonl.gz",
+        "audit_uncompressed_sha256": "4de5c2509618bae2c7805d57ff632529f9779d763fa3566189f33047c826a3da",
+        "case_ids_hash": "9c9cbda41352dc089bfef475ecafe8fa440a01ccbd0271a7d97383c3ca23ec80",
+        "case_index": [
+          {
+            "base_shipments": 192,
+            "case_id": "account-9880a2987ba286e3c0d5",
+            "content_hash": "9f1b95e4161f519df2ad83f4c3ebd9a0d211f825a541ced1dce9aa3a29e63416",
+            "generation_index": 0,
+            "semantic_hash": "4f7bee8a23dcebd3df4baf571d56c947f0d49f26220e446e5c56f7709a9731be",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-c0fb594d1a910f6c5522",
+            "content_hash": "a452359c99ceee0373f902c77e936aafa078327c52342664d9ae3facf6ed31e9",
+            "generation_index": 1,
+            "semantic_hash": "4f7aebd7ecc3f8804142b25a44c4d80561cde248c63597dcb4254a52b90c1ebe",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-a45a1b155a37f6db10cc",
+            "content_hash": "717fa89d1c761bc64960911e421f0d494e26c427ae0db897cd2319bb0b021888",
+            "generation_index": 2,
+            "semantic_hash": "2d3f3a33b339aa9a1700ace3d7498d18221fa18a5b78ce7d942a34d278ef7756",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-8ba871f095ecc72f0739",
+            "content_hash": "bfe0cac1ccb0131002950b24b884a641f6adbecf532862f502f937b21910bfef",
+            "generation_index": 3,
+            "semantic_hash": "a1c58d011eb97a1383236499574e133883792bbac41e18868ab9bc61d2779c3f",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-2bbb053c97d96d6c2154",
+            "content_hash": "52592925587f2810bab8d2a1ac1d100bd9bd1ba3510613d2dccc82ceb7c611bc",
+            "generation_index": 4,
+            "semantic_hash": "6342226d5b1a19188a4b18a27f30ec5e4954fef72303238792e3fac4991496eb",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-f7c612f2326e446f38c2",
+            "content_hash": "da3b2e81ac1bb0ba9ecb607bbab6cbd3432a7c2a3e2cbfb7e7059359f299659f",
+            "generation_index": 5,
+            "semantic_hash": "04b369c4a13d9cdb380b54c09247b8bcd75bd6667f94bd511efe3cdb8e322586",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-a42f9d069f23202e5af2",
+            "content_hash": "7ede44312d1c7f929f7f6b9d68c9d939a4498c0ffe6186916544548dec1c6204",
+            "generation_index": 6,
+            "semantic_hash": "0915ae256bdd7c829f07b60ca64bf7a72d1dbb4993d6081590437843c1cfd95a",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-9fd7f809d71d322b6d39",
+            "content_hash": "9f690926d80fd148293c0dad27afac77c40fea23b20dac353d2d0bc616737b90",
+            "generation_index": 7,
+            "semantic_hash": "7e807059efaf77af8fa2705dc760cc7b15c8786c38cf55d07117eb6a624e4f2f",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-79e193c6298c964c6249",
+            "content_hash": "788a66d01abd2a25fc68cc30487f884388aa7b829f9e020cd053e0955680b7bd",
+            "generation_index": 8,
+            "semantic_hash": "693814524e320d971219baca26a47ae7c783cab39d2ce8ada82286e846c977a7",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-558ba82709e1c4a2022f",
+            "content_hash": "b0bdbe6e3b611a87d701a9a1c246758e4bf852db91776cbe5849706b25d3cb33",
+            "generation_index": 9,
+            "semantic_hash": "f2f086b03279aa4c56ea7eefd1de662f4bdae12cb1457f7ad8e2f08da7bfc0d8",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-ad57ef839ed60bfab7a3",
+            "content_hash": "9a781ee76cc53cb1bbdf873d8b1b8f5fe987c5fb4dfc729cce9b641b4b884add",
+            "generation_index": 10,
+            "semantic_hash": "0b6836b567ab471c6214438a7fe3f6555cb8ed4249b25b1876ca0428ac7d821d",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-cfb19edb8fd4e8df6686",
+            "content_hash": "730a3881faaf5229b1f189268b8cf016c43f8605b1b6271587935c61ecb84f1b",
+            "generation_index": 11,
+            "semantic_hash": "fd4e52c2f4ae73e769733ec0824fab39cba2e8250e9cdd98847c177241229e2f",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-aed5c743218acd31ffd3",
+            "content_hash": "2f772038b7a88780659b929e9700bee442ab91a66d901ab414069d7703e9ef3b",
+            "generation_index": 12,
+            "semantic_hash": "9f90537b75b9ef7d405d31dfe6b1875dcce9b80dfcd9b982c5d67f3eefa47735",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-eb1885c4b5bc0335a018",
+            "content_hash": "db393dbf4fd03d5e9762e1a6a8f4d27c81012ef4c97baacc63c360506154dc59",
+            "generation_index": 13,
+            "semantic_hash": "75f24572183a2530674ddac12870b3be5a34834a08e1d11c24fd8563f2f7fa11",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-5e403d3f7ea74bf4e598",
+            "content_hash": "87ea54c5312ced301649f2874b47620bbad457501f109cb1434961338c1464a7",
+            "generation_index": 14,
+            "semantic_hash": "b17fc9a5e16de13268e03ffa554826d3d949e5c437673d5fe8102b08d96f3d32",
+            "split": "pilot"
+          },
+          {
+            "base_shipments": 192,
+            "case_id": "account-5faab53186b1262fce30",
+            "content_hash": "b1a6d58e9e8b80fec7bcd9736a916d645b80f2aa2b13aeb250e49fe6845abe3f",
+            "generation_index": 15,
+            "semantic_hash": "97c4207ab424f2f88cb366d03896a6c5e1e84778ede555ad08e5f947e908b5d1",
+            "split": "pilot"
+          }
+        ],
+        "complete": true,
+        "compressed_sha256": "9bafe7ea95a1cd24bbe2a1e54804cc65c0c2a9996ee9dda02c5ef8fb206b693a",
+        "core_lf_sha256": {
+          "audit_high_rendered_sources.py": "b033e8ca7a90a385390155e4ee5e26fb2c8eed36f41129c30d9727e446560bf3",
+          "high_fixtures.py": "ff9479d80c93327d3cf0f4f854b1da89e5bd8d8b0db48707509f9cfe77e15547",
+          "high_material_audit.py": "cb8d8d6242936886b4f8ff865d7375d02a79d9562d29fc601650da9c6d584bb0"
+        },
+        "core_sha256": {
+          "audit_high_rendered_sources.py": "b033e8ca7a90a385390155e4ee5e26fb2c8eed36f41129c30d9727e446560bf3",
+          "high_fixtures.py": "ff9479d80c93327d3cf0f4f854b1da89e5bd8d8b0db48707509f9cfe77e15547",
+          "high_material_audit.py": "cb8d8d6242936886b4f8ff865d7375d02a79d9562d29fc601650da9c6d584bb0"
+        },
+        "corpus_file": "tier_192.jsonl.gz",
+        "corpus_gzip_sha256": "9bafe7ea95a1cd24bbe2a1e54804cc65c0c2a9996ee9dda02c5ef8fb206b693a",
+        "corpus_jsonl_sha256": "f15caf138f0a8c45c94f15cda3c469d427360b6bad3328ab6f20d799f7af97f4",
+        "created_at": "2026-10-26",
+        "family_counts": {
+          "compound": 3,
+          "dated_uom_returns": 3,
+          "effective_authority": 2,
+          "shipment_revisions": 3,
+          "split_allocations": 2,
+          "tier_sequential_pricing": 3
+        },
+        "full_visible_text_audit": true,
+        "instructions_sha256": "0d74782473e7b1b8079f76f004aa87d0d2341bb8c37e4210b5b85acf3d7567b8",
+        "max_document_words": 9740,
+        "min_document_words": 9645,
+        "n_cases": 16,
+        "n_unique_ids": 16,
+        "n_unique_semantics": 16,
+        "semantic_hashes_hash": "4f04471fa8eca04c5cbfbf1afc5d6ea5a13e782a766b13fa952a56550a2ff8f1",
+        "tier_counts": {
+          "192": 16
+        },
+        "uncompressed_sha256": "f15caf138f0a8c45c94f15cda3c469d427360b6bad3328ab6f20d799f7af97f4",
+        "version": "23-procurement-scale-v5"
+      }
+    }
+  ],
+  "previous_corpora_hash": "b8b57f4839540596f36367aefc8817c49ea3305da46fe95128a35f8432e39912",
+  "cross_cohort_audit": {
+    "passed": true,
+    "n_cases": 32,
+    "n_unique_ids": 32,
+    "n_unique_semantics": 32,
+    "scope": "Exact normalized source facts, not task-family or arbitrary outcome equivalence"
+  },
+  "stopping_policy": "First tier in 128,192 with at least min_value_failures genuine valid-schema wrong-value cases; no upper cutoff. If neither qualifies choose 192 and explicitly mark threshold failure. No intervention results exist or inform calibration.",
+  "max_pilot_requests": 32
+}
