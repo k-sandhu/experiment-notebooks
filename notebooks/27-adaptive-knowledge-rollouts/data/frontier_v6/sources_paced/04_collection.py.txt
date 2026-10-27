@@ -1,0 +1,158 @@
+def token_cost(usage):
+    for name in ['input_tokens','output_tokens']:
+        if not isinstance(usage.get(name),int) or isinstance(usage.get(name),bool) or usage[name]<0:
+            raise ValueError('Missing or invalid token usage: '+name)
+    for name,parent in [('cached_input_tokens','input_tokens'),('reasoning_output_tokens','output_tokens')]:
+        if name in usage and (not isinstance(usage[name],int) or not 0<=usage[name]<=usage[parent]):
+            raise ValueError('Invalid token subset: '+name)
+    return usage['input_tokens']+usage['output_tokens']
+
+def token_admission(before,charge,cap):
+    assert 0<=before<cap and charge>=0
+    return dict(before=before,charged=charge,after=before+charge,eligible=before+charge<=cap,overrun=max(0,before+charge-cap))
+
+def model_call(label,messages,sample_id):
+    req=dict(protocol=PROTOCOL,backend='codex',model=MODELS[label],policy=label,messages=copy.deepcopy(messages),sample_id=sample_id,cli_options=CLI_OPTIONS,reasoning_effort='medium',timeout_s=MODEL_TIMEOUT_S,token_unit='input_tokens + output_tokens',boundary='A crossing call is charged and saved but its action is not executed or scored.',request_start_gap_s=MIN_CALL_START_GAP_S)
+    key=digest(req);path=CACHE/(key+'.json')
+    if path.exists():
+        rec=read_json(path)
+        assert rec['request']==req and rec.get('complete'),'Pending cache requires manual audit'
+        return rec
+    if not LIVE:raise RuntimeError('Offline cache miss '+key)
+    with CALL_START_LOCK:
+        delay=MIN_CALL_START_GAP_S-(time.monotonic()-LAST_CALL_START[0])
+        if delay>0:time.sleep(delay)
+        LAST_CALL_START[0]=time.monotonic()
+    rec=dict(key=key,request=req,started=now(),complete=False,status='pending',usage={},reported_cost_usd=None)
+    save_json(path,rec);start=time.perf_counter()
+    try:
+        exe=shutil.which('codex.cmd') or shutil.which('codex');assert exe,'Codex CLI is required'
+        child=os.environ.copy()
+        for k in ['CODEX_THREAD_ID','CODEX_PARENT_THREAD_ID','CODEX_SESSION_ID','OPENROUTER_API_KEY']:child.pop(k,None)
+        with tempfile.TemporaryDirectory(prefix='nb27_token_policy_') as cwd:
+            prompt='\n\n'.join(m['role'].upper()+':\n'+m['content'] for m in messages)
+            flags=(subprocess.CREATE_NEW_PROCESS_GROUP|getattr(subprocess,'CREATE_NO_WINDOW',0)) if os.name=='nt' else 0
+            with subprocess.Popen([exe,*CLI_OPTIONS,'-m',MODELS[label],'-'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8',errors='replace',cwd=cwd,env=child,creationflags=flags) as proc:
+                try:stdout,stderr=proc.communicate(prompt,timeout=MODEL_TIMEOUT_S);timed_out=False
+                except subprocess.TimeoutExpired:
+                    if os.name=='nt':subprocess.run(['taskkill','/PID',str(proc.pid),'/T','/F'],capture_output=True,timeout=15)
+                    else:proc.kill()
+                    stdout,stderr=proc.communicate(timeout=15);timed_out=True
+            events=[]
+            for line in stdout.splitlines():
+                try:events.append(json.loads(line))
+                except json.JSONDecodeError:pass
+            items=[e.get('item',{}) for e in events if e.get('type')=='item.completed']
+            finals=[i.get('text','') for i in items if i.get('type')=='agent_message']
+            unexpected=[i for i in items if i.get('type') not in {'agent_message','reasoning','error'}]
+            usage=next((e.get('usage',{}) for e in reversed(events) if e.get('type')=='turn.completed'),{})
+            failed=any(e.get('type')=='turn.failed' for e in events)
+            rec.update(stdout=stdout,stderr=stderr,events=events,text=finals[-1] if finals else '',usage=usage,return_code=proc.returncode,unexpected_tools=unexpected,timed_out=timed_out)
+            rec['status']='policy_tool_violation' if unexpected else ('ok' if proc.returncode==0 and finals and not timed_out and not failed else 'transport_error')
+    except Exception as exc:rec.update(status='transport_error',error=type(exc).__name__+': '+str(exc)[:500],text=rec.get('text',''))
+    rec.update(elapsed_s=time.perf_counter()-start,finished=now(),complete=True)
+    if rec['status']=='ok':
+        try:
+            a=json.loads(rec['text']);assert isinstance(a,dict) and set(a)=={'tool','arguments'} and isinstance(a['tool'],str) and isinstance(a['arguments'],dict)
+            rec['parsed_action']=a
+        except Exception as exc:rec.update(status='invalid_json',parse_error=str(exc))
+    try:rec['charged_tokens']=token_cost(rec['usage'])
+    except ValueError as exc:
+        rec['charged_tokens']=None;rec['accounting_error']=str(exc);CIRCUIT_BREAKER.set()
+    if rec['status']=='transport_error':CIRCUIT_BREAKER.set()
+    save_json(path,rec);return rec
+
+def run_token_episode(label,task,sample,budget,service):
+    eid=digest(dict(protocol=PROTOCOL,policy=label,task=task['task_id'],sample=sample))[:24]
+    path=EPISODES/(eid+'.json')
+    assert not path.exists(),'An existing episode requires replay or manual audit, never automatic resubmission'
+    assert budget['spent']<budget['cap'] and budget['calls']<MAX_CALLS_PER_BLOCK
+    env=EpisodeEnvironment(task,eid,service);messages=initial_messages(task,env);initial=copy.deepcopy(messages)
+    trace=[];stop='horizon';status='ok';started=now();begin_tokens=budget['spent']
+    def persist(complete=False):
+        record=dict(protocol=PROTOCOL,episode_id=eid,policy=label,task_id=task['task_id'],environment=task['environment'],family=task['family'],phase='comparison',sample=sample,initial_messages=initial,initial_state=env.initial,trace=trace,started=started,complete=complete,start_tokens=begin_tokens)
+        save_json(path,record)
+    try:
+        persist()
+        for turn in range(MAX_ACTIONS):
+            if CIRCUIT_BREAKER.is_set():stop='circuit_breaker';break
+            if budget['spent']>=budget['cap']:stop='token_budget';break
+            if budget['calls']>=MAX_CALLS_PER_BLOCK:stop='safety_call_cap';break
+            rec=model_call(label,messages,dict(episode_id=eid,sample=sample,turn=turn))
+            budget['calls']+=1
+            entry=dict(turn=turn+1,cache_key=rec['key'],raw_text=rec.get('text',''),status=rec['status'])
+            if rec['charged_tokens'] is None:
+                entry.update(eligible=False,accounting_error=rec.get('accounting_error'));trace.append(entry);stop='unknown_usage';status='accounting_error';persist();break
+            admission=token_admission(budget['spent'],rec['charged_tokens'],budget['cap'])
+            entry.update(token_accounting=admission);budget['spent']=admission['after']
+            if not admission['eligible']:
+                entry.update(action_executed=False,observation={'not_executed':'The completed CLI request crosses the frozen token cutoff.'})
+                trace.append(entry);stop='token_budget';persist();break
+            budget['eligible_spent']+=rec['charged_tokens']
+            if rec['status'] in {'transport_error','policy_tool_violation'}:
+                trace.append(entry);stop=rec['status'];status=rec['status'];persist();break
+            if rec['status']=='invalid_json':
+                obs={'error':'Return exactly one JSON object with tool and arguments. This consumed one action.','done':False,'reward':0};raw={};entry['action_executed']=False
+            else:
+                action=rec['parsed_action'];entry.update(action=action,action_executed=True)
+                try:obs,raw=env.step(action)
+                except (ValueError,TypeError,KeyError) as exc:obs={'error':type(exc).__name__+': '+str(exc)[:700],'done':False,'reward':0};raw={}
+            entry.update(observation=obs,raw_observation=raw);trace.append(entry)
+            messages.extend([dict(role='assistant',content=rec.get('text','')),dict(role='user',content=canonical(obs))]);persist()
+            if obs.get('done'):stop='policy_finish';break
+        verification=env.verify()
+        unknown=stop in {'token_budget','safety_call_cap','transport_error','circuit_breaker','unknown_usage'}
+        reward=None if unknown else (0 if stop=='policy_tool_violation' else verification['reward'])
+        record=dict(protocol=PROTOCOL,episode_id=eid,policy=label,task_id=task['task_id'],environment=task['environment'],family=task['family'],phase='comparison',sample=sample,initial_messages=initial,initial_state=env.initial,trace=trace,verification=verification,reward=reward,status=status,stop_reason=stop,terminated=stop=='policy_finish',truncated=stop in {'token_budget','horizon','safety_call_cap'},started=started,finished=now(),complete=True,start_tokens=begin_tokens,end_tokens=budget['spent'],eligible_end_tokens=budget['eligible_spent'])
+        save_json(path,record);return record
+    finally:env.close()
+
+def token_task_order(block,cycle):
+    tasks=[t for t in TASKS if t['block']==block]
+    random.Random(202610260+100*block+cycle).shuffle(tasks)
+    return tasks
+
+def run_token_arm(label,allocator,block):
+    sid=digest(dict(protocol=PROTOCOL,policy=label,allocator=allocator,block=block,cap=TOKEN_BUDGET_PER_BLOCK))[:20]
+    path=SCHEDULES/(sid+'.json')
+    if path.exists():
+        record=read_json(path)
+        assert record.get('complete'),'Partial schedule requires manual audit; no automatic restart'
+        return record
+    assert LIVE,'Live collection is disabled'
+    service=CalendarService('token-'+sid)
+    budget=dict(spent=0,eligible_spent=0,calls=0,cap=TOKEN_BUDGET_PER_BLOCK)
+    groups=[];ledger=[];group_index=0;cycle=0;stop=None;started=now()
+    def checkpoint(complete=False):
+        record=dict(protocol=PROTOCOL,schedule_id=sid,policy=label,allocator=allocator,block=block,cap=TOKEN_BUDGET_PER_BLOCK,actual_tokens=budget['spent'],eligible_tokens=budget['eligible_spent'],overrun_tokens=max(0,budget['spent']-budget['cap']),unspent_eligible_tokens=budget['cap']-budget['eligible_spent'],calls=budget['calls'],groups=groups,ledger=ledger,stop_reason=stop,started=started,complete=complete)
+        if complete:record['finished']=now()
+        save_json(path,record);return record
+    try:
+        checkpoint()
+        while not stop:
+            for task in token_task_order(block,cycle):
+                group=dict(group_id=f'{sid}-{group_index}',task_id=task['task_id'],episodes=[],decision='continue',start_tokens=budget['spent'],predictor_history=[])
+                groups.append(group);group_index+=1
+                for replicate in range(GROUP_SIZE):
+                    if CIRCUIT_BREAKER.is_set():stop='circuit_breaker';group['decision']=stop;break
+                    if budget['spent']>=budget['cap']:stop='token_budget';group['decision']=stop;break
+                    if budget['calls']>=MAX_CALLS_PER_BLOCK:stop='safety_call_cap';group['decision']=stop;break
+                    e=run_token_episode(label,task,dict(phase='comparison',allocator=allocator,block=block,cycle=cycle,group=group_index-1,replicate=replicate),budget,service)
+                    group['episodes'].append(e['episode_id'])
+                    for entry in e['trace']:
+                        ledger.append(dict(call=len(ledger)+1,cache_key=entry['cache_key'],episode_id=e['episode_id'],group_id=group['group_id'],task_id=task['task_id'],turn=entry['turn'],token_accounting=entry.get('token_accounting'),action_executed=entry.get('action_executed',False)))
+                    rs=[read_json(EPISODES/(eid+'.json'))['reward'] for eid in group['episodes']]
+                    if any(x is None for x in rs):group['decision']='unknown_or_budget';stop=e['stop_reason'];break
+                    n=len(rs);successes=sum(rs);mixed=0<successes<n
+                    peff=1.0 if mixed else (GROUP_SIZE-n)/(GROUP_SIZE+1)
+                    group['predictor_history'].append(dict(n=n,successes=successes,p_effective=peff))
+                    if n==GROUP_SIZE:group['decision']='complete';break
+                    if allocator=='adaptive' and n>=PROBE_SIZE and peff<ABANDON_THRESHOLD:group['decision']='abandon_unanimous_probe';break
+                group['end_tokens']=budget['spent'];checkpoint()
+                print('TOKEN ARM',label,allocator,block,'calls',budget['calls'],'tokens',budget['spent'],'group',task['task_id'],group['decision'],'rewards',[read_json(EPISODES/(eid+'.json'))['reward'] for eid in group['episodes']],flush=True)
+                if stop:break
+                if budget['spent']>=budget['cap']:stop='token_budget';break
+                if budget['calls']>=MAX_CALLS_PER_BLOCK:stop='safety_call_cap';break
+            cycle+=1
+        return checkpoint(complete=True)
+    finally:service.close()

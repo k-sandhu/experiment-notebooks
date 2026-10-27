@@ -1,0 +1,42 @@
+def validate_trajectory_integrity(folder,data_root,canonical,iso_time):
+    """Audit hidden-answer separation, observable history and state isolation."""
+    import json,copy
+    def read(p):return json.loads(p.read_text(encoding='utf-8'))
+    tasks={t['task_id']:t for p in sorted(folder.glob('tasks_calibration*.json')) for t in read(p)}
+    if (folder/'tasks_recovery.json').exists():tasks.update({t['task_id']:t for t in read(folder/'tasks_recovery.json')})
+    stages=[]
+    if (folder/'comparison_paced').exists():stages.append(folder/'comparison_paced')
+    checked=0;accepted=0;calls=0
+    for stage in stages:
+        cache={p.stem:read(p) for p in (stage/'cache').glob('*.json')}
+        for path in sorted((stage/'episodes').glob('*.json')):
+            e=read(path);task=tasks[e['task_id']];initial={r['event_id']:r for r in e['initial_state']['events']};final={r['event_id']:r for r in e['verification']['final_state']['events']}
+            assert set(initial)==set(final)=={r['event_id'] for r in task['records']}
+            for authored in task['records']:
+                actual=initial[authored['event_id']]
+                assert iso_time(actual['start_datetime'])==iso_time(authored['start'])
+                assert iso_time(actual['end_datetime'])==iso_time(authored['end'])
+                assert actual['summary']==authored['summary'] and actual['calendar_id']==authored['calendar_id']
+            payload=json.loads(e['initial_messages'][1]['content'])
+            assert set(payload)=={'task_id','task','tools','initial_observation','max_actions'}
+            assert payload['task_id']==task['task_id'] and payload['task']==task['prompt'] and payload['max_actions']==24
+            assert set(payload['initial_observation'])=={'message'}
+            assert {t['name'] for t in payload['tools']}=={'list_events','get_event','patch_event','finish'}
+            history=copy.deepcopy(e['initial_messages']);expected=copy.deepcopy(initial)
+            for s in e['trace']:
+                c=cache[s['cache_key']];assert c['request']['messages']==history
+                assert c['request']['sample_id']['episode_id']==e['episode_id'] and c['request']['policy']==e['policy']
+                assert c['text']==s['raw_text'];calls+=1
+                if 'observation' not in s:continue
+                history.extend([dict(role='assistant',content=s['raw_text']),dict(role='user',content=canonical(s['observation']))])
+                action=s.get('action',{});obs=s['observation'].get('tool_result') or {}
+                if action.get('tool')=='patch_event' and isinstance(obs,dict) and int(obs.get('status_code',0))==200 and not obs.get('isError'):
+                    args=action['arguments'];row=expected[args['eventId']]
+                    for name,column in [('start','start_datetime'),('end','end_datetime')]:
+                        if name in args and 'dateTime' in args[name]:row[column]=args[name]['dateTime']
+                    accepted+=1
+            for eid,row in expected.items():
+                assert iso_time(row['start_datetime'])==iso_time(final[eid]['start_datetime']),(e['episode_id'],eid)
+                assert iso_time(row['end_datetime'])==iso_time(final[eid]['end_datetime']),(e['episode_id'],eid)
+            checked+=1
+    return dict(episodes=checked,linked_model_calls=calls,accepted_patches=accepted,initial_states_match_authored_records=True,model_payload_excludes_oracle=True,history_is_episode_local=True,final_times_match_own_accepted_edits=True)

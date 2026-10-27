@@ -1,0 +1,200 @@
+def analyze_token_phase(root,verify_fn,integrity_fn):
+    """Reconstruct token ledgers, task rewards and stopping decisions from caches."""
+    import json,hashlib,collections,itertools,copy,math
+    from pathlib import Path
+    import numpy as np
+    import pandas as pd
+    root=Path(root);data=root/'data';folder=data/'frontier_v6'
+    def read(p):return json.loads(p.read_text(encoding='utf-8'))
+    def canonical(x):return json.dumps(x,sort_keys=True,ensure_ascii=False,separators=(',',':'))
+    def save(name,x):(folder/name).write_text(json.dumps(x,indent=2,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8',newline='\n')
+    active=read(folder/'active_plan.json');run=folder/active['run_folder']
+    p=read(folder/active['protocol']);cap=p['tokens_per_model_collector_block']
+    for rel,expected in p['inputs_sha256'].items():assert hashlib.sha256((data/rel).read_bytes()).hexdigest()==expected,rel
+    protocols={p['protocol']:p};origin_by_arm={}
+    if p.get('capacity_recovery'):
+        parent=read(folder/p['parent_protocol']);protocols[parent['protocol']]=parent
+        for rel,expected in parent['inputs_sha256'].items():assert hashlib.sha256((data/rel).read_bytes()).hexdigest()==expected,rel
+        assert cap==parent['tokens_per_model_collector_block']
+        manifest=read(run/'composite_manifest.json')
+        assert manifest['protocol_sha256']==hashlib.sha256((folder/active['protocol']).read_bytes()).hexdigest()
+        for rel,entry in manifest['files'].items():
+            assert hashlib.sha256((run/rel).read_bytes()).hexdigest()==entry['sha256']==hashlib.sha256((data/entry['source']).read_bytes()).hexdigest(),rel
+        origin_by_arm={(r['policy'],r['allocator'],r['block']):r for r in manifest['origins']}
+        expected_origins={(r['policy'],r['allocator'],r['block']):r for r in p['arm_origins']}
+        assert len(origin_by_arm)==len(expected_origins)==16
+        for key,origin in origin_by_arm.items():
+            assert all(origin[k]==expected_origins[key][k] for k in ['run_folder','protocol_file'])
+        for name in sorted({origin['protocol_file'] for origin in origin_by_arm.values()}):
+            origin_protocol=read(folder/name)
+            assert origin_protocol['tokens_per_model_collector_block']==cap
+            for rel,expected in origin_protocol['inputs_sha256'].items():assert hashlib.sha256((data/rel).read_bytes()).hexdigest()==expected,rel
+            protocols[origin_protocol['protocol']]=origin_protocol
+    tasks={t['task_id']:t for t in read(folder/active['tasks'])}
+    assert len(tasks)==16 and all(t['created']<p['frozen'] for t in tasks.values())
+    calls={q.stem:read(q) for q in sorted((run/'cache').glob('*.json'))}
+    episodes={q.stem:read(q) for q in sorted((run/'episodes').glob('*.json'))}
+    schedules=[read(q) for q in sorted((run/'schedules').glob('*.json'))]
+    assert len(schedules)==16 and len({(s['policy'],s['allocator'],s['block']) for s in schedules})==16
+    assert all(s['complete'] and s['stop_reason']=='token_budget' for s in schedules),'Every block must reach its frozen token boundary without an outage or safety cap'
+    for key,c in calls.items():
+        assert c['key']==key==hashlib.sha256(canonical(c['request']).encode()).hexdigest()
+        assert c['request']['protocol'] in protocols
+        assert c['complete'] and c['started']>protocols[c['request']['protocol']]['frozen'] and c['charged_tokens'] is not None
+        u=c['usage'];assert c['charged_tokens']==u['input_tokens']+u['output_tokens']
+        assert 0<=u.get('cached_input_tokens',0)<=u['input_tokens'] and 0<=u.get('reasoning_output_tokens',0)<=u['output_tokens']
+        assert c['status']!='transport_error'
+    linked=[];erows=[];grows=[];crows=[];srows=[];exports=[]
+    for s in sorted(schedules,key=lambda x:(x['policy'],x['allocator'],x['block'])):
+        running=0;eligible=0;crossing=0
+        arm=(s['policy'],s['allocator'],s['block'])
+        source_protocol=read(folder/origin_by_arm[arm]['protocol_file']) if origin_by_arm else p
+        if origin_by_arm:
+            source_schedule=data/origin_by_arm[arm]['source_schedule']
+            assert canonical(s)==canonical(read(source_schedule))
+        assert s['cap']==cap and len(s['ledger'])==s['calls']<=p['safety_call_cap_per_arm_block']
+        for index,l in enumerate(s['ledger'],1):
+            c=calls[l['cache_key']];linked.append(c['key']);a=l['token_accounting'];charge=c['charged_tokens']
+            assert l['call']==index and a['before']==running and a['after']==running+charge and a['charged']==charge
+            assert a['eligible']==(a['after']<=cap) and a['overrun']==max(0,a['after']-cap)
+            assert c['request']['policy']==s['policy'] and c['request']['sample_id']['sample']['block']==s['block'] and c['request']['sample_id']['sample']['allocator']==s['allocator']
+            assert c['request']['protocol']==source_protocol['protocol']
+            running+=charge
+            if a['eligible']:eligible+=charge
+            else:
+                crossing+=1;assert not l['action_executed'] and index==len(s['ledger'])
+            u=c['usage'];crows.append(dict(policy=s['policy'],allocator=s['allocator'],block=s['block'],call=index,key=c['key'],task_id=l['task_id'],episode_id=l['episode_id'],group_id=l['group_id'],turn=l['turn'],eligible=a['eligible'],cumulative_tokens=running,charged_tokens=charge,input_tokens=u['input_tokens'],cached_input_tokens=u.get('cached_input_tokens',0),output_tokens=u['output_tokens'],reasoning_output_tokens=u.get('reasoning_output_tokens',0),elapsed_s=c['elapsed_s'],status=c['status']))
+        assert running==s['actual_tokens'] and eligible==s['eligible_tokens'] and running>=cap
+        assert crossing<=1 and s['overrun_tokens']==running-cap and s['unspent_eligible_tokens']==cap-eligible
+        assert (crossing==1)==(running>cap)
+        for g in s['groups']:
+            rs=[]
+            for eid in g['episodes']:
+                e=episodes[eid];t=tasks[e['task_id']]
+                assert e['complete'] and t['block']==s['block'] and e['sample']['allocator']==s['allocator']
+                import datetime as dt
+                def norm(value):
+                    z=dt.datetime.fromisoformat(str(value).replace('Z','+00:00'))
+                    if z.tzinfo is None:z=z.replace(tzinfo=dt.timezone.utc)
+                    return z.astimezone(dt.timezone.utc).isoformat()
+                reads=set();unchecked=False;required={'cal-'+person for person in t['people']};api_errors=0
+                for step in e['trace']:
+                    a=step.get('action',{});args=a.get('arguments',{});obs=step.get('observation',{}).get('tool_result') or {}
+                    if a.get('tool')=='patch_event' and reads!=required:unchecked=True
+                    native=step.get('raw_observation') or {}
+                    if isinstance(obs,dict) and (obs.get('isError') or int(obs.get('status_code') or 200)>=400):api_errors+=1
+                    if a.get('tool')=='list_events' and 'tool_result' in native and isinstance(obs,dict) and not obs.get('isError') and int(obs.get('status_code',200))==200:
+                        if norm(args.get('timeMin','2026-11-06T00:00:00Z'))<=norm('2026-11-06T09:00:00Z') and norm(args.get('timeMax','2026-11-07T00:00:00Z'))>=norm(t['window_end']):reads.add(args.get('calendarId'))
+                v=verify_fn(t,e['initial_state'],e['verification']['final_state'],not unchecked and reads==required)
+                assert canonical(v)==canonical(e['verification']),eid
+                expected=None if e['stop_reason'] in {'token_budget','safety_call_cap','transport_error','circuit_breaker','unknown_usage'} else (0 if e['stop_reason']=='policy_tool_violation' else v['reward'])
+                assert e['reward']==expected,eid
+                if e['reward'] is not None:assert e['end_tokens']<=cap
+                rs.append(e['reward'])
+                erows.append(dict(policy=s['policy'],allocator=s['allocator'],block=s['block'],group_id=g['group_id'],episode_id=eid,task_id=t['task_id'],reward=e['reward'],calls=len(e['trace']),stop_reason=e['stop_reason'],status=e['status'],start_tokens=e['start_tokens'],end_tokens=e['end_tokens'],feasible=v['feasible'],objective_points=v['objective_penalty_points'],optimum_points=v['optimum_minutes'],gap_points=v['objective_gap_minutes'],gap_pct=None if not v['feasible'] or v['objective_penalty_points'] is None else 100*v['objective_gap_minutes']/v['optimum_minutes'],native_api_errors=api_errors,details='; '.join(v['details'])))
+            assert rs,'No empty group should be created'
+            full=len(rs)==4 and None not in rs and g['end_tokens']<=cap
+            mixed=full and 0<sum(rs)<4
+            for h in g['predictor_history']:
+                n=h['n'];prefix=rs[:n];assert None not in prefix and h['successes']==sum(prefix)
+                assert h['p_effective']==(1.0 if 0<sum(prefix)<n else (4-n)/5)
+            if g['decision']=='complete':assert full
+            if g['decision']=='abandon_unanimous_probe':assert s['allocator']=='adaptive' and len(rs)==2 and len(set(rs))==1 and None not in rs
+            if s['allocator']=='uniform':assert g['decision']!='abandon_unanimous_probe'
+            if full and s['allocator']=='adaptive':assert rs[0]!=rs[1]
+            grows.append(dict(policy=s['policy'],allocator=s['allocator'],block=s['block'],group_id=g['group_id'],task_id=g['task_id'],rewards=canonical(rs),known=sum(x is not None for x in rs),complete=full,mixed=mixed,decision=g['decision'],start_tokens=g['start_tokens'],end_tokens=g['end_tokens'],missed_after_unanimous_probe=full and mixed and rs[0]==rs[1]))
+            if full:
+                advantages=[r-(sum(rs)-r)/3 for r in rs]
+                exports.append(dict(protocol=p['protocol'],group_id=g['group_id'],policy=s['policy'],allocator=s['allocator'],block=s['block'],task_id=g['task_id'],rewards=rs,scalar_leave_one_out_advantages=advantages,complete_mixed_group=mixed,end_tokens=g['end_tokens'],train_ready=False,missing=['attested behavior-policy weights','action token IDs','action-token log probabilities','action masks'],episodes=[episodes[eid] for eid in g['episodes']]))
+        gs=[g for g in grows if g['policy']==s['policy'] and g['allocator']==s['allocator'] and g['block']==s['block']]
+        es=[e for e in erows if e['policy']==s['policy'] and e['allocator']==s['allocator'] and e['block']==s['block']]
+        cs=[c for c in crows if c['policy']==s['policy'] and c['allocator']==s['allocator'] and c['block']==s['block']]
+        srows.append(dict(policy=s['policy'],allocator=s['allocator'],block=s['block'],token_budget=cap,actual_tokens=running,eligible_tokens=eligible,overrun_tokens=running-cap,unspent_eligible_tokens=cap-eligible,calls=s['calls'],known=sum(e['reward'] is not None for e in es),successes=sum(e['reward']==1 for e in es),failures=sum(e['reward']==0 for e in es),unknown=sum(e['reward'] is None for e in es),complete_groups=sum(g['complete'] for g in gs),mixed_groups=sum(g['mixed'] for g in gs),abandoned=sum(g['decision']=='abandon_unanimous_probe' for g in gs),tasks_reached=len({e['task_id'] for e in es}),input_tokens=sum(c['input_tokens'] for c in cs),cached_input_tokens=sum(c['cached_input_tokens'] for c in cs),output_tokens=sum(c['output_tokens'] for c in cs),reasoning_output_tokens=sum(c['reasoning_output_tokens'] for c in cs),call_seconds=sum(c['elapsed_s'] for c in cs)))
+    assert len(linked)==len(set(linked))==len(calls) and set(linked)==set(calls)
+    assert len(erows)==len({e['episode_id'] for e in erows})==len(episodes)
+    blocks=pd.DataFrame(srows);groups=pd.DataFrame(grows);eps=pd.DataFrame(erows);cdf=pd.DataFrame(crows)
+    def failure_type(e):
+        if e['reward'] is None or pd.isna(e['reward']):return 'unknown'
+        if e['reward']==1:return 'success'
+        if e['status']=='policy_tool_violation':return 'protocol violation'
+        if e['stop_reason']=='horizon':return 'action horizon'
+        if not e['feasible']:return 'business constraint violation'
+        return 'feasible higher-cost plan'
+    eps['failure_type']=eps.apply(failure_type,axis=1)
+    numeric=[c for c in blocks.columns if c not in {'policy','allocator','block'}]
+    summary=blocks.groupby(['policy','allocator'],sort=True)[numeric].sum().reset_index()
+    policy_order=['GPT-6.1 Sol','GPT-6 Luna']
+    summary=pd.concat([summary[(summary.policy==policy)&(summary.allocator==method)] for policy in policy_order for method in ['uniform','adaptive']],ignore_index=True)
+    # Post hoc boundary diagnostic. Known returns remain eligible; no unknown
+    # reward is imputed and the primary complete-G4 metric stays unchanged.
+    observed_contrasts=[]
+    for policy in policy_order:
+        for allocator in ['uniform','adaptive']:
+            selected=groups[(groups.policy==policy)&(groups.allocator==allocator)]
+            partial=0
+            for g in selected.to_dict('records'):
+                known_rewards=[r for r in json.loads(g['rewards']) if r is not None]
+                if not g['complete'] and 0 in known_rewards and 1 in known_rewards:partial+=1
+            full=int(selected.mixed.sum())
+            observed_contrasts.append(dict(policy=policy,allocator=allocator,primary_complete_mixed=full,additional_partial_known_contrast=partial,all_observed_contrast=full+partial))
+    paired=[];permutation=[];sensitivity=[]
+    for policy in policy_order:
+        differences=[]
+        for b in range(p['blocks']):
+            u=blocks[(blocks.policy==policy)&(blocks.allocator=='uniform')&(blocks.block==b)].iloc[0]
+            a=blocks[(blocks.policy==policy)&(blocks.allocator=='adaptive')&(blocks.block==b)].iloc[0]
+            delta=int(a.mixed_groups-u.mixed_groups);differences.append(delta)
+            paired.append(dict(policy=policy,block=b,uniform=int(u.mixed_groups),adaptive=int(a.mixed_groups),difference=delta,token_budget_each=cap))
+            common=int(min(u.eligible_tokens,a.eligible_tokens))
+            values={method:int(((groups.policy==policy)&(groups.allocator==method)&(groups.block==b)&groups.mixed&(groups.end_tokens<=common)).sum()) for method in ['uniform','adaptive']}
+            sensitivity.append(dict(policy=policy,block=b,shared_eligible_cutoff=common,uniform=values['uniform'],adaptive=values['adaptive'],difference=values['adaptive']-values['uniform']))
+        means=[sum(s*d for s,d in zip(signs,differences))/p['blocks'] for signs in itertools.product([-1,1],repeat=p['blocks'])]
+        observed=sum(differences)/p['blocks'];prob=sum(abs(m)>=abs(observed)-1e-12 for m in means)/len(means)
+        permutation.append(dict(policy=policy,block_differences=differences,mean_difference=observed,exact_two_sided_sign_flip_p=prob,sign_patterns=len(means),assumption='Descriptive reference under exchangeable collector labels within independent blocks; not proof of causation. Four blocks give coarse resolution.'))
+    checkpoints=[]
+    for policy in policy_order:
+        for allocator in ['uniform','adaptive']:
+            for checkpoint in range(0,cap+1,1_000_000):
+                checkpoints.append(dict(policy=policy,allocator=allocator,per_block_tokens=checkpoint,total_budget_tokens=checkpoint*p['blocks'],mixed_groups=int(((groups.policy==policy)&(groups.allocator==allocator)&groups.mixed&(groups.end_tokens<=checkpoint)).sum())))
+    audit=integrity_fn(folder,data,canonical,norm)
+    assert audit['episodes']==len(episodes) and audit['linked_model_calls']==len(calls)
+    status_counts=dict(collections.Counter(c['status'] for c in calls.values()))
+    known_sol=eps[(eps.policy=='GPT-6.1 Sol')&eps.reward.notna()]
+    feasible_sol=known_sol[known_sol.feasible]
+    valid_higher=(known_sol.reward==0)&known_sol.feasible&(known_sol.gap_points>0)&(known_sol.status=='ok')
+    within_one=known_sol[valid_higher&(known_sol.gap_pct<=1)]
+    result=dict(protocol=p['protocol'],tasks=16,blocks=4,token_budget_per_block=cap,token_budget_per_model_collector=cap*4,total_eligibility_budget=cap*16,actual_tokens=int(summary.actual_tokens.sum()),overrun_tokens=int(summary.overrun_tokens.sum()),eligible_tokens=int(summary.eligible_tokens.sum()),calls=len(calls),trajectories=len(episodes),known=int(eps.reward.notna().sum()),unknown=int(eps.reward.isna().sum()),summary=summary.to_dict(orient='records'),paired=paired,sign_flip=permutation,shared_eligible_sensitivity=sensitivity,statuses=status_counts,sol_quality=dict(known=len(known_sol),optima=int((known_sol.reward==1).sum()),feasible_nonoptimal=int(valid_higher.sum()),constraint_or_protocol_failures=int((known_sol.reward==0).sum()-valid_higher.sum()),within_one_pct=len(within_one),median_feasible_gap_pct=None if feasible_sol.empty else float(feasible_sol.gap_pct.median()),max_feasible_gap_pct=None if feasible_sol.empty else float(feasible_sol.gap_pct.max())),health_probe_calls=len(list((folder/'health/cache').glob('*.json')))+len(list((folder/'health_recovery/cache').glob('*.json'))),interrupted_launches=[read(folder/name) for name in ['interrupted_launch_audit.json','interrupted_recovery_audit.json','interrupted_paced_audit.json']],incremental_authoring_calls=0,reported_policy_dollars=None,no_weight_updates=True,export_train_ready=False)
+    result['known_contrast_diagnostic']=dict(analysis_status='Post hoc diagnostic added after inspecting token-boundary groups; not the primary metric.',definition='Counts incomplete groups whose known eligible rewards already include both 0 and 1. Unknown rewards are never imputed. No training benefit is inferred.',rows=observed_contrasts)
+    result['run_folder']=active['run_folder'];result['protocol_file']=active['protocol']
+    physical_stages=['comparison','comparison_recovery','comparison_paced','comparison_final','comparison_capacity','comparison_session','health','health_recovery','health_capacity']
+    abandoned_pending={}
+    if p.get('session_recovery'):
+        session_audit=read(folder/'session_interruption_audit.json')
+        for entry in session_audit['abandoned_pending_requests']:
+            assert hashlib.sha256((data/entry['path']).read_bytes()).hexdigest()==entry['sha256']
+            abandoned_pending[entry['key']]=entry
+    physical={};stage_reports={};pending_seen=set()
+    for name in physical_stages:
+        rows=[read(q) for q in sorted((folder/name/'cache').glob('*.json'))]
+        if not rows:continue
+        assert all(c.get('complete') or c['key'] in abandoned_pending for c in rows)
+        pending_seen.update(c['key'] for c in rows if not c.get('complete'))
+        stage_reports[name]=dict(invocations=len(rows),reported_tokens=sum(c.get('charged_tokens') or 0 for c in rows),missing_usage=sum(c.get('charged_tokens') is None for c in rows),abandoned_pending_requests=sum(not c.get('complete') for c in rows),statuses=dict(collections.Counter(c['status'] for c in rows)))
+        for c in rows:
+            assert hashlib.sha256(canonical(c['request']).encode()).hexdigest()==c['key']
+            if c['key'] in physical:assert canonical(physical[c['key']])==canonical(c)
+            physical[c['key']]=c
+    assert pending_seen==set(abandoned_pending)
+    assert set(calls)<=set(physical) and not set(calls)&set(abandoned_pending)
+    for key,c in calls.items():assert canonical(c)==canonical(physical[key])
+    result['health_probe_calls']=sum(v['invocations'] for k,v in stage_reports.items() if k.startswith('health'))
+    excluded=[c for key,c in physical.items() if key not in calls]
+    result['physical_collection']=dict(unique_invocations=len(physical),primary_invocations=len(calls),outside_primary_invocations=len(excluded),reported_tokens_known=sum(c.get('charged_tokens') or 0 for c in physical.values()),missing_usage=sum(c.get('charged_tokens') is None for c in physical.values()),outside_primary_reported_tokens_known=sum(c.get('charged_tokens') or 0 for c in excluded),outside_primary_missing_usage=sum(c.get('charged_tokens') is None for c in excluded),stage_reports=stage_reports,physical_total_is_fully_known=all(c.get('charged_tokens') is not None for c in physical.values()),capacity_recovery=bool(p.get('capacity_recovery')))
+    if p.get('capacity_recovery'):result['capacity_interruption']=read(folder/'capacity_interruption_audit.json')
+    if p.get('session_recovery'):result['session_interruption']=session_audit
+    failures=eps[eps.reward==0].groupby(['policy','failure_type']).size().reset_index(name='known_failures')
+    for name,table in [('blocks',blocks),('groups',groups),('episodes',eps),('calls',cdf),('summary',summary),('paired',pd.DataFrame(paired)),('checkpoints',pd.DataFrame(checkpoints)),('shared_eligible_sensitivity',pd.DataFrame(sensitivity)),('failure_types',failures),('known_contrast_diagnostic',pd.DataFrame(observed_contrasts))]:table.to_csv(folder/(name+'.csv'),index=False,lineterminator='\n')
+    save('results.json',result);save('integrity_audit.json',audit)
+    save('final_audit.json',dict(protocol_frozen=p['frozen'],complete_blocks=16,cache_requests_verified=len(calls),ledger_calls=len(linked),all_group_decisions_replayed=True,boundary_actions_never_executed=True,rewards_recomputed=len(episodes),exact_common_cutoff=cap,independent_native_witnesses=16,integrity=audit,no_weight_updates=True))
+    (folder/'rollouts_diagnostic.jsonl').write_text(''.join(json.dumps(x,ensure_ascii=False,allow_nan=False)+'\n' for x in exports),encoding='utf-8',newline='\n')
+    return dict(results=result,tasks=tasks,calls=calls,episodes=episodes,schedules=schedules,summary=summary,blocks=blocks,groups=groups,episode_table=eps,call_table=cdf,checkpoints=pd.DataFrame(checkpoints))

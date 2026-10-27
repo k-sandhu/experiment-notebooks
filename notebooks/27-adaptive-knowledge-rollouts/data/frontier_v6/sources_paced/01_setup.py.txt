@@ -1,0 +1,59 @@
+from pathlib import Path
+import os, json, hashlib, time, datetime, math, random, re, shutil, tempfile
+import subprocess, threading, socket, sqlite3, contextlib, copy, platform
+from decimal import Decimal, ROUND_HALF_UP
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from IPython.display import display, Markdown, HTML
+
+LIVE=os.environ.get('NB27_V6_LIVE','0')=='1'
+N_TASKS_PER_ENV=16
+MODELS={'GPT-6.1 Sol':'gpt-6.1-sol','GPT-6 Luna':'gpt-6-luna'}
+CALLS_PER_ARM=400
+N_BLOCKS=4
+assert N_TASKS_PER_ENV==4*N_BLOCKS
+GROUP_SIZE=4
+PROBE_SIZE=2
+ABANDON_THRESHOLD=0.45
+MAX_ACTIONS=24
+MODEL_TIMEOUT_S=1200
+N_WORKERS=2
+FRONTIER_PHASE=os.environ.get('NB27_FRONTIER_PHASE','comparison_paced')
+PROTOCOL='27-adaptive-v6-token-paced'
+ROOT=Path.cwd(); DATA=ROOT/'data'; FIGURES=ROOT/'figures'; RUN_DATA=DATA/'frontier_v6'/FRONTIER_PHASE; CACHE=RUN_DATA/'cache'; EPISODES=RUN_DATA/'episodes'; SCHEDULES=RUN_DATA/'schedules'
+for p in [CACHE,FIGURES,EPISODES,SCHEDULES,DATA/'tmp']:p.mkdir(parents=True,exist_ok=True)
+assert (DATA/'frontier_v6'/'preparation_plan.json').exists(),'Run from this notebook folder.'
+ALL_TASKS=json.loads((DATA/'frontier_v6'/'tasks_recovery.json').read_text(encoding='utf-8')) if (DATA/'frontier_v6'/'tasks_recovery.json').exists() else []
+TASKS=ALL_TASKS
+
+def canonical(x):return json.dumps(x,sort_keys=True,ensure_ascii=False,separators=(',',':'))
+def digest(x):return hashlib.sha256(canonical(x).encode('utf-8')).hexdigest()
+def read_json(p):return json.loads(Path(p).read_text(encoding='utf-8'))
+def save_json(p,x):
+    p=Path(p);p.parent.mkdir(parents=True,exist_ok=True)
+    tmp=p.with_name(p.name+'.tmp');tmp.write_text(json.dumps(x,indent=2,ensure_ascii=False,default=str)+'\n',encoding='utf-8',newline='\n');os.replace(tmp,p)
+def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
+plt.rcParams.update({'figure.dpi':135,'savefig.dpi':170,'font.size':10,'axes.spines.top':False,'axes.spines.right':False,'axes.grid':True,'grid.alpha':0.18,'axes.axisbelow':True,'figure.constrained_layout.use':True})
+COLORS={'uniform':'#5853a0','adaptive':'#197880'}
+def show_figure(fig):
+    import base64,io,html
+    alt='; '.join(ax.get_title() for ax in fig.axes if ax.get_title());buf=io.BytesIO();fig.savefig(buf,format='png',dpi=135,bbox_inches='tight')
+    display(HTML('<img style="max-width:100%;height:auto" alt="'+html.escape(alt,quote=True)+'" src="data:image/png;base64,'+base64.b64encode(buf.getvalue()).decode('ascii')+'">'));plt.close(fig)
+_real_request=getattr(requests.Session.request,'_nb27_original',requests.Session.request)
+def guarded_request(self,method,url,*a,**kw):
+    from urllib.parse import urlparse
+    if not LIVE and urlparse(str(url)).hostname not in {'localhost','127.0.0.1','::1'}:raise RuntimeError('Offline replay blocked public HTTP')
+    return _real_request(self,method,url,*a,**kw)
+guarded_request._nb27_original=_real_request;requests.Session.request=guarded_request
+CLI_OPTIONS=['exec','--skip-git-repo-check','--ephemeral','--ignore-user-config','--ignore-rules','--sandbox','read-only','--disable','shell_tool','--disable','unified_exec','--disable','apps','--disable','plugins','--disable','multi_agent','--disable','browser_use','--disable','computer_use','--disable','image_generation','--disable','code_mode','--disable','code_mode_host','--disable','shell_snapshot','-c','web_search="disabled"','-c','model_reasoning_effort="medium"','--json']
+
+TOKEN_BUDGET_PER_BLOCK=6_000_000
+MAX_CALLS_PER_BLOCK=400
+CIRCUIT_BREAKER=threading.Event()
+
+CALL_START_LOCK=threading.Lock()
+LAST_CALL_START=[0.0]
+MIN_CALL_START_GAP_S=6.0

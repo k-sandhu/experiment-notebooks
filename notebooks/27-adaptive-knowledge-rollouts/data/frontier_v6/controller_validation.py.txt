@@ -1,0 +1,41 @@
+from pathlib import Path
+import json, tempfile, copy, os
+R=Path(__file__).resolve().parents[2];os.chdir(R);F=R/'data/frontier_v6'
+ns={}
+exec((F/'sources/01_setup.py.txt').read_text(encoding='utf-8'),ns)
+exec((F/'sources/04_collection.py.txt').read_text(encoding='utf-8'),ns)
+checks=[]
+assert ns['token_cost'](dict(input_tokens=1000,cached_input_tokens=700,output_tokens=100,reasoning_output_tokens=80))==1100
+for bad in [{},dict(input_tokens=1),dict(input_tokens=-1,output_tokens=2),dict(input_tokens=2,output_tokens=1,reasoning_output_tokens=2)]:
+    try:ns['token_cost'](bad)
+    except ValueError:pass
+    else:raise AssertionError(bad)
+assert ns['token_admission'](80,20,100)['eligible']
+assert not ns['token_admission'](80,21,100)['eligible']
+checks.append('Token subsets counted once; missing/negative/subset-invalid usage rejected; exact boundary included, crossing excluded.')
+class ToyEnv:
+    def __init__(self,*args):self.actions=[];self.initial={'toy':True}
+    def step(self,action):self.actions.append(action);return dict(done=action['tool']=='finish'),{}
+    def verify(self):return dict(reward=int(bool(self.actions and self.actions[-1]['tool']=='finish')),toy=True)
+    def close(self):pass
+ns['EpisodeEnvironment']=ToyEnv;ns['initial_messages']=lambda *a:[dict(role='user',content='Synthetic controller test, not a model observation.')]
+task=dict(task_id='toy-controller',environment='calendar',family='synthetic controller control',phase='control')
+def run(charges,cap,tools):
+    counter=iter(zip(charges,tools))
+    def call(*a):
+        charge,tool=next(counter)
+        return dict(key='toy-'+str(charge)+'-'+tool,status='ok',text=json.dumps(dict(tool=tool,arguments={})),charged_tokens=charge,parsed_action=dict(tool=tool,arguments={}))
+    ns['model_call']=call;ns['MAX_ACTIONS']=len(charges)
+    budget=dict(spent=0,eligible_spent=0,calls=0,cap=cap)
+    e=ns['run_token_episode']('GPT-6.1 Sol',task,dict(test=list(charges),cap=cap,tools=tools),budget,None)
+    return e,budget
+with tempfile.TemporaryDirectory(dir=R/'data/tmp',prefix='token_controls_') as tmp:
+    ns['EPISODES']=Path(tmp)
+    e,b=run([40,60],100,['read','finish']);assert e['reward']==1 and b['spent']==100
+    e,b=run([40,61],100,['read','finish']);assert e['reward'] is None and b['spent']==101 and b['eligible_spent']==40 and not e['trace'][-1]['action_executed'] and e['verification']['reward']==0
+    e,b=run([40,60],100,['read','read']);assert e['reward']==0 and e['stop_reason']=='horizon'
+    ns['MAX_ACTIONS']=3
+checks.append('Exact-budget finish is known; a crossing finish is saved but never executed and remains unknown; full action-horizon failure remains zero.')
+out=dict(passed=True,checked=ns['now'](),controls_are_synthetic=True,live_model_calls=0,checks=checks)
+(F/'controller_audit.json').write_text(json.dumps(out,indent=2)+'\n',encoding='utf-8',newline='\n')
+print('Controller boundary audit passed without any model calls.')
