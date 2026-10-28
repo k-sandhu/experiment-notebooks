@@ -95,3 +95,42 @@ this design was added to the first one. It is the current study.
   unreadable single-answer and 10 unreadable ranking replies from `cache_requests.jsonl` (`response.text`);
   unreadable counts by family and by development run from `test.csv` and `development.csv`; and the recovery
   columns of the routing and answer-selection tables by applying the notebook's rules to `test_recovered.csv`.
+
+## 2026-10-28: figures redrawn by an offline replay, no data changed
+
+- Only plotting and display code changed: a shared block of figure labels, colours and drawing helpers in the
+  setup cell, and the plotting lines of nine other cells. No line that loads, parses, scores or caches a reply changed.
+  The notebook was re-run with `NB_LIVE` unset and no API key in the environment: every reply came from
+  `extension_v2/cache_requests.jsonl`, with zero model calls and $0 spent.
+- A replay of the unchanged notebook first reproduced every data file and every text output. The only
+  differences were the Python, pandas and numpy versions that `extension_v2/validation.json` and the last
+  code cell record (this replay used Python 3.12.5, pandas 3.0.6, numpy 2.5.4 and matplotlib 3.11.2). The
+  committed `validation.json` was kept; the notebook's printed validation record shows the replay versions.
+  After the plotting changes, every data file was again unchanged.
+- Every figure now uses the names in the text (direct, checklist and quotation prompts; GPT-6.1 Sol; plain
+  names for kinds of work, presentation variants and decision rules) and one colour scheme: blue for Claude,
+  orange for GPT, grey hatching for unreadable replies and red cross-hatching for readable wrong answers. The
+  figures were renamed from the historical `extension_` prefix; the old files were removed. The data folder
+  keeps its name.
+- `accuracy_by_parser.png` (was `extension_accuracy.png`): showed strict scores only, with a title that read as
+  the headline. It now shows both parsers side by side, splitting each judge and prompt's 120 tasks into
+  correct, unreadable and wrong, and the kind-of-work heat map under both parsers. The recovery counts come from
+  re-reading the same cached replies inside the plotting cell.
+- `parser_rescoring.png` (was `extension_parser.png`): its x labels printed as raw tuples. It now counts the 240
+  ratings per judge and prompt under each parser, split the same way, with readable labels.
+- `presentation_tests.png` (was `extension_stress.png`): showed changes from the baseline, so the two replies of
+  task `0bfa48d9d0e7` that stay unreadable after recovery looked like wrong grades. It now shows each
+  condition's 16 tasks as correct, unreadable or wrong, with the baseline as the first bar.
+- `review_workload.png` (was `extension_review.png`): the left title named the axis. It now states the finding
+  and labels each point with its cutoffs; the right panel uses plain rule names and colours rules by judge.
+- `answer_selection.png` (was `extension_utility.png`): the right panel, for score shopping, was empty because
+  both counts were zero. It was removed, and the remaining panel adds Claude's picks under the recovery parser
+  (60 of 100, from the notebook's selection rule applied to the recovery-parser grades).
+- `development_by_parser.png`, `formats_by_outcome.png`, `confidence_check.png`, `latency_by_prompt.png`,
+  `acceptance_error_card.png` and `policy_error_grid.png` (were `extension_development.png`,
+  `extension_formats.png`, `extension_calibration.png`, `extension_cost_latency.png`,
+  `extension_error_example.png` and `extension_policy_error.png`): renamed, relabelled and recoloured as above;
+  the development figure uses the same split as the parser figure, the latency figure adds rings for the
+  recovery parser, and the calibration and error-grid titles state their findings.
+- The README and notebook text around each figure was rewritten to describe the new images, and the sentences
+  warning about the old figures' flaws were removed.

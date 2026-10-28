@@ -193,7 +193,7 @@ success rate. Both judges returned the same labels with every prompt in both ord
 | GPT-6.1 Sol | `gpt-6.1-sol`, requested; the CLI returned no model ID or dated snapshot | OpenAI, `codex exec` (codex-cli 0.160.1) | Not published | Reasoning effort low; read-only sandbox; tools and web search off | The other allowed top closed judge, from a second vendor, so the two can be compared and combined |
 | Muse Wonder | `muse-wonder-full-1.0` | Meta, `muse exec` (Muse Code 1.4.11) | Not published | Reasoning effort low; one model step | Wrote scene-setting and style text so that neither judge wrote what it grades; not a judge |
 
-Figures and data files label the second judge `GPT-6.1`; it is GPT-6.1 Sol throughout.
+Data files label the second judge `GPT-6.1`; it is GPT-6.1 Sol throughout.
 
 All three prompts share the same grading rules, including "Each required field is one point if correct, zero
 if wrong or missing. Prefer the answer with more correct fields." They differ only in a closing instruction:
@@ -277,12 +277,14 @@ Readable-rating counts come from [`test.csv`](data/extension_v2/test.csv) (rows 
 `correct`); the rest are in [`summary.csv`](data/extension_v2/summary.csv) and
 [`parser_summary.csv`](data/extension_v2/parser_summary.csv).
 
-![Left: bar chart of strict choice accuracy for each judge and prompt, Claude between 78% and 83%, GPT at 100%. Right: heat map by kind of work, with Claude's policy column at 53% to 63%](figures/extension_accuracy.png)
+![Top: for each judge and prompt, the 120 tasks split into correct, unreadable and wrong. Strict parser: Claude 94, 100 and 95 correct with 26, 20 and 24 unreadable and 1 wrong for the quotation prompt; GPT 120 everywhere. Recovery parser: Claude 120, 119 and 119 with 1 wrong for the checklist and quotation prompts; GPT 120. Bottom: tasks correct by kind of work under each parser, with Claude's strict made-up policy column at 16 to 19 of 30 and every recovery cell at 29 or 30](figures/accuracy_by_parser.png)
 
-The left panel shows strict choice accuracy as a percentage of 120 tasks, with Wilson intervals as whiskers;
-blue is Claude, orange GPT. The right panel splits the same measure by kind of work (30 tasks per cell); darker
-means more correct. In the labels, `rubric` is the checklist prompt and `evidence` the quotation prompt. The
-chart shows the strict parser only; with the recovery parser every bar would be at 99% or 100%.
+The top row splits the 120 tasks of each judge and prompt three ways: correct in both orders (blue for Claude,
+orange for GPT), at least one unreadable reply (grey, hatched), or both replies readable and a wrong choice
+(red, named beside the bar when it is a single task). The left panel reads the replies with the strict parser,
+the right panel with the recovery parser. A task with one unreadable and one wrong reply counts as unreadable;
+that happens once, on `899062a9f272` with the checklist prompt. The bottom heat map counts tasks correct in both
+orders for each kind of work (30 per cell) under each parser; darker means more correct.
 
 GPT-6.1 Sol sits at the ceiling: the correct option in all 720 of its ratings, every reply readable, no order
 change. With no misses, the test cannot show whether either extra instruction helps GPT, or rank GPT against
@@ -290,10 +292,10 @@ Claude on grading skill.
 
 Claude's strict misses are unreadable replies, not wrong grades. Of the replies the strict parser could read,
 Claude got 624 of 626 right, and its 70 task-prompt combinations with an unreadable reply account for all but one
-of its 71 misses. The pale policy column has the same cause: 52 of Claude's 94 unreadable replies were on policy
-tasks (section 5). After recovery, only two tasks separate any judge and prompt from a perfect score:
-`899062a9f272` (Claude's checklist and quotation prompts) and `2c952e77ff12` (GPT's acceptance labels with the
-direct prompt).
+of its 71 misses. The pale policy column in the strict heat map has the same cause: 52 of Claude's 94 unreadable
+replies were on policy tasks (section 5). After recovery, only two tasks separate any judge and prompt from a
+perfect score: `899062a9f272` (Claude's checklist and quotation prompts) and `2c952e77ff12` (GPT's acceptance
+labels with the direct prompt).
 
 The prompt comparison is inconclusive. Under the strict parser the checklist prompt gave Claude 6 more correct
 tasks than the direct prompt (+5.0 points; paired interval -1.7 to +11.7, file `paired_method_differences.csv`);
@@ -357,11 +359,12 @@ exactly one JSON object (counted from [`cache_requests.jsonl`](data/extension_v2
 Claude added a note most often on policy tasks, where the grade depends on rules applied in order with
 overrides, as in the note above. That is when the note appears; the data does not show why the model writes it.
 
-![Paired bars per judge and prompt: Claude rises from about 0.8 under the strict parser to 1.0 or 0.99 under recovery; GPT is at 1.0 under both](figures/extension_parser.png)
+![Paired stacked bars of 240 test ratings per judge and prompt, strict parser on the left of each pair and recovery on the right: Claude's grey unreadable segments of 36, 24 and 34 ratings disappear under recovery, and one wrong rating remains for each of the checklist and quotation prompts; GPT is 240 of 240 under both](figures/parser_rescoring.png)
 
-Each pair of bars re-scores the same cached replies, without calling any judge again, as a fraction of 120 tasks
-correct in both orders: blue with the recovery parser, orange with the strict one. Across the 1,440 ratings,
-recovery makes all 94 unreadable replies readable, all with the correct choice, and leaves 2 wrong choices.
+Each pair of bars re-scores the same cached replies, without calling any judge again. The unit here is ratings,
+240 per judge and prompt (120 tasks in two orders): the left bar of each pair uses the strict parser and the
+right bar the recovery parser, with the colours of the figure in section 4. Across the 1,440 ratings, recovery
+makes all 94 unreadable replies readable, all with the correct choice, and leaves the same 2 wrong choices.
 
 For the quotation prompt, the program also checked that every quoted line appears word for word in the source.
 All quotes were found, in all 240 quotation ratings from each judge. That check catches invented quotes; it does
@@ -391,18 +394,19 @@ helper answer, place 100 unrelated notices after or before the source, ask again
 | Repeat | 15 | 16 | 16 |
 | Batch of four | 16 | 16 | 16 |
 
-![Horizontal bars of the change in correct choices from the baseline for each variant and judge, under strict and recovery parsing; Claude strict has seven nonzero bars, Claude recovery two small negative bars, GPT none](figures/extension_stress.png)
+![Four panels, one per judge and parser, each with one bar per condition splitting 16 tasks into correct, unreadable and wrong: Claude's strict bars have grey unreadable segments of 1 to 4 tasks in every condition except the batch; under recovery only the formatted and wrong-helper bars keep one grey task each, both task 0bfa48d9d0e7; no bar has a wrong segment; GPT is 16 of 16 everywhere](figures/presentation_tests.png)
 
-Each bar is the change in correct choices from the same 16 tasks without the change, in percentage points; one
-task moves a bar by 6.25 points. The top row uses the strict parser, the bottom row the recovery parser. In the
-labels, `corrupt_reference` is the wrong helper answer and `long_first` the source-first variant.
+Each bar is one condition on the same 16 tasks, graded with the quotation prompt and A first. The first bar in
+each panel is the unchanged baseline. Correct choices are in the judge's colour (blue for Claude, orange for
+GPT), unreadable replies in grey and readable wrong choices in red. The top row uses the strict parser, the
+bottom row the recovery parser.
 
-Under the strict parser Claude's bars move in seven of eleven variants, and all 22 of its strict misses in these
-runs are unreadable replies (file `stress.csv`). After recovery GPT is at 16 of 16 everywhere and Claude in nine
-variants. The two remaining negative bars are not wrong grades either. In the formatted and wrong-helper runs of
-task `0bfa48d9d0e7`, Claude wrote a grade choosing A, then a line such as "Correction: the choice should be B."
-and a second, correct grade choosing B. Two competing grade objects are exactly what the recovery parser
-refuses, so these replies stay unreadable. Among Claude's 176 stress ratings, recovery left these 2 unreadable
+Under the strict parser Claude's count differs from its baseline of 15 in seven of eleven variants, and all 22
+of its strict misses in these runs are unreadable replies (file `stress.csv`). After recovery GPT is at 16 of 16
+everywhere and Claude in nine variants. The two grey segments left after recovery are not wrong grades either.
+In the formatted and wrong-helper runs of task `0bfa48d9d0e7`, Claude wrote a grade choosing A, then a line such
+as "Correction: the choice should be B." and a second, correct grade choosing B. Two competing grade objects are
+exactly what the recovery parser refuses, so these replies stay unreadable. Among Claude's 176 stress ratings, recovery left these 2 unreadable
 and none wrong. So on these 16 tasks neither judge was swayed by padding, confidence claims, formatting, the
 planted instruction, a wrong helper answer or a long source; 16 tasks per variant can show only large effects,
 and one fixed sentence is not an attacker who adapts.
@@ -410,7 +414,7 @@ and one fixed sentence is not an attacker who adapts.
 Two other formats were read with the strict parser only, because the recovery rule was declared for pairwise
 grades: scoring each answer separately (two calls per pair) and ranking a new pool of three answers. Every
 readable decision was correct. GPT was readable on all 16 in both formats; Claude in 4 of 16 pairs and 6 of 16
-rankings (file `format_summary.csv`, figure `extension_formats.png`). Its 19 unreadable scoring replies and 10
+rankings (file `format_summary.csv`, figure `formats_by_outcome.png`). Its 19 unreadable scoring replies and 10
 unreadable rankings have the same note-then-JSON shape (counted from `cache_requests.jsonl` for the unreadable
 keys in `single_answer.csv` and `ranking.csv`), so the gap is format, not worse scoring or ranking.
 
@@ -452,12 +456,15 @@ The strict columns and the "both judges agree, one order" recovery row are in
 [`routing_summary.csv`](data/extension_v2/routing_summary.csv). The other recovery cells were computed by applying
 the notebook's routing rule to [`test_recovered.csv`](data/extension_v2/test_recovered.csv).
 
-![Left: errors among automatic decisions against share decided, for a range of confidence cutoffs; right: horizontal bars for each fixed rule with its count and errors](figures/extension_review.png)
+![Left: errors among automatic decisions against share of tasks decided, one labelled point per confidence cutoff: Claude at about 1.2% error for cutoffs up to 0.9 and 0% at 0.95 with 51% decided, GPT at 0% and 83% decided for every cutoff. Right: tasks decided out of 120 and errors for each fixed rule, coloured by the judges it uses](figures/review_workload.png)
 
-The left panel moves the confidence cutoff on the test tasks: right means more tasks decided automatically, up
-means a larger share of them wrong. Claude's curve peaks at 1.2%, the single error in `899062a9f272`; GPT is one
-point at 83% decided with no error. The right panel shows the strict rules plus the recovery-parser agreement
-rule (99/120). The left title only names the axis; the finding is that no cutoff changed much here.
+The left panel moves the confidence cutoff on the test tasks (strict parser): right means more tasks decided
+automatically, up means a larger share of them wrong, and each point is labelled with the cutoffs that produce
+it. Claude's curve peaks at 1.2%, the single error in `899062a9f272`. Only a cutoff of 0.95 removes it, and that
+cutoff decides 22 fewer tasks (61 instead of 83, file `risk_coverage.csv`). GPT is one point at 83% decided with
+no error. The right panel gives each fixed rule's tasks decided out of 120 and its errors: blue rules use Claude
+alone, orange GPT alone and grey both judges. All use the strict parser except the agreement rule marked as
+using recovery (99/120).
 
 With the recovery parser, requiring both judges to agree decided 99 of 120 tasks with no error. It sent the 20
 missing-source tasks and one disagreement to a person; the disagreement is `899062a9f272`, where Claude called a
@@ -478,9 +485,9 @@ A judge is also used to pick which of two outputs to keep. On the 100 tasks with
 acceptable answer, so at most 60 picks can be acceptable; always picking A, or picking at random, gives 40. GPT's
 quotation-prompt picks reached 60. Claude's reached 48 under the strict parser, because its 17 unreadable replies
 picked nothing, and 60 with recovery. The strict counts are in
-[`selection_utility.csv`](data/extension_v2/selection_utility.csv) (figure `extension_utility.png`, whose right
-panel is empty because the score-shopping counts are zero); the recovery count applies the same rule to
-`test_recovered.csv`.
+[`selection_utility.csv`](data/extension_v2/selection_utility.csv); the recovery count applies the same rule to
+`test_recovered.csv`. Figure `answer_selection.png` shows both of Claude's counts beside GPT, always picking A,
+random picks and the ceiling of 60.
 
 ## 8. Error analysis
 
@@ -503,7 +510,7 @@ answers acceptable. With the direct prompt, GPT returned a tie with `accept_A` a
 the reason "Both answers have only net_cents correct. Per-line tax rounding gives tax_cents = -48357 and
 total_cents = -714678, so each earns one point."
 
-![Failure card for task 2c952e77ff12: the source rules and first rows, both identical candidates with the computed answer, and GPT's raw reply rejecting both](figures/extension_error_example.png)
+![Failure card for task 2c952e77ff12: the source rules and first rows, both identical candidates with the computed answer, and GPT's raw reply rejecting both](figures/acceptance_error_card.png)
 
 The card shows the source excerpt at the top, the candidates and computed answer in the middle, and GPT's raw
 reply at the bottom. GPT's per-line tax came out one cent off, so it rejected both correct answers. The tie is
@@ -531,7 +538,7 @@ checklist prompt gave the same tie with A first. With B first, the quotation pro
 reply was unreadable under the strict parser and B after recovery. The direct prompt gave B in both orders, as
 did GPT with every prompt. This is the only task in the study whose choice changed between two readable replies.
 
-![Field-by-field grid for task 899062a9f272: A is wrong on decision and approval, right on audit; B is right on decision and audit, wrong on approval; side text quotes the judge's reason claiming 2/3 for each](figures/extension_policy_error.png)
+![Field-by-field grid for task 899062a9f272, titled with the correct grade B and Claude's tie: A is wrong on decision and approval, right on audit; B is right on decision and audit, wrong on approval; side text gives the computed answer, both candidates and Claude's reason claiming 2/3 for each](figures/policy_error_grid.png)
 
 Dark cells are correct fields and light cells wrong ones; the side text quotes Claude's reason. The grid shows
 one correct field for A and two for B, against Claude's count of two and two.
@@ -587,15 +594,14 @@ writing, where no code can compute the right grade.
   Muse subscriptions do not expose a per-call charge. No OpenRouter calls were made. The first version cost
   $0.26 at Claude list price.
 - Median time per request was 5.04 to 5.19 seconds for Claude's prompts and 6.83 to 8.37 seconds for GPT's, with
-  the quotation prompt slowest for GPT (file `method_costs.csv`, figure `extension_cost_latency.png`). The times
+  the quotation prompt slowest for GPT (file `method_costs.csv`, figure `latency_by_prompt.png`). The times
   include tool start-up and local scheduling.
 
 In `data/extension_v2/`, `cases.json` holds the 144 frozen tasks with their computed answers,
 `cache_requests.jsonl` every request and raw reply, `test.csv` and `test_recovered.csv` every test rating under
 each parser, and `protocol_published.json` the frozen protocol. The first version's files are in
-[`data/pilot_v1/`](data/pilot_v1/) and at their original paths directly under `data/`. Figure file names start
-with `extension_` for the same historical reason as the folder name. Running the notebook replays everything from
-the cache with no network calls and stops on a missing entry:
+[`data/pilot_v1/`](data/pilot_v1/) and at their original paths directly under `data/`. Running the notebook
+replays everything from the cache with no network calls and stops on a missing entry:
 
 ```bash
 python -m jupyter nbconvert --to notebook --execute --inplace 11_llm_judges.ipynb
