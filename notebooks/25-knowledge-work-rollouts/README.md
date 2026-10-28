@@ -34,8 +34,6 @@ Someone planning to train a model on its own attempts needs these answers to cho
 
 Granite 4.2 8B and Nemotron 3.5 Lightning (open-weight, through OpenRouter) and GPT-6.1 Sol and GPT-6 Luna (through `codex exec`) each made three attempts at 12 tasks written for the study on 24 October 2026: 144 attempts and 518 model calls, with at most six actions per attempt.
 
-What we found:
-
 - 119 of 144 attempts finished the task: Granite 16 of 36, Nemotron 35, Sol 35 and Luna 33. Of the 25 failures, 24 were read and scored wrong. One was a reply the harness could not use: Luna's command-line tool called a tool it had not been offered, so its action, the correct booking, was withheld. On usable attempts Luna finished 33 of 35 and the order does not change. Nemotron, Sol and Luna failed 1 to 3 of 36 attempts each: they are at the ceiling of this test, which cannot rank them.
 - The built-in scores accepted unfinished work in two of the three environments. On the calendar, a point per successful action does not separate success from failure: Granite's attempt that moved a meeting and then created a duplicate earned 5 points, as many as its best successes. The financial-table environment accepts answers within about 1% and passed 6 answers that the exact check rejected: five of Granite's slightly wrong divisions and Sol's 12.806 for 12.805. The reconciliation environment's built-in score agreed with the exact check on all 48 attempts.
 - Only 9 of the 48 groups were mixed: Granite 5 of 12, Luna 2, Nemotron 1 and Sol 1. Counting every model call, that is 30 calls per mixed group for Granite, against 114 for Sol and 131 for Nemotron. Granite's other groups did not help either: 4 of its 12 failed all three times.
