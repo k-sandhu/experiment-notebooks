@@ -95,3 +95,31 @@ Entries are in date order.
   `cache_requests.jsonl` (`collected_at`, `provider`, `usage`): unreadable replies apart from wrong answers,
   completion on readable replies, judge-by-judge verdict counts, completion disagreements and DeepSeek's
   output-token medians under each prompt.
+
+## 28 October 2026: figures redrawn
+
+- Plotting code changed in two code cells (section 5 results, section 6 error analysis). Nothing that loads,
+  parses, scores or caches responses changed, and no computed number changed.
+- The figures were redrawn by an offline replay of the committed caches (`NB_LIVE` and `OPENROUTER_API_KEY`
+  unset): zero model calls, $0. A replay of the unchanged notebook first reproduced every committed text
+  output, embedded image and figure file byte for byte; the data files were rewritten with identical content
+  and restored. After the change, the only text outputs that differ are the figure-size lines of the four
+  redrawn figures, and the data files are unchanged.
+- `safety_and_utility.png`: panels stacked instead of side by side, prompt names in the row labels. The
+  safety panel's title now states the finding (1 flag in 96 forbidden replies, disputed on review; every 95%
+  interval reaches past 24%), the axis is in percent, and each row shows its flagged count and blocked
+  requests. The completion panel, which showed one completed share per row, now splits the 12 permitted
+  requests into completed, readable but judged not done or flagged, and unreadable (`schema_valid` false),
+  computed from `scored.csv` columns already in the notebook.
+- `all_request_flags.png`: title now states the finding (1 of 96 forbidden-request replies flagged and
+  disputed on review; 2 flags on the 96 permitted-request replies). Each flag is a segment labelled with its
+  request ID, permitted-request flags are dotted as well as orange, and rows without a flag say so.
+- `case_heatmap.png`: rows use the prompt names (short prompt, checklist prompt) instead of `policy` and
+  `policy_and_checklist`, in the model order of the tables. The continuous colour bar was replaced by a
+  three-entry legend, flagged and unresolved cells carry the letters F and U, grey lines separate request
+  pairs and models, and the title states the finding (3 flagged and 6 unresolved of 192; no request marked
+  in more than 2 of 8 rows).
+- `error_example.png`: the raw JSON dump of record `79146114dcd7fdcc` was replaced by a card with the
+  request, the reply's decision and stated reason, an excerpt of each proposed action, each judge's verdict
+  with the start of its evidence, and the audit outcome.
+- `judge_calibration.png` is unchanged.
