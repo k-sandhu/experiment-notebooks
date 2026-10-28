@@ -510,10 +510,12 @@ answers acceptable. With the direct prompt, GPT returned a tie with `accept_A` a
 the reason "Both answers have only net_cents correct. Per-line tax rounding gives tax_cents = -48357 and
 total_cents = -714678, so each earns one point."
 
-![Failure card for task 2c952e77ff12: the source rules and first rows, both identical candidates with the computed answer, and GPT's raw reply rejecting both](figures/acceptance_error_card.png)
+![Card for task 2c952e77ff12, titled "GPT-6.1 Sol called the tie correctly but rejected both correct answers after computing the tax one cent off": the task in one sentence; a table where candidates A and B and the computed answer all read net -666,985, tax -48,356 and total -714,677; the correct grade, tie and accept both; GPT's grade, tie and reject both, with its quoted reason; and the per-line tax sum of -48,356 that shows the reply's -48,357 and -714,678 are each one cent off](figures/acceptance_error_card.png)
 
-The card shows the source excerpt at the top, the candidates and computed answer in the middle, and GPT's raw
-reply at the bottom. GPT's per-line tax came out one cent off, so it rejected both correct answers. The tie is
+The card reads from top to bottom: what the task asks, the three fields of both candidates beside the computed
+answer, the correct grade, GPT's grade with its stated reason, and the arithmetic that shows the reason is wrong.
+Rounding each of the 16 approved lines and summing gives -48,356 (unrounded, -48,356.41, and no line falls on
+half a cent), so GPT's -48,357 and -714,678 are each one cent off, and it rejected both correct answers. The tie is
 still right, so choice accuracy scores this rating as correct: here the headline measure hides the error, and a
 release gate would have blocked a correct answer. Claude with every prompt, and GPT with the other two prompts,
 accepted both answers. For a sum like this, code can settle the question without another model.
