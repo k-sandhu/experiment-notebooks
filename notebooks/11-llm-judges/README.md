@@ -66,11 +66,9 @@ And how much checking work can a rule save that accepts a grade only when both j
 
 ## Study summary
 
-**What was compared.** Two judges, three prompts and two answer orders on 120 test tasks: 1,440 ratings. A
+The study graded 120 test tasks with two judges, three prompts and two answer orders: 1,440 ratings. A
 fixed subset of 16 tasks also tested distracting presentation, a planted instruction, helper answers, long
 sources and two other grading formats.
-
-**What we found.**
 
 - GPT-6.1 Sol chose correctly in all 120 tasks, in both orders, with all three prompts (720 of 720 ratings).
   The test sits at its ceiling for GPT, so it cannot rank GPT's prompts.
@@ -90,7 +88,7 @@ In the original situation: on checkable tasks like these, both judges graded nea
 practical work is to validate the reply format, check acceptance separately from the winner, and send
 missing-source tasks and disagreements to a person.
 
-**The main caveat.** These are generated three-field answers, built from 24 templates, and the scores are near
+The main caveat is that these are generated three-field answers, built from 24 templates, and the scores are near
 the ceiling. Nothing here measures how well a judge grades open-ended writing or matches human preferences.
 
 ## Contents
