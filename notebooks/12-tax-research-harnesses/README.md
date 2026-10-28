@@ -51,9 +51,7 @@ When a model drafts a small company's tax workpaper, does a checklist, a self-re
 
 ## Study summary
 
-**What was compared.** Gemma 4 31B and Qwen3.8 Flash each prepared workpapers for the 12 companies in all four setups with both instruction lengths: 2 models x 12 companies x 4 setups x 2 instruction lengths = 192 runs, one sample each. A workpaper counts as fully correct only when all nine fields match the answer key. Self-review and checker feedback start from the direct call's own draft and add one call, so they can only change what the direct call produced.
-
-**What we found.**
+Gemma 4 31B and Qwen3.8 Flash each prepared workpapers for the 12 companies in all four setups with both instruction lengths: 2 models x 12 companies x 4 setups x 2 instruction lengths = 192 runs, one sample each. A workpaper counts as fully correct only when all nine fields match the answer key. Self-review and checker feedback start from the direct call's own draft and add one call, so they can only change what the direct call produced.
 
 - Qwen3.8 Flash's direct call wrote a fully correct workpaper for all 12 companies with both instruction lengths. Gemma 4 31B wrote none in any of its eight combinations of setup and instructions (0 of 96).
 - Qwen's two review setups scored 9 to 12 of 12, and every miss was an empty reply: in 5 of 48 second calls Qwen spent the whole 6,000-token output limit on its thinking step and returned no text. All 5 drafts it had been asked to review were already correct. Counting only replies the scorer could read, Qwen was right 67 times out of 67.
@@ -62,7 +60,7 @@ When a model drafts a small company's tax workpaper, does a checklist, a self-re
 
 In the original situation: Gemma's workpaper for test-01 gives a profit of $3,400 instead of $4,400, with shares of $2,040 and $1,360, and none of the extra steps changed it, because none of them redoes the subtraction. Qwen got test-01 and the other 11 companies right in one call, so for Qwen the extra steps added cost and a chance of an empty reply.
 
-**The main caveat.** One model sat at the ceiling and the other at the floor, so this design had no room to show a gain: Qwen had nothing left to fix, and Gemma's errors were of a kind none of the steps checks. None of the 12 planned paired comparisons found a gain, and that is a consequence of the design as much as a finding about the steps. The 12 companies were written for this experiment, each run happened once, and the answer key has not been reviewed by a certified public accountant.
+The main caveat is that one model sat at the ceiling and the other at the floor, so this design had no room to show a gain: Qwen had nothing left to fix, and Gemma's errors were of a kind none of the steps checks. None of the 12 planned paired comparisons found a gain, and that is a consequence of the design as much as a finding about the steps. The 12 companies were written for this experiment, each run happened once, and the answer key has not been reviewed by a certified public accountant.
 
 ## Contents
 
@@ -141,7 +139,7 @@ flowchart TD
     P --> D["Direct call (OpenRouter)<br/>48 first drafts: 2 models x 12 x 2"]
     D --> SR["Self-review: one more call<br/>48 second replies"]
     D --> CK["Checker reads the draft<br/>its error list goes back: 48 second replies"]
-    P --> F["Agent framework, smolagents 1.24.0<br/>48 runs: 24 Gemma, 24 Qwen ended in HTTP 400"]
+    P --> F["Agent framework, smolagents 1.24.0<br/>48 runs: 24 Gemma; 24 Qwen, all ended in HTTP 400"]
     D --> S["Scoring: 192 runs<br/>fully correct, wrong or unreadable"]
     SR --> S
     CK --> S
@@ -247,11 +245,11 @@ Fully correct counts are from `data/summary.csv`; wrong and unreadable counts ar
 
 Each panel is one model; each pair of bars is one setup, green for short and blue for detailed instructions; the x-axis is the share of the 12 companies with a fully correct workpaper. The y-axis uses the code names: `simple` is the direct call, `generic_review` self-review, `custom_feedback` checker feedback and `smolagents` the agent framework. Gemma's panel is empty because all eight of its values are zero, not because data is missing. Qwen's framework bars are also absent: those runs failed before writing anything.
 
-**Qwen's direct call was at the ceiling.** It wrote a fully correct workpaper for 24 of 24 company and instruction pairs. Neither review setup could raise that score; it could only keep it or lose it.
+Qwen's direct call was at the ceiling. It wrote a fully correct workpaper for 24 of 24 company and instruction pairs. Neither review setup could raise that score; it could only keep it or lose it.
 
-**Every Qwen loss is an unreadable reply.** Qwen produced 67 fully correct workpapers, 0 wrong ones and 29 unreadable replies. The 29 are the 24 framework runs that never started and 5 review runs whose second reply was empty. With unreadable replies set aside, Qwen was correct in every setup it could run, so the ranking among its three working setups comes entirely from empty replies. Section 9 shows why they were empty.
+Every Qwen loss is an unreadable reply. Qwen produced 67 fully correct workpapers, 0 wrong ones and 29 unreadable replies. The 29 are the 24 framework runs that never started and 5 review runs whose second reply was empty. With unreadable replies set aside, Qwen was correct in every setup it could run, so the ranking among its three working setups comes entirely from empty replies. Section 9 shows why they were empty.
 
-**Gemma was at the floor.** All 96 of its workpapers were readable and all 96 were wrong. Neither instruction length nor any setup changed that, so this test cannot rank the setups for Gemma either. Section 7 shows that the same part failed every time.
+Gemma was at the floor. All 96 of its workpapers were readable and all 96 were wrong. Neither instruction length nor any setup changed that, so this test cannot rank the setups for Gemma either. Section 7 shows that the same part failed every time.
 
 ## 7. Results: which parts of the workpaper were right
 
@@ -259,7 +257,7 @@ Each panel is one model; each pair of bars is one setup, green for short and blu
 
 Each row is one model, instruction length and setup (code names as before); each column is one component check; the colour is the share of the 12 companies that passed, from pale yellow (none) to dark blue (all). The column `amounts` requires all four money fields to be right, `owner_allocation` is the owners' shares and `authority` is the sources check. The title's 67 of 192 amount checks are exactly Qwen's 67 fully correct workpapers.
 
-**Gemma's amounts failed in all 96 workpapers, and its judgement mostly held.** Across Gemma's 96 workpapers, counted from `data/runs.json` (field `parsed`) against `data/gold.json`:
+Gemma's amounts failed in all 96 workpapers, and its judgement mostly held. Across Gemma's 96 workpapers, counted from `data/runs.json` (field `parsed`) against `data/gold.json`:
 
 | Field | Gemma right |
 |---|---:|
@@ -281,7 +279,7 @@ Qwen's rows are dark across every column except where whole runs were unreadable
 
 Each row is one planned comparison, written "first minus second / where": "custom minus generic / short" is checker feedback minus self-review with short instructions, and "detailed minus short / simple" is detailed minus short instructions in the direct call. The dot is the average paired difference over 12 companies and the bar its 95% interval; the grey line marks no difference. A dot right of the line favours the first-named option.
 
-**None of the 12 comparisons showed a supported gain.** For Gemma every difference is 0 on every company, so the resampled interval has zero width. That shows only that the 12 companies never differed, not that the setups are equal. For Qwen the largest point is checker feedback against self-review with detailed instructions, +0.17 (interval -0.17 to +0.50), and the lowest is detailed against short instructions in self-review, -0.25 (interval -0.50 to 0). Each of the 10 non-zero company differences in Qwen's comparisons comes from one of the 5 empty replies: the detailed self-review runs lost test-02, test-08 and test-12, and the checker-feedback runs lost test-11 (short) and test-09 (detailed).
+None of the 12 comparisons showed a supported gain. For Gemma every difference is 0 on every company, so the resampled interval has zero width. That shows only that the 12 companies never differed, not that the setups are equal. For Qwen the largest point is checker feedback against self-review with detailed instructions, +0.17 (interval -0.17 to +0.50), and the lowest is detailed against short instructions in self-review, -0.25 (interval -0.50 to 0). Each of the 10 non-zero company differences in Qwen's comparisons comes from one of the 5 empty replies: the detailed self-review runs lost test-02, test-08 and test-12, and the checker-feedback runs lost test-11 (short) and test-09 (detailed).
 
 ![Two horizontal bar charts by setup, averaged over both models and instruction lengths: mean recorded cost per run in US dollars on the left, mean model calls per run on the right](figures/cost_and_calls.png)
 
