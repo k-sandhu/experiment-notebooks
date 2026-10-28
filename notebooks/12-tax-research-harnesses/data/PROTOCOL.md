@@ -101,6 +101,35 @@ kept.
 From `all_collection_spend.csv`. These are costs reported in API responses, not an account invoice: HTTP error
 bodies and interrupted requests report no cost.
 
+## 28 October 2026: figures redrawn
+
+The plotting code in four cells was changed and the notebook was re-run as an offline replay of the committed
+caches, with `NB_LIVE` and `OPENROUTER_API_KEY` unset: zero model calls, $0. No code that loads, parses, scores or
+caches a response was changed; every data file and every computed number is unchanged, and the protocol hash check
+passed. What changed in each figure:
+
+- `exact_success.png`: one panel per model, stacked vertically. Each bar now splits the 12 companies into fully
+  correct, wrong and unreadable, with the counts written beside it, so Gemma's 0 of 12 bars are visible as 12 wrong.
+  Qwen's framework rows are marked "not run" (HTTP 400) instead of being drawn as zero. Setup names replace the code
+  names. Before, the x-axis was the share fully correct, Gemma's panel was blank and the unreadable replies were not
+  shown.
+- `cost_and_calls.png`: split by model, leaving out Qwen's 24 framework runs that ended in HTTP 400 (marked "not
+  run"). Before, each bar averaged both models, so those failed runs pulled the framework's averages down to 1.5
+  calls and $0.0004; the cost axis labels overlapped and the titles did not describe the data. New title: the
+  review setups cost 2.0 to 2.7 times the direct call.
+- `transport_failures.png`: one panel per model, rows named by setup, each bar labelled with its category and count,
+  and rows with no failures labelled. Before, the title read "24 framework runs fail at HTTP transport", which did
+  not say that all 24 were Qwen's.
+- `error_example.png`: every amount in dollars and the fields named as in the README (business profit, owners'
+  shares, review flags). Before, the right table was in cents beside a ledger in dollars.
+- `paired_effects.png`, `component_checks.png`, `budget_check.png`: labels only. Setup and component code names and
+  OpenRouter model ids were replaced by the README's names; nothing else was changed.
+- The printed lines after the paired comparisons no longer end "on this pilot"; each now names the comparison in
+  words and says whether its interval lies entirely above zero.
+
+`all_collection_spend.png` was not changed. The framework error logs printed by the run cell come out in a
+different order on each replay, because runs execute eight at a time; their content is the same.
+
 ## Replay notes
 
 - Replay (`python -m jupyter nbconvert --to notebook --execute --inplace 12_tax_research_harnesses.ipynb`) reads
