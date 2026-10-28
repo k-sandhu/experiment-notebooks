@@ -46,7 +46,7 @@ Data and scoring:
 
 ## 2026-10-17 02:32 (UTC-4): notebook, caches and results committed
 
-Commit `2901f83d` added the notebook with its outputs and this folder's data files. The replies carry no timestamps, so collection happened on or before this commit.
+Commit `2901f83d` added the notebook with its outputs and this folder's data files. The replies carry no timestamps, so collection happened on or before this commit. The commit message names Claude Opus 5.5, one of the eleven models tested, as co-author ("Co-Authored-By: Claude Opus 5.5"), and no file records who wrote the 52 requests. If Claude wrote them, they may suit its habits and favour its scores; the repository's rules ask for model-written test data to come from a different vendor than the models tested.
 
 - 572 replies scored, 0 failed calls, 572 read as JSON by the lenient parser, 301 queries executed, 0 timeouts, 0 blocked for file access, 1 query that changed data (Mistral Small 4 on i-05, 412 rows).
 - One retry: Muse Spark Open's first reply to d-02 used 6,000 completion tokens (5,997 reasoning) and returned empty text, cost $0.0258; the retry with 20,000 tokens used 793 and refused. The first attempt remains in `cache_openrouter.jsonl` (417 entries for 416 scored replies) but is not scored.
