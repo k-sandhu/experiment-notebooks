@@ -118,12 +118,20 @@ passed. What changed in each figure:
   calls and $0.0004; the cost axis labels overlapped and the titles did not describe the data. New title: the
   review setups cost 2.0 to 2.7 times the direct call.
 - `transport_failures.png`: one panel per model, rows named by setup, each bar labelled with its category and count,
-  and rows with no failures labelled. Before, the title read "24 framework runs fail at HTTP transport", which did
-  not say that all 24 were Qwen's.
+  and rows with none of the three counts labelled as such. The title names what is counted: only Qwen's 24
+  framework runs hit HTTP errors, and every Gemma run returned a readable reply. Before, the title read "24
+  framework runs fail at HTTP transport", which did not say that all 24 were Qwen's.
 - `error_example.png`: every amount in dollars and the fields named as in the README (business profit, owners'
   shares, review flags). Before, the right table was in cents beside a ledger in dollars.
-- `paired_effects.png`, `component_checks.png`, `budget_check.png`: labels only. Setup and component code names and
-  OpenRouter model ids were replaced by the README's names; nothing else was changed.
+- `paired_effects.png`: comparisons named in words; the two panels share one set of row labels, so the image is
+  1,500 px wide instead of 2,085; Qwen's comparison of the two instruction lengths in the agent framework, where
+  all 24 runs ended in HTTP 400, is marked "not run (HTTP 400)" instead of drawn as a dot at zero; a title states
+  that no comparison's 95% interval lies entirely above zero.
+- `component_checks.png`: setup and component names as in the README; each cell shows its pass count; Qwen's two
+  agent-framework rows are hatched grey and marked "not run (HTTP 400)" instead of drawn as 0 of 12. The title
+  keeps its numbers but now counts them over the 168 runs that reached the model (67 amount checks and 159 sources
+  checks passed); before, it gave them out of 192, including the 24 runs that were never scored.
+- `budget_check.png`: labels only. OpenRouter model ids were replaced by the model names; nothing else was changed.
 - The printed lines after the paired comparisons no longer end "on this pilot"; each now names the comparison in
   words and says whether its interval lies entirely above zero.
 

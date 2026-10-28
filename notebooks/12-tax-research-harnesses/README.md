@@ -202,9 +202,9 @@ Gemma 4 31B received the same message and replied in 168 tokens, with no thinkin
 
 Seven of the nine fields are right. The profit is $3,400 instead of $4,400, and the two shares are wrong because they are 60% and 40% of the wrong profit. The workpaper is not fully correct. This is the mistake from the opening, made by a model: the shares add up, so in the checker-feedback run the checker sent back an empty error list, and Gemma's second reply was the same JSON. Gemma returned exactly 340,000 cents for test-01 in all eight combinations of setup and instructions.
 
-![Two tables in dollars: on the left the test-01 books, $8,100 of receipts and five costs ending in a correct business profit of $4,400; on the right Gemma's workpaper beside the answer key, with business profit $3,400 against $4,400 and owner shares $2,040 and $1,360 against $2,640 and $1,760 highlighted](figures/error_example.png)
+![Two tables in dollars: on the left the test-01 books ending in a correct business profit of $4,400; on the right Gemma's workpaper beside the answer key, with business profit $3,400 against $4,400 and owner shares $2,040 and $1,360 against $2,640 and $1,760 highlighted](figures/error_example.png)
 
-The left table is the test-01 books, ending in the correct business profit of $4,400. The right table shows Gemma's workpaper (direct call, short instructions) beside the answer key, field by field, in dollars like the left. A cell that differs is shaded red and printed in bold on Gemma's side, and shaded green on the key's side. Three cells differ, all caused by the one profit figure: $3,400 instead of $4,400, and the two shares that follow from it.
+The left table is the test-01 books, ending in the correct business profit of $4,400. The right table shows Gemma's workpaper (direct call, short instructions) beside the answer key, also in dollars. A cell that differs is shaded red and printed in bold on Gemma's side, and shaded green on the key's side. Three cells differ, all caused by the one profit figure: $3,400 instead of $4,400, and the two shares that follow from it.
 
 ## 4. The models
 
@@ -241,9 +241,9 @@ The planned comparisons are paired: the same company in two setups. For each com
 
 Fully correct counts are from `data/summary.csv`; wrong and unreadable counts are from `data/scored.csv` (columns `correct` and `valid`) and match `data/transport_summary.csv`. Gemma's row stands for its eight combinations, each with the same result.
 
-![Two stacked bar charts, one per model, with one bar per setup and instruction length splitting the 12 companies by outcome. All eight Gemma 4 31B bars read 0 correct, 12 wrong. Qwen3.8 Flash's bars read 12 correct for the direct call and short self-review, 11 correct and 1 unreadable for checker feedback, 9 correct and 3 unreadable for detailed self-review, and not run (HTTP 400) for the agent framework](figures/exact_success.png)
+![Two stacked bar charts, one per model, splitting the 12 companies by outcome for each setup and instruction length: every Gemma 4 31B bar reads 0 correct, 12 wrong; Qwen3.8 Flash's bars read 9 to 12 correct with the rest unreadable, and its agent framework rows read not run (HTTP 400)](figures/exact_success.png)
 
-The top panel is Gemma 4 31B and the bottom panel Qwen3.8 Flash. Each bar is one setup with one instruction length, and its length is the 12 companies, split by what happened on each: a coloured segment for a fully correct workpaper (green for short, blue for detailed instructions), grey for a wrong workpaper (read by the scorer, at least one field differs) and a hatched segment for an unreadable reply. A dotted outline marks runs that never reached the model. The text at the right end of each bar gives the same counts, and the panel title totals them over the runs that completed.
+Gemma 4 31B is on top and Qwen3.8 Flash below. Each bar is one setup and instruction length, split over the 12 companies by outcome: a coloured segment for a fully correct workpaper (green for short, blue for detailed instructions), grey for a wrong workpaper and a hatched segment for an unreadable reply. A dotted outline marks runs that never reached the model. The text beside each bar gives the counts; the panel title totals them over completed runs.
 
 Qwen's direct call was at the ceiling. It wrote a fully correct workpaper for 24 of 24 company and instruction pairs. Neither review setup could raise that score; it could only keep it or lose it.
 
@@ -253,9 +253,9 @@ Gemma was at the floor. All 96 of its workpapers were readable and all 96 were w
 
 ## 7. Results: which parts of the workpaper were right
 
-![Heat map with one row per model, instruction length and setup, and four columns: amounts, owner shares, review flags and sources; Gemma's rows are pale for amounts and owner shares and dark for review flags and sources](figures/component_checks.png)
+![Heat map of pass counts with one row per model, instruction length and setup and four columns (amounts, owner shares, review flags, sources); Gemma's rows are pale for amounts and owner shares and dark for the rest; Qwen's two agent framework rows are hatched grey and marked not run (HTTP 400)](figures/component_checks.png)
 
-Each row is one model, instruction length and setup; each column is one component check; the colour is the share of the 12 companies that passed, from pale yellow (none) to dark blue (all). The Amounts column requires all four money fields to be right. The title's 67 of 192 amount checks are exactly Qwen's 67 fully correct workpapers.
+Each row is one model, instruction length and setup; each column is one component check; the colour is the share of the 12 companies that passed, from pale yellow (none) to dark blue (all), and each cell gives the count. The Amounts column requires all four money fields to be right. Qwen's two agent framework rows are hatched grey and marked not run: every request ended in HTTP 400, so nothing was scored. The title therefore counts the 168 runs that reached the model, and its 67 amount checks are exactly Qwen's 67 fully correct workpapers.
 
 Gemma's amounts failed in all 96 workpapers, and its judgement mostly held. Across Gemma's 96 workpapers, counted from `data/runs.json` (field `parsed`) against `data/gold.json`:
 
@@ -271,19 +271,19 @@ Gemma's amounts failed in all 96 workpapers, and its judgement mostly held. Acro
 
 So Gemma read the books well enough to put interest, gifts and draws in the right place and to raise the right flags in 11 of 12 companies. What failed was the one number that needs a sum of six to nine lines. All 88 of its non-empty share splits add up exactly to its own profit figure, which is why the checker passed them. The 8 missed review flags are all on test-11, where Gemma raised the loss flag but left out the missing-source flag. The sources check failed only on test-11 in the two review setups, for a reason shown in section 9.
 
-Qwen's rows are dark across every column except where whole runs were unreadable: its pale framework rows and its slightly lighter review rows are the 29 unreadable replies, which fail every component at once.
+Qwen's rows are dark across every column except its three review rows with empty replies (9/12 for detailed self-review, 11/12 for checker feedback at each length). An unreadable reply fails every component at once, so each of the 5 empty replies takes one company off every column of its row.
 
 ## 8. Results: paired comparisons, cost and time
 
-![Two dot plots, one per model, each with six paired comparisons and their 95% intervals; every Gemma point sits at zero with no interval; Qwen's points range from -0.25 to +0.17 and every interval includes zero](figures/paired_effects.png)
+![Two dot plots, one per model, sharing six row labels for the planned comparisons: all six Gemma points sit at zero with zero-width intervals; five Qwen points range from -0.25 to +0.17, every interval including zero, and its agent framework instruction comparison reads not run (HTTP 400)](figures/paired_effects.png)
 
-Each row is one planned comparison, named first option minus second: "Checker feedback minus self-review, short instructions", or "Detailed minus short instructions, direct call". The dot is the average paired difference over 12 companies and the bar its 95% interval; the grey line marks no difference. A dot right of the line favours the first-named option.
+Each row is one planned comparison, named first option minus second: "Checker feedback minus self-review, short instructions", or "Detailed minus short instructions, direct call". The row labels on the left apply to both panels. The dot is the average paired difference over 12 companies and the bar its 95% interval; the grey line marks no difference. A dot right of the line favours the first-named option. Qwen's agent framework row has no dot: all 24 of those runs ended in HTTP 400.
 
 None of the 12 comparisons showed a supported gain. For Gemma every difference is 0 on every company, so the resampled interval has zero width. That shows only that the 12 companies never differed, not that the setups are equal. For Qwen the largest point is checker feedback against self-review with detailed instructions, +0.17 (interval -0.17 to +0.50), and the lowest is detailed against short instructions in self-review, -0.25 (interval -0.50 to 0). Each of the 10 non-zero company differences in Qwen's comparisons comes from one of the 5 empty replies: the detailed self-review runs lost test-02, test-08 and test-12, and the checker-feedback runs lost test-11 (short) and test-09 (detailed).
 
 ![Two bar charts by setup with one bar per model: mean recorded cost per run on the left (Gemma $0.0006 to $0.0013, Qwen $0.0011 to $0.0030) and mean model calls per run on the right (1 for the direct call, 2 otherwise); Qwen's agent framework is marked not run (HTTP 400)](figures/cost_and_calls.png)
 
-Each setup has one bar per model, orange for Gemma 4 31B above purple for Qwen3.8 Flash, and each bar is labelled with the model and its value. A bar averages the setup's 24 runs, 12 companies at each instruction length. The left panel is the recorded OpenRouter cost per run, counting the shared first call in every setup that uses it; the right panel is model calls per run. Qwen's 24 framework runs never reached the model, so they are left out and marked "not run (HTTP 400)". The title's range of 2.0 to 2.7 times covers both models: 2.0 to 2.1 for Gemma and 2.4 to 2.7 for Qwen. Every run that reached the model used its full allowance of calls: one for the direct call, two for every other setup, including all 24 of Gemma's framework runs. Gemma's framework runs cost 1.3 times its direct call.
+Each setup has one bar per model, orange for Gemma 4 31B above purple for Qwen3.8 Flash, and each bar is labelled with the model and its value. A bar averages the setup's 24 runs. The left panel is the recorded OpenRouter cost per run, counting the shared first call in every setup that uses it; the right panel is model calls per run. Qwen's 24 framework runs never reached the model, so they are left out and marked "not run (HTTP 400)". The title's range of 2.0 to 2.7 times covers both models: 2.0 to 2.1 for Gemma and 2.4 to 2.7 for Qwen. Every run that reached the model used all its calls: one for the direct call, two for every other setup, including all 24 of Gemma's framework runs. Gemma's framework runs cost 1.3 times its direct call.
 
 Per model, from `data/summary.csv` (columns `mean_cost_usd` and `mean_latency_s`, averaged over the two instruction lengths):
 
@@ -330,9 +330,9 @@ test-07 is the case that needs judgement. Qwen's direct call with short instruct
 
 ### The agent framework with Qwen: not a measurement
 
-![Two panels, one per model, with one row per setup counting runs with an HTTP error, an output-limit hit or an unreadable reply. Every Gemma 4 31B row reads no failures in 24 runs. Qwen3.8 Flash has 24 HTTP errors and 24 unreadable replies in the agent framework, 3 and 2 output-limit hits matching 3 and 2 unreadable replies in self-review and checker feedback, and no failures in the direct call](figures/transport_failures.png)
+![Two panels, one per model, counting runs per setup with an HTTP error, an output-limit hit or an unreadable reply: none in any Gemma 4 31B row; for Qwen3.8 Flash, 24 HTTP errors and 24 unreadable replies in the agent framework, and 3 and 2 output-limit hits, each also unreadable, in self-review and checker feedback](figures/transport_failures.png)
 
-The left panel is Gemma 4 31B and the right panel Qwen3.8 Flash, each with 24 runs per setup. In each row the bars count runs with an HTTP error (blue), a call that hit the output limit (orange) and an unreadable final reply (green), and each bar is labelled with its category and count. A row with none of the three says "no failures in 24 runs". The categories overlap: each of Qwen's 5 output-limit hits is also one of its unreadable replies, and each of its 24 HTTP errors is also an unreadable reply.
+The left panel is Gemma 4 31B and the right Qwen3.8 Flash, 24 runs per setup. The bars count runs with an HTTP error (blue), a call that hit the output limit (orange) and an unreadable final reply (green), each labelled with its category and count. A row with none of the three says so. "Readable" in the title means only that the scorer could read the reply; all 96 of Gemma's readable workpapers were wrong. The categories overlap: each of Qwen's 5 output-limit hits is also one of its unreadable replies, and each of its 24 HTTP errors is also an unreadable reply.
 
 All 24 Qwen framework runs ended on their first request. The host's error message, saved in the cache, reads: "The tool_choice parameter does not support being set to required or object in thinking mode". The framework asks the model to always call a tool (`tool_choice: required`), which is its default, and Alibaba's endpoint for Qwen3.8 Flash refuses that setting while the thinking mode is on. No workpaper was written, no cost was reported, and nothing about Qwen's tax work can be read from these runs. Changing the setting would have changed the framework under test, so the runs were kept as they failed and the fix is listed as future work.
 
