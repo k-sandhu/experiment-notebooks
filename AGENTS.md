@@ -10,6 +10,7 @@ notebooks/NN-short-name/
   NN_short_name.ipynb   the experiment, committed with its outputs
   README.md             topic introduction, worked examples, question, explained results and visuals, how to run
   data/                 inputs, caches of every model response, results tables
+    PROTOCOL.md         run history: preregistration, amendments, outages, settings (see Protocol history)
   figures/              PNGs saved by the notebook (used by README.md)
 
 econ/                    economics experiments grouped at the owner's request
@@ -88,19 +89,29 @@ The opening is the beginning of a lesson for a curious reader, not an abstract f
 first paragraph followed immediately by model names and results is still too abrupt. Give the reader time
 to become familiar with the subject before asking them to follow an experiment about it.
 
-- Begin with the everyday activity or need behind the topic. Explain what people are trying to accomplish
-  and what a useful outcome looks like. Start with one simple situation; do not pack several exceptions,
-  business rules or failure types into the first paragraph.
-- Explain why someone would care in human terms: time spent checking work, a payment made incorrectly,
-  an appointment that never gets booked, or a number that answers the wrong question. Develop the
-  connection instead of asserting that the topic is important.
+- Begin with the task the experiment is about, in whichever of two ways fits it. When people do the task
+  (reading an invoice, booking a meeting, checking a tax return), start from one concrete case of it. When
+  the experiment is about building or testing models (generating training data, collecting rewards,
+  judging answers, forecasting), start with a plain introduction to that topic: what the task is, what it
+  is for and why someone would run this test. Assume the reader does not know why such a test is done,
+  and explain that before the question. In either case, say what a useful outcome looks like. Start with
+  one simple situation; do not pack several exceptions, business rules or failure types into the first
+  paragraph.
+- Use an everyday analogy only when it maps closely onto the subject, as notebook 28's decorator who
+  switches off a smoke alarm maps onto an agent that switches off its monitor. An analogy that needs
+  caveats to fit, or a household scene attached to a model-training topic, distracts more than it teaches.
+- Explain why someone would care in concrete terms: time spent checking work, a payment made incorrectly,
+  an appointment that never gets booked, a model trained on examples with wrong labels, or a benchmark
+  score that overstates what a model can do. Develop the connection instead of asserting that the topic
+  is important.
 - Build one small, explicitly labelled illustrative example over several paragraphs. First establish the
-  ordinary case, then add one complication, and explain how a person would work through it. Use easy
-  numbers and familiar words. Save the full measured case and its exceptions for the later worked examples.
+  ordinary case, then add one complication, and explain how a person, or the method being tested, would
+  work through it. Use easy numbers and familiar words. Save the full measured case and its exceptions for
+  the later worked examples.
 - Introduce the underlying idea only after the example has made it useful. Explain what a term means and
   why it is needed before adding another term. A paragraph that defines several unfamiliar terms at once
-  is still a barrier. Prefer everyday descriptions in the opening even when the technical terms are
-  defined elsewhere in the document.
+  is still a barrier. Prefer plain descriptions in the opening even when the technical terms are defined
+  elsewhere in the document.
 - Explain both sides of the proposed comparison in ordinary language before naming methods. A reader
   should understand what changes between them and why that might help before seeing acronyms, software
   names, model versions or a research-paper reference.
@@ -109,7 +120,8 @@ to become familiar with the subject before asking them to follow an experiment a
   Translate the answer back into the original situation. Detailed scores belong in the results section.
 - Keep pilot histories, follow-up protocols, cache paths, token counts, request budgets, API details,
   provider outages, parsing rules and secondary scoring variants out of the opening. Place them in the
-  relevant method, results, limitations or reproduction section. Preserve the evidence when moving it.
+  relevant method, results, limitations or reproduction section, or in `data/PROTOCOL.md` (see
+  [Protocol history](#protocol-history)). Preserve the evidence when moving it.
 
 Allow roughly six to ten short paragraphs for this teaching introduction, with descriptive subheadings
 when they help. This is a pacing guide, not a quota: each paragraph should answer the next question a new
@@ -126,8 +138,8 @@ rewrite the opening rather than adding a parenthetical definition to the abstrac
 - **Self-contained.** A notebook imports nothing from this repo. Helpers (CLI wrappers, caches, plot style)
   are defined inside the notebook, even if another notebook has the same code. Paths are relative to
   the notebook's folder.
-- **Introduce the topic gradually.** Follow the gradual-opening standard above. Teach the everyday task,
-  its importance and one small example before moving to the research question. The first markdown cell
+- **Introduce the topic gradually.** Follow the gradual-opening standard above. Teach the task, its
+  importance and one small example before moving to the research question. The first markdown cell
   need not contain the experiment or its answer. Use several cells if that gives each idea room to settle.
 - **Orient the reader before the code.** After the introduction, state the question, data and counts,
   method in plain language, headline result and main caveat in a short study summary. Keep this summary
@@ -220,6 +232,28 @@ flowchart LR
 - Save every figure used by the README to `figures/`, including the headline chart, example panels and
   any matplotlib diagrams. Keep notebook and README figures, numbers and explanations in agreement.
 
+## Separate format failures from wrong answers
+
+A model can fail an item in two different ways. It can give an answer that is read and scored as wrong, or
+it can give a reply the program cannot score: an empty reply, broken JSON, a missing field, text outside the
+required format, a refusal or a timeout. The first says something about the model's skill at the task. The
+second often comes from a mismatch between the format the harness asks for and the format the model
+writes, and a retry or a looser parser might change it. Counting both as "wrong" can make a model or method
+look worse at the task when it only broke the format.
+
+- Before comparing models or methods, sort every failed item into unreadable (empty, did not parse, failed
+  the schema, refused, timed out) or wrong (read and scored incorrect). Report both counts beside the score
+  in the results table, and in the study summary when they change the comparison.
+- When the scoring rule counts unreadable replies as failures, also give the score on readable replies, and
+  say in the summary whether the ranking changes.
+- Read the unreadable replies, or a sample of them when there are many. A reply that failed the format check
+  may still have done the task; show one when it did. If a parser is fixed after the results were seen,
+  re-score from the cache, say so, and report the score under both parsers.
+- Say when a result sits at a ceiling or a floor. When every method scores near the maximum, or near zero,
+  the test cannot rank them. Say so in the study summary, give the number of items that separate the
+  methods ("all three models missed the same 2 of 120 items"), and do not report the order of the scores
+  as a finding.
+
 ## Worked examples
 
 Examples are part of the explanation in both the notebook and its README. Place them beside the concept
@@ -247,11 +281,12 @@ It should provide enough background, examples and analysis to understand the wor
 following a link to the notebook. Follow the gradual-opening standard above, like a lecturer introducing
 an unfamiliar topic to a reader with no background. In order:
 
-1. Introduce the everyday subject and its purpose before the experimental problem. Explain who needs the
-   answer and why it matters. Build the necessary background over several short paragraphs, one new idea
-   at a time. An opening anecdote alone is not enough preparation for a technical summary.
+1. Introduce the subject and its purpose before the experimental problem, starting from a concrete case
+   or a plain introduction to the topic as described above. Explain who needs the answer and why it
+   matters. Build the necessary background over several short paragraphs, one new idea at a time. An
+   opening anecdote alone is not enough preparation for a technical summary.
 2. Develop a small example from the ordinary case to one complication. Explain how a person would solve
-   it, what can go wrong and what that mistake changes. Describe the alternative approaches in everyday
+   it, what can go wrong and what that mistake changes. Describe the alternative approaches in plain
    language. Introduce technical names only after the reader understands the choices they name.
 3. State the question: what is compared, on what data and with what counts. Explain why the comparison
    would help someone make a decision.
@@ -263,6 +298,12 @@ Then develop the evidence as a connected explanation:
 
 - Explain the data, method and reasons for the main choices. Include the workflow diagram and an
   end-to-end worked example. Explain what makes the comparison fair and what each method can access.
+- Include a models table with one row per model and these columns: the model's name; its pinned version
+  (dated slug, permaslug or Hugging Face revision); the provider and how it was called (`claude -p`,
+  `codex exec`, `muse exec`, OpenRouter or local); its size and precision, when published; settings that
+  change its output, such as reasoning effort; and why it is included. The last column says what the model
+  adds to the comparison, for example "highest-scoring small open-weight model on OpenRouter" or "the
+  model the method is meant to replace". Put the same table in the notebook.
 - Present a results table and key figures with the reading guidance and interpretation required above.
   Connect each comparison to the question it answers. Explain the size and practical meaning of differences,
   including tradeoffs such as accuracy, time and cost when measured.
@@ -271,11 +312,51 @@ Then develop the evidence as a connected explanation:
 - Explain limitations and the conditions under which the finding might change. End the analysis with what
   the evidence supports doing and which uncertainty needs another experiment.
 - Put spend, call counts, blocked or failed requests, cache layout, protocol versions and how to run below
-  the analysis. Link the notebook and saved results for readers who want to inspect or reproduce the work.
+  the analysis. Link the notebook, saved results and `data/PROTOCOL.md` for readers who want to inspect or
+  reproduce the work.
 
 Use headings and a contents list when needed to make a long README easy to browse. Keep background relevant
 to the question, and give each example or visual a teaching purpose. Cut repetition while preserving the
 explanations that a new reader needs.
+
+Aim for 25 to 50 KB of README text (check with `wc -c README.md`). A page under 25 KB usually lacks the
+examples, error analysis or limitations required above. A page over 50 KB usually holds run history or raw
+material that belongs elsewhere. Put full prompts, long per-item tables, raw inputs and complete model
+responses in linked files in `data/`, and show a short excerpt in the prose. A `<details>` block can hold a
+prompt or response the reader may want beside the text, but it counts toward the length. A very small
+experiment may come in under 25 KB if it still covers every part above.
+
+## Extending or re-running a notebook
+
+A notebook answers one question. Later work often adds models, enlarges the sample, changes a prompt or
+repairs a failed batch. Each of these changes the evidence for the answer, so revise the answer instead of
+adding a chapter about the new run.
+
+- Rewrite, do not append. When a new run extends or replaces a result, rewrite the opening, question, study
+  summary, results, limitations and root `README.md` row so they give one answer from all the evidence.
+  Do not add a section, summary paragraph or workflow diagram for the new run beside the old ones. Make the
+  same changes in the notebook's markdown cells.
+- Put earlier results that still answer part of the question in the same tables and figures as the new
+  run. Remove results the new run replaces from the reader's text (their data stays in `data/`), and say
+  in one sentence what changed and why.
+- When earlier runs explain the design (a pilot set a threshold, a first sample turned out too easy),
+  describe them in a short section titled "How the study got here", after the method: what each run showed
+  and what it changed. Results the reader needs belong in the results section, not here.
+- Delete superseded summaries and diagrams, and any old abstract left lower on the page, such as a
+  "Collection and scoring details" block under the reproduction steps. First move anything in them that the
+  current page lacks, such as the question or a metric definition, to where it belongs.
+- Name sections and results by what they compare, not by when they ran: "Equal token budgets", not
+  "Follow-up 3" or "The extension".
+
+### Protocol history
+
+Some records matter to someone checking the work but not to someone learning from it: preregistered plans
+and their amendments, provider outages and recovery plans, requests still pending, file hashes, commit
+references, CLI flags and timeouts. Keep them in `data/PROTOCOL.md`, or one protocol file per run (for
+example `data/scale_v5/PROTOCOL.md`), in date order. The README and notebook give the reader the parts that
+change how far to trust the result, in one or two sentences in the limitations with a link to the file:
+whether the analysis was fixed before the results were seen, and any amendment that changed what was
+measured or which items were scored.
 
 ## Root README table
 
@@ -289,7 +370,8 @@ no notebook and does not know the topic or tools:
 - **Goal and question:** first the problem and why it matters, then the question, naming what is compared
   and on what data (with counts). Explain or avoid jargon and product names. Do not lean on another notebook
   without saying what it found.
-- **Headline result:** answer the question with numbers.
+- **Headline result:** answer the question with numbers, using all the evidence. Leave out run notes such
+  as pilot counts, request totals and spend.
 
 ## Model access
 
@@ -301,8 +383,9 @@ no notebook and does not know the topic or tools:
   Inception's Mercury Decide (`inception/mercury-decide`). Open-weight decision models such as Cloudflare's Clef
   (`cloudflare/clef-flash`) fall under the open-weight rule. Pin a dated version, not a `-latest` alias, and record
   its permaslug (for example `typesafe/jev-1.14-20261014`). These models are allowed, not required: compare the
-  ones the experiment's question needs or the requester asks for, and say why each one is included. Adding
-  another closed decision model needs the repo owner's approval and a change to this list.
+  ones the experiment's question needs or the requester asks for, and say why each one is included (in the
+  models table described under [Notebook README](#notebook-readme)). Adding another closed decision model
+  needs the repo owner's approval and a change to this list.
 - Open-weight models that are not chat LLMs (time-series foundation models, embedding, image or audio models) may
   run locally. Pin the Hugging Face revision, and record the licence, release date, hardware and run time. Leave
   out any model whose licence forbids this use.
@@ -353,7 +436,7 @@ guide (WikiProject AI Cleanup) and from studies of words whose frequency jumped 
 
 - **Introduce the topic before the findings.** Give notebook and README openings room to explain the
   subject, its importance and a slowly developed example before presenting the experimental result.
-  Start with everyday language and introduce one unfamiliar idea at a time. A compressed abstract after
+  Start with plain language and introduce one unfamiliar idea at a time. A compressed abstract after
   a friendly first paragraph does not meet this standard.
 - **Lead result paragraphs with the finding and its number.** Once the task and metric are explained,
   write "Claude Opus 5.5 read every marked test on 24 forms (F1 1.00)", not "The results reveal interesting
@@ -419,8 +502,9 @@ Prefer a table or a number over an adjective.
 When adding or revising a notebook or its README, read the rendered README and the notebook with code
 cells hidden or skipped. Check that:
 
-- The opening teaches the everyday subject at a gradual pace, explains why it matters and develops a
-  simple example before the result. Both approaches make sense without knowing their technical names.
+- The opening teaches the subject at a gradual pace, from a concrete case or a plain topic introduction,
+  explains why it matters and develops a simple example before the result. Both approaches make sense
+  without knowing their technical names.
 - The transition into the study summary stays readable. No unexplained acronyms, dense lists of new
   terms, pilot histories or collection bookkeeping interrupt the introduction.
 - A new reader can explain the question, data, methods and main result using only the narrative and visuals.
@@ -433,6 +517,12 @@ cells hidden or skipped. Check that:
   possible explanations are clearly distinguished.
 - Images render, text is legible, links and section references work, and counts and claims agree between
   the notebook, README and saved results.
+- The study summary and the root `README.md` row answer the question from all the evidence. No section,
+  summary or diagram describes one run beside the others, and no old abstract remains lower on the page.
+- Unreadable replies are counted apart from wrong answers, and a result at a ceiling or floor is named as
+  one in the summary.
+- The models table has every column listed under [Notebook README](#notebook-readme).
+- The README is 25 to 50 KB, and run history is in `data/PROTOCOL.md` rather than in the reader's text.
 
 Read the changed text once against the lists above, then search the files you wrote for the overused words
 and for em dashes (replace the paths with your notebook's):
@@ -443,3 +533,16 @@ grep -niE "\b(delv(e|es|ed|ing)|tapestry|testament|intricate|meticulous(ly)?|piv
 
 Rewrite every hit in prose. Leave a word that is literal or sits in code or output (a "robust" estimator, a
 column named `landscape`).
+
+Then search for words that usually mark run history in reader text:
+
+```bash
+grep -niE "follow-up|extension|pilot|amendment|the user|this update|Collection and scoring details" notebooks/09-short-name/README.md notebooks/09-short-name/*.ipynb
+```
+
+Rewrite each hit as the comparison it describes, or move it to `data/PROTOCOL.md`. Some hits are fine: a
+follow-up experiment under Future work, a pilot that the method section explains as part of the design, a
+simulated user in an agent task, or a match in code.
+
+Both searches check wording, not structure. A page can pass them and still fail every check in the list
+above, so read the page as well.
