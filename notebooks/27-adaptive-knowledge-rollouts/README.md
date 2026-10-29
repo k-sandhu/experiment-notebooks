@@ -169,7 +169,7 @@ A complete mixed group is four attempts with known rewards at one task, from one
 
 The comparison was run five times, on harder tasks each time, because a model that never fails produces no mixed groups to count.
 
-- The office tasks came first (24 October). Sol solved all 70 known attempts, so no Sol group could be mixed. A first run lost 792 of its 960 calls to connection errors and was replaced by a separately registered run with a smaller budget.
+- The office tasks came first (24 October). Sol solved all 70 known attempts, so no Sol group could be mixed. A first run lost most of its calls to connection errors and was replaced.
 - Two five-review calendars were added the same evening. Sol solved all 12 known attempts.
 - A difficulty ladder was then run on Sol alone: two practice tasks per level, two attempts each and two more when both outcomes appeared, stopping at the first level where one task gave both. At six reviews one attempt in eight failed, but on four new six-review tasks Sol solved all 29 known attempts. One failure had not marked a reliable boundary.
 - The rule was tightened to 2 to 6 successes in 8 attempts, with both outcomes on one task. Eight, nine and twelve reviews each gave 8 of 8; adding handoff charges gave 2 of 8, and that level was chosen.
@@ -256,7 +256,7 @@ The two non-zero blocks have different causes. In block 2 the adaptive collector
 | `token6r-07` | 1, 0, 0, 1 | 0, 1, 0, 0 |
 | `token6r-06` | 0, 0, 0, 0 | 1, 0, 1, 0 |
 
-The rule acted like uniform collection here, so the extra adaptive group came from different attempts at `token6r-06`: four uniform attempts each found a valid agenda 2.26% to 13.57% above the minimum, while two of four adaptive attempts reached it. In block 4 the adaptive collector stopped three groups after two failures and found no mixed group, while the uniform collector found one on `token6r-16`. The mean difference is 0.00 groups per block. Swapping the collector labels within blocks in all 16 possible ways gives a two-sided reference value of 1.000 for each model ([data/frontier_v6/results.json](data/frontier_v6/results.json)); four blocks can only reveal large differences.
+The rule acted like uniform collection here, so the extra adaptive group came from different attempts at `token6r-06`: four uniform attempts each found a valid agenda 2.26% to 13.57% above the minimum, while two of four adaptive attempts reached it. In block 4 the adaptive collector stopped three groups after two failures and found no mixed group, while the uniform collector found one on `token6r-16`. The mean difference is 0.00 groups per block. Swapping the collector labels within blocks in all 16 possible ways gives a two-sided p-value of 1.000 for each model: every swap gives a difference at least as large as the observed zero ([data/frontier_v6/results.json](data/frontier_v6/results.json)); four blocks can only reveal large differences.
 
 ![Step curves of cumulative Sol mixed groups at token checkpoints: both reach 2 at 12M; uniform reaches 3 at 16M while adaptive stays at 2; both end at 4 at 24M. Luna stays at 0](figures/token6_curves.png)
 
@@ -292,7 +292,7 @@ Each row is a review and each bar its time on 6 November (UTC); hatched blocks a
 
 ### Sol revises its agenda while it works
 
-In its 60 known attempts at equal tokens, Sol never used `get_event` to check its work. In 43 it moved at least one review more than once (counted from the `patch_event` actions in the saved episodes). Failures did this more, 4.4 repeat moves on average against 2.7, and 21 of the 44 failures used all 24 actions against none of the 16 successes. Each call is a fresh process that sees the history but not its earlier reasoning, which may lead it to re-plan; the data show the repeated moves, not their cause. Failed attempts also cost more, 767,776 tokens on average against 694,639.
+In its 60 known attempts at equal tokens, Sol never used `get_event` to check its work. In 43 it moved at least one review more than once (counted from the `patch_event` actions in the saved episodes). Failures did this more, 4.4 repeat moves on average against 2.7, and 21 of the 44 failures used all 24 actions (19 ending with `finish`) against none of the 16 successes. Each call is a fresh process that sees the history but not its earlier reasoning, which may lead it to re-plan; the data show the repeated moves, not their cause. Failed attempts also cost more, 767,776 tokens on average against 694,639.
 
 ### Luna breaks hard rules
 
@@ -300,7 +300,7 @@ At equal tokens, 34 of Luna's 36 failures were finished agendas that broke a har
 
 ### Stopping after two failures
 
-All 14 groups stopped at equal tokens, 6 for Sol and 8 for Luna, stopped after two failures (from `data/frontier_v6/groups.csv`); on the easier tasks Sol's stopped pairs were two successes. On `token6r-16` in block 4, the adaptive pair (`0397fdb08bf7c69a9cba-0`) failed twice and stopped, while the uniform group (`3514ff3294564eeacf4a-0`) scored 0, 1, 0, 0. These are separate attempts, so they show only that the task could still produce a success, not what the stopped pair would have done next.
+At equal tokens, all 14 stopped groups (6 Sol, 8 Luna) ended on two failures (from `data/frontier_v6/groups.csv`); on the easier tasks Sol's stopped pairs were two successes. On `token6r-16` in block 4, the adaptive pair (`0397fdb08bf7c69a9cba-0`) failed twice and stopped, while the uniform group (`3514ff3294564eeacf4a-0`) scored 0, 1, 0, 0. These are separate attempts, so they show only that the task could still produce a success, not what the stopped pair would have done next.
 
 ### An attempt cut off by the budget
 
