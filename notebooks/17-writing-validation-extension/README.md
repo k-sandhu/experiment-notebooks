@@ -1,72 +1,221 @@
-# Writing that readers can follow: testing the writers and the judges
+# Does a writer's rank depend on which AI judges score it?
 
-An analytical document helps someone make a decision from evidence. A manager reading an email needs to see what is recommended and why. A reader of a report needs to distinguish an observed change from a claim that a program caused it. A slide audience needs the main number before the meeting moves on. If the writing buries those connections, correct calculations can still lead to a poor decision.
+## Comparing AI writers with AI judges
 
-AI can produce these documents quickly. The harder question is whether the result is easy to follow. People often use *AI slop* to describe repeated conclusions, empty emphasis or formulaic prose. The label combines several different objections, and reasonable editors can disagree about a particular sentence. Counting a fashionable word does not tell us whether a reader missed the finding. A polished report can also contain a factual error that has little to do with its style.
+A team that wants an AI model to draft its reports has to choose one, and the obvious way is to give several models the same tasks and compare the results. The hard part is the comparison. A person can read and score a few dozen documents carefully, but not several hundred, and not again every time a new model comes out. So teams often ask other AI models to do the scoring. These models are **judges**: each reads a document and returns ratings, such as how clear it is and whether its facts are right, and sometimes a list of problems.
 
-We therefore study the writing and the way it is evaluated. A writer model receives an evidence packet and a document brief. A judge model reads the resulting document without the author's identity and assigns scores. We check whether those assessments survive a different reviewer, whether they change when AI slop is mentioned, and what still needs testing with people.
+Judges are fast, but they are models too, with tastes of their own. One worry is favouritism: a judge may score writing from its own company's models more kindly. A study of this found that models do prefer their own writing ([Panickssery et al., 2024](https://arxiv.org/abs/2404.13076)). A common precaution follows from it: never let a judge score a writer from its own company. An OpenAI model's drafts are scored only by judges from other companies, an Anthropic model's drafts likewise, and so on.
 
-The [earlier pilot](../15-analytical-writing-style/) collected 213 short drafts from 27 writers on two numerical cases. Its automated readers answered the varying questions correctly on average, leaving little room to distinguish drafts. This extension samples 108 old drafts, reviews 204 passages, and adds 288 longer documents from six writers on 24 fresh cases. Its three new judges are GPT-6 Astra and GPT-6.1 Sol through Codex, and Claude Opus 5.5 through Claude Code.
+### An illustrative example
 
-The clearest result is that the judging design changes the ranking. GPT-6 Astra moves from sixth to first when every writer receives the same vendor-balanced panel. The text is unchanged. Previously flagged passages receive prose concerns at a mean reviewer rate of 1.6%, and adding an AI-slop warning to a fixed rubric changes clarity by -0.31/100. These are model judgments; human comprehension and editor agreement remain pending.
+This example is made up, with easy numbers.
 
-## A reading guide
+Two companies each make one writer and one judge. Judge A, from company A, is generous: it gives about 95 out of 100 to any clear, correct draft. Judge B, from company B, is strict: it gives about 87 to the same drafts. Now suppose writer A and writer B write equally well.
 
-- [What was compared](#what-was-compared)
-- [Why Astra moved from sixth to first](#why-astra-moved-from-sixth-to-first)
-- [Actual texts and judge explanations](#actual-texts-and-judge-explanations)
-- [Rechecking earlier prose flags](#rechecking-earlier-prose-flags)
-- [Whether an AI-slop warning changes scores](#whether-an-ai-slop-warning-changes-scores)
-- [Document lengths and delivery](#document-lengths-and-delivery)
-- [What remains for human readers](#what-remains-for-human-readers)
-- [Limits, evidence and reproduction](#limits-evidence-and-reproduction)
+Under the precaution, writer A may only be scored by judge B, so it gets about 87. Writer B may only be scored by judge A, so it gets about 95. Writer B comes out 8 points ahead, and nothing about the writing differs. The precaution removed one possible bias, favouritism, and let in another, the difference in strictness between the two judges. Each writer's score now says as much about the judge it drew as about its writing.
 
-## What was compared
+The other way is to give every writer the same judges, its own company's judge included, and weight the two companies equally. Both writers then get (95 + 87) / 2 = 91, and the tie shows. Favouritism could still creep in, but it now has to show up as a gap that the strictness difference does not explain, which can be checked.
 
-There are two related parts. The old-draft part asks whether fresh reviewers agree with earlier criticisms. The new-draft part asks writers to analyze more varied decisions at lengths closer to an actual email, article or report. Both parts use cached responses, so a replay needs no new model calls.
+### Judges also point at problems
 
-| Part | Material | What the result can tell us |
-|---|---|---|
-| Longer writing tasks | 24 cases × 6 writers × 2 generations = 288 drafts | How the selected writers respond to these briefs and how judges score them |
-| Fresh passage review | 96 previously flagged and 108 unflagged passages | Whether new model reviewers find a locally justified concern |
-| Review instructions | 24 selected drafts under baseline, rubric and warning conditions | How scores change when instructions change while the document stays fixed |
-| Prepared human study | 396 documents and paired booklets for 204 passages | Reader accuracy, effort and editor agreement once people submit responses |
+Judges are also used to find faults: a team asks for a list of weak passages and edits them. An earlier study in this repository ([notebook 15](../15-analytical-writing-style/)) asked 27 AI models to write 213 short decision documents on two invented cases, and asked AI judges to score them. When judges were told to hunt for "AI slop" (padded, formulaic or empty writing) and given eight habits to count, their clarity scores fell by 1.66 points out of 100 on the same drafts. But that instruction changed two things at once, the label "AI slop" and the list of habits. And two judges reading the same draft often flagged different passages: on one article, one judge flagged 1 passage and another flagged 13. Nobody checked whether those flags would survive a second, independent reading.
 
-The 24 fresh cases cover six reasoning problems: whether added value exceeds costs, which supplier meets capacity and budget constraints, how a changing mix affects comparisons, where a process bottleneck sits, how uncertain scenarios affect a decision, and whether a trial clears all operational guardrails. Each structure has four parameter draws. Each case is assigned one genre; all writers receive that identical prompt twice in fresh sessions. No writing-style advice or AI-slop warning is given to the writers.
+### What this study does
 
-For a concrete input, the first email packet has 65 more standard successes and 18 fewer complex successes. Each success is worth $41; implementation costs $1,027 and the vendor fee is $400. The stated rule permits expansion only when added value minus both costs is positive. The resulting calculation is (65 - 18) × $41 - $1,027 - $400 = $500. The draft must connect that number to the recommendation and explain the different segment results. Examples 1 and 2 show two writers answering this exact prompt. Its task instructions are:
+This study does three things. Six writers produce 288 longer decision documents on 24 new cases, three judges score all of them, and the writers' average scores are compared under the two ways of choosing judges: the **outside-company panel**, which drops same-company judges, and the **common panel**, which gives every writer the same three judges. Fresh judges re-read 204 passages from the earlier study, some that it flagged and some that it did not, without being told which. And the same 24 drafts are scored with a fixed list of the eight habits, with and without a warning that the text "may contain AI-slop prose", to separate the label from the list.
+
+## The question
+
+Does the ranking of six AI writers on 288 new decision documents depend on which AI judges are allowed to score each writer? And do AI judges' criticisms of prose hold up: when fresh judges re-read 204 passages from an earlier study, do they agree with its flags, and does warning a judge about "AI slop" change its scores when its criteria stay the same?
+
+## Study summary
+
+Six writers (GPT-6 Astra; Claude Opus 5.5, Sonnet 5.5 and Haiku 5.5; Muse Wonder Full; DeepSeek V4 Pro) each wrote two drafts for each of 24 new cases, 288 drafts in all, every one usable. Three judges scored every draft: two from OpenAI (GPT-6 Astra and GPT-6.1 Sol) and one from Anthropic (Claude Opus 5.5). The main measure is **clarity**, a 0 to 100 rating of how easy the analysis is to follow. 282 drafts have readable scores from all three judges.
+
+- The ranking depended on the panel. Dropping same-company judges put GPT-6 Astra last of six, at 88.21. Giving every writer the same three judges, with the two companies weighted equally, put it first, at 93.10. No text changed.
+- The cause is a gap in strictness, not favouritism. On every one of the 282 drafts, the two OpenAI judges' average clarity was higher than the Claude judge's, by 9.01 points on average (3 to 24). Dropping same-company judges left Astra with only the strict Claude judge and the Claude writers with only the generous OpenAI judges. Scored by the Claude judge alone, Astra was ahead of every Claude writer (88.21 against 87.92 for Claude Opus 5.5).
+- The earlier study's prose flags rarely held up. On 96 previously flagged passages, fresh judges called the wording a problem in 1.6% of their opinions, against 1.2% on 108 unflagged passages. They raised some concern more often on flagged passages (16.1% against 5.2%), but 29 of those 38 concerns were about reasoning, mostly a claim the evidence could not support, not about wording.
+- With the habit list fixed, adding the AI-slop warning changed clarity by -0.31 (95% interval -0.70 to +0.02) on 55 judge-and-draft pairs, and left 32 of the 55 scores exactly where they were.
+
+Unreadable replies are counted apart from scores: 3 of 432 scoring requests broke the reply format and are left out. All 288 drafts arrived, though 76 missed their requested length.
+
+For a team choosing a writer: give every writer the same judges and report each judge's scores separately. A rule that drops same-company judges can end up ranking writers by which judge they drew.
+
+The main caveat is that every judgment here comes from a model. Forms for a study with human readers and editors are ready, but no responses have been collected, so nothing here shows which ranking or which criticism human readers would agree with.
+
+## Contents
+
+1. [The data: new cases and earlier passages](#1-the-data-new-cases-and-earlier-passages)
+2. [How the experiment runs](#2-how-the-experiment-runs)
+3. [The models, the panels and the measures](#3-the-models-the-panels-and-the-measures)
+4. [How the study got here](#4-how-the-study-got-here)
+5. [Results: delivered lengths](#5-results-delivered-lengths)
+6. [Results: writer scores under the two panels](#6-results-writer-scores-under-the-two-panels)
+7. [Results: re-checking the earlier flags](#7-results-re-checking-the-earlier-flags)
+8. [Results: adding an AI-slop warning](#8-results-adding-an-ai-slop-warning)
+9. [Error analysis](#9-error-analysis)
+10. [What the evidence supports](#10-what-the-evidence-supports)
+11. [Limitations](#11-limitations)
+12. [Spend, data and how to run](#12-spend-data-and-how-to-run)
+13. [Future work and further reading](#13-future-work-and-further-reading)
+
+## 1. The data: new cases and earlier passages
+
+### 24 new cases
+
+Each case is an evidence packet with a decision rule and an exact answer, generated in code. The 24 cases cover six **decision types**, four cases each:
+
+| Decision type | What the writer must work out |
+|---|---|
+| Value threshold | Whether the added value of a programme exceeds its implementation cost and vendor fee |
+| Supplier choice | The cheapest option that meets peak capacity and the budget |
+| Changing mix | The real gain once a shift between standard and complex work is taken out of the raw total |
+| Capacity bottleneck | Which stage limits completed work, and which option adds the most net value |
+| Uncertain scenarios | Whether the expected net value is positive and the low scenario's loss stays within a limit |
+| Trial with guardrail | Whether a randomised trial clears all three limits: success gain, rise in adverse events and net value |
+
+Each case is assigned one document type, rotating so that each type gets one case of each decision type. Every writer gets the identical prompt for a case twice, in fresh sessions. The requested lengths are closer to real documents than a single short target: an email of 180 to 280 words, text for six slides of 200 to 320 words, a web article of 700 to 1,000 words and an academic-style report of 1,000 to 1,400 words. No prompt gives writing advice or mentions AI slop.
+
+The first case, `F1-1`, is a value-threshold email. Its packet reports a randomised quarter: standard appointments rose from 676 to 741 successes (+65) and complex ones fell from 222 to 204 (-18). Each success is worth $41, implementation costs $1,027 and the vendor fee is $400. The rule says expand only if extra value minus both costs is positive: (65 - 18) × $41 - $1,027 - $400 = $500, so expand. The prompt reads:
 
 > Write an analytical email for the director making the decision. Analyze the evidence and recommend a decision under the stated rule. Use 180 to 280 words. Use the following evidence packet.
 
-The full evidence packet is preserved with both drafts in the linked example evidence.
+The packet follows as JSON. All 24 cases passed an independent arithmetic check ([`data/fixture_checks.json`](data/fixture_checks.json)), and all 24 packets are distinct. The packets leave out the licence and source notes that the earlier study included, after writers there copied the phrase "seeded arithmetic fixture" into their drafts.
+
+The cases were generated on 2026-10-21 at 00:53 UTC and saved in the repository with the protocol before any draft or score was collected ([`data/cases.json`](data/cases.json), [`data/protocol.json`](data/protocol.json)). No model can have seen them in training. Training cutoffs are not published for the six models called through company command-line tools; the Muse Wonder models were released on 2026-10-12, and DeepSeek V4 Pro's catalogue entry dates from 2026-08-12 ([`data/model_dates.csv`](data/model_dates.csv)).
+
+### 204 passages from the earlier study
+
+From the earlier study's 213 drafts, one draft was drawn per writer and document type by a hash, without looking at scores: 108 drafts from 27 writers. From each, the study took up to two passages:
+
+- a **flagged passage**: one passage that an outside-company judge had flagged in that study's slop audit, picked from that draft's flags by a hash, where at least two fresh judges could read it (96 passages);
+- an **unflagged passage**: one sentence of 30 to 260 characters that no outside-company flag touched (108 passages).
+
+An unflagged sentence is a comparison, not a known good sentence, and a flagged one is not a known bad one. The earlier study's two cases were also generated in code, on 2026-10-19 ([`data/legacy/cases.json`](data/legacy/cases.json)).
+
+## 2. How the experiment runs
 
 ```mermaid
 flowchart TD
- A["213 frozen drafts from 27 writers"] --> B["108 drafts: one per writer and genre<br/>204 flagged and unflagged passages"]
- C["24 fresh cases<br/>6 decision structures x 4 draws"] --> D["6 writers x 2 samples<br/>288 requested drafts"]
- D --> E["GPT-6 Astra, GPT-6.1 Sol, Opus 5.5<br/>scores and typed problems"]
- B --> F["Independent blinded adjudicators<br/>severity and local justification"]
- D --> G["24 selected drafts<br/>baseline, neutral rubric, AI-slop warning"]
- B --> H["Editor forms and reader trial<br/>human results pending"]
- D --> H
- E --> I["Case-level comparisons<br/>coverage, figures and cached replay"]
- F --> I
- G --> I
+    A["24 new cases, 6 decision types x 4<br/>generated in code, exact answers"] --> D["6 writers x 2 drafts per case<br/>288 requested, 288 usable"]
+    D --> E["3 judges score every draft: GPT-6 Astra, GPT-6.1 Sol (codex exec),<br/>Claude Opus 5.5 (claude -p); 432 requests, 429 readable"]
+    E --> I["Writer averages under 2 panels<br/>outside-company and common"]
+    D --> G["1 draft per case: 24 drafts x 3 judges x 3 instructions<br/>neutral review, habit list, habit list + warning; 216 requests"]
+    B0["Earlier study: 213 drafts from 27 writers"] --> B["108 drafts sampled<br/>204 passages: 96 flagged, 108 unflagged"]
+    B --> F["Passage re-check: same 3 models, author and old flag hidden<br/>140 requests, 140 readable"]
+    B --> H["Reader and editor forms for a human study<br/>no responses yet"]
+    D --> H
+    I --> R["Tables, intervals and examples<br/>replayed from the cache"]
+    F --> R
+    G --> R
 ```
 
-The workflow separates original documents from reviews of those documents. This matters because a review is another model output that can contain an error; it is not automatically a correct label.
+One draft travels through it like this. Claude Opus 5.5 receives the `F1-1` email prompt and writes a draft. GPT-6 Astra, GPT-6.1 Sol and Claude Opus 5.5 each score it in a fresh session. Its outside-company score uses only the two OpenAI judges; its common-panel score also uses the Claude judge. Because it was also drawn for case `F1-1` in the warning test, the same draft is scored three more times by each judge, once under each instruction.
 
-## Why Astra moved from sixth to first
+The writers work in parallel, and no writer sees any judge's feedback:
 
-Each judge scores clarity, factual support, reasoning and genre fit on a 0 to 100 scale. Clarity means ease of following the analysis. Factual support asks whether claims match the supplied evidence. Reasoning asks whether the conclusion follows. Genre fit asks whether the response suits the requested document. A score of 90 is a reviewer's rating, not a finding that 90% of people understood the text.
+```mermaid
+flowchart LR
+    P["One case prompt<br/>two fresh sessions per writer"] --> C1["Claude Haiku 5.5, Sonnet 5.5, Opus 5.5<br/>claude -p: raw draft"]
+    P --> G["GPT-6 Astra<br/>codex exec: raw draft"]
+    P --> M["Muse Wonder Full<br/>muse exec: raw draft"]
+    P --> D["DeepSeek V4 Pro<br/>OpenRouter: raw draft"]
+    C1 --> S["Wait for all writers<br/>save every reply and failure"]
+    G --> S
+    M --> S
+    D --> S
+```
 
-Here, a vendor is the company supplying a model: the GPT models are from OpenAI and the Claude models are from Anthropic. Codex and Claude Code are the tools used to call those model families. “Own-vendor” is a label applied during analysis; the judges were not told the author or company that produced a draft.
+Each judge then works alone, two drafts per request, and never sees another judge's scores:
 
-The original outside-vendor calculation excludes judges from the writer's own vendor. For an OpenAI writer, that leaves Claude. For a Claude writer, that leaves the two Codex judges. Muse and DeepSeek retain all three judges. This creates different panels for different writers, and the panels use the score scale differently.
+```mermaid
+flowchart LR
+    A["Two drafts and their prompts<br/>author hidden"] --> G1["GPT-6 Astra<br/>codex exec: 4 scores + up to 3 concerns each"]
+    A --> G2["GPT-6.1 Sol<br/>codex exec: 4 scores + up to 3 concerns each"]
+    A --> C["Claude Opus 5.5<br/>claude -p: 4 scores + up to 3 concerns each"]
+    G1 --> W["Wait for all three replies<br/>check the JSON and the quotes"]
+    G2 --> W
+    C --> W
+    W --> R["Outside-company and common-panel averages<br/>failures kept as missing"]
+```
 
-The common-panel calculation includes all three judges for every writer, including own-vendor reviews. It averages the two Codex judges first, then gives that average and Claude equal weight. Scores average the two generations within case before averaging cases.
+The passage re-check and the warning test use the same three models in the same way, in separate sessions.
 
-| Writer | Codex judges | Claude judge | Outside-vendor score (rank) | Common-panel score (rank) |
+### Worked example: one draft from prompt to two scores
+
+Claude Opus 5.5's first draft for `F1-1` (document `6aab6b1c14691720`) opens:
+
+> Under the decision rule (expand only if extra value exceeds implementation and vendor costs), the evidence supports expansion, but the margin is thin and comes entirely from standard appointments.
+
+It computes the right net value, +$500, and then argues for expanding to standard appointments only, which it says would net about $1,238. Each judge returned four ratings and up to three concerns:
+
+| Judge | Clarity | Factual support | Reasoning | Fit to the document type | Concerns listed |
+|---|---:|---:|---:|---:|---|
+| GPT-6 Astra | 95 | 96 | 94 | 96 | none |
+| GPT-6.1 Sol | 96 | 97 | 95 | 98 | none |
+| Claude Opus 5.5 | 88 | 92 | 85 | 88 | one, about reasoning |
+
+The Claude judge's concern was the $1,238 figure: "This assumes the full implementation and vendor costs apply unchanged to a one-segment rollout. The email flags this later, but the figure is presented here without that qualifier."
+
+The two panels turn these into different numbers. Claude Opus 5.5 is an Anthropic model, so the outside-company panel drops the Claude judge and averages the two OpenAI judges: (95 + 96) / 2 = 95.5. The common panel first averages the two OpenAI judges, then gives that average and the Claude judge equal weight: (95.5 + 88) / 2 = 91.75. A writer's score averages its two drafts within each case and then its 24 cases. Done for every draft, this gives Claude Opus 5.5 95.54 under the outside-company panel and 91.73 under the common panel.
+
+The same draft was also scored alone, once under each instruction of the warning test. GPT-6 Astra gave clarity 97 under all three; GPT-6.1 Sol gave 97, 96 and 96. The differences of up to 2 points from the scores above, where the draft shared a request with another draft, are the ordinary variation between two readings.
+
+## 3. The models, the panels and the measures
+
+| Model | Version recorded | Called through | Size, precision | Settings | Role and why included |
+|---|---|---|---|---|---|
+| GPT-6 Astra | `gpt-6-astra`; no dated version | OpenAI, `codex exec` | not published | Low reasoning effort | Writer and judge: the only OpenAI writer, and the top OpenAI judge of the earlier study |
+| GPT-6.1 Sol | `gpt-6.1-sol`; no dated version | OpenAI, `codex exec` | not published | Low reasoning effort | Judge only: a second OpenAI judge |
+| Claude Opus 5.5 | `claude-opus-5-5` | Anthropic, `claude -p` | not published | Low reasoning effort | Writer and the Claude judge; the top Anthropic judge of the earlier study |
+| Claude Sonnet 5.5 | `claude-sonnet-5-5` | Anthropic, `claude -p` | not published | Low reasoning effort | Writer: with Opus and Haiku, three sizes of one model generation |
+| Claude Haiku 5.5 | `claude-haiku-5-5` | Anthropic, `claude -p` | not published | Low reasoning effort | Writer: the smallest of the three |
+| Muse Wonder Full | `muse-wonder-full-1.0`; no dated version | Meta, `muse exec` | not published | Low reasoning effort | Writer from a company with no judge here, so no judge is ever dropped for it |
+| DeepSeek V4 Pro | `deepseek/deepseek-v4-pro-20260813` | OpenRouter, Sail Research | not published; FP4 | Low reasoning effort | Open-weight writer from a company with no judge here |
+
+OpenAI models were called through the Codex command-line tool (version 0.160.1), Anthropic models through Claude Code (2.1.296) and Meta's through `muse exec` (1.4.11), each in a new empty folder with tools switched off. Claude Code reports the model ID it used; the Codex and Muse tools report no dated version, so none is pinned for OpenAI or Meta. DeepSeek V4 Pro was pinned to one OpenRouter provider with fallback off, and the dated name is the catalogue's name for that endpoint ([`data/model_catalog.json`](data/model_catalog.json)). The judges were limited to OpenAI and Anthropic models by the study's design ([`data/validation.json`](data/validation.json), `judges_only_codex_claude`), which is why there are only two judge companies.
+
+### The two panels
+
+A writer's **panel** is the set of judges whose scores enter its average.
+
+- The **outside-company panel** drops same-company judges. Claude writers are scored by the two OpenAI judges, GPT-6 Astra by the Claude judge alone, and Muse Wonder Full and DeepSeek V4 Pro by all three, averaged equally. The data files call this `outside_vendor`.
+- The **common panel** gives every writer all three judges: the two OpenAI judges are averaged first, and that average and the Claude judge get equal weight. The files call this `common_vendor_balanced`.
+
+For GPT-6 Astra, the outside-company score is the Claude judge's 88.21. The OpenAI judges' average for Astra is 98.00, so the common-panel score is (98.00 + 88.21) / 2 = 93.10. The outside-company panel was the main analysis in the protocol fixed before collection; the common panel was added during analysis as a check (section 4).
+
+### The measures
+
+Each judge gave four 0 to 100 ratings, higher being better. **Clarity** asks how easy the analysis is to follow and is the main measure. **Factual support** asks whether claims match the evidence (`grounding` in the files). **Reasoning** asks whether the conclusion follows. **Fit to the document type** asks whether it works as the requested email, slides, article or report (`genre_fit`). A judge could also list up to three **concerns**, each quoting the text and typed as prose, factual, reasoning or format, and was told that none is allowed. Three concerns is a cap, so these lists are not complete counts of every fault.
+
+In the passage re-check, each judge saw the whole earlier draft with one passage marked, and said whether that passage has a justified problem for its reader, of which type, and how severe (0 none, 1 minor, 2 likely rereading, 3 likely misunderstanding). It was not told the author, the old judge, the old flag or whether the passage had been flagged. The writer's own model and the model that made the original flag were left out of each passage's judges, leaving two or three judges per passage. The result for a group of passages is the share of judge opinions that found a problem, averaged within each passage and then over passages.
+
+Intervals are 95% intervals from resampling the 24 cases 1,000 times. A second interval resamples the six decision types instead, which asks whether a result depends on a few kinds of decision.
+
+## 4. How the study got here
+
+This study was designed after the earlier one, and four of its choices come from what that study showed. The earlier study's reading check, in which models answered questions from each draft, was correct on every readable reply and so could not tell drafts apart; this study prepares a human reading test instead. Its single short length target suited emails but not reports, so each document type here has its own range. Its slop audit changed the label and the list together, so the warning test here separates them. And its packets carried a source note that writers copied into their text, so the new packets leave it out.
+
+Two choices were made during the study rather than before it. While replies were coming in, a parser change was recorded: replies from the OpenAI judges that were complete except for their final closing brackets are repaired, and every result is also reported using strictly valid replies only (section 9). And the common panel is not named in the protocol. It was computed alongside the first results as a check on the outside-company panel, and the breakdown by judge company that explains it (section 6) was added two days later. The dated record is in [`data/PROTOCOL.md`](data/PROTOCOL.md).
+
+## 5. Results: delivered lengths
+
+All 288 drafts arrived, and 76 of them (26.4%) missed their requested range. Drafts that missed were kept as they were; asking again until a draft fits would reward compliance and hide how often it fails.
+
+| Document type | Requested words | Within range | Drafts |
+|---|---:|---:|---:|
+| Email | 180 to 280 | 63 | 72 |
+| Six-slide text | 200 to 320 | 69 | 72 |
+| Web article | 700 to 1,000 | 42 | 72 |
+| Academic-style report | 1,000 to 1,400 | 38 | 72 |
+
+![Dots for the word count of every draft, grouped by requested document type on the x-axis; academic reports spread from about 750 to 2,650 words and web articles from about 550 to 1,350, while emails and slides cluster near 250](figures/lengths.png)
+
+Each dot is one draft's word count, grouped by document type (the x-axis label "Requested genre" means document type); the thick grey bar in each column marks the requested range. Emails and slides cluster inside their ranges. The two long types spread widely: academic reports ran from 749 to 2,652 words. GPT-6 Astra kept all 48 of its drafts in range; Muse Wonder Full kept 23 of 48 and Claude Haiku 5.5 28 of 48 ([`data/generation_coverage.csv`](data/generation_coverage.csv)). Length is a separate outcome from quality: the draft with a wrong calculation in section 9 is 974 words, inside its range.
+
+## 6. Results: writer scores under the two panels
+
+| Writer | OpenAI judges' average | Claude judge | Outside-company score (rank) | Common-panel score (rank) |
 |---|---:|---:|---:|---:|
 | GPT-6 Astra | 98.00 | 88.21 | 88.21 (6) | 93.10 (1) |
 | Claude Opus 5.5 | 95.54 | 87.92 | 95.54 (1) | 91.73 (2) |
@@ -75,207 +224,164 @@ The common-panel calculation includes all three judges for every writer, includi
 | Muse Wonder Full | 95.72 | 85.96 | 92.42 (5) | 90.84 (5) |
 | Claude Sonnet 5.5 | 94.94 | 86.71 | 94.94 (3) | 90.82 (6) |
 
-For Astra, the common-panel calculation is (98.00 + 88.21) / 2 = 93.10. For Claude Opus, it is (95.54 + 87.92) / 2 = 91.73. The outside-vendor calculation had instead compared Astra's 88.21 from the stricter Claude judge with Opus's 95.54 from the more generous Codex judges. That comparison placed Astra last even though it has the highest mean clarity under either judge vendor separately.
+The table is the whole finding in one view. Read across a row: the outside-company score copies one of the two judge columns for the Claude writers and for Astra, and the common-panel score averages the two columns. Read down the judge columns: each judge company, on its own, put GPT-6 Astra first. The Claude judge gave Astra 88.21, more than any Claude writer, and the OpenAI judges gave it 98.00. Astra came last only when its score came from one company and its rivals' scores from the other. Under the common panel, places 3 to 6 are within 0.32 points of each other and should be read as a tie. Values are from [`data/judge_panel_components.csv`](data/judge_panel_components.csv).
 
-![Judge scores and the panel-dependent ranking](figures/judge_panels.png)
+![Left: for each writer, a brown dot for the Claude judge's mean clarity and a blue dot for the two OpenAI judges' average, joined by a line; the blue dot is about 9 points higher for every writer. Right: the six writers' ranks under the outside-company panel joined by lines to their ranks under the common panel; GPT-6 Astra moves from last to first](figures/judge_panels.png)
 
-Read the left panel across each row: the Claude dot is lower than the Codex average for every writer, including Claude's own models. Across the 282 documents with all three scores, the Codex average is 9.01 clarity points above Claude on average. Read the right panel as a sensitivity check: the connecting lines move because the panel changes, not because a draft was rewritten. Neither ordering is established as the one human readers would prefer. Including own-vendor reviews fixes panel consistency but introduces a different concern about self-preference.
+In the left panel each row is a writer; the brown dot is the Claude judge's mean clarity and the blue dot the two OpenAI judges' average (the legend says "Codex judges", after the command-line tool used to call them). The x-axis starts at 80. The right panel lists the writers in rank order under each panel, labelled "Outside-vendor panel" and "Same panel, equal vendor weight", and joins each writer's two positions.
 
-![Outside-vendor scores and eligible judges](figures/headline.png)
+The blue dot is to the right for every writer, including the three Claude writers and the two writers whose companies have no judge here. Across the 282 drafts with all three scores, the OpenAI judges' average was higher than the Claude judge's on every single draft, by 9.01 points on average, 9.0 at the median, 3 at the smallest and 24 at the largest (counted from [`data/same_text_judge_scores.csv`](data/same_text_judge_scores.csv), column `codex_minus_claude`). Because the gap is as large for Muse Wonder Full and DeepSeek V4 Pro as for anyone, it is a difference in how strictly the judges use the scale, not a preference for one company's writing. The right panel then follows from the rule: the outside-company panel gives Astra only the strict judge and gives the Claude writers only the generous ones.
 
-The left side of the original score figure shows outside-vendor writer means with intervals from resampling cases: we repeatedly draw cases from the observed set and recalculate the average to show how much it moves. These intervals describe variation in these cases, conditional on the selected judges. The right side exposes which judges supplied those scores. Tight intervals on the left cannot repair systematic differences between the panels on the right. The [judge-specific scores](data/judge_specific.csv), [panel components](data/judge_panel_components.csv) and [common-panel sensitivity](data/common_panel_sensitivity.csv) preserve the calculation.
+![Left: outside-company clarity for each writer with 95% intervals, on an axis from 0 to 100, from 88.2 for GPT-6 Astra to 95.5 for Claude Opus 5.5. Right: each judge's mean clarity for the writers it was allowed to score](figures/headline.png)
 
-## Actual texts and judge explanations
+The notebook's first score figure shows the outside-company panel alone. The left panel gives each writer's outside-company clarity with 95% intervals from resampling cases; its axis starts at zero, which squeezes all six writers into the right-hand edge. The right panel gives each judge's mean for the writers it was allowed to score, so the Claude judge's green dot appears only for the three non-Claude writers and the OpenAI judges' dots only for the five non-OpenAI writers. Labels are model IDs (`claude-opus-5-5` is Claude Opus 5.5, and "External-vendor" means outside-company). The intervals are narrow (Astra 86.98 to 89.19, Claude Opus 5.5 94.98 to 96.09), but they measure variation between cases, not the choice of judges, which moves Astra by almost 5 points.
 
-These six examples were chosen after viewing the results to explain specific disagreements, compare one identical prompt, and inspect a checkable error. They do not estimate how common each problem is. All judges saw the whole draft and evidence, with author identity hidden. The scores below apply to the full draft. Reviewers could list up to three concerns, so those lists do not explain every point deducted.
+Three further checks leave the picture unchanged. The two drafts each writer produced per case differed by 1.89 clarity points on average for the same judge (307 writer, case and judge pairs). Using only strictly valid replies moves no writer's outside-company score by more than 0.67 points ([`data/strict_json_writer_sensitivity.csv`](data/strict_json_writer_sensitivity.csv)). And weighting the two judge companies equally within the outside-company panel lowers Muse Wonder Full and DeepSeek V4 Pro by about 1.6 points each and moves nobody else ([`data/vendor_balance_sensitivity.csv`](data/vendor_balance_sensitivity.csv)).
 
-![All three judges score the same six example documents](figures/same_text_examples.png)
+### Six drafts read by all three judges
 
-Each row is one unchanged document, and each column is one judge. The numbers show that a gap appears for Astra, Claude and Muse texts. The academic example is the largest gap among fully reviewed drafts, so it should be read as an extreme illustration. Full prompts, complete drafts, review text and cache keys are in [the example evidence](data/explanation_examples.json).
+![Heat map of clarity from the Claude judge, GPT-6 Astra and GPT-6.1 Sol for six drafts; the Claude column ranges from 72 to 88 and the two OpenAI columns from 93 to 100](figures/same_text_examples.png)
 
-### Example 1. An Astra email: 100, 99 and 88 for the same text
+Each row is one unchanged draft and each column one judge; darker blue means higher clarity. The rows are labelled "Example 1" to "Example 6" in the order of the table below. They were chosen after the results to explain the panel gap, so they show its shape, not its frequency.
 
-Writer: GPT-6 Astra · email · case `F1-1` · sample 1 · document `6d8506c6cd7f46c4`.
+| Row | Draft | Writer, document type, case | Claude judge | GPT-6 Astra | GPT-6.1 Sol | What the Claude judge objected to |
+|---|---|---|---:|---:|---:|---|
+| 1 | `6d8506c6cd7f46c4` | GPT-6 Astra, email, `F1-1` | 88 | 100 | 99 | The unfilled signature `[Your Name]` (format) |
+| 2 | `6aab6b1c14691720` | Claude Opus 5.5, email, `F1-1` | 88 | 95 | 96 | The $1,238 one-segment figure (reasoning) |
+| 3 | `0615bc9bc930e621` | GPT-6 Astra, slides, `F1-2` | 88 | 100 | 100 | An unclear "their"; switching from "orders" to "items" (prose) |
+| 4 | `2881ca4f1e31ec4e` | GPT-6 Astra, academic report, `F1-4` | 72 | 95 | 97 | A causal claim, no section headings, repeated conclusion |
+| 5 | `bce3310018aed73c` | Muse Wonder Full, slides, `F4-3` | 86 | 100 | 100 | A stray line under the first slide title (prose) |
+| 6 | `4b18caca8fb62c3f` | Claude Opus 5.5, web article, `F5-3` | 85 | 94 | 93 | A wrong sensitivity calculation (factual) |
 
-> I recommend expanding the program under the stated rule: expand only if the value of additional successful service appointments exceeds both the implementation cost and vendor fee. The study’s quarterly results meet that threshold, with an estimated net benefit of $500.
+In five of the six rows the OpenAI judges listed no concern at all, while the Claude judge listed one to three and scored 7.5 to 24 points below their average. Rows 1 and 2 answer the same prompt: the Claude judge gave both emails 88, so on this pair it did not prefer its own company's draft, while the OpenAI judges put Astra's email 4 points higher. Row 4 is the largest gap among the 282 drafts. Its 1,197-word report computes the right answer, -$500, and the Claude judge raised three different objections, including "Causal uncertainty cuts both ways. The report later concedes the true effect 'could be smaller or larger', so the uncertainty does not reinforce rejection." The OpenAI judges gave 95 and 97 with no concerns. Whether a reader would agree with either side is the question the human study is meant to answer. Row 6 is the one draft where all three judges agreed on a fault; it is discussed in section 9.
 
-| Judge | Clarity | Factual support | Reasoning | Genre fit |
-|---|---:|---:|---:|---:|
-| GPT-6 Astra | 100 | 100 | 100 | 100 |
-| GPT-6.1 Sol | 99 | 100 | 99 | 98 |
-| Claude Opus 5.5 | 88 | 92 | 88 | 84 |
+## 7. Results: re-checking the earlier flags
 
-The packet gives 65 additional standard successes and 18 fewer complex successes. The email correctly computes (65 - 18) × $41 - $1,027 - $400 = $500. Both Codex judges list no problems. Claude lists only a format concern: the signature is left as `[Your Name]`. That concern is real in a ready-to-send email, but the review does not explain how the clarity score of 88 was allocated. The recorded concerns are not an itemized explanation of every lost point.
+![Two pairs of bars: for 96 previously flagged passages, any justified problem 16.1% and a prose problem 1.6%; for 108 unflagged passages, 5.2% and 1.2%](figures/adjudication.png)
 
-Selected review excerpts, quoted exactly:
+Each pair of bars is one group of passages, labelled `flagged` and `unflagged`. The blue bar is the share of judge opinions finding any justified problem, of any type; the orange bar counts only problems of the prose type. Each passage counts equally: opinions are averaged within a passage, then passages are averaged. The figure title's "Blinded model opinions" means judges who were told neither the author nor the old flag.
 
-- Claude Opus 5.5, format, on “[Your Name]”: “An unfilled placeholder signature means the email is not ready to send as written.”
+Fresh judges seldom agreed that a flagged passage had a wording problem: 1.6% of opinions on flagged passages against 1.2% on unflagged ones, a difference of less than half a point. Counted by passage, 2 of the 96 flagged passages and 3 of the 108 unflagged ones drew a prose concern from at least one judge. Concerns of any type were three times as common on flagged passages (16.1% against 5.2%), and 19 of the 96 flagged passages drew a concern from at least one judge, 11 of them from every judge. But the type changed: of the 38 concerns on flagged passages, 29 were about reasoning, 4 about prose, 3 about facts and 2 about format (counted from [`data/passage_assessments.csv`](data/passage_assessments.csv), column `assessment_type`). The earlier flags often pointed at a real weak spot and gave it the wrong name.
 
-### Example 2. Claude Opus on the identical email prompt
+Two passages show both outcomes. A passage from a Claude Haiku 5.5 email (item `2144b2f2cfea0a70`), flagged as unnecessary jargon:
 
-Writer: Claude Opus 5.5 · email · case `F1-1` · sample 1 · document `6aab6b1c14691720`.
+> The evidence packet is also labeled a seeded arithmetic fixture
 
-> Under the decision rule (expand only if extra value exceeds implementation and vendor costs), the evidence supports expansion, but the margin is thin and comes entirely from standard appointments.
+All three fresh judges agreed it is a prose problem. GPT-6 Astra wrote: "'Seeded arithmetic fixture' is unexplained software-testing jargon for a director-facing email." The only other flagged passage with a prose concern uses the same phrase, which writers copied from the earlier packets' source note. A passage from a DeepSeek V4 Pro web article (item `81f758a9e0933dac`) was flagged as empty emphasis:
 
-| Judge | Clarity | Factual support | Reasoning | Genre fit |
-|---|---:|---:|---:|---:|
-| GPT-6 Astra | 95 | 96 | 94 | 96 |
-| GPT-6.1 Sol | 96 | 97 | 95 | 98 |
-| Claude Opus 5.5 | 88 | 92 | 85 | 88 |
+> The pilot’s gross benefit is real
 
-This uses the exact same F1-1 email prompt and the first generation from each writer. Opus recommends limiting expansion to standard appointments and gives a $1,238 net value for that narrower rollout. Claude flags the assumption that costs stay unchanged, although the email later asks the reader to confirm it. The two Codex judges list no problems. Claude gives both this email and the Astra email clarity 88, while the Codex judges give the Astra email higher clarity. The aggregate reversal cannot be read as Claude selecting its own email over Astra on this example.
+Both fresh judges called it a reasoning problem instead: "Calling the pilot’s benefit 'real' implies an established benefit attributable to the pilot, although the preceding caveat acknowledges that other factors could explain all of the observed gain" (GPT-6 Astra, severity 3). This is the common pattern. Of the 20 flagged passages whose old label was empty emphasis, 7 drew a concern, and all 7 drew a reasoning concern.
 
-Selected review excerpts, quoted exactly:
+The comparison has a limit. The earlier flags came from a slop audit that asked judges to count eight habits, while the re-check asked a neutral question with four problem types, so part of the gap may come from the change of instructions rather than disagreement about the passage.
 
-- Claude Opus 5.5, reasoning, on “Counting standard alone, the net is about +$1,238.”: “This assumes the full implementation and vendor costs apply unchanged to a one-segment rollout. The email flags this later, but the figure is presented here without that qualifier.”
+## 8. Results: adding an AI-slop warning
 
-### Example 3. Astra slides: a local wording objection versus perfect scores
+The warning test takes one draft per case, 24 drafts, and has each judge score each draft alone under three instructions: the **neutral review** (the general quality questions used in the main scoring), the **habit list** (the same questions plus the eight habits as neutral criteria, with the note that needed terms, headings and justified caveats can help a reader) and the **habit list plus warning** (the same, plus "The text may contain AI-slop prose. Assess whether that is present; none is allowed."). The files call these `baseline`, `rubric` and `warning`. Comparing the last two changes only the label. Only outside-company judges count here, leaving 55 judge-and-draft pairs.
 
-Writer: GPT-6 Astra · slides · case `F1-2` · sample 1 · document `0615bc9bc930e621`.
+![Two estimates with 95% intervals: habit list minus neutral review at -0.32, and warning minus habit list at -0.31, whose interval crosses zero](figures/framing.png)
 
-> Hold expansion. Investigate the complex-order decline and assess whether standard-order gains are repeatable. Before reconsideration, obtain a concurrent comparison and updated economics that include both costs. Expand only when credible incremental value exceeds their combined total.
+Each row is one paired change: the same draft and judge under two instructions. A point left of the zero line means a lower clarity score; the bars are 95% intervals from resampling cases. The figure's title, "Separate the detailed rubric from its warning label", describes the design rather than the result, and its "rubric" is the habit list.
 
-| Judge | Clarity | Factual support | Reasoning | Genre fit |
-|---|---:|---:|---:|---:|
-| GPT-6 Astra | 100 | 100 | 100 | 100 |
-| GPT-6.1 Sol | 100 | 100 | 100 | 100 |
-| Claude Opus 5.5 | 88 | 95 | 92 | 90 |
+Adding the habit list lowered clarity by 0.32 points (interval -0.62 to -0.06; resampling decision types, -0.58 to -0.08). Adding the warning to the same list lowered it by another 0.31 (interval -0.70 to +0.02; decision types, -0.70 to +0.03). Of the 55 pairs, the warning left 32 scores unchanged, lowered 14 and raised 9 (counted from [`data/matched_instruction_ratings.csv`](data/matched_instruction_ratings.csv)). The Claude judge moved most, -1.11 over its 9 pairs, against -0.26 for GPT-6 Astra and +0.09 for GPT-6.1 Sol over 23 pairs each. Using strictly valid replies only, the warning effect is -0.46 on 40 pairs. The worked-example draft shows the usual case: GPT-6 Astra gave it 97 under all three instructions.
 
-Both Codex judges give 100 on every dimension and list no problems. Claude objects to the referent of “their” and to switching from “orders” to “items” elsewhere in the draft. A reader can inspect whether “both costs” in the preceding sentence resolves the reference. This is an editorial disagreement about how much explicitness the reader needs; its effect on comprehension has not been tested.
+So the label alone made a small difference at most, and the interval allows none. The earlier study's 1.66-point drop came from an instruction that changed the label and the list together and also asked judges to count every instance; this test cannot say which of those did the work there.
 
-Selected review excerpts, quoted exactly:
+## 9. Error analysis
 
-- Claude Opus 5.5, prose, on “Expand only when credible incremental value exceeds their combined total.”: “The antecedent of 'their' is unclear; it should name implementation cost and vendor fee explicitly.”
+### A real error that every judge caught, and a judge's own error
 
-- Claude Opus 5.5, prose, on “across 900 items”: “Switching from 'orders' to 'items' within the deck is inconsistent and mildly confusing.”
-
-### Example 4. An Astra academic report: a 24-point clarity gap
-
-Writer: GPT-6 Astra · academic · case `F1-4` · sample 1 · document `2881ca4f1e31ec4e`.
-
-> The evidence does not support expanding the account onboarding program under the stated decision rule. Across the two segments, the program quarter recorded 34 more successful onboardings than the prior comparison quarter at equal volumes. Valuing each additional success at USD 38 produces USD 1,292 in incremental gross value. However, implementation costs of USD 1,292 and a vendor fee of USD 500 bring total costs to USD 1,792, leaving a net incremental value of negative USD 500.
-
-| Judge | Clarity | Factual support | Reasoning | Genre fit |
-|---|---:|---:|---:|---:|
-| GPT-6 Astra | 95 | 99 | 99 | 97 |
-| GPT-6.1 Sol | 97 | 99 | 99 | 97 |
-| Claude Opus 5.5 | 72 | 90 | 78 | 68 |
-
-The report has 1,197 words, inside its 1,000 to 1,400 target. Claude gives clarity 72 and raises three different issues: a claim about causal uncertainty, missing section headings, and repeated reminders that the net value is negative. The Codex judges give clarity 95 and 97 with no listed problems. This example shows why a single “AI slop” count would lose information: reasoning, report structure and repeated prose are separate objections. It is the largest Codex-versus-Claude clarity gap among the 282 fully reviewed drafts, selected here for that reason.
-
-Selected review excerpts, quoted exactly:
-
-- Claude Opus 5.5, reasoning, on “This financial conclusion is reinforced by uncertainty about whether the observed improvement was caused by the program.”: “Causal uncertainty cuts both ways. The report later concedes the true effect 'could be smaller or larger', so the uncertainty does not reinforce rejection.”
-
-- Claude Opus 5.5, format, on “The study compares outcomes in a prior quarter with those in a program quarter, with equal onboarding volumes within each segment.”: “An academic-style report would normally use section structure such as methods, results, limitations and recommendation. This one runs as continuous paragraphs with no headings.”
-
-- Claude Opus 5.5, prose, on “This percentage provides supplementary context; the decisive finding remains the negative dollar balance under the stated rule.”: “The report repeatedly restates that the negative balance is decisive, which pads the length and pushes it toward the upper word limit.”
-
-### Example 5. Muse slides show that the score gap extends beyond self-scoring
-
-Writer: Muse Wonder Full · slides · case `F4-3` · sample 2 · document `bce3310018aed73c`.
-
-> Increasing completed service appointments
-
-| Judge | Clarity | Factual support | Reasoning | Genre fit |
-|---|---:|---:|---:|---:|
-| GPT-6 Astra | 100 | 100 | 100 | 100 |
-| GPT-6.1 Sol | 100 | 100 | 100 | 100 |
-| Claude Opus 5.5 | 86 | 92 | 90 | 85 |
-
-This line sits beneath the first slide heading, followed by “Recommendation: Option B.” Claude calls the line an unexplained fragment. Both Codex judges return 100 on all four dimensions and list no problems. Muse is from neither judge vendor, so this example helps separate a general difference in scoring strictness from a claim that the gap is entirely self-preference.
-
-Selected review excerpts, quoted exactly:
-
-- Claude Opus 5.5, prose, on “Increasing completed service appointments”: “This is an unexplained fragment under the slide title that reads as a leftover heading rather than a framed objective.”
-
-### Example 6. A Claude article: agreement on an arithmetic error, with a judge error too
-
-Writer: Claude Opus 5.5 · web · case `F5-3` · sample 1 · document `4b18caca8fb62c3f`.
+Claude Opus 5.5's web article for `F5-3` (document `4b18caca8fb62c3f`) runs a sensitivity test and gets it wrong:
 
 > If the low scenario were 30% likely instead of 20%, with the remaining probability taken from the high case, expected gross value would fall to $2,820. Expected net value would then be **–$140**, and the expansion would fail Test 1.
 
-| Judge | Clarity | Factual support | Reasoning | Genre fit |
-|---|---:|---:|---:|---:|
-| GPT-6 Astra | 94 | 79 | 82 | 94 |
-| GPT-6.1 Sol | 93 | 80 | 79 | 95 |
-| Claude Opus 5.5 | 85 | 68 | 72 | 85 |
+With probabilities of 30%, 50% and 20% on scenario values of $1,200, $3,000 and $5,400, gross value is 0.30 × $1,200 + 0.50 × $3,000 + 0.20 × $5,400 = $2,940, and after the $2,960 cost the net is -$20, not -$140. The test still fails, so the recommendation stands, but the stated loss is wrong. All three judges found it. Claude Opus 5.5 wrote "so net is –$20, not –$140" and gave factual support 68; GPT-6 Astra gave the same correction and 79. GPT-6.1 Sol also scored factual support 80, but in a separate concern it made its own mistake: it said the break-even value is "approximately $26.79 ($2,960 divided by 112)". The division gives $26.43, which is what the article says. A judge can catch one error and make another in its explanation, so a judge's reasons need the same checking as the draft.
 
-All three judges identify the same wrong sensitivity calculation, despite giving different scores. The stated revised probabilities are 30%, 50% and 20%; the scenario values are $1,200, $3,000 and $5,400. The correct gross value is 0.30 × $1,200 + 0.50 × $3,000 + 0.20 × $5,400 = $2,940; after the $2,960 cost, net value is -$20. The article’s recommendation under this changed scenario still fails its positive-value test, but its stated loss is wrong. There is also a check on the judge: in a separate concern Sol says $2,960 divided by 112 is about $26.79. It is about $26.43, as the article originally states. A judge can catch one mistake and make another in its explanation.
+### A typical success with a strict reading
 
-Selected review excerpts, quoted exactly:
+GPT-6 Astra's email for `F1-1` (document `6d8506c6cd7f46c4`) states the rule, the $500 net value and the recommendation in its first two sentences and computes (65 - 18) × $41 - $1,027 - $400 = $500 correctly. The two OpenAI judges gave it 100 and 99 with no concerns. The Claude judge gave 88 and listed one concern, the unfilled signature: "An unfilled placeholder signature means the email is not ready to send as written." That is a fair point about a ready-to-send email, but it does not explain 12 lost points; the concern lists are not an itemised account of each score.
 
-- GPT-6 Astra, factual, on “If the low scenario were 30% likely instead of 20%, with the remaining probability taken from the high case, expected gross value would fall to $2,820. Expected net value would then be **–$140**, and the expansion would fail Test 1.”: “The revised probabilities are 30%, 50%, and 20%, giving expected gross value of $2,940 and net value of −$20. The test still fails, but the stated loss exaggerates the sensitivity.”
+### A passage the fresh judges split on
 
-- Claude Opus 5.5, factual, on “expected gross value would fall to $2,820. Expected net value would then be **–$140**”: “With 30/50/20 weights, gross is 0.3×1200 + 0.5×3000 + 0.2×5400 = $2,940, so net is –$20, not –$140. The conclusion that Test 1 fails still holds, but the figures are wrong.”
+![On the left, a passage from a GPT-6 Astra academic report and the earlier flag on it; on the right, the two fresh judges' opposite assessments](figures/error_example.png)
 
-- GPT-6.1 Sol, reasoning, on “Expected value stays positive down to about $26.43 per success. The low-scenario limit holds only down to **$25**.”: “As value per success falls, expected net value reaches zero first, at approximately $26.79 ($2,960 divided by 112), whereas the loss guardrail holds through $25. This sensitivity therefore contradicts the claim that the downside guardrail is the tighter constraint.”
+The left side gives the passage and its original flag; the right side gives each fresh judge's verdict and reason. Labels are model IDs. The passage, from a GPT-6 Astra report (item `d05f3e6433e13bb5`), reads "The packet also identifies the evidence as a seeded arithmetic fixture". The earlier flag, from Claude Haiku 5.5, called it an unclear reference. Claude Opus 5.5 called it a minor prose problem: "Applied management researchers may not know it means synthetic, code-generated data." GPT-6.1 Sol saw no problem: "Identifying synthetic evidence is relevant to an academic research audience." Both reasons fit the task, and only a reader can settle which matters more. The passage was chosen as the strongest split among flagged passages, so it shows the limit of model agreement, not its usual level: 8 of the 96 flagged passages had judges on both sides.
 
-## Rechecking earlier prose flags
+### Unreadable replies
 
-The extension selects one available old draft per writer and genre, without looking at its score. Fresh reviewers then inspect selected passages without the writer's identity or the original criticism. At least two valid reviews are available for all 204 passages. The unflagged group avoids located old audit flags, but it has no human gold label declaring the prose good.
+Unreadable replies are counted apart from scores. 3 of the 432 main scoring requests failed the reply format: two GPT-6.1 Sol replies used a concern type, `grounding`, outside the four allowed, and one GPT-6 Astra reply returned a record for only one of its two drafts (read from [`data/reviews.json`](data/reviews.json)). Each failed request removes one judge's scores for two drafts, which is why 282 of 288 drafts have all three scores. The warning test (216 requests) and the passage re-check (140 requests) had no unreadable replies.
 
-![Fresh review of flagged and unflagged passages](figures/adjudication.png)
+Another 78 OpenAI judge replies, 51 in the main scoring and 27 in the warning test, were complete except for their final `]}`. The parser change described in section 4 repairs only that defect, and only when every record and field is otherwise valid. With those replies left out, writer scores move by at most 0.67 points, the passage results are identical, and the warning effect is -0.46 instead of -0.31.
 
-The “any problem” bar includes factual, reasoning, prose and format concerns. The prose bar counts only a reading or wording concern. Previously flagged passages receive any concern at a mean reviewer rate of 16.1%, compared with 5.2% for unflagged passages. The corresponding prose rates are 1.6% and 1.2%. These average reviewer opinions within each passage, then average passages; they are not the percentage of original flags proven wrong. The neutral task differs from the earlier AI-slop audit, so a change in instructions can explain part of the difference.
+### What these examples cannot show
 
-One exact old passage from an Astra academic report reads:
+The examples were chosen after the results to explain the panel gap, a same-prompt comparison, a checkable error and a split. They show what judges wrote, not why, and the judges' listed concerns do not account for every point they deducted.
 
-> The packet also identifies the evidence as a seeded arithmetic fixture
+## 10. What the evidence supports
 
-Claude Opus marks a mild prose problem: the testing term is unexplained and could be replaced by a plain statement that the data are synthetic. GPT-6.1 Sol marks no problem because identifying synthetic evidence is relevant to an academic audience. Both explanations have a connection to the task; people must decide whether the phrase actually interrupts reading.
+- When comparing writers with AI judges, give every writer the same judges and report each judge's scores alongside the average. Here the OpenAI judges scored every draft higher than the Claude judge, by 3 to 24 points, and dropping same-company judges turned that strictness gap into a ranking.
+- Treat a rule that drops same-company judges as a source of bias in its own right unless the judges have been shown to use the scale the same way. Here, each judge company on its own put GPT-6 Astra first; the mixed panel put it last.
+- Do not read a model judge's prose flag as a fault in the wording. Fresh judges seldom agreed that flagged passages had a wording problem, and when they did see a problem it was usually in the reasoning.
+- A warning about "AI slop" made little or no difference to scores once the criteria were fixed (-0.31, interval -0.70 to +0.02).
+- Check a judge's arithmetic as well as the writer's.
 
-![The legacy passage and conflicting explanations](figures/error_example.png)
+The uncertainty that most needs another experiment is which judge, if any, matches human readers: whether the Claude judge's lower scores and extra concerns mark documents that people find harder to follow.
 
-The visual puts the original criticism beside fresh reviewer explanations. It is selected for disagreement, rather than as a typical passage. Its purpose is to make the judgment inspectable. The [individual assessments](data/passage_assessments.csv) retain the full sample, including agreement and no-problem reviews.
+## 11. Limitations
 
-## Whether an AI-slop warning changes scores
+- Every judgment comes from a model. The reader and editor forms have no responses, so neither ranking, nor any concern, is shown to match what people find clear.
+- There are only two judge companies and three judges, chosen by design. With two companies, an outside-company panel can never be the same for writers from both. A study with judges from several more companies might show a smaller or larger strictness spread.
+- The cases are invented and give the writer every number and the rule. They cover six decision types with four cases each, and each case has one document type, so differences between document types also reflect different cases. Each writer wrote two drafts per case.
+- The earlier passages come from only two cases, and the re-check asked different questions from the audit that produced the flags.
+- Command-line products bring their own built-in instructions and default settings, so this compares configured products, not bare models. The study scores slide text, not slide layout.
+- The protocol and cases were saved before any model was called, and the outside-company panel was the planned main analysis. Two things were added during the study: the parser change for replies missing their closing brackets, and the common panel, which was not in the protocol. The examples and the breakdown by judge company were added after the results to explain them. This is an exploratory study; the record is in [`data/PROTOCOL.md`](data/PROTOCOL.md).
 
-To distinguish a cue from a change in criteria, the extension reviews the same 24 selected drafts under three instructions: general quality questions, a neutral prose rubric, and that identical rubric plus a warning that the text might contain AI slop. The rubric supplies the criteria; the warning adds the label. Fresh sessions and opaque document IDs vary across conditions.
+## 12. Spend, data and how to run
 
-![Score changes from the rubric and warning](figures/framing.png)
+- This study's OpenRouter calls (DeepSeek V4 Pro's drafts) reported $0.18. Before making any call it reserved the earlier study's full cost bound of $4.45, so the two studies together can have cost at most $4.63, against a shared $10 cap.
+- OpenAI, Anthropic and Meta calls ran on subscriptions with no per-call charge. Claude Code reported a list-price equivalent of $16.93.
+- The cache holds 1,076 requests and 1,081 attempts, failures included.
 
-The neutral rubric lowers clarity by 0.32 points relative to baseline. Adding the warning lowers it by another 0.31 points, with a case-resampling interval from -0.70 to +0.02 and a six-family interval from -0.70 to +0.03. The warning interval crosses zero, so these data support a small or absent average effect, conditional on the cases and judges. This is a tighter question than the earlier pilot's 1.66-point drop, which changed both the review criteria and the AI-slop framing at once.
+| File in `data/` | What it holds |
+|---|---|
+| `cases.json`, `tasks.json`, `fixture_checks.json` | The 24 packets with exact answers, the prompts and the arithmetic checks |
+| `drafts.json`, `generation_coverage.csv` | All 288 drafts with word counts and range checks |
+| `reviews.json`, `ratings.csv`, `problems.csv` | Every judge reply, one row per score, one row per concern |
+| `judge_specific.csv`, `judge_panel_components.csv`, `same_text_judge_scores.csv` | Scores by judge, the two panels and the per-draft strictness gap |
+| `legacy/`, `legacy_sample.json`, `passage_sample.json` | Copied evidence from the earlier study, the 108 sampled drafts and 204 passages |
+| `adjudications.json`, `passage_assessments.csv`, `passage_summary.csv` | The passage re-check |
+| `frame_reviews.json`, `framing_ratings.csv`, `matched_instruction_ratings.csv` | The warning test |
+| `strict_json_*.csv` | Results with strictly valid replies only |
+| `explanation_examples.json` | Prompts, drafts and judge replies for the documents quoted above |
+| `human/` | Reader and editor forms, administrator keys and empty result files |
+| `cache_requests.jsonl` | Every request and reply, keyed by the full request |
+| `PROTOCOL.md` | Run history: settings, the parser change, spend and commit dates |
 
-## Document lengths and delivery
+The human study is prepared but not run. [`data/human/participant/reader.html`](data/human/participant/reader.html) gives each reader one version of each case, hides the document before asking four questions and records time, confidence and effort; 64 reader schedules cover 396 documents. [`data/human/participant/editor.html`](data/human/participant/editor.html) asks editors to classify the 204 passages as prose, factual, reasoning or format problems, with "no problem" allowed, in 34 booklets. Both pages run locally in a browser; GitHub's file viewer does not run them. The administrator keys in `data/human/admin/` hold the authors and answers and must not go to participants. [`data/human/README.md`](data/human/README.md) explains distribution and import.
 
-The run produces 288 usable drafts, but 76 (26.4%) miss their requested word range. Keeping these responses avoids quietly replacing poor compliance with a better second attempt.
+Running the notebook replays everything from the cache with no network calls and no keys, and stops if a cached reply is missing:
 
-| Document | Requested words | Within range | Total |
-|---|---:|---:|---:|
-| Email | 180 to 280 | 63 | 72 |
-| Six-slide text | 200 to 320 | 69 | 72 |
-| Web article | 700 to 1,000 | 42 | 72 |
-| Academic report | 1,000 to 1,400 | 38 | 72 |
-
-![Returned document lengths and requested ranges](figures/lengths.png)
-
-Each dot is a returned draft; the thick segment marks its requested range. The article and academic tasks have lower compliance than the shorter briefs. Length compliance is a separate outcome from prose quality: the 974-word Claude article in example 6 fits its target but contains a wrong sensitivity calculation. The study scores slide text only; it does not test a rendered presentation's layout or spoken delivery.
-
-## What remains for human readers
-
-We still need evidence that a prose concern predicts reader difficulty. The prepared [reader page](data/human/participant/reader.html) records timed reading, four answers, confidence and effort. The [editor page](data/human/participant/editor.html) asks people to distinguish prose, factual, reasoning and format problems, with “no problem” allowed. Authors and administrator answer keys are hidden from participants.
-
-There are 64 reader schedules covering 396 documents and paired editor booklets for 204 passages. A reader sees only one version of each case, reducing the chance that a previous version gives away the answer. All human result files currently contain headers only. No model or test response has been entered as a human result. Human-reviewed rewrites and a causal comparison of edited prose are also pending.
-
-The [administrator guide](data/human/README.md) explains distribution and importing responses. Download participant HTML files and open them locally; GitHub's source viewer does not run the forms. Keep the separate administrator keys private from participants.
-
-## Limits, evidence and reproduction
-
-The new cases are synthetic and have exact numerical rules, which makes calculations checkable. They cover six decision structures with four draws each, not the full range of analytical writing. Each case has one genre, so differences between genres also reflect different cases. There are two generations per writer. The old passage sample comes from only two original cases. Human reading time, comprehension and editorial validity have not yet been measured.
-
-The common-panel ordering remains a diagnostic result, not a general writer leaderboard. Models differ in review strictness; they can also make errors in their criticism, as example 6 shows. The new examples and panel decomposition were added after collection to explain the frozen results, not preregistered as new hypotheses.
-
-The protocol and source packets were committed before model collection in `3b26cf0`. This is an amended exploratory study: a [dated parser amendment](data/parser_amendment.json) permits only missing outer `]}` after complete, fully validated records. It recovers 51 main review requests and 27 instruction requests without changing their raw text, scores or explanations. Strict-only [writer](data/strict_json_writer_sensitivity.csv), [passage](data/strict_json_adjudication_sensitivity.csv) and [instruction](data/strict_json_instruction_sensitivity.csv) tables keep the original parsing rule visible. There are 429/432 valid main review requests and 216/216 valid instruction requests. Failures remain missing rather than becoming zero scores.
-
-This extension reports USD 0.1816 in OpenRouter charges. Reserving notebook 15's full uncertain bound gives a combined charged-or-reserved bound of USD 4.6316, below the USD 10 ceiling. Reported charges across both runs total USD 3.3693. CLI subscription tokens and available list-price estimates are recorded separately. This explanatory update makes no new model calls and adds no model spending.
-
-Install the repository requirements and this folder's [rendering requirements](requirements.txt), then run from this folder:
-
-```powershell
-python -m jupyter nbconvert --to notebook --execute --inplace 17_writing_validation_extension.ipynb
+```bash
+jupyter nbconvert --to notebook --execute --inplace 17_writing_validation_extension.ipynb
 ```
 
-Default execution verifies frozen evidence and replays the cached responses with zero model calls. The new explanatory figures and example evidence are generated by the notebook from those caches. Place complete participant exports in `data/human/submissions/` to include future human results. For a separate collection, use a new folder, change the protocol version and seed, carry forward the latest cumulative spending bound, and follow the notebook's live-collection instructions. Keep the committed evidence intact.
+It also needs the packages in [requirements.txt](requirements.txt) for the human forms. Completed human response files placed in `data/human/submissions/` are included in a replay. A new collection needs `NB_LIVE=1`, an `OPENROUTER_API_KEY` and signed-in `codex`, `claude` and `muse` tools; copy the notebook and its earlier-study inputs to an empty folder, change the seed and protocol version, and carry forward the shared spending bound. The full analysis is in [17_writing_validation_extension.ipynb](17_writing_validation_extension.ipynb).
 
-The notebook's final section lists five follow-up experiments and four checked readings on human evaluation and structured testing. The next measurement that would change the interpretation is whether these model judgments predict independent readers' accuracy and effort on the same documents.
+## 13. Future work and further reading
+
+### Future work
+
+- Collect the prepared reader and editor responses, and test whether the Claude judge's lower scores, or any judge's concerns, predict readers' accuracy and effort on the same documents. This is the test that could say which ranking in section 6 is closer to readers.
+- Add judges from two or three more companies, every one scoring every draft, to measure how much judges differ in strictness and whether a model of each judge's scale (a per-judge offset) removes the ranking reversal.
+- Give human editors verified, fact-preserving rewrites of flagged passages, with a proofread-only control, and randomly assign readers one version per case. This would measure whether fixing a flagged passage helps, which the re-check here cannot.
+- Cross every case with all four document types, so that document type and decision type are no longer tied together.
+- Ask the judges for schema-enforced replies through each tool's structured-output option and compare validity and scores with the plain JSON instructions used here, where 78 replies needed the bracket repair.
+
+### Further reading
+
+Links checked on 2026-10-22.
+
+- [Best practices for the human evaluation of automatically generated text](https://aclanthology.org/W19-8643/) (van der Lee et al., 2019). Sets out how to design reader tasks and report human evaluations; it guided the reader and editor forms.
+- [Beyond Accuracy: Behavioral Testing of NLP Models with CheckList](https://aclanthology.org/2020.acl-main.442/) (Ribeiro et al., 2020). Tests models with structured families of cases; the six decision types follow the same idea of varying the reasoning, not just the numbers.
+- [SummEval: Re-evaluating Summarization Evaluation](https://aclanthology.org/2021.tacl-1.24/) (Fabbri et al., 2021). Rates summaries on separate quality dimensions and compares automatic and human scores; here clarity, factual support and reasoning are scored separately for the same reason.
+- [The Authenticity Gap in Human Evaluation](https://arxiv.org/abs/2205.11930) (Ethayarajh and Jurafsky, 2022). Shows how averaged ratings can misstate what readers prefer; the same caution applies to averaging judges with different scales.

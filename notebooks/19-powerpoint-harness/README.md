@@ -1,259 +1,401 @@
-# 19. PowerPoint harnesses and screenshot judges
+# Which model, and which tools, make a better slide deck?
 
-Preparing a presentation means shaping ideas and numbers into something an audience can follow. In a project review, the slides might compare a few options and explain the figures behind a recommendation. When the plan changes, keeping those figures and the timeline consistent helps the discussion stay clear.
+## A deck that has to change
 
-## Why slide generation is hard
+A project team has spent a month comparing three ways to upgrade its distribution network, called Lean, Balanced and Resilient. The team lead now has to present the choice to the operations committee in eight slides: the recommendation and its cost, the monthly results so far, a table of the three options, what happens if savings come in lower or higher than expected, the capacity of each site, a timeline, a chart of the main risks, and the decision the committee is asked to take.
 
-A model has to decide what to emphasize, choose a useful chart or diagram, and fit the content into a readable layout. A written slide description cannot fully show how PowerPoint will wrap a title or crowd its labels. Even correct risk values can tell the wrong story if they sit at the wrong coordinates on a matrix.
+A good deck lets the committee find the recommendation at once and check every number behind it. That takes two kinds of work. One is getting the facts right: costs, savings and dates must match the plan, and a figure that appears on three slides must be the same on all three. The other is presentation: titles that fit their space, tables that can be read from the back of the room, and a risk chart in which each risk sits in the right square.
 
-Editing adds another challenge: changing an investment means updating payback, scenario calculations and the final recommendation, while preserving unrelated facts. The model must plan the content, place the objects, review the rendered result when available, and revise the deck consistently. Our briefs supply the facts and slide outline, so this pilot tests only part of that larger task.
+### An illustrative example
 
-Language models can help draft these slides, but it is less clear which tools help them produce better decks. This experiment looks at reusable layout helpers and the ability to review screenshots. It also asks how best to compare the results: a 9/10 rating can be hard to interpret across decks of different lengths and complexity. Alongside individual scores, model judges compare complete decks made for the same brief.
+This example is a simplified version of the first of the two tasks given to the models in this study.
 
-## Question
+In the ordinary case the deck recommends Balanced: an investment of $350k that saves $130k a year. The payback, the investment divided by the yearly saving, is 350 / 130 = 2.7 years. Over three years the option saves 3 × 130 − 350 = $40k more than it costs. These figures appear on the opening slide, in a chart of low, expected and high savings, and again on the closing slide, where the committee is asked to approve the money.
 
-Which model and set of authoring tools should we try for a presentation with charts, financial tables and a delivery plan? We compare three models using four tool setups on two newly written project briefs, producing 24 editable eight-slide decks.
+Then the plan changes. The committee decides that reliability matters more than price, and the recommendation becomes Resilient: $440k invested, $155k saved a year. The payback becomes 440 / 155 = 2.8 years, and the three-year figure falls to 3 × 155 − 440 = $25k. Each of those numbers has to change on every slide that shows it. Some things must not change: the option table still lists all three options at their original prices. The plan also adds a new risk, R5, which has to appear on the risk chart at likelihood 3 and impact 5.
 
-## Result
+A careful person lists every slide where a changed number appears, recalculates each one, and then looks at the finished slides, because a longer title can wrap into the text below it and a risk can land in the wrong square even when its label is right. The mistakes that get through are quiet ones: an old payback left on the closing slide, or R5 drawn one square too low. A committee can approve or reject a plan because of either.
 
-GPT-6.1 Sol led the model comparisons in all four setups. Giving a model screenshots to review earned 61.1% win credit against text review. Adding layout helpers earned 38.2% against basic drawing tools.
+### Why this is hard for a language model
 
-**Win credit** counts a win as 1, a tie as 0.5 and a loss as 0, then averages the results. A result above 50% favors the option being tested. It measures how often judges prefer a deck, not how much better the deck is.
+A language model can write the words for a slide, but it cannot see the slide. In this study each model describes every slide in a structured text format: a text box with this wording at this position and size, a table with these cells here, a bar chart with these values there. A program turns that description into an editable PowerPoint file. The model chooses coordinates and font sizes, but it never sees where PowerPoint breaks a line, so it cannot tell whether a title fits until the slide is drawn.
 
-For similar decks, these results suggest trying GPT-6.1 Sol with basic drawing tools and screenshot review first. That is a starting point from this pilot: all 24 decks come from just two related briefs, with one generated deck per model and setup on each brief.
+### Two kinds of help
 
-## What the harness gives the models
+Two kinds of help might make this easier.
 
-A harness is the tools and instructions a model uses to create and revise a deck. This experiment changes two parts of that harness: how the model places content, and what it can see when reviewing its draft.
+The first is a small set of ready-made layout blocks, here called **layout helpers**: a title area that measures its own text and keeps the title clear of the subtitle, a card with one large number and its label, a row of connected steps, and a set of equal columns. With helpers the model can ask for "a key-number card saying 2.8 years" instead of placing every box and line itself. Without them it builds everything from **basic tools**: text boxes, rectangles, lines, charts and tables. Helpers might prevent positioning mistakes; they might also push the content into a layout that does not suit it.
 
-- Primitives are basic drawing tools for text, rectangles, connectors, charts and tables. The model supplies the content, data, positions, sizes and colors.
-- Helpers add optional shortcuts for headers (`header`), key-number cards (`kpi`), connected process steps (`flow`) and columns (`columns`). They arrange the same drawing objects underneath. The repaired header measures text to fit its reserved area; the helpers do not calculate values or choose the story.
-- Text review gives the model its draft's written specification, including content and layout, plus a change request.
-- Screenshot review gives it that same material and images of its actual draft slides.
+The second is a look at the draft, here called **screenshot review**. When the model revises its deck after the plan changes, it receives pictures of its own draft slides as PowerPoint drew them. Without the pictures it revises from its own text description alone, called **text review** here. The pictures might let it notice a crowded box or a title running into its subtitle; they also give it much more to read.
 
-Models use these controls by returning a structured JSON description of the slides. The harness builds the editable PowerPoint file and renders it. Each model returns a complete replacement description for its revision; it does not directly operate PowerPoint or call the renderer itself. All four setups keep text, charts and tables editable. Notebook section 4 explains the individual controls and supporting functions.
+The tools and inputs placed around a model are often called a harness. This study compares four harness setups: basic tools or layout helpers, each with text review or screenshot review.
 
-## How the ablation study works
+### How to tell which deck is better
 
-An **ablation study** adds or removes a feature while keeping the other choices fixed. Here we cross two authoring choices, primitives or optional helpers, with two review choices, text or screenshots. This gives the four setups in the results table.
+There is no answer key for a good slide, so the study uses other language models as judges. Judges see only images: the finished slides, and three "task card" images that list the correct facts and 24 requirements, such as "Gate week 10 and rollout weeks 11-14 agree on slides 6 and 8". They are not told which model made a deck.
 
-To test helpers, we compare decks made by the same model for the same brief, keeping review mode fixed. To test screenshots, we keep the model, brief and authoring tools fixed. Each text/screenshot pair starts from the same draft and gets the same change request. Every final deck gets one draft call and one revision call. The call count is matched; token use and run time can still differ.
+They judge in two ways. In **individual scoring** a judge rates one deck on five aspects (design, legibility, visual communication, coherence and meeting the requirements) and marks each of the 24 requirements as met or not. In a **head-to-head comparison** a judge sees two decks made for the same task and picks the better one, or calls a tie. A score of 87 out of 100 is hard to interpret on its own; a head-to-head choice answers the practical question of which of two decks you would rather present.
 
-Testing both features in all four combinations also shows whether they work well together. We assess the changes through individual scores and head-to-head comparisons, with judges seeing only images. This tests the helper bundle as a whole; it does not isolate the contribution of headers, cards, flows or columns individually.
+A useful outcome is a setup to try first for this kind of deck, and a short list of the mistakes a person still needs to check.
 
-## Choosing a model
+## The question
 
-GPT-6.1 Sol is the strongest candidate in this test. Each column compares models using the same tools on the same briefs. For example, its 89.6% under primitives plus screenshots is its average win credit against Claude and Muse in that setup.
+When a language model builds an eight-slide decision deck and then updates it after the plan changes, which of three models makes the decks that judges prefer? And does either kind of help, layout helpers or screenshot review before revising, make the decks better?
 
-| Model making the deck | Primitives + text | Primitives + screenshots | Helpers + text | Helpers + screenshots |
-|---|---:|---:|---:|---:|
-| GPT-6.1 Sol | 83.3% | 89.6% | 95.8% | 81.2% |
-| Claude Opus 5.5 | 66.7% | 60.4% | 52.1% | 66.7% |
-| Muse Wonder Full | 0.0% | 0.0% | 2.1% | 2.1% |
+A team that wants a model to draft its decks needs both answers: which model to use, and whether building helpers or a draw-and-look step is worth the effort.
 
+## Study summary
 
-Claude generally beat Muse but lost more often to GPT. Muse received little preference credit in this particular authoring interface. All 24 final decks rendered successfully, so these differences concern judged quality rather than whether PowerPoint could render a file.
+Three models, GPT-6.1 Sol, Claude Opus 5.5 and Muse Wonder Full, each made one deck in each of the four setups for two eight-slide tasks written for this study: 24 final decks. Three judge models scored every deck alone (72 scores) and compared 48 matched pairs of decks head to head, each pair in both orders (288 judgments). Head-to-head results are given as **win credit**: the share of judgments a deck or setup won, with a tie counting half, so 50% means no preference.
 
-Read this table down a column when choosing a model. GPT's 95.8% with helpers plus text does not establish that this is its best tool setup: its opponents' decks also change between columns. The next section compares tools while keeping the model fixed.
+- Judges preferred GPT-6.1 Sol's decks in all four setups, with 81% to 96% win credit against the other two models. It won all 48 judgments against Muse Wonder Full and 34 of 48 against Claude Opus 5.5 (10 lost, 4 ties). Most of the margin over Claude comes from one task, on which all four Claude decks left the $155k yearly saving off the closing slide and GPT won 22 of 24 judgments. On the other task GPT won 12, Claude 9, with 3 ties.
+- Muse Wonder Full won none of its 96 head-to-head judgments (2 were ties), a floor. Six of its eight risk charts put likelihood on the vertical axis, the opposite of the judges' task card, and judges also reported axis numbers that did not line up with the grid.
+- Screenshot review was preferred over text review: 61% win credit across 12 matched pairs of decks, 69% with basic tools and 53% with layout helpers. Layout helpers were not: 38% against basic tools, 28% when combined with screenshot review. Individual scores moved the same way by little (+1.6 and −1.1 points out of 100), and neither change passed the adoption rule set before the decks were made.
+- All 24 decks built and rendered, and no deck or head-to-head judgment was lost to an unreadable reply. One of the 72 individual scores needed a narrow repair. The comparisons are about judged quality, not broken output.
 
-![Head-to-head model results in all four conditions](figures/full_models.png)
+In the original situation: for a deck like the one in the example, start with GPT-6.1 Sol, let it draw with the basic tools, and show it pictures of its draft before it revises. Whichever model drafts the deck, check the closing slide's figures and the risk chart against the plan yourself, because every requirement the judges marked unmet was on one of those two slides.
 
-Each table cell covers four deck pairs: two opponents on two briefs. Every pair is judged in both orders. We average the two orders within each judge, then weight judges and briefs equally.
+The main caveat is that the test is small and uneven: two tasks with the same structure, one deck per model and setup, and two details (the yearly saving on the closing slide, and likelihood on the horizontal axis of the risk chart) that were written on the judges' task cards but not in the deck makers' instructions. One omission on one task accounts for most of the gap between GPT and Claude.
 
-To check whether judges favor their own vendor, we also exclude judges from the two vendors whose decks are being compared. Averaged across all four setups, that leaves GPT at 82.8%, Claude at 65.6% and Muse at 1.6%. The ordering remains, but this check has only one judge vendor per matchup. It is a useful check on the result, with limited evidence for a general ranking.
+## Contents
 
-## Choosing a harness from the ablation results
+1. [The tasks and the change request](#1-the-tasks-and-the-change-request)
+2. [How a deck is made and judged](#2-how-a-deck-is-made-and-judged)
+3. [The models and the measures](#3-the-models-and-the-measures)
+4. [How the study got here](#4-how-the-study-got-here)
+5. [Results: which model's decks judges preferred](#5-results-which-models-decks-judges-preferred)
+6. [Results: what layout helpers and screenshot review changed](#6-results-what-layout-helpers-and-screenshot-review-changed)
+7. [Results: how far scores, preferences and judges agree](#7-results-how-far-scores-preferences-and-judges-agree)
+8. [Error analysis](#8-error-analysis)
+9. [What the evidence supports](#9-what-the-evidence-supports)
+10. [Limitations](#10-limitations)
+11. [Spend, data and how to run](#11-spend-data-and-how-to-run)
+12. [Future work and further reading](#12-future-work-and-further-reading)
 
-Screenshot review looks most useful when paired with primitives. It earned 69.4% win credit against text review in that setting. With helpers, the result was much closer to even at 52.8%.
+## 1. The tasks and the change request
 
-These comparisons change one tool choice at a time for the same model and brief. Each row averages six deck pairs: three models on two briefs.
+The two tasks are fictional decision briefs generated in Python from fixed templates and seeded random numbers, so every correct value is known exactly. Both follow the outline of the opening example:
 
-| Change being tested | Other choice kept the same | Win credit for the change |
-|---|---|---:|
-| Add helpers to primitives | Text review | 48.6% |
-| Add helpers to primitives | Screenshot review | 27.8% |
-| Add screenshots to text review | Primitives | 69.4% |
-| Add screenshots to text review | Helpers | 52.8% |
+| Slide | What the brief asks for |
+|---|---|
+| 1 | Recommendation, chosen investment, yearly saving, payback and three-year net saving |
+| 2 | Six-month actual-versus-target chart with all 12 values, totals and the gap |
+| 3 | Option table with every cell, and the selected option's tradeoff |
+| 4 | Chart of downside, base and upside savings (80%, 100%, 120%), with three paybacks and three-year figures |
+| 5 | Five-site table with every cell, total daily demand and capacity, and the sites that lack capacity |
+| 6 | Two-lane roadmap (Technical and People) with a decision gate and its dependencies |
+| 7 | Likelihood-by-impact risk chart with labelled axes, risk IDs at the right coordinates, and all mitigations |
+| 8 | Funding and go/no-go decision: gate timing, every threshold, HOLD if any threshold fails, and the rollout |
 
-Helpers were close to even under text review and lost more often under screenshot review. The header repair fixed the observed title collision, but the helper bundle still did not earn a place as the default in this pilot. This tests the particular helpers supplied here; it does not show that reusable layouts are generally unhelpful.
+The first task, **Aster** (code `pilot-00`), is about distribution capacity for an operations committee, counted in shipments. The second, **Cedar** (code `pilot-01`), is a sensor rollout for an engineering steering group, counted in readings. Their monthly results and site tables differ; their option prices are almost the same (only Lean differs, $220k against $210k), and both change to Resilient at $440k and $155k a year.
 
-![Both factor comparisons under each control setting](figures/full_factors.png)
+Each model first drafts the deck recommending Balanced. It then gets one change request with linked edits:
 
-The comparisons within GPT support trying primitives plus screenshots first: on these two briefs, that setup earned 83.3% credit against GPT's primitives plus text, and 100% against GPT's helpers plus screenshots. We did not directly compare GPT's primitives plus screenshots with its helpers plus text, so the experiment has not identified a winner among every possible setup for GPT.
-
-The effect also depends on the model. With helpers, screenshot review earned only 20.8% for GPT but 83.3% for Muse. An average across models can hide a poor combination for the model you plan to use. The [per-model comparisons](data/harder/paired_full/factors_by_model.csv) give the full breakdown.
-
-Legibility helps explain what to investigate next. Helpers earned 35.4% credit on this dimension, while screenshot review earned 69.4%. These votes describe what judges preferred; they cannot identify which individual helper caused a problem.
-
-![Factor preferences by judged dimension](figures/full_dimensions.png)
-
-The tools' effects do not simply add up. Helper credit fell from 48.6% with text review to 27.8% with screenshots, a difference of 20.8 percentage points. The figure below shows those changes separately for each model and brief. A percentage point is the difference between two percentages; these values describe changes in preference.
-
-![Preference changes when the other feature is present](figures/full_interactions.png)
-
-The earlier individual ratings point in the same broad direction: helpers changed the average score by -1.1/100 and screenshots by +1.6/100. The [full comparison table](data/harder/paired_full/factors.csv) includes score changes and results excluding each deck maker's own vendor. With primitives, screenshot review still earned 68.8% under that second judge panel.
-
-## See the ablations on the same slide
-
-These examples hold the model, brief and slide fixed: GPT-6.1 Sol, the first brief (`pilot-00`), and slide 3's option comparison. We chose this slide to illustrate text-fit differences mentioned in the saved judges' reasons. All four images are original final-deck screenshots; click an image to inspect it at full size.
-
-Read across a row to compare text and screenshot review. Those are independent revisions of the same draft. Read down a column to compare primitives with optional helpers, keeping review mode fixed; those authoring setups start from different drafts.
-
-| Authoring tools | Text review | Screenshot review |
+| Requested change | What a correct revision must do | What must stay the same |
 |---|---|---|
-| Primitives | [![GPT primitives with text review: the lower-right callout runs past its bottom edge](data/harder/artifacts/180b0686bfd85db8/slide-3.png)](data/harder/artifacts/180b0686bfd85db8/slide-3.png) | [![GPT primitives with screenshot review: shorter callouts fit inside their boxes](data/harder/artifacts/3ac382cc672b488c/slide-3.png)](data/harder/artifacts/3ac382cc672b488c/slide-3.png) |
-| Helpers available | [![GPT helpers with text review: a wider tradeoff box and contained supporting text](data/harder/artifacts/499a039c76dbef27/slide-3.png)](data/harder/artifacts/499a039c76dbef27/slide-3.png) | [![GPT helpers with screenshot review: added comparison text and a lower-right callout reaching past its box](data/harder/artifacts/beba013335974f93/slide-3.png)](data/harder/artifacts/beba013335974f93/slide-3.png) |
+| Select Resilient at $440k investment and $155k yearly saving | Update the opening and closing decision; payback 440 / 155 = 2.8 years; three-year net 3 × 155 − 440 = $25k | The reference prices and savings in the option table |
+| Recalculate the downside, base and upside cases | Savings $124k / $155k / $186k, paybacks 3.5 / 2.8 / 2.4 years, three-year nets −$68k / $25k / $118k | The 80% / 100% / 120% definitions |
+| Correct month 4's actual value (Aster 910 to 1080 shipments; Cedar 980 to 1150 readings) | Update that bar, the total actual and the remaining gap to target | The other months and all targets |
+| Move the gate to week 10 and rollout to weeks 11-14 | Update the roadmap and the final decision; Validate and Train both stay gate prerequisites | Other activity weeks and all thresholds |
+| Add risk R5 at likelihood 3, impact 5 | Place it on the risk chart with "Test backup power before gate" | R1 to R4, their mitigations, and every site-table cell |
 
-In the top row, the text-review version's words “more saving.” run past the bottom of the right-hand box. The screenshot-review version reorganizes the explanation into two shorter callouts that fit. That is a concrete example of the text-fit improvements judges cited when preferring the primitives-plus-screenshots deck.
+The judges' 24 requirements turn this into yes-or-no checks. The deck makers never saw that list, only the brief, the facts and the change request, and on two points the list is more specific. Requirement 3 asks for the investment and the yearly saving on slides 1 and 8, while the brief asks slide 8 for the "funding and go/no-go decision". Requirements 20 and 21 check the risk chart against a task card that says "likelihood on x, impact on y", while the brief asks only for a "likelihood-by-impact risk matrix with labeled axes". Both points matter in the results.
 
-The bottom row shows why screenshot review is not an automatic improvement. It adds a comparison with Lean, but the right-hand paragraph now reaches past its box at “week 10 gate.” Under text review, the helper-enabled version instead uses a wider tradeoff box and keeps both explanations contained. The option-table values remain the same across all four slides. These layouts show the effect of offering the helper bundle; they do not identify a particular helper as the cause.
+The tasks are synthetic, MIT licensed and newer than every model: generated on 2026-10-21, against training cutoffs of 2026-04-30 (GPT-6.1 Sol, GPT-6 Astra) and June 2026 (Claude Opus 5.5) and Muse Wonder Full's release on 2026-10-12 (`data/harder/date_provenance.json`).
 
-The following numbers connect the pictured decks to the ablation results. They are preferences between the complete eight-slide decks, not scores for this slide alone. Each example pair has six judgments: three judges in both orders. The study average covers six deck pairs, three models on two briefs.
+## 2. How a deck is made and judged
 
-| Change being tested | Other choice kept fixed | Win credit for the change, pictured decks | Win credit across the study |
-|---|---|---:|---:|
-| Add helpers | Text review | 91.7% | 48.6% |
-| Add helpers | Screenshot review | 0.0% | 27.8% |
-| Add screenshots | Primitives | 100.0% | 69.4% |
-| Add screenshots | Helpers | 16.7% | 52.8% |
+Each model writes a draft from the brief with either the basic tools or the basic tools plus layout helpers. That draft is revised twice, independently, with text review and with screenshot review, both given the same change request: 3 models × 2 tasks × 4 setups = 24 final decks from 12 drafts. Every final deck costs one draft call and one revision call, so the two review modes are matched in calls but not in input size or time.
 
-All six judgments preferred screenshot review for the pictured primitive decks. With helpers, four preferred text review and two tied. Helpers themselves received five wins and one tie under text review, but six losses under screenshot review. This example makes the interaction visible: the value of one feature depends on the other feature already present. The differences between the example and study averages also show why one attractive slide cannot establish the best harness.
+```mermaid
+flowchart TD
+    P["Four-slide first run: 24 decks, 864 of 864 checks met<br/>led to a title repair and a longer task"] --> A
+    A["2 eight-slide tasks (Aster, Cedar)<br/>24 requirements on the judges' task cards"] --> B
+    B["12 draft calls<br/>3 deck makers x 2 tool sets x 2 tasks"] --> R1["PowerPoint draws 12 drafts<br/>96 slide images"]
+    B --> T["12 text-review revisions"]
+    R1 --> V["12 screenshot-review revisions<br/>+ 8 draft images each"]
+    T --> F["24 final decks, 192 slide images"]
+    V --> F
+    K["6 image-reading checks, all passed"] --> S
+    F --> S["Individual scoring: 3 judges x 24 decks<br/>= 72 scores with 24 checks each"]
+    F --> H["Head-to-head: 48 pairs x 3 judges x 2 orders<br/>= 288 judgments"]
+    S --> O["Scores, unmet requirements and win credit<br/>by model and by tool change"]
+    H --> O
+```
 
-The [per-pair results](data/harder/paired_full/factors_by_pair.csv) and [saved judge reasons](data/harder/paired_full/judgments.json) retain the evidence behind these comparisons. Judges assessed the whole deck, so the callouts shown here illustrate only part of their reasoning.
-
-## What the scores tell us
-
-Individual scores and direct comparisons usually agreed: the higher-scoring deck also won the head-to-head comparison in 37 of 40 pairs without a tie on either measure. Three pairs disagreed, and eight more were tied on at least one measure. GPT's mean individual score was 87.5/100, but the paired results give that number context by showing which alternatives judges preferred.
-
-Judges also returned different preferences between the two presentation orders on 32 of 144 judge-pair checks. That can reflect both sensitivity to order and ordinary variation between responses; this study cannot separate them. Keeping both orders helps avoid relying on a single presentation of the decks. Across all 288 decisions, judges chose a tie 51 times.
-
-For the next study, keep individual scores to describe a deck's strengths and weaknesses, and keep head-to-head comparisons to support choices between alternatives. These results do not turn a 9/10 score into a universal measure across different topics or deck lengths.
-
-![Absolute-score margins and direct preferences](figures/full_reliability.png)
-
-## Look at the decks
-
-The suggested starting setup is available as a [GPT primitives-plus-screenshots deck](data/harder/artifacts/3ac382cc672b488c/deck.pptx) and a [slide preview](data/harder/artifacts/3ac382cc672b488c/contact.png). The examples below use that same first brief, so you can inspect the different models' output on the same content. Experimental defects have been left in place.
-
-| Model making the deck | Primitives + text | Helpers + screenshots |
-|---|---|---|
-| GPT-6.1 Sol | [PPTX](data/harder/artifacts/180b0686bfd85db8/deck.pptx), [preview](data/harder/artifacts/180b0686bfd85db8/contact.png) | [PPTX](data/harder/artifacts/beba013335974f93/deck.pptx), [preview](data/harder/artifacts/beba013335974f93/contact.png) |
-| Claude Opus 5.5 | [PPTX](data/harder/artifacts/494bc96620387047/deck.pptx), [preview](data/harder/artifacts/494bc96620387047/contact.png) | [PPTX](data/harder/artifacts/2555ca16c56d227b/deck.pptx), [preview](data/harder/artifacts/2555ca16c56d227b/contact.png) |
-| Muse Wonder Full | [PPTX](data/harder/artifacts/a2298a70bdc31a0c/deck.pptx), [preview](data/harder/artifacts/a2298a70bdc31a0c/contact.png) | [PPTX](data/harder/artifacts/005b8e576ac75c08/deck.pptx), [preview](data/harder/artifacts/005b8e576ac75c08/contact.png) |
-
-Notebook section 15 also shows the pair with the largest score difference where the direct comparison went the other way. It includes both roadmap slides and the judges' exact reasons, chosen by a fixed rule rather than by how persuasive the example looks.
-
-## Why we made the tasks harder
-
-The first pilot used four-slide decks. Judges marked all 864 factual checks as passed, which left little room to tell whether the tools helped preserve facts. We also found a title wrapping into its subtitle. The revised [header helper](harness.py) measures the text and reserves separate space for each line. Collisions fell from 6 to 0 across 12 development headers in three fonts.
-
-This checks that the repair addresses the known layout problem. Whether the resulting decks are better is a separate question, answered by the model judges.
-
-![Original and repaired header on the same scene](figures/header_fix.png)
-
-The harder task asks for eight slides, including financial comparisons, charts, a two-lane delivery plan and a risk matrix. A later change request updates the selected option and its calculations, a monthly result, project timing and a risk. Those edits must reach the right slides while the other facts stay intact. The 24 final decks contain 48 editable charts and 108 editable tables.
-
-Judges marked 52 of 1,728 requirement checks as unmet on these longer decks. Those are individual judge responses, so several can refer to the same deck error. These failures give us concrete examples of where edits and fact preservation need more work.
-
-![Requirement checks marked unmet](figures/harder_requirements.png)
-
-The example below is the lowest-scoring deck, showing the slide judges most often picked as its weakest. Notebook section 13 includes their reasons and the checklist disagreements.
-
-![Lowest-scoring harder-pilot deck](figures/harder_error.png)
-
-## How the study works
-
-Each model makes a draft using either primitives or helpers. That draft then takes two separate revision paths, one with text review and one with screenshots. Both paths receive the same change request. This creates 24 final decks from 12 drafts.
+The model calls for one draft and its two final decks are below. There is no loop: each call gets one prompt and returns one reply, at most three calls run at once, and each step waits for the outputs it needs.
 
 ```mermaid
 flowchart LR
-    old["Original: 24 four-slide decks<br/>132 model calls"] --> fix["Header repair<br/>check in three fonts"]
-    fix --> data["2 fresh eight-slide briefs<br/>24 visible requirements each"]
-    data --> draft["3 models x 2 authoring choices<br/>12 shared drafts"]
-    draft --> edits["Text or screenshots + same edit<br/>24 final decks, 192 screenshots"]
-    controls["6 image-reading checks<br/>all passed"] --> judges
-    edits --> judges["3 frontier screenshot judges<br/>72 individual deck ratings"]
-    edits --> pairs["48 matched deck pairs, both orders<br/>288 paired judgments"]
-    reused["108 focused judgments reused<br/>180 additional calls"] --> pairs
-    judges --> results["Model choices and tool comparisons<br/>scores, preferences and errors"]
-    pairs --> results
+    brief["Brief + tool documentation"] --> draft["Deck maker draft call<br/>GPT-6.1 Sol (codex exec), Claude Opus 5.5 (claude -p)<br/>or Muse Wonder Full (muse exec)<br/>returns JSON slide description"]
+    draft --> render["Build .pptx, PowerPoint draws 8 slides<br/>wait for images"]
+    draft --> rt["Same model, text review<br/>draft JSON + change request<br/>returns revised JSON"]
+    render --> rv["Same model, screenshot review<br/>same input + 8 images<br/>returns revised JSON"]
+    rt --> fin["Build and draw both final decks"]
+    rv --> fin
+    fin --> js["3 judges, 1 call per deck: GPT-6 Astra (codex exec),<br/>Claude Opus 5.5 (claude -p), Muse Wonder Full (muse exec)<br/>scores + 24 checks"]
+    fin --> jh["3 judges x 2 orders per pair<br/>A, B or tie, with reasons"]
 ```
 
-GPT-6.1 Sol, Claude Opus 5.5 and Muse Wonder Full make the decks. They return structured descriptions of the slides; the [harness](harness.py) turns those descriptions into editable PowerPoint objects. PowerPoint itself produces the screenshots, so the judges see the rendered output.
+Every call runs in an empty folder with the model's tools off, at medium effort; the study's program ([harness.py](harness.py)), not the model, builds the file. Judges get no model names, source files or extracted text. Before judging, each judge had to read a code from an image and prefer a clean slide over a damaged copy in both orders; all six checks passed.
 
-The judges are GPT-6 Astra, Claude Opus 5.5 and Muse Wonder Full. They see only slide screenshots and images of the task requirements. They do not receive the deck maker's name, source files, extracted slide text or earlier ratings. Each deck gets a score for design, legibility, visual communication, coherence and meeting requirements. The five scores have equal weight and are converted to a total out of 100.
+### Worked example: one deck from brief to result
 
-In a head-to-head comparison, each judge chooses deck A, deck B or a tie, and gives reasons. The study has 24 pairs comparing models, 12 comparing helpers and 12 comparing screenshot review. Every pair uses the same brief. Three judges seeing each of the 48 pairs in both orders gives 288 judgments.
+This is GPT-6.1 Sol's Aster deck with basic tools and screenshot review, deck `3ac382cc672b488c`.
 
-All six preliminary image checks passed: judges could read an image-only code and preferred clean text over a damaged version with overlapping, low-contrast text. These checks establish basic image use; they do not establish agreement with a human audience.
+1. Draft. Given the basic-tools documentation and the Aster brief, GPT-6.1 Sol returned a 16,493-character slide description in 137 seconds. PowerPoint drew it as draft `9fb3815fe53d4f18`: eight slides, 2 charts, 5 tables and 8 connector lines.
+2. Revision. The text-review call received the draft description and the change request. The screenshot-review call received the same plus eight slide images and the line "The attached images show your actual rendered draft, in slide order. Use them to find visual defects." It returned a 15,361-character description in 98 seconds whose first slide is titled "Choose Resilient: uptime now outranks price".
+3. The final decks. Below is slide 3 of the draft, the text-review deck `180b0686bfd85db8` and the screenshot-review deck `3ac382cc672b488c`. The draft's boxes fit. The text-review revision rewrote the right-hand box, and its last words "more saving." run past the bottom edge; the screenshot-review revision kept both boxes short enough to fit.
 
-## How far to take the recommendation
+| Draft (shared) | Text review | Screenshot review |
+|---|---|---|
+| [![Draft slide 3; both boxes fit](data/harder/artifacts/9fb3815fe53d4f18/slide-3.png)](data/harder/artifacts/9fb3815fe53d4f18/slide-3.png) | [![Text-review slide 3; right box overflows](data/harder/artifacts/180b0686bfd85db8/slide-3.png)](data/harder/artifacts/180b0686bfd85db8/slide-3.png) | [![Screenshot-review slide 3; both boxes fit](data/harder/artifacts/3ac382cc672b488c/slide-3.png)](data/harder/artifacts/3ac382cc672b488c/slide-3.png) |
 
-The recommendation to try GPT with primitives and screenshots applies to decks like these. The two briefs share a structure, and each model gets only one attempt at each draft and revision. More judge votes give us more views of those decks, but they do not create more independent tasks.
+4. Individual scores. All three judges gave the screenshot-review deck 4 for design, legibility and visual communication and 5 for coherence and requirements, and all three marked all 24 requirements met. The average of the five ratings is 4.4 out of 5, which is 88.0 out of 100. GPT-6 Astra's most important fix was to "stagger slide 2's M4 value labels so 1080 actual and 1040 target are immediately distinguishable".
+5. Head to head. This deck won all 6 judgments against its text-review twin (pair `5dc18af4c096d50f`; Claude Opus 5.5 as judge: "Deck A has visible text overflow: on A3 the tradeoff callout's 'more saving.' spills below its box"), all 6 against GPT's layout-helper deck with screenshot review, and all 6 against Muse's deck. Against Claude's deck in the same setup it won 4, tied 1 and lost 1, which section 3 turns into win credit.
 
-The tasks also have narrow financial coverage: annual savings are fixed by the template, and both briefs drew the same selected investment. Monthly and site values differ. GPT assistance wrote the templates and data-generation code, which can introduce author preferences. Helpers are optional, so the experiment tests access to them rather than forcing the same layout on every model.
+## 3. The models and the measures
 
-Before collecting the harder pilot, we set a rule for expanding a feature into a larger study. It required at least 90% valid decks, better scores on both briefs under both judge panels, no loss on requirement checks, and tasks hard enough to produce some checklist failures. Neither helpers nor screenshots met every part of that rule. The later head-to-head results help choose what to try next, but do not replace that earlier rule after seeing the outcomes.
+| Model | Pinned version | Provider and how called | Size and precision | Settings | Role and why included |
+|---|---|---|---|---|---|
+| GPT-6.1 Sol | Requested `gpt-6.1-sol`; Codex returned no version | OpenAI, `codex exec` (CLI 0.160.1) | Not published | Medium effort; tools off; empty folder; reply up to 75,000 characters; 600 s timeout | Deck maker from one of the three companies whose models this repository calls through their own tools; cutoff 2026-04-30 |
+| Claude Opus 5.5 | `claude-opus-5-5`, reported by the CLI in all 178 calls; no dated version | Anthropic, `claude -p` (CLI 2.1.296) | Not published | As above; $3 cap per call | Deck maker and judge; cutoff June 2026 |
+| Muse Wonder Full | Requested `muse-wonder-full-1.0`; the CLI returned no version | Meta, `muse exec` (CLI 1.4.11-R6667.1) | Not published | As above | Deck maker and judge; the newest model here, released 2026-10-12 |
+| GPT-6 Astra | Requested `gpt-6-astra`; no version returned | OpenAI, `codex exec` (CLI 0.160.1) | Not published | As above | Judge only. The data do not record why a different OpenAI model judges than the one that makes decks |
 
-The next step is to test distinct presentation structures and repeated generations, and to examine the helper components separately. This pilot does not cover photographs, animations, imported templates or unrestricted authoring code. It also cannot isolate the quality effect of the header repair, because the tasks became harder at the same time.
+Claude Opus 5.5 and Muse Wonder Full judge decks they made themselves. To check whether that matters, the **other-vendor check** repeats each result using only judges from companies whose model did not make either deck in the comparison. For a comparison between two models this leaves a single judge.
 
-## Spend and saved evidence
+An individual score works like this. Each judge rates five aspects from 0 to 5, where 3 means "usable with noticeable defects" and 4 means "polished with minor defects". The five ratings are averaged, multiplied by 20 to give a score out of 100, and averaged over the three judges. Higher is better. The requirement checks are reported separately as the number of "unmet" marks.
 
-Models were called through their command-line programs (CLIs): `codex exec`, `claude -p` and `muse exec`. Claude reports a list-price equivalent, which is not the same as an incremental subscription charge. The other CLIs do not expose dollar costs.
+For win credit, a head-to-head win counts 1, a tie 0.5 and a loss 0. Each judge sees each pair twice, once in each order, and its two answers are averaged; the three judges are then averaged. Higher is better for the deck or setup named, and 50% means the judges had no preference. For example, deck `3ac382cc672b488c` (GPT) against deck `e481d71c6ece0a7d` (Claude), both with basic tools and screenshot review on the Aster task:
 
-| Work covered | Model-call attempts | Known Claude list-price equivalent |
+| Judge | First order | Second order | Credit for GPT's deck |
+|---|---|---|---:|
+| Claude Opus 5.5 | GPT | GPT | (1 + 1) / 2 = 100% |
+| GPT-6 Astra | tie | GPT | (0.5 + 1) / 2 = 75% |
+| Muse Wonder Full | Claude | GPT | (0 + 1) / 2 = 50% |
+| Average | | | 75% |
+
+A model's win credit in one setup averages its four pairs: two opponents on two tasks. GPT's 89.6% with basic tools and screenshot review is the average of 75% and 83.3% against Claude and 100% and 100% against Muse. For a tool change, win credit averages six pairs (three models on two tasks) of decks that differ only in that tool. Win credit says how often judges preferred a deck, not how much better it was: a deck that wins every judgment narrowly gets 100%.
+
+The protocol ruled out confidence intervals and p-values from two tasks, since judges and orders add views of the same decks, not tasks; the results give the spread by task and the pairs won instead.
+
+## 4. How the study got here
+
+The study began with four-slide decks (recommendation, an eight-value chart, a site table and a four-step process) and a smaller change request, with the same models, setups and judges: 132 calls, 24 decks, all rendered. That run changed the design in two ways.
+
+First, the requirement checks were at a ceiling: judges marked all 864 of them met (24 decks × 12 requirements × 3 judges), so the run could not show whether any setup kept facts better. GPT-6.1 Sol averaged 94.5 out of 100, with three of its setups tied at 94.7; layout helpers changed scores by −2.9 points and screenshot review by +0.2. Neither passed the rule set for adopting it.
+
+Second, the lowest-scoring deck (Claude Opus 5.5, layout helpers with text review, 74.7 out of 100) failed because of a helper. All three judges named the same fault: on slides 2 and 4 the title wrapped onto a second line and ran into the subtitle. The original title helper placed both lines in fixed boxes.
+
+So the title helper (code name `header`) was repaired, and the task was made longer. The repaired helper measures the text with the installed font, reserves a two-line band for a 24 to 27 point title and a separate band for a 10 to 12 point subtitle, starts the slide body 1.7 inches from the top, and refuses a title that still does not fit. Redrawing the four titles of the failing deck in each of the three allowed fonts gave 6 collisions with the old helper and 0 with the repaired one. The other three helpers and the basic tools did not change: 18 four-slide basic-tools decks rebuilt to identical slide, chart and workbook content.
+
+In the figure below, the left copy is slide 4 of the failing deck (`data/artifacts/85f6a9f3611d0a54`) with the old title helper, and the right copy is the same slide description with the repaired helper. Compare the first two lines of each.
+
+![Two copies of the same four-slide slide: on the left the old title helper lets a two-line title run into its subtitle; on the right the repaired helper keeps them in separate bands](figures/header_fix.png)
+
+The collision is gone. This check cannot show whether the repair improves whole decks, because the eight-slide task changed at the same time.
+
+The eight-slide study then used the task in section 1. Its individual-scoring plan, including the rule for adopting a feature, was fixed before any deck was made. The head-to-head comparisons were added after the decks existed, while the individual scores were being collected. A first set of 18 pairs was fixed before any head-to-head judgment; the remaining 30 pairs, which complete every comparison, were added after those 18 had been judged. The results below use all 48 pairs, with the first 18 included unchanged. The run history is in [data/PROTOCOL.md](data/PROTOCOL.md).
+
+## 5. Results: which model's decks judges preferred
+
+Read the table down a column: each column compares the three models with the same tools on the same two tasks. Each cell gives win credit against the other two models and, in brackets, the mean individual score out of 100.
+
+| Deck maker | Basic tools + text review | Basic tools + screenshot review | Layout helpers + text review | Layout helpers + screenshot review | Mean score |
+|---|---:|---:|---:|---:|---:|
+| GPT-6.1 Sol | 83.3% (86.7) | 89.6% (88.0) | 95.8% (88.7) | 81.2% (86.7) | 87.5 |
+| Claude Opus 5.5 | 66.7% (86.0) | 60.4% (86.7) | 52.1% (84.0) | 66.7% (86.0) | 85.7 |
+| Muse Wonder Full | 0.0% (74.7) | 0.0% (79.3) | 2.1% (73.3) | 2.1% (76.0) | 75.8 |
+
+The figure splits each model's win credit by opponent. Each panel is one setup, titled with code names: "primitive" means basic tools, "helpers" means layout helpers, and "text" and "screenshots" are the two review modes. Each cell gives the row model's win credit against the column model, averaged over two tasks, three judges and both orders, so opposite cells add to 100%. Blue favours the row model and red the column model. The 81.2% to 95.8% in the title is GPT's row of the table above.
+
+![Four heat maps, one per setup, of head-to-head win credit for each row model against each column model; GPT's row is blue in every panel and Muse's row is red](figures/full_models.png)
+
+GPT-6.1 Sol led in every setup. GPT won all 48 judgments against Muse Wonder Full, and Claude Opus 5.5 won 46 of 48 against Muse with 2 ties, so Muse won none of its 96. That is a floor: the test cannot say how far behind Muse was. Its individual scores say the same more mildly, 75.8 against 85.7 and 87.5, lowest on visual communication (3.1 out of 5 against 4.0 and 4.2).
+
+The comparison that matters for choosing a model is GPT against Claude. Over 48 judgments GPT won 34, Claude 10, and 4 were ties, and GPT won 6 of the 8 deck pairs. But the two tasks tell different stories:
+
+| Task | GPT wins | Claude wins | Ties | GPT's win credit | GPT's credit, other-vendor judge only |
+|---|---:|---:|---:|---:|---:|
+| Aster | 12 | 9 | 3 | 56.3% | 31.3% |
+| Cedar | 22 | 1 | 1 | 93.8% | 100% |
+
+On Aster the two were close: each won two of the four deck pairs, Claude's decks had slightly higher individual scores (87.7 against 87.0), and Muse Wonder Full, the only judge whose company made neither deck, preferred Claude. On Cedar GPT won almost everything. The reason is one figure: all four of Claude's Cedar decks left the $155k yearly saving off slide 8, and 23 of the 24 judges' reasons in those comparisons point this out. Section 8 shows the slide.
+
+The judges' choices on the five aspects show where each model was preferred. Against Claude, GPT's decks got 80% of the credit for design and 84% for legibility, but only 18% for visual communication, the aspect that asks whether charts, tables and diagrams clarify relationships (computed from `data/harder/paired_full/votes.csv`, GPT-against-Claude rows, aspect columns).
+
+With other-vendor judges only, averaged over the four setups, GPT gets 82.8%, Claude 65.6% and Muse 1.6%, against 87.5%, 61.5% and 1.0% with all judges; with one judge per comparison this check is weak. A final deck took on average 232 seconds of model time for GPT (draft plus revision), 305 for Claude and 162 for Muse (`data/harder/engineering.csv`, `two_call_s`).
+
+## 6. Results: what layout helpers and screenshot review changed
+
+These comparisons hold the model and the task fixed and change one tool. Each row covers six pairs of decks (three models on two tasks), every pair judged by three judges in both orders.
+
+| Change | Kept the same | Win credit for the change | Pairs won / tied / lost | Other-vendor judges only | Change in mean score |
+|---|---|---:|---:|---:|---:|
+| Add screenshot review | Basic tools | 69.4% | 4 / 1 / 1 | 68.8% | +2.2 |
+| Add screenshot review | Layout helpers | 52.8% | 3 / 1 / 2 | 50.0% | +0.9 |
+| Add layout helpers | Text review | 48.6% | 2 / 1 / 3 | 54.2% | −0.4 |
+| Add layout helpers | Screenshot review | 27.8% | 1 / 0 / 5 | 27.1% | −1.8 |
+
+Pooled over both settings, screenshot review earned 61.1% win credit (58.3% on Aster, 63.9% on Cedar) and layout helpers 38.2% (31.9% on Aster, 44.4% on Cedar). Both features point the same way on both tasks.
+
+The next figure shows the six pairs behind each row. Each panel is one row of the table, and each dot is one model on one task: teal for Aster (`pilot-00` in the legend) and orange for Cedar (`pilot-01`). The vertical axis, labelled "treatment win credit", is the win credit for the added tool; dots above the dashed 50% line favour adding it. The panel title gives the average of the six dots.
+
+![Four panels of dots, one per tool comparison; each dot is one model on one task, placed at the win credit for the added tool, with a dashed line at 50%](figures/full_factors.png)
+
+Screenshot review helped most when the model drew with basic tools: 4 of 6 pairs won. The one loss was Muse on Aster (16.7%); GPT's Aster pair is the worked example in section 2, won in all 6 judgments. With layout helpers the result was close to even, and it split by model: 20.8% for GPT, 54.2% for Claude, 83.3% for Muse.
+
+Layout helpers lost more than they won, and they lost most when combined with screenshot review: 5 of 6 pairs, including both of GPT's at 0%. The two features did not add up. Adding screenshot review lowered the helpers' credit from 48.6% to 27.8%, and adding helpers lowered screenshot review's credit from 69.4% to 52.8%. With text review, helpers earned 91.7% for GPT on Aster and 16.7% on Cedar, so a pooled average can hide a poor combination for one model ([per-model numbers](data/harder/paired_full/factors_by_model.csv)).
+
+The models also used the helpers differently. Where helpers were offered, Claude and Muse used them on every slide (19.5 helper blocks per deck, including a title block on all 8 slides), while GPT used 8.25 per deck and the title block on 3.5 slides (`data/harder/engineering.csv`, `helper_objects` and `headers`).
+
+Judges also chose a winner on each of the five aspects. In the next figure rows are the four comparisons and columns the five aspects; each cell is the win credit for the added tool on that aspect alone. Blue favours adding the tool, red favours leaving it out.
+
+![Heat map of win credit for the added tool on each of the five judged aspects, one row per tool comparison](figures/full_dimensions.png)
+
+Legibility separates the two features most clearly: screenshot review earned 73.6% and 65.3% on legibility, layout helpers 43.1% and 27.8%. Coherence, whether the eight slides tell one story, stayed near 50% in every row, which fits tools that change layout rather than content.
+
+The worked example in section 2 showed slide 3 of GPT's two Aster decks with basic tools: screenshot review fixed nothing in the draft, which already fit, but avoided the overflow that the text-review revision introduced. GPT's two layout-helper decks for the same task, below, go the other way. Both are revisions of one helper draft; the screenshot-review deck added a comparison with Lean, and its right-hand box runs past its edge at "week 10 gate."
+
+| Layout helpers + text review, `499a039c76dbef27` | Layout helpers + screenshot review, `beba013335974f93` |
+|---|---|
+| [![GPT helpers, text review: text fits](data/harder/artifacts/499a039c76dbef27/slide-3.png)](data/harder/artifacts/499a039c76dbef27/slide-3.png) | [![GPT helpers, screenshot review: right box overflows](data/harder/artifacts/beba013335974f93/slide-3.png)](data/harder/artifacts/beba013335974f93/slide-3.png) |
+
+The option-table values are the same on all four GPT slides. Judges compared whole decks, so one slide shows only part of their reasoning. For these four GPT decks, screenshot review earned 100% with basic tools and 16.7% with helpers, and helpers earned 91.7% with text review and 0% with screenshot review, against study averages of 69.4%, 52.8%, 48.6% and 27.8%: one model on one task can point either way.
+
+The adoption rule, fixed before the eight-slide decks were made, used individual scores: at least 90% of decks built, a score gain on both tasks with all judges and with other-vendor judges, no loss on requirement checks, and checks no longer all met. Layout helpers failed it (−2.4 points on Aster, +0.2 on Cedar). Screenshot review gained on both tasks with all judges (+0.2 and +2.9) but not with other-vendor judges on Aster (0.0), and its decks drew 28 unmet marks of 864 against 24 for text review, the 4 extra all on the risk chart (`data/harder/check_failures.csv`). Screenshot review is the better feature on this evidence but did not meet the bar the study set itself.
+
+## 7. Results: how far scores, preferences and judges agree
+
+If the two judging methods agree, the higher-scoring deck of a pair should usually win head to head. In the left panel of the next figure each dot is one of the 48 pairs. The horizontal axis is the difference in individual score, the first deck minus the second, in points out of 100 (the label's "canonical A" means the deck listed first in the plan, not the one shown first). The vertical axis is the first deck's head-to-head win credit. Dots in the upper-right and lower-left quarters agree; colours mark model comparisons ("model"), helper comparisons ("helpers") and screenshot comparisons ("vision"). The right panel shows, for each judge, the share of pairs where it chose the same deck in both orders.
+
+![Left: scatter of the individual-score difference between two decks against the head-to-head win credit for the first deck, one dot per pair. Right: bars showing how often each judge chose the same deck in both orders](figures/full_reliability.png)
+
+The two methods mostly agree. In the 40 pairs with no tie on either measure, the higher-scoring deck won head to head in 37; the other 8 pairs were tied on at least one measure. Two of the three disagreements are close calls, such as the worked example's pair against Claude, whose deck scored 1.3 points higher but got 25% of the head-to-head credit. The largest is in section 8.
+
+Judges are less consistent about order. In 32 of 144 cases a judge answered differently when the two decks were swapped (Claude Opus 5.5 in 9 of 48, GPT-6 Astra in 11, Muse Wonder Full in 12). That can be position preference or ordinary variation between calls; this study cannot separate them. Of the 288 judgments 51 were ties, 25 from GPT-6 Astra and 32 in screenshot comparisons, where the two decks share a draft.
+
+Judges rating their own company's decks did not drive the model result. Muse Wonder Full scored Muse decks 79.0, against 74.0 and 74.5 from the other judges, but never preferred a Muse deck head to head; Claude Opus 5.5 scored GPT's decks slightly above Claude's (86.0 against 85.5).
+
+## 8. Error analysis
+
+Error analysis starts from the requirement checks: which of the 24 requirements did judges mark unmet? In the next figure the horizontal axis is the requirement number on the judges' third task card, and the vertical axis counts "unmet" marks across 24 decks and 3 judges, out of 72 possible per requirement.
+
+![Bar chart of requirement checks marked unmet, by requirement number: 12 marks on requirement 3, 27 on requirement 20 and 13 on requirement 21, none elsewhere](figures/harder_requirements.png)
+
+Judges marked 52 of the 1,728 checks unmet, and all 52 fall on three requirements: 3 (investment and yearly saving on slides 1 and 8), 20 (risk chart axes and the positions of R1 to R4) and 21 (R5's position and mitigation). Counted by deck, 21 deck-and-requirement combinations got at least one unmet mark and 13 got all three judges' marks. Everything else, including every recalculated figure on slides 1, 2, 4 and 6, was marked met by every judge. By the judges' checks the models made the arithmetic edits correctly; the failures are about where a figure goes.
+
+### The closing slide that dropped a figure
+
+All four of Claude Opus 5.5's Cedar decks (`5781b5b3676fea1c`, `b1d7dd21666bd88a`, `db3ee5e500743b69`, `c1f4a30b85449b30`) show the $440k investment on slide 8 but not the $155k yearly saving. All three judges marked requirement 3 unmet on all four, 12 of the 12 marks on that requirement. GPT-6.1 Sol's deck in the same setup puts both on slide 8:
+
+| Claude Opus 5.5, `5781b5b3676fea1c` | GPT-6.1 Sol, `47680068f2692550` |
+|---|---|
+| [![Claude's Cedar slide 8: $440k, thresholds and HOLD, but no yearly saving](data/harder/artifacts/5781b5b3676fea1c/slide-8.png)](data/harder/artifacts/5781b5b3676fea1c/slide-8.png) | [![GPT's Cedar slide 8: funding card with $440k and $155k annual saving](data/harder/artifacts/47680068f2692550/slide-8.png)](data/harder/artifacts/47680068f2692550/slide-8.png) |
+
+Claude's slide is otherwise complete; it even adds each threshold's current status. GPT-6 Astra's evidence reads: "Slide 8 includes the $440k Resilient recommendation, week-10 gate, weeks 11–14 rollout and all three gate conditions, but omits the required $155k annual saving."
+
+The gap was already in both Claude drafts, whose closing slides showed $350k but not the $130k saving (`ed5008f41aa1aeda`, `b2d6cfcbb7c3a2cb`). All four revisions updated the investment and none added the saving, with or without pictures of the draft: a picture shows what is on a slide, not what is missing. And the deck makers were never asked for the saving on slide 8; their brief asked for the "funding and go/no-go decision", and only the judges' card added the saving. This one difference decides most of the GPT-against-Claude comparison, and it is the clearest case here of a result that depends on judges knowing something the deck makers were not told.
+
+### The risk chart drawn the other way round
+
+The next figure is slide 7 of the lowest-scoring eight-slide deck, Muse Wonder Full with layout helpers and text review on Aster (`2cc2fcb8f8547e7d`, 70.7 out of 100; the title shows the code name `helpers_text`). Compare the grid with the table beside it.
+
+![Slide 7 of Muse's Aster deck with layout helpers and text review: a 5 by 5 risk grid with likelihood on the vertical axis, axis numbers 1 to 5 bunched in the upper half beside the grid, and a table of the five risks with correct values](figures/harder_error.png)
+
+The table gives each risk's likelihood and impact correctly. The grid puts likelihood on the vertical axis, as its subtitle says, while the judges' card asks for likelihood on the horizontal axis. And the vertical axis numbers 1 to 5 sit squeezed into the upper part of the grid, so R1, drawn in the fourth row, reads as likelihood 2. All three judges asked for the chart to be redrawn; Claude Opus 5.5 asked to "put likelihood on the x-axis and impact on the y-axis as specified".
+
+Requirement 20 was marked unmet on all 8 Muse decks and requirement 21 on 7. Six of the eight Muse charts put likelihood on the vertical axis and say so in their labels, such as "likelihood (vertical) by impact (horizontal)" (counted from each deck's `scene.json`, slide 7). The two Cedar decks with layout helpers used the specified orientation and were still marked unmet on requirement 20 (`9bed9e7c71e2d69e` by one judge, `bc776bc485d6f216` by all three), for axis numbers that do not line up with the grid. The word "matrix" appears in 70 of the 96 judges' reasons in Muse's head-to-head pairs. Muse's decks also got only 12% of the design and legibility credit against GPT, so the chart is not the only reason Muse lost, and this data cannot say how Muse would have done had its instructions fixed the orientation. GPT's two flagged decks (`be985f7f5749eb4a`, `71d7446101a259d8`, Cedar with layout helpers) failed on orientation alone; GPT-6 Astra noted that "all five likelihood/impact pairs and mitigations remain visibly correct under its own axis labels".
+
+### When the score and the head-to-head result disagree
+
+The largest disagreement between the two judging methods is pair `ed747770f5aeeece`: two Muse Wonder Full decks for Cedar with screenshot review, one with basic tools (`bc42acd2f0f36cb8`, 81.3) and one with layout helpers (`bc776bc485d6f216`, 78.7). The basic-tools deck scored 2.7 points higher, yet the helper deck won 66.7% of the head-to-head credit.
+
+The figure shows slide 6, the roadmap, of both decks ("canonical A" is the basic-tools deck; `primitive_vision` and `helpers_vision` are the code names of the two setups).
+
+![Slide 6, the roadmap, from both decks: the basic-tools version on top with white boxes and thin connectors, the layout-helper version below with coloured lanes and boxes](figures/full_disagreement.png)
+
+The judges compared all eight slides. Claude Opus 5.5 preferred the helper deck "narrowly on design, visual communication and coherence" while saying the basic-tools deck "wins on legibility and requirements because its risk matrix is the more accurate one". Muse Wonder Full preferred the helper deck because its risk chart followed the specified orientation; GPT-6 Astra preferred it for clearer organisation, noting that "neither risk matrix is fully correct". The individual scores weighted the risk chart's accuracy more, the head-to-head choice the richer presentation elsewhere.
+
+### Typical successes
+
+GPT-6.1 Sol's four basic-tools decks drew no unmet marks (0 of 288 checks), and its Aster deck with screenshot review (section 2) won 22 of its 24 head-to-head judgments. Claude Opus 5.5's Aster decks also drew none, and its `e481d71c6ece0a7d` (89.3) tied GPT's `499a039c76dbef27` for the highest individual score. Among the best decks, presentation, not facts, decided the judgments.
+
+### What these examples cannot show
+
+They show what model judges preferred, not what a committee would, and which slides failed, not why. With one deck per setup, each model's failure could be one habit or the wording of these briefs.
+
+## 9. What the evidence supports
+
+- For an eight-slide decision deck like these, try GPT-6.1 Sol with basic tools and screenshot review first: its decks were preferred in every setup, its basic-tools decks met every requirement, and screenshot review won 4 of 6 pairs with basic tools.
+- Claude Opus 5.5 was close to GPT where it did not drop a figure: on Aster judges split 12 to 9 with 3 ties, and the only judge from a third company preferred Claude.
+- Do not make this set of layout helpers the default. It lost 8 of 12 pairs against basic tools, and legibility was its weakest aspect. The repaired title helper fixed the collision it was built for, but the bundle as a whole did not help.
+- Whichever model drafts the deck, give it the requirement list the reviewer will use, and check the closing slide and any chart where position carries meaning. Every unmet requirement here was on such a slide, and a picture of the draft did not catch a missing figure.
+
+The uncertainty that most needs another experiment is whether GPT's lead over Claude survives when both models get the full requirement list and more varied tasks.
+
+## 10. Limitations
+
+- Two tasks with the same outline, the same final investment and saving, and one deck per model and setup. Judges and orders add views of the same 24 decks, not new tasks. One omission on one task decided most of one model comparison.
+- The judges' task cards were more specific than the deck makers' instructions on two points: the saving on slide 8 and the risk chart's orientation. All 52 unmet marks fell on those two slides.
+- The rule for adopting a feature and the individual-scoring analysis were fixed before the eight-slide decks were made. The head-to-head comparisons, which give the win-credit numbers, were added after the decks existed, and 30 of the 48 pairs were chosen after the first 18 had been judged. No deck was regenerated or selected on its result. Details are in [data/PROTOCOL.md](data/PROTOCOL.md).
+- Judges are language models, and two of them also made decks. The other-vendor check leaves one judge per model comparison. In 32 of 144 cases a judge changed its answer when the order was swapped.
+- Each feature is a bundle: the four helpers are tested together, and screenshot review adds eight images, so input size and time are not matched.
+- One authoring format: a fixed JSON description, with no templates, photographs or free code. Models writing presentation code directly might rank differently.
+- The task templates and the collection code were written with GPT assistance (`data/harder/date_provenance.json`, field `authoring`). OpenAI also makes GPT-6.1 Sol and GPT-6 Astra.
+- No dated model versions were recorded, only requested names and tool versions. The title repair's effect on deck quality is not measured.
+
+## 11. Spend, data and how to run
+
+Models were called only through `codex exec`, `claude -p` and `muse exec`. Claude's tool reports a list-price equivalent, not the subscription charge; the other two report no dollar cost.
+
+| Work | Model-call attempts | Known Claude list-price equivalent |
 |---|---:|---:|
-| Additional comparisons completing the full paired study | 180 | $19.66 |
-| Entire harder pilot, including those comparisons | 403 | $42.97 |
-| Both pilots combined | 535 | $48.65 |
+| Four-slide first run | 132 | $5.68 |
+| Eight-slide decks, individual scores and the first 18 head-to-head pairs | 223 (one reply lost to a full disk) | $23.31 |
+| The remaining 30 head-to-head pairs | 180 | $19.66 |
+| Total | 535 | $48.65 |
 
-These rows include earlier work, so they should not be added together. Dollar costs for 269 attempts in the harder pilot are unknown. The known amounts therefore do not give the total bill.
+The dollar cost of the 357 GPT and Muse calls is unknown. One head-to-head reply was lost to a full disk before anyone read it; the identical request was sent once more.
 
-The [notebook](19_powerpoint_harness.ipynb) contains the analysis, and [harness.py](harness.py) contains the authoring and collection code. Requests, model responses, decks and screenshots are saved under `data/`; the full paired extension is in `data/harder/paired_full/`. File hashes let the replay check that its evidence has not changed. The synthetic inputs are MIT licensed, with creation dates and model date sources recorded in each pilot's `date_provenance.json`.
+| File or folder in `data/` | What it holds |
+|---|---|
+| `harder/cases.json`, `harder/tasks/` | The two tasks and the judges' task-card images |
+| `harder/runs.json`, `harder/drafts.json` | Which deck ID is which model, task and setup |
+| `harder/artifacts/<id>/` | Each deck's description, `.pptx`, slide images and overview |
+| `harder/cache.jsonl` | Every request and reply except the last 180 head-to-head judgments |
+| `harder/judgments.json`, `deck_scores.csv`, `check_failures.csv` | Individual scores and requirement checks |
+| `harder/paired_full/` | All 288 head-to-head judgments, the 180 new replies, and tables by vote, pair, model and tool change |
+| top level | The four-slide first run (its deck IDs repeat the eight-slide ones; IDs here are eight-slide decks) |
+| `PROTOCOL.md` | Run history, plan versions and amendments |
 
-## How to run
-
-To read and reproduce the results, run these commands from this notebook's folder. They use saved responses, verify the evidence files and regenerate the analysis without calling models or requiring PowerPoint:
+To reproduce the analysis from the saved replies, with no model calls and no PowerPoint, run from this folder:
 
 ```bash
 python -m pip install -r requirements.txt
 python -m nbconvert --to notebook --execute --inplace 19_powerpoint_harness.ipynb
 ```
 
-Collecting new decks needs Windows, PowerPoint and authenticated CLIs. Notebook section 17 gives the commands. The size controls are `--n-briefs`, `MODELS`, `JUDGES`, `--pair-scope` and `--max-calls`. Raising the brief count changes numerical inputs but does not create new presentation structures.
+The notebook checks every evidence file against saved hashes first. Collecting new decks needs Windows, PowerPoint and signed-in `codex`, `claude` and `muse` tools; the commands and size controls (`--n-briefs`, `--max-calls`, `--pair-scope`) are in the notebook's reproduction section and [harness.py](harness.py). The full analysis is in [19_powerpoint_harness.ipynb](19_powerpoint_harness.ipynb).
 
-<details>
-<summary>Extending a focused run and checking the collection details</summary>
+## 12. Future work and further reading
 
-To extend an existing focused run, make a separate copy with the current collector and earlier evidence, omitting the frozen `data/harder/paired_full/` subfolder, then run:
+### Future work
 
-```bash
-python harness.py paired-expand --profile harder --max-calls 430
-python harness.py paired-collect --profile harder --pair-scope full --live --max-calls 430
-python harness.py paired-manifest --profile harder
-```
+- Give the deck makers the judges' requirement list. Re-run the eight-slide task with the 24 requirements in the instructions and measure whether GPT's lead over Claude remains (motivated by Claude's slide 8, which decided most of the 24 Cedar judgments against GPT, and by the risk chart, which drew 40 of the 52 unmet marks).
+- More and different tasks. Write at least 12 briefs with different outlines (a research talk, a training plan, a budget review), make three decks per setup, and report intervals that resample tasks rather than judge votes (motivated by GPT's 56% against Claude on one task and 94% on the other).
+- Test the helpers one at a time: title block, key-number card, row of steps and columns, each against basic tools, with legibility as the main measure (motivated by the helpers' 28% to 43% legibility credit and GPT's 92% and 17% on the two tasks).
+- Compare review steps at equal cost: an extra revision with screenshots, with geometry problems found by the program, or with a slide-by-slide check against the requirement list (motivated by screenshot review's 69% with basic tools and its failure to catch a missing figure).
+- Repeat some head-to-head requests in the same order to separate order effects from ordinary variation between calls (motivated by 32 changed answers in 144 order checks).
 
-The full comparison plan was frozen after the focused results were available. It includes every remaining planned pair, reuses 108 earlier judgments unchanged and adds 180 calls. It adds no new decks. Notebook section 14 retains the focused results, and section 15 reports the full comparison. A new design needs its own report; the committed notebook checks this specific complete study.
+### Further reading
 
-The harder study has a cap of 430 attempts. Its 60 additional Claude calls had a $3 per-call cap, or $180 combined. A fresh full run without the earlier storage incident needs 402 attempts. No direct provider HTTP APIs or OpenRouter calls were used, and responses are not automatically retried because of their content.
+Links checked on 2026-10-28.
 
-Each model call runs in a separate empty directory with tools disabled and medium effort, with at most three calls running at once. Each generation has a 75,000-character output cap. PowerPoint exports slides at 1440 by 810 pixels. Judges receive three task-card images and eight slide images per deck.
-
-One Muse rating had 25 identical true checklist entries instead of 24. Offline parsing removes one excess entry; every possible deletion gives the same answer vector. The raw response and all five quality scores are preserved. One earlier GPT paired response was lost during a disk-full cache write, then its identical request was repeated once. The incident and request are recorded. The extension adds free-space checks and retries local writes without another model call. After collection, the active writer was changed to use unbuffered writes and handle short writes; local tests checked that change while retaining the frozen collector.
-
-The header repair uses 24-27 point titles and 10-12 point subtitles in separate bands, with body content starting at y=1.7 inches. Headers that do not fit fail explicitly. All 156 fitted header text objects stayed clear of the next band, although 34 titles extend 0.72 points below their nominal text boxes. These outputs are preserved. On 18 original primitive decks, expanded scenes, slide and chart XML, and embedded workbook content matched the old compiler; ZIP timestamps were excluded. The other three helpers stayed unchanged.
-
-The original four-slide pilot remains in notebook sections 1-10 and its own evidence files: 24/24 decks rendered, GPT averaged 94.5/100, helpers changed scores by -2.9 and screenshots by +0.2. The harder pilot and full paired extension each have separate manifests, lists of saved file hashes, so all three sets of evidence can be checked independently.
-
-</details>
-
-## Research and further reading
-
-Links checked on 2026-10-21. The research log, exact prompts and source snapshots are retained with the evidence. Notebook section 18 lists the follow-up experiments.
-
-- [PPTAgent](https://arxiv.org/abs/2501.03936) motivates separate content, design and coherence outcomes.
-- [DECKBench](https://arxiv.org/abs/2602.13318) motivates generation followed by editing and preservation checks.
-- [PresentBench](https://presentbench.github.io/) motivates a task-specific visible checklist.
-- [Judging LLM-as-a-judge](https://arxiv.org/abs/2306.05685) motivates multiple judges, vendor exclusion and swapped presentation order.
-- [Text fitting analysis](https://python-pptx.readthedocs.io/en/latest/dev/analysis/txt-fit-text.html) explains why actual font metrics matter.
-- [PowerPoint Slide.Export](https://learn.microsoft.com/en-us/office/vba/api/powerpoint.slide.export) documents the common renderer.
+- [DECKBench: Benchmarking Multi-Agent Frameworks for Academic Slide Generation and Editing](https://arxiv.org/abs/2602.13318) (Jang et al., 2026). Tests slide generation followed by multi-turn edits, the create-then-change design used here.
+- [PPTAgent: Generating and Evaluating Presentations Beyond Text-to-Slides](https://arxiv.org/abs/2501.03936) (Zheng et al., 2025). Scores content, design and coherence separately, as the five judged aspects here do.
+- [PresentBench: A Fine-Grained Rubric-Based Benchmark for Slide Generation](https://presentbench.github.io/) (Chen et al., 2026). Checks each deck against a written list of yes-or-no requirements, like the 24 checks here.
+- [Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena](https://arxiv.org/abs/2306.05685) (Zheng et al., 2023). Documents position and self-preference in model judges, the reasons for both orders and the other-vendor check.
+- [Self-Refine: Iterative Refinement with Self-Feedback](https://arxiv.org/abs/2303.17651) (Madaan et al., 2023). The draft, review and revise pattern that screenshot review is one instance of.
+- [Text - Fit text to shape](https://python-pptx.readthedocs.io/en/latest/dev/analysis/txt-fit-text.html) (python-pptx documentation). Explains why fitting text to a box needs the font's measurements, the problem the repaired title helper solves.
