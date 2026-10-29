@@ -1,0 +1,24 @@
+def validate_fee_oracle():
+    """Check both optimization encodings against enumeration on small fixtures."""
+    import itertools
+    checks=[]
+    for seed in range(30):
+        rng=random.Random(27100000+seed);n=4
+        specs=[dict(index=j,people=['alice'] if j%2==0 else ['bob'],duration=1+j%2,weight=rng.randint(1,5),old=rng.randrange(12),options=sorted(rng.sample(range(12),5))) for j in range(n)]
+        busy={'alice':[rng.randrange(12)],'bob':[rng.randrange(12)]};prec=[[0,2,seed%2]];fees=handoff_fees(specs);best=None;plans=0
+        for starts in itertools.product(*(sp['options'] for sp in specs)):
+            if any(overlap((s,s+sp['duration']),(b,b+1)) for s,sp in zip(starts,specs) for p in sp['people'] for b in busy[p]):continue
+            if any(overlap((starts[i],starts[i]+specs[i]['duration']),(starts[j],starts[j]+specs[j]['duration'])) for i in range(n) for j in range(i)):continue
+            if any(starts[i]+specs[i]['duration']+g>starts[j] for i,j,g in prec):continue
+            value=sum(sp['weight']*abs(s-sp['old']) for s,sp in zip(starts,specs))
+            # Direct formula, deliberately not fee_units, supplies the third encoding.
+            value+=sum(f['penalty'] for f in fees if not (starts[f['left']]+specs[f['left']]['duration']<=starts[f['right']]<=starts[f['left']]+specs[f['left']]['duration']+f['free_gap']))
+            best=value if best is None else min(best,value);plans+=1
+        answer=solve_frontier(specs,busy,prec,fees)
+        assert (answer is None)==(best is None)
+        if best is not None:assert answer['cost_units']==answer['milp_cost_units']==best
+        checks.append(dict(seed=27100000+seed,feasible_plans=plans,optimum_cost_units=best))
+    for f in [dict(left=0,right=1,free_gap=3,penalty=11)]:
+        specs=[dict(duration=2),dict(duration=1)]
+        assert [fee_units(f,0,t,specs) for t in [1,2,5,6]]==[11,0,0,11]
+    return dict(method='Thirty small fixtures: full Cartesian enumeration, exact search, independent MILP. Separate early/on-time/inclusive-deadline/late handoff tests.',cases=checks,boundary_tests_passed=True)

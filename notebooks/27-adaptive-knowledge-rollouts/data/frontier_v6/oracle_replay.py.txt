@@ -1,0 +1,19 @@
+def recheck_token_oracles(tasks,generator_code):
+    """Repeat both exact encodings locally, with four independent Python workers."""
+    import subprocess,sys,json,os
+    from concurrent.futures import ThreadPoolExecutor
+    worker='''import sys,json
+payload=json.loads(sys.stdin.read());ns={};exec(payload['generator'],ns)
+t=payload['task'];s=ns['solve_frontier'](t['specs'],t['busy'],t['precedence'],t['handoff_fees'])
+assert 15*s['cost_units']==t['oracle']['objective_minutes']==15*s['milp_cost_units']
+print(json.dumps(dict(task_id=t['task_id'],optimum_points=15*s['cost_units'],search_nodes=s['search_nodes'],independent_milp_agrees=True)))
+'''
+    def check(task):
+        env=os.environ.copy()
+        for key in list(env):
+            if any(word in key.upper() for word in ['API_KEY','HF_TOKEN','ACCESS_TOKEN']):env.pop(key,None)
+        flags=getattr(subprocess,'CREATE_NO_WINDOW',0)
+        p=subprocess.run([sys.executable,'-X','utf8','-c',worker],input=json.dumps(dict(task=task,generator=generator_code)),text=True,encoding='utf-8',capture_output=True,env=env,timeout=600,creationflags=flags)
+        assert p.returncode==0,p.stderr[-1500:]
+        return json.loads(p.stdout)
+    with ThreadPoolExecutor(max_workers=4) as pool:return list(pool.map(check,sorted(tasks,key=lambda t:t['task_id'])))
