@@ -1,0 +1,206 @@
+"""Fresh planning fixtures. Exhaustive branch-and-bound plus independent MILP."""
+from pathlib import Path
+import json,random,datetime as dt,sqlite3,hashlib,math
+import numpy as np
+from scipy.optimize import milp,Bounds,LinearConstraint
+from scipy.sparse import lil_matrix
+
+def frontier_stamp(s):
+    return (dt.datetime(2026,11,6,9)+dt.timedelta(minutes=15*s)).isoformat()+'Z'
+
+def overlap(a,b):return a[0]<b[1] and b[0]<a[1]
+
+def handoff_fees(specs):
+    n=len(specs);h=n//2
+    return [dict(left=i,right=h+(i+offset)%h,free_gap=2+(i+offset)%5,penalty=16+4*((specs[i]['weight']+specs[h+(i+offset)%h]['weight']+i)%7)) for offset in [0,1] for i in range(h)]
+
+def fee_units(fee,s,t,specs):
+    gap=t-s-specs[fee['left']]['duration']
+    return fee['penalty'] if gap<0 or gap>fee['free_gap'] else 0
+
+def solve_frontier(specs,busy,precedence,fees=None):
+    fees=[] if fees is None else fees
+    n=len(specs);allowed=[[s for s in sp['options'] if not any(overlap((s,s+sp['duration']),(b,b+1)) for p in sp['people'] for b in busy[p])] for sp in specs]
+    if any(not opts for opts in allowed):return None
+    costs=[[sp['weight']*abs(s-sp['old']) for s in opts] for sp,opts in zip(specs,allowed)]
+    compat=[]
+    for j,opts in enumerate(allowed):
+        row=[]
+        for s in opts:
+            masks=[]
+            for k,other in enumerate(allowed):
+                bits=0
+                for q,t in enumerate(other):
+                    good=j==k or not overlap((s,s+specs[j]['duration']),(t,t+specs[k]['duration']))
+                    for a,b,g in precedence:
+                        if (a,b)==(j,k) and s+specs[j]['duration']+g>t:good=False
+                        if (a,b)==(k,j) and t+specs[k]['duration']+g>s:good=False
+                    if good:bits|=1<<q
+                masks.append(bits)
+            row.append(masks)
+        compat.append(row)
+    ordered=[sorted(range(len(opts)),key=lambda q:(costs[j][q],opts[q])) for j,opts in enumerate(allowed)]
+    best=[math.inf,None];nodes=0;leaves=0;seen={}
+    def search(domains,assigned,cost,chosen):
+        nonlocal nodes,leaves
+        nodes+=1
+        if nodes>2000000:raise RuntimeError('Exact nonlinear search exceeds the pre-call node cap')
+        remaining=[j for j in range(n) if not (assigned>>j)&1]
+        if not remaining:
+            leaves+=1
+            if cost<best[0]:best[:]=[cost,tuple(chosen)]
+            return
+        bound=cost+sum(costs[j][next(q for q in ordered[j] if (domains[j]>>q)&1)] for j in remaining)
+        for fee in fees:
+            a,b=fee['left'],fee['right']
+            if chosen[a] is not None and chosen[b] is not None:continue
+            aa=[chosen[a]] if chosen[a] is not None else [s for q,s in enumerate(allowed[a]) if (domains[a]>>q)&1]
+            bb=[chosen[b]] if chosen[b] is not None else [s for q,s in enumerate(allowed[b]) if (domains[b]>>q)&1]
+            if not any(fee_units(fee,s,t,specs)==0 for s in aa for t in bb):bound+=fee['penalty']
+        if bound>=best[0]:return
+        state=(assigned,tuple(domains),tuple(chosen))
+        if seen.get(state,math.inf)<=cost:return
+        seen[state]=cost
+        j=min(remaining,key=lambda q:(domains[q].bit_count(),-specs[q]['weight'],q))
+        for q in ordered[j]:
+            if not (domains[j]>>q)&1:continue
+            child=list(domains);child[j]=0;valid=True
+            for k in remaining:
+                if k==j:continue
+                child[k]&=compat[j][q][k]
+                if not child[k]:valid=False;break
+            if not valid:continue
+            values=list(chosen);values[j]=allowed[j][q];extra=costs[j][q]
+            for fee in fees:
+                a,b=fee['left'],fee['right']
+                if j in [a,b] and values[a] is not None and values[b] is not None:extra+=fee_units(fee,values[a],values[b],specs)
+            search(child,assigned|(1<<j),cost+extra,values)
+    search([(1<<len(opts))-1 for opts in allowed],0,0,[None]*n)
+    if best[1] is None:return None
+    # Independent MILP: assignment binaries and one paid-charge indicator per rule.
+    variables=[(j,s) for j,opts in enumerate(allowed) for s in opts];m=len(variables);rows=[];lower=[];upper=[]
+    for j in range(n):rows.append({k:1 for k,(r,s) in enumerate(variables) if r==j});lower.append(1);upper.append(1)
+    for a,(i,s) in enumerate(variables):
+        for b,(j,t) in enumerate(variables[:a]):
+            if i==j:continue
+            bad=overlap((s,s+specs[i]['duration']),(t,t+specs[j]['duration']))
+            for u,v,g in precedence:
+                if (u,v)==(i,j) and s+specs[i]['duration']+g>t:bad=True
+                if (u,v)==(j,i) and t+specs[j]['duration']+g>s:bad=True
+            if bad:rows.append({a:1,b:1});lower.append(-np.inf);upper.append(1)
+    for f,fee in enumerate(fees):
+        for a,(i,s) in enumerate(variables):
+            if i!=fee['left']:continue
+            for b,(j,t) in enumerate(variables):
+                if j==fee['right'] and fee_units(fee,s,t,specs):rows.append({a:1,b:1,m+f:-1});lower.append(-np.inf);upper.append(1)
+    A=lil_matrix((len(rows),m+len(fees)))
+    for i,row in enumerate(rows):
+        for j,value in row.items():A[i,j]=value
+    c=np.array([specs[j]['weight']*abs(s-specs[j]['old']) for j,s in variables]+[f['penalty'] for f in fees],float)
+    result=milp(c,integrality=np.ones(len(c)),bounds=Bounds(0,1),constraints=LinearConstraint(A.tocsr(),lower,upper),options={'time_limit':120,'mip_rel_gap':0.0})
+    assert result.success,result.message
+    assert round(result.fun)==best[0],(result.fun,best)
+    ms=[None]*n
+    for value,(j,s) in zip(result.x[:m],variables):
+        if value>.5:ms[j]=s
+    return dict(starts=list(best[1]),cost_units=int(best[0]),search_nodes=nodes,visited_feasible_leaves=leaves,milp_cost_units=int(round(result.fun)),milp_starts=ms,allowed_after_availability=allowed,objective='movement plus conditional handoff charges',handoff_fees=fees)
+
+
+def make_frontier(seed,n,task_id,phase,data_root,wording):
+    rng=random.Random(seed); horizon=4*n; people=['alice','bob','carol','dan']; pairs=[['alice','bob'],['carol','dan'],['alice','carol'],['bob','dan'],['alice','dan'],['bob','carol']]
+    precedence=[[j,j+n//2,j%2] for j in range(n//2)]
+    for attempt in range(300):
+        busy={p:sorted(rng.sample(range(horizon),2)) for p in people}
+        specs=[]
+        for j in range(n):
+            duration=(3 if j%2==0 else 2)
+            specs.append(dict(index=j,people=pairs[j%6],duration=duration,weight=rng.choice([1,2,3,4,5]),old=rng.randrange(horizon-duration+1),options=sorted(rng.sample(range(horizon-duration+1),min(n+7,horizon-duration+1)))))
+        fees=handoff_fees(specs)
+        solution=solve_frontier(specs,busy,precedence,fees)
+        if solution:break
+    else:raise AssertionError('No feasible generated case')
+    records=[]
+    for p,slots in busy.items():
+        for k,s in enumerate(slots):records.append(dict(event_id=f'busy-{p}-{k}',calendar_id='cal-'+p,user_id='alice',summary=p.title()+' protected '+str(k),start=frontier_stamp(s),end=frontier_stamp(s+1)))
+    for j,sp in enumerate(specs):records.append(dict(event_id='target-'+str(j),calendar_id='cal-'+sp['people'][0],user_id='alice',summary='Project review '+str(j),start=frontier_stamp(sp['old']),end=frontier_stamp(sp['old']+sp['duration'])))
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from calendar_env.server.database.models import Base,User,Calendar
+    from calendar_env.server.database.models.event import Event
+    from calendar_env.server.database.models.acl import ACLs,Scope,AclRole,ScopeType
+    db=data_root/'tmp'/(task_id+'.sqlite')
+    if db.exists():db.unlink()
+    eng=create_engine('sqlite:///'+str(db));Base.metadata.create_all(eng)
+    with Session(eng) as ses:
+        for p in people:ses.add(User(user_id=p,email=p+'@example.test',name=p.title(),static_token='nb27-fictional-'+p,timezone='UTC'))
+        ses.commit()
+        for p in people:
+            ses.add(Calendar(calendar_id='cal-'+p,user_id='alice',summary=p.title()+' managed availability',time_zone='UTC',is_primary=p=='alice'));ses.add(Scope(id='scope-'+p,type=ScopeType.user,value=p+'@example.test'))
+        ses.commit()
+        for p in people:ses.add(ACLs(id='owner-'+p,calendar_id='cal-'+p,user_id='alice',scope_id='scope-alice',role=AclRole.owner))
+        for row in records:ses.add(Event(event_id=row['event_id'],calendar_id=row['calendar_id'],user_id='alice',summary=row['summary'],start_datetime=dt.datetime.fromisoformat(row['start'].replace('Z','')),end_datetime=dt.datetime.fromisoformat(row['end'].replace('Z','')),start_timezone='UTC',end_timezone='UTC'))
+        ses.commit()
+    eng.dispose()
+    with sqlite3.connect(db) as con:sql='\n'.join(x for x in con.iterdump() if x.startswith('INSERT INTO'))+'\n'
+    (data_root/'calendar'/(task_id+'.sql')).write_text(sql,encoding='utf-8',newline='\n')
+    public=[dict(review=j,title='Project review '+str(j),calendar='cal-'+sp['people'][0],people=sp['people'],duration_minutes=15*sp['duration'],weight=sp['weight'],allowed_start_UTC=[frontier_stamp(s) for s in sp['options']]) for j,sp in enumerate(specs)]
+    prompt=wording+' '+json.dumps(dict(reviews=public,precedence=[[i,j,15*g] for i,j,g in precedence],handoff_charges=[dict(source_review=f['left'],destination_review=f['right'],free_gap_minutes=15*f['free_gap'],fixed_penalty_points=15*f['penalty']) for f in fees]),separators=(',',':'))
+    return dict(task_id=task_id,environment='calendar',family=f'{n}-review frontier planning',phase=phase,created='2026-10-26',seed=seed,people=people,date='2026-11-06',level=n,prompt=prompt,records=records,specs=specs,busy=busy,precedence=precedence,handoff_fees=fees,horizon_units=horizon,expected={'target-'+str(j):dict(start=frontier_stamp(s),end=frontier_stamp(s+specs[j]['duration'])) for j,s in enumerate(solution['starts'])},oracle=dict(solution,objective_minutes=15*solution['cost_units'],witness_calls=5+n),generator_attempt=attempt)
+
+def structural_plan_count(task,stop_after=10000,node_cap=2000000):
+    specs=task['specs'];allowed=task['oracle']['allowed_after_availability'];prec=task['precedence'];n=len(specs);compat=[]
+    for j,opts in enumerate(allowed):
+        row=[]
+        for s in opts:
+            masks=[]
+            for k,other in enumerate(allowed):
+                bits=0
+                for q,t in enumerate(other):
+                    good=j==k or not overlap((s,s+specs[j]['duration']),(t,t+specs[k]['duration']))
+                    for a,b,g in prec:
+                        if (a,b)==(j,k) and s+specs[j]['duration']+g>t:good=False
+                        if (a,b)==(k,j) and t+specs[k]['duration']+g>s:good=False
+                    if good:bits|=1<<q
+                masks.append(bits)
+            row.append(masks)
+        compat.append(row)
+    nodes=0;count=0;stopped=None
+    def visit(domains,assigned):
+        nonlocal nodes,count,stopped
+        nodes+=1
+        if nodes>node_cap:stopped='node_cap';return
+        remaining=[j for j in range(n) if not (assigned>>j)&1]
+        if not remaining:
+            count+=1
+            if count>=stop_after:stopped='threshold'
+            return
+        j=min(remaining,key=lambda k:(domains[k].bit_count(),k));bits=domains[j]
+        while bits and not stopped:
+            bit=bits&-bits;q=bit.bit_length()-1;bits^=bit;child=list(domains);child[j]=0;good=True
+            for k in remaining:
+                if k==j:continue
+                child[k]&=compat[j][q][k]
+                if not child[k]:good=False;break
+            if good:visit(child,assigned|(1<<j))
+    visit([(1<<len(x))-1 for x in allowed],0)
+    return dict(feasible_plans_seen=count,complete_enumeration=stopped is None,stop=stopped,search_nodes=nodes,required_lower_bound=stop_after,threshold_met=count>=stop_after)
+
+def make_filtered_frontier(base_seed,n,task_id,phase,data_root,wording):
+    trials=[]
+    for proposal in range(30):
+        # Calibration seeds are even and evaluation seeds are odd, including
+        # every rejected numerical proposal. The two streams cannot collide.
+        seed=2*(base_seed+10000*proposal)+(1 if phase=='comparison' else 0)
+        try:t=make_frontier(seed,n,task_id,phase,data_root,wording)
+        except (RuntimeError,AssertionError) as exc:
+            trials.append(dict(seed=seed,accepted=False,reason=str(exc)[:150]));continue
+        structural=structural_plan_count(t);trials.append(dict(seed=seed,accepted=structural['threshold_met'],structural=structural))
+        if structural['threshold_met']:
+            
+            nofee=solve_frontier(t['specs'],t['busy'],t['precedence'])
+            nofee_full=15*(nofee['cost_units']+sum(fee_units(f,nofee['starts'][f['left']],nofee['starts'][f['right']],t['specs']) for f in t['handoff_fees']))
+            if nofee_full-t['oracle']['objective_minutes']<60:
+                trials[-1]['accepted']=False;trials[-1]['reason']='Charges do not change a movement-only solution by at least 60 points';continue
+            t['movement_only_diagnostic']=dict(movement_only_points=15*nofee['cost_units'],total_points_with_charges=nofee_full,optimal_total_points=t['oracle']['objective_minutes'])
+            t['structural_choice_audit']=structural;t['generation_proposals']=trials;return t
+    raise RuntimeError('No numerically certified high-choice fixture within proposal cap')

@@ -1,0 +1,26 @@
+def select_token_examples(state,root):
+    from pathlib import Path
+    import json
+    root=Path(root);folder=root/'data/frontier_v6'
+    episodes=state['episodes'];table=state['episode_table'];groups=state['groups'];selected={}
+    def first(category,mask):
+        z=table[mask].sort_values('episode_id')
+        if z.empty:selected[category]=None;return
+        q=z.iloc[0];e=episodes[q.episode_id];task=state['tasks'][q.task_id]
+        accepted=[]
+        for step in e['trace']:
+            obs=step.get('observation',{}).get('tool_result') or {}
+            if step.get('action',{}).get('tool')=='patch_event' and isinstance(obs,dict) and str(obs.get('status_code'))=='200' and not obs.get('isError'):accepted.append(step)
+        raw_step=accepted[0] if accepted else (e['trace'][0] if e['trace'] else None)
+        selected[category]=dict(episode_id=e['episode_id'],task_id=e['task_id'],policy=e['policy'],allocator=e['sample']['allocator'],reward=e['reward'],stop_reason=e['stop_reason'],calls=len(e['trace']),actual_cost_points=e['verification']['objective_penalty_points'],expected_cost_points=task['oracle']['objective_minutes'],feasible=e['verification']['feasible'],details=e['verification']['details'],movement_points=e['verification'].get('movement_penalty_points'),handoff_points=sum(f['penalty_points'] for f in e['verification'].get('handoff_charges',[])),raw_step=raw_step,initial_messages=e['initial_messages'],start_tokens=e['start_tokens'],end_tokens=e['end_tokens'])
+    first('sol_success',(table.policy=='GPT-6.1 Sol')&(table.reward==1))
+    first('sol_valid_higher_cost',(table.policy=='GPT-6.1 Sol')&(table.reward==0)&table.feasible&(table.gap_points>0)&(table.status=='ok'))
+    first('constraint_failure',(table.reward==0)&~table.feasible&(table.status=='ok'))
+    first('budget_boundary',table.stop_reason=='token_budget')
+    first('luna_success',(table.policy=='GPT-6 Luna')&(table.reward==1))
+    first('luna_failure',(table.policy=='GPT-6 Luna')&(table.reward==0))
+    for name,mask in [('uniform_missed_contrast',(groups.allocator=='uniform')&groups.missed_after_unanimous_probe),('adaptive_abandon',(groups.allocator=='adaptive')&(groups.decision=='abandon_unanimous_probe')),('ordinary_mixed_group',groups.mixed)]:
+        z=groups[mask].sort_values('group_id');selected[name]=None if z.empty else z.iloc[0].to_dict()
+    out=dict(selection='First stable episode ID or group ID within each displayed outcome category. Examples are selected after collection and explain aggregate results; they are not independent tests.',counts=dict(known=int(table.reward.notna().sum()),successes=int((table.reward==1).sum()),failures=int((table.reward==0).sum()),unknown=int(table.reward.isna().sum()),uniform_missed_contrast=int(((groups.allocator=='uniform')&groups.missed_after_unanimous_probe).sum()),adaptive_abandoned_groups=int(((groups.allocator=='adaptive')&(groups.decision=='abandon_unanimous_probe')).sum())),examples=selected)
+    (folder/'worked_examples.json').write_text(json.dumps(out,indent=2,ensure_ascii=False,allow_nan=False)+'\n',encoding='utf-8',newline='\n')
+    return out
