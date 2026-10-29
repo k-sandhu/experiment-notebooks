@@ -19,7 +19,8 @@ included.
   messages and waits that agent frameworks keep out of sight, and what each pattern costs in time and calls.
 - Some check whether general-purpose models hold up on work that matters in practice: reading regulatory filings
   and lab forms, writing safe SQL, staying inside permissions, grading other models, preparing tax workpapers,
-  building slide decks, reading government spending reports and keeping watch on other organisations' news pages.
+  building slide decks, turning subsidiaries' workbooks into financial statements, reading government spending
+  reports and keeping watch on other organisations' news pages.
 - Some test pretrained models that predict without being fitted to the data in front of them: forecasting a new
   time series from its recent history (16) and predicting from a small table (14).
 - Some study the step before training a model: generating examples with exact answers, and collecting scored
@@ -198,6 +199,19 @@ grade is right and how much the instruction, the author's name and the choice of
 | 15 | [What changes an AI judge's writing score?](notebooks/15-analytical-writing-style/) | Teams often let one AI model score documents written by another, so the score should reflect the document, not how the judge was asked or which judge was used. 27 writer models each wrote 8 short decision documents (2 invented cases, 4 document types; 213 drafts), and each draft was scored by two judges from other companies under four instructions: plain questions or an "AI slop" audit, with the author hidden or named. How much do the instruction, the author's name and the choice of judge move a clarity score, and do two judges flag the same passages? | The slop audit lowered clarity by 1.66 points out of 100 (interval -2.17 to -1.12), less than the 3.30 points a second reading by the same judge moved it; naming the author changed it by -0.06. The judge mattered more: on identical control texts, judges' average clarity ran from 32.5 to 83.0, and on 194 drafts audited by two judges only 36.5% of flags overlapped. The lowest-scoring draft contradicted its own recommendation. Model judges only, two invented cases |
 | 17 | [Does a writer's rank depend on the judges?](notebooks/17-writing-validation-extension/) | When AI judges compare AI writers, a common precaution drops judges made by the writer's own company. Six writers produced 288 decision documents on 24 new invented cases, scored by two OpenAI judges and one Anthropic judge: does the ranking change between that rule and giving every writer the same judges? Fresh judges also re-read 204 passages that an earlier study had flagged or left alone, and 24 drafts were scored with and without an "AI slop" warning on a fixed list of criteria. | GPT-6 Astra ranked last when same-company judges were dropped (88.21) and first when every writer had the same judges (93.10), because the OpenAI judges scored every one of 282 drafts higher than the Claude judge, by 9.01 points on average. Fresh judges found a wording problem in 1.6% of opinions on earlier flagged passages and 1.2% on unflagged ones; most concerns they did raise were about reasoning. The warning changed clarity by -0.31 (interval -0.70 to +0.02). Model judges only; human study prepared but not run |
 
+## Turning spreadsheets into reports
+
+A finance team that publishes statements for many subsidiaries receives a workbook from each one, and no two are
+built alike: the current year sits in a different column, costs are negative in one and in brackets in another,
+labels are in German or Japanese, a budget column sits beside the actuals. Someone copies each into a fixed house
+template by hand. A number taken from the wrong column or put on the wrong line leaves the page looking tidy, and
+some of these mistakes leave every total intact. This experiment tests whether a model can write the conversion
+for each workbook, and which automatic checks catch the mistakes it makes.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 30 | [Twenty differently built workbooks, one set of financial statements](notebooks/30-workbook-to-statements/) | A group's finance team turns each subsidiary's year-end workbook into statements in one house format, and a number on the wrong line or from the wrong column can look perfectly tidy. On 20 fictional subsidiary workbooks with exact answers (18 countries, five languages, layouts from trial balances to ERP exports, two with errors of their own), can a model write a conversion program for each, with tie-out checks and a second model's look at the PDF sending it back to fix problems? Writers: Claude Sonnet 5.5 and GPT-6.1 Sol; reviewer: Claude Opus 5.5; reference: a fixed keyword mapper. Which check catches which mistake, and does the loop ever change a number to make the checks pass? | All 40 final statements were exactly right (66 amounts and the heading each), at the ceiling for both writers, and no wrong statement ever passed the checks. Sonnet's first programs were right on 20 of 20; GPT's on 16, the other 4 stopped with an error and were fixed in one repair. The keyword mapper got 3 of 20. Both writers kept the subsidiaries' numbers on the two broken workbooks and declared the exact difference. Of 20 planted mistakes, the tie-out checks caught the 8 that broke a total and the visual review caught 19, including wrong units, a near-duplicate company and amounts moved within one subtotal |
+
 ## Creating presentations
 
 A deck that supports a decision has to carry the right figures to every slide and lay them out so the choice is
@@ -282,6 +296,7 @@ command-line tool installed and signed in.
 | [26](notebooks/26-model-auditability/) | Nothing extra; no Torch or model checkpoint | `NB26_LIVE=1`, in a copy, for hosted replies; `NB26_LOCAL=1` (and `NB26_DOWNLOAD=1` if the checkpoint is absent) recomputes the local probes into git-ignored `data/tmp/` | `OPENROUTER_API_KEY`; `codex`; optional packages for the local probes |
 | [27](notebooks/27-adaptive-knowledge-rollouts/) | `requirements-replay.txt`; allow 1,800 seconds per cell | `requirements-live.txt` and the pinned OpenEnv source, in a new folder; steps and switches in `data/PROTOCOL.md` | `codex` |
 | [28](notebooks/28-monitor-removal-honesty/) | Nothing extra | `NB_LIVE=1`; the prepared conversations are rebuilt only with `NB_REBUILD_TRACES=1` | `OPENROUTER_API_KEY`; `claude`, `codex` |
+| [30](notebooks/30-workbook-to-statements/) | Nothing extra; the workbooks are regenerated in a temporary folder and checked against the frozen copies, and every saved program runs again | `NB_LIVE=1`; capped at 400 new calls and USD 60 of Claude list price | `claude`, `codex` |
 | [31](notebooks/31-self-repairing-scrapers/) | Nothing extra; `NB_RERUN_PROGRAMS=1` also runs every saved program again and reports any difference | `NB_LIVE=1` | `OPENROUTER_API_KEY`; `claude`, `codex` |
 
 ## Data and licences
@@ -325,6 +340,7 @@ here with their data and caches.
 | 26 | 32 made-up expense claims generated in code, and the Pythia-14M model checkpoint | Fresh: 24 October 2026 | Claims in this repository; Pythia-14M Apache-2.0, downloaded on demand |
 | 27 | Fictional calendar and office tasks generated in code, worded by Claude Opus 5.5 | Fresh: 24 and 26 October 2026 | CC0; OpenEnv BSD-3-Clause |
 | 28 | 15 prepared agent conversations over small code repositories written for the experiment, with the agent's words by Claude Haiku 5.5 | Fresh | This repository |
+| 30 | 20 fictional subsidiary workbooks generated in code, with exact answers | Fresh: 29 October 2026 | This repository |
 | 31 | 20 fictional news sites built in code, with 240 release texts written by GPT-6.1 Sol | Fresh: releases dated 17 August to 23 October 2026, weekly runs 5 to 26 October 2026 | This repository |
 
 ## For AI agents
