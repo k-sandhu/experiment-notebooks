@@ -87,11 +87,13 @@ The models differ, mostly in using beliefs rather than stating them.
 | GPT-6 Luna | 0.69 | 0.48 |
 | Granite 4.2 8B | 0.52 | 0.29 |
 
+Unreadable replies were rare, at most 31 of a model's 3,084 answers (Nemotron 3.5 Super VL), and are counted as wrong; counting them as right instead leaves the order of the models unchanged.
+
 The errors go mostly one way. Every model is at least 90% accurate when the person missed the change. When the person saw it, read the note or heard the announcement, the weaker models still say the person holds the old belief: Granite 4.2 8B gets 51% of those answers right and GPT-6 Luna 73%. That is the answer the classic story always rewards, and a test made only of classic stories would have scored both models at about 90%.
 
 In Priya's terms: every model knows she will open the blue drawer when she missed the move. The top models also know she will go to the shelf when she watched through the glass. The weakest two would often send her to the drawer anyway, and would often be wrong about whether her colleague needs to message her.
 
-The main caveat: the three strongest models answered almost every question correctly, so this test cannot rank them or show where their ability ends. The stories come from templates that state every rule, which is easier than real writing, where much is left unsaid.
+The main caveat: the three strongest models answered almost every question correctly (Claude Opus 5.5 missed 1 of 3,084 answers, GPT-6.1 Sol 6, and Muse Wonder 2 of 1,034), so this test cannot rank them or show where their ability ends. The stories come from templates that state every rule, which is easier than real writing, where much is left unsaid.
 
 ## How the experiment runs
 
@@ -223,18 +225,20 @@ One format problem did matter, and it was fixed during the run. In the first ver
 
 Each row is one model. The blue circle is explicit pair accuracy, the orange square applied pair accuracy (behaviour, judgement and action pooled), each over 240 pairs (80 for Muse Wonder) with a 95% interval. The distance between them is the cost of having to use a belief rather than state it.
 
-| Model | Control accuracy | Explicit | Applied | Behaviour | Judgement | Action |
-|---|---|---|---|---|---|---|
-| Claude Opus 5.5 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
-| Muse Wonder (80 pairs) | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
-| GPT-6.1 Sol | 1.00 | 0.99 | 1.00 | 1.00 | 1.00 | 1.00 |
-| DeepSeek V4.1 Flash | 1.00 | 0.99 | 0.93 | 0.92 | 0.89 | 0.99 |
-| Qwen3.8 27B | 0.99 | 0.98 | 0.91 | 0.92 | 0.87 | 0.98 |
-| Muse Spark | 0.99 | 0.98 | 0.97 | 0.96 | 0.98 | 0.98 |
-| Nemotron 3.5 Super VL | 0.98 | 0.89 | 0.86 | 0.81 | 0.83 | 0.96 |
-| Claude Haiku 5.5 | 0.98 | 0.80 | 0.82 | 0.82 | 0.75 | 0.92 |
-| GPT-6 Luna | 0.94 | 0.69 | 0.48 | 0.59 | 0.40 | 0.49 |
-| Granite 4.2 8B | 0.93 | 0.52 | 0.29 | 0.25 | 0.31 | 0.30 |
+| Model | Control accuracy | Explicit | Applied | Behaviour | Judgement | Action | Wrong answers | Unreadable |
+|---|---|---|---|---|---|---|---|---|
+| Claude Opus 5.5 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1 | 0 |
+| Muse Wonder (80 pairs) | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 2 | 0 |
+| GPT-6.1 Sol | 1.00 | 0.99 | 1.00 | 1.00 | 1.00 | 1.00 | 6 | 0 |
+| DeepSeek V4.1 Flash | 1.00 | 0.99 | 0.93 | 0.92 | 0.89 | 0.99 | 46 | 0 |
+| Qwen3.8 27B | 0.99 | 0.98 | 0.91 | 0.92 | 0.87 | 0.98 | 71 | 0 |
+| Muse Spark | 0.99 | 0.98 | 0.97 | 0.96 | 0.98 | 0.98 | 46 | 0 |
+| Nemotron 3.5 Super VL | 0.98 | 0.89 | 0.86 | 0.81 | 0.83 | 0.96 | 136 | 31 |
+| Claude Haiku 5.5 | 0.98 | 0.80 | 0.82 | 0.82 | 0.75 | 0.92 | 248 | 0 |
+| GPT-6 Luna | 0.94 | 0.69 | 0.48 | 0.59 | 0.40 | 0.49 | 567 | 16 |
+| Granite 4.2 8B | 0.93 | 0.52 | 0.29 | 0.25 | 0.31 | 0.30 | 760 | 2 |
+
+The last two columns count individual answers, out of 3,084 per model (1,034 for Muse Wonder).
 
 Claude Opus 5.5 answered every pair correctly at every level (3,083 of 3,084 answers right), and GPT-6.1 Sol was one pair short of that. Muse Wonder made two errors in 1,034 answers on its 80 pairs; with that many pairs its applied score is only known to lie between 0.95 and 1.00. For these three the test is at its ceiling: they state and use beliefs without error in all eight families, so this experiment cannot rank them against each other.
 
