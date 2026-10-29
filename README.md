@@ -51,6 +51,20 @@ send to a person.
 | 06 | [Car make and model from one photo](notebooks/06-car-make-model-from-image/) | Labelling photos against a fixed list (products, parts, vehicles) is a task where a probability per label is cheaper than generated text and gives a confidence score. Can the Decisions API name a car's make and model from one photo over 109 labels, and how does it compare with frontier vision models (Claude, GPT, Muse) on accuracy, cost and speed? | Decisions API: 94.5% top-1 over 109 labels at $0.20 per 1,000 images and 0.9 s per call; GPT-6.1 and Muse Wonder 100%, Claude Opus 5.5 99.3% at 4-12 s per call |
 | 08 | [Ontario lab requisition extraction](notebooks/08-lab-requisition-extraction/) | Labs receive paper test requisitions as scans, faxes and phone photos, and a missed checkbox is a test that never runs. The Ontario form has about 70 tests in a tight grid of small boxes, plus typed and handwritten patient details. On 24 synthetic forms with exact ground truth, can vision LLMs read which tests were ordered and the patient and clinician fields? | Claude Opus 5.5 read every marked test on 24 forms (F1 1.00); GPT-6.1 0.995, Muse Wonder 0.986; best open model 0.94, open models weak on phone photos and written-in tests |
 
+## Watching outside sources
+
+Many teams keep a list of outside organisations whose announcements they must not miss: a finance team watches
+the central bank, the tax authority, its largest customers and suppliers. Someone opens each news page every
+week and copies the headline, date, author and text of anything new. A language model can do that reading
+itself, or it can write one small extraction program per site that then runs every week at almost no cost. The
+programs break when a site is redesigned, sometimes visibly and sometimes by quietly returning the wrong date, so
+the question is whether checks that do not know the right answer can notice a break and send the program back to
+the model for repair.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 31 | [Self-repairing scrapers](notebooks/31-self-repairing-scrapers/) | A finance team must notice new releases on 20 outside organisations' news pages and record each headline, date, author and text. On 20 fictional, differently built sites over four weekly runs with six redesigns (593 release-weeks), can a model write one extraction program per site, fix it when free automatic rules or a stronger model's review flag a problem, and keep it working? Which checks catch which errors, and how does this compare with a model reading every page? Writers: Claude Haiku 5.5, Claude Sonnet 5.5 and the small open-weight Granite 4.2 8B; reviewer Claude Opus 5.5. | Claude Haiku and Sonnet wrote correct programs for 19 and 20 of 20 sources at once; the free rules caught every break after the redesigns and one repair fixed each, so every release-week was right for $0.28 (Haiku) or $1.76 (Sonnet) over four weeks. Granite: 4 of 20 at once, 9 after three repairs, and its errors went unnoticed in 22 source-weeks with rules only against 1 with the review. On 135 planted errors the rules flagged 48 and the review all 135. Reading every page cost $4.25 with Sonnet (all right) and $0.23 with Haiku (94.4% right) |
+
 ## Generating and checking example data
 
 A synthetic extraction example needs more than a plausible answer. If an order changes twice, its final price
