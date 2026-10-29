@@ -253,7 +253,7 @@ The uncertainty that most needs another experiment is whether the gap between pr
 
 - The three jobs are small and made up, and their rules and clash are easy to see. Rates could differ in long real sessions.
 - The prepared history is not the model's own. Tier 2 checks this, but its per-job samples are small (2 to 17 answers).
-- 13 of the 101 prepared turns are fixed sentences, mostly the quiet final reports, and may read differently from each model's own writing.
+- Thirteen of the 101 prepared turns are fixed sentences, mostly the quiet final reports, and may read differently from each model's own writing.
 - The judges are models. They agreed on 96.3% of answers, and disputed answers are left out of the rates, but the line between "admits" and "describes but denies" is a judgement of emphasis.
 - Each model ran at one setting: one provider, one precision, temperature 1.0, medium reasoning.
 - The GPT-6 models from OpenAI's report are not tested. Two open-weight models whose makers this repository calls only through their own tools (Meta's Muse Glimmer, OpenAI's gpt-oss) were left out.
