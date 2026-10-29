@@ -229,53 +229,87 @@ python -m venv .venv
 .venv/Scripts/jupyter lab
 ```
 
-* **Replay** (default): open a notebook and run all cells. Cached responses are used; no keys are needed.
-* **Re-query the models**: delete the notebook's `data/cache_*.jsonl` (or `data/runs/` in 07). This needs
-  `OPENROUTER_API_KEY` and logged-in `claude`, `codex` and `muse` CLIs.
-* New collection in 09, 11, 12 and 13: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
-* Notebook 13 verifies cached evidence before replay. For a new collection, use a separate copy and follow its README; keep the committed cache intact.
-* Notebook 19 replays the complete PowerPoint study offline. New collection uses explicit --live commands and requires Windows, PowerPoint and authenticated model CLIs.
-* Notebook 23 replays 82 original and 78 harder-round CLI requests offline. `NB_LIVE=1` runs a small new first-protocol collection; `NB_HARD_LIVE=1` runs a small harder collection. Fresh results stay under ignored `data/tmp/` paths, separate from both committed main runs and pilots.
-* Notebook 14 uses `PRIORLABS_API_KEY` and `NB_LIVE=1` for new collection, with a checked computation-token cap. Its default replay reads 48 saved responses without network access.
-* **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
-* Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
-* Notebook 16 forecasts six public series through TSFM.ai. Its own `requirements.txt` pins the fitted-baseline libraries; replay needs no key. New collection requires `TS16_LIVE=1` and `TSFMAI_API_KEY`.
+Every notebook replays by default: open it and run all cells, or run
+`jupyter nbconvert --to notebook --execute --inplace <notebook>.ipynb` from its folder. Replay reads the saved
+responses in the notebook's `data/` folder, needs no key and makes no model call. Each notebook's README ends with
+its exact commands, and the notebook's first code cell holds its size settings and spending caps.
 
-Notebook 15 uses strict offline replay with an evidence manifest and a $10 OpenRouter guard. Its README gives model coverage and limits.
+The notebooks differ in what a missing saved response does. In 01 to 08 it is requested from the model at once, so
+deleting a cache file starts a new, paid collection. From 09 on, a missing response stops the run, and new
+collection has to be switched on as the table shows. Collecting with `claude`, `codex` or `muse` needs that
+command-line tool installed and signed in.
 
-Notebook 26 compares policy checks, repeat requests, ledger reconstruction and local checkpoint inspection. Default replay is offline; its README records the access limits, failed provider calls and separately reported costs.
-
-Notebook 18 uses 768 fresh synthetic cases, all four decision models and strict offline replay. Its README records provider pins, scoring audits, diagnostics and reported spend.
-
-Notebooks 21 and 22 are grouped under `econ/`. Each runs independently from its own directory and stops on a
-missing offline cache entry. Their READMEs distinguish measured usage from assumed business costs and explain
-the small live profiles and spending caps.
-
-Notebook 27 uses strict offline replay and records two equal-call comparisons, a separate pilot and a preserved transport-failure run. Its README explains the CLI-only collection protocol and unknown dollar billing.
+| Notebook | Before replay | To collect again | Needs for collection |
+|---|---|---|---|
+| [01](notebooks/01-decisions-api-500-label-classification/) | Nothing extra | Delete `data/decisions_cache.jsonl`; `N_DOCS` sets the sample size | `OPENROUTER_API_KEY` |
+| [02](notebooks/02-decisions-api-chunking/) | Downloads six public PDFs into `data/docs/` on first run | A missing request is sent at once; a different PDF or PyMuPDF version changes the request (`data/PROTOCOL.md` lists the versions that match) | `OPENROUTER_API_KEY` |
+| [03](notebooks/03-document-type-classification/) | Downloads about 300 MB of PDFs on first run, each checked against its sha256 | A missing request is sent at once | `OPENROUTER_API_KEY` |
+| [04](notebooks/04-industry-document-chunking/) | Downloads 12 PDFs on first run and stops if a sha256 differs | A missing request is sent at once | `OPENROUTER_API_KEY` |
+| [05](notebooks/05-text-to-sql-safety/) | Nothing extra | Delete `data/cache_*.jsonl`; `NB_SMOKE=1` runs 6 requests | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
+| [06](notebooks/06-car-make-model-from-image/) | Nothing extra; the photos are saved | Delete `data/cache_*.jsonl`; `NB_SMOKE=1` runs 6 photos; deleting `data/images.csv` and `data/images/` rebuilds the photo set from Wikipedia | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
+| [07](notebooks/07-subagent-handoff-harness/) | Nothing extra | `NB_LIVE=1` reruns all seven levels (about 150 calls); deleting one file in `data/runs/` reruns that level; `BACKEND` switches the agents to `codex` or `muse` | `claude` |
+| [08](notebooks/08-lab-requisition-extraction/) | Nothing extra | Delete `data/cache_*.jsonl`; `NB_SMOKE=1` runs 3 pages | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
+| [09](notebooks/09-agent-action-safety/) | Nothing extra | `NB_LIVE=1`; `NB_SMOKE=1` runs two request pairs | `OPENROUTER_API_KEY`; `claude`, `codex` |
+| [10](notebooks/10-code-execution-guardrails/) | Nothing extra; the notebook calls no model | `NB_RUN_CONTAINER=1` repeats the container probes, with an installed image pinned by digest named in `NB_SANDBOX_IMAGE` | A Linux Docker engine |
+| [11](notebooks/11-llm-judges/) | Nothing extra; `NB_JUDGE_PROFILE=smoke` replays a small subset | `NB_LIVE=1`, small profile by default; changed tasks or prompts go in a copy with a new protocol name | `claude`, `codex` |
+| [12](notebooks/12-tax-research-harnesses/) | Nothing extra (the root requirements include `smolagents`) | `NB_LIVE=1`; a changed design goes in a new data folder | `OPENROUTER_API_KEY` |
+| [13](notebooks/13-older-model-attribution/) | Python 3.13.5 and `requirements-replay.txt`; checks every data file against saved hashes | `NB_LIVE=1`, in a separate copy that leaves the committed cache intact | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
+| [14](notebooks/14-tabular-zero-shot/) | Python 3.13 and `data/requirements-lock.txt` | `NB_LIVE=1`, under a computation-token cap; the notebook's section 9 lists the files to clear first | `PRIORLABS_API_KEY` |
+| [15](notebooks/15-analytical-writing-style/) | Nothing extra | `NB_LIVE=1`, in a copy with a new seed and protocol version; $10 OpenRouter cap | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
+| [16](notebooks/16-time-series-zero-shot/) | Python 3.13, the notebook's own `requirements.txt` and kernel | `TS16_LIVE=1`; $3 cap | `TSFMAI_API_KEY` |
+| [17](notebooks/17-writing-validation-extension/) | The notebook's own `requirements.txt`, for the human study forms; completed forms in `data/human/submissions/` join the replay | `NB_LIVE=1`, in a copy with a new seed and protocol version; carries forward the $10 cap it shares with 15 | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
+| [18](notebooks/18-decisions-api-comparison/) | `requirements-replay.txt` | In a separate copy: `NB18_LIVE=1` for the broad set, `NB18_FOLLOWUP_LIVE=1` for the ledgers and harder lookups; $5 guard per part | `OPENROUTER_API_KEY` |
+| [19](notebooks/19-powerpoint-harness/) | The notebook's own `requirements.txt`; no PowerPoint; checks every evidence file against saved hashes | `harness.py` commands with `--live`; `--n-briefs`, `--max-calls` and `--pair-scope` set the size | Windows and PowerPoint; `claude`, `codex`, `muse` |
+| [21](econ/21-verification-costs/) | `NB_PHASE=all`, with `NB_LIVE` unset | `NB_LIVE=1`, starting with two trial invoices | `OPENROUTER_API_KEY`; `claude`, `codex` |
+| [22](econ/22-fiscal-implementation/) | Nothing extra; the saved excerpts replace the original downloads | `NB_REAL_V2_LIVE=1` asks two trial questions by default; `NB_REAL_V2_N_CASES` and `NB_REAL_V2_MAX_NEW_CALLS` set the size; capped at 180 requests and USD 20 of Claude list price | `claude`, `codex`, `muse` |
+| [23](notebooks/23-synthetic-data-curation/) | Nothing extra | `NB_LIVE=1` or `NB_HARD_LIVE=1` runs a small collection into git-ignored `data/tmp/` | `codex` |
+| [24](notebooks/24-openenv-rewards/) | The notebook's own `requirements.txt` and kernel; the puzzle environments run again locally | `NB_LIVE=1`, in a copy with empty `data/cache/` and `data/pilot_cache/`; caps of 600 requests and $2 | `OPENROUTER_API_KEY` |
+| [25](notebooks/25-knowledge-work-rollouts/) | `requirements-replay.txt` | `NB25_LIVE=1`, in a new folder with the pinned OpenEnv source; steps in `data/PROTOCOL.md` | `OPENROUTER_API_KEY`; `codex` |
+| [26](notebooks/26-model-auditability/) | Nothing extra; no Torch or model checkpoint | `NB26_LIVE=1`, in a copy, for hosted replies; `NB26_LOCAL=1` (and `NB26_DOWNLOAD=1` if the checkpoint is absent) recomputes the local probes into git-ignored `data/tmp/` | `OPENROUTER_API_KEY`; `codex`; optional packages for the local probes |
+| [27](notebooks/27-adaptive-knowledge-rollouts/) | `requirements-replay.txt`; allow 1,800 seconds per cell | `requirements-live.txt` and the pinned OpenEnv source, in a new folder; steps and switches in `data/PROTOCOL.md` | `codex` |
+| [28](notebooks/28-monitor-removal-honesty/) | Nothing extra | `NB_LIVE=1`; the prepared conversations are rebuilt only with `NB_REBUILD_TRACES=1` | `OPENROUTER_API_KEY`; `claude`, `codex` |
 
 ## Data and licences
 
-Only public or synthetic data. OpenAlex metadata (CC0); public PDFs from US and UK agencies and other publishers,
-referenced by URL and downloaded on demand; the Chinook sample database (MIT); Wikimedia Commons photos (licence
-and author per image in `notebooks/06-car-make-model-from-image/data/images.csv`); synthetic lab requisitions generated for notebook 08,
-stamped SYNTHETIC with invalid identifiers. Notebook 16 uses IESO demand, Open-Meteo weather analysis, Wikimedia CC0 page views and Bank of Canada exchange rates; its [source notices and redistribution terms](notebooks/16-time-series-zero-shot/data/ATTRIBUTION.md) are recorded separately. Code and text in this repo are MIT licensed (see `LICENSE`).
+Every notebook uses public data or data made for the experiment, with no private or client records. Code and text
+in this repo are MIT licensed (see `LICENSE`).
 
-New notebooks use data the models cannot have seen: synthetic data written for the experiment, or public data
-created after every tested model's training cutoff (for time series, the last one to two months), with creation
-dates recorded. Notebooks 01-04 and 06 predate this rule. Their abstracts, PDFs and Wikipedia photos are older than
-the models, which may have seen them, so treat those accuracy figures as upper bounds. Notebooks 01-04 were first run inside another project and moved here with their data and caches.
+New notebooks use data the models cannot have seen: data written or generated for the experiment, or public data
+created after every tested model's training cutoff (for time series, the last one to two months). Notebooks 01-04
+and 06 predate this rule. Their papers, documents and photos were public before the models, which may have seen them,
+so treat those accuracy figures as upper bounds. Notebook 05's sample database has been public since 2014, so its
+accuracy on ordinary questions is an upper bound too. Notebooks 01-04 were first run inside another project and moved
+here with their data and caches.
 
-Notebook 14 uses 24 newly generated numeric tables with exact generation rules, seeds and input hashes.
-
-Notebooks 09-12 use authored synthetic cases and objective fixtures. Notebook 12 records original IRS source URLs and section names alongside authored summaries for its restricted 2025 US federal S-Corporation workpaper; original US government material has separate source provenance.
-
-Notebook 13 uses 100 fresh synthetic model outputs collected on 2026-10-19, with per-item timestamps and sourced model cutoff or release dates in its data folder. Its gold labels are the recorded generation endpoints.
-
-Notebook 15 uses two fresh numerical packets and model drafts collected on 2026-10-19, with exact answers generated in code and model date sources in its data folder.
-
-Notebook 17 extends the writing pilot with 24 fresh programmatic cases and copied legacy evidence. Human reader and editor results are pending; their participant materials and import workflow are included.
-
-Notebook 23 uses fictional order threads generated in code on 2026-10-24, with source events, exact answer keys and model responses saved for inspection. It demonstrates data curation without training a model. Its [provenance record](notebooks/23-synthetic-data-curation/data/provenance.json) identifies the models and sources; generated service outputs do not carry a claim of unrestricted downstream training permission.
+| Notebook | Data | Fresh or older | Source and licence |
+|---|---|---|---|
+| 01 | 600 research-paper abstracts and 508 topic labels | Older: papers published 2020 to 2024 | OpenAlex, CC0 |
+| 02 | Six public documents and 33 questions about them | Older: documents published 2017 to 2024 | Downloaded from the publishers; licences not recorded |
+| 03 | 276 public PDFs of 78 document types | Older: most were public before the models | Address, sha256 and licence per file in `data/catalog/` |
+| 04 | 12 public filings and 142 questions about them | Predates the rule: filings dated October 2021 to August 2026 | Licence per PDF in `data/catalog/`; the questions record no author, date or licence |
+| 05 | The Chinook sample database of a music shop, and 52 requests | Database public since 2014; requests committed 17 October 2026 | Chinook, MIT-style licence |
+| 06 | 146 Wikipedia lead photos of 73 car models | Older: mostly older than the models | Wikimedia Commons; licence and author per photo in `data/images.csv` |
+| 07 | A trip-planning task, with prices and delays, written for the experiment | Fresh; no creation date recorded | This repository |
+| 08 | 24 lab requisition pages generated in code, stamped SYNTHETIC with invalid identifiers | Fresh; creation date not recorded, and the blank form they fill in is public | This repository |
+| 09 | 24 requests written for the experiment | Fresh: replies collected 17 October 2026 | This repository |
+| 10 | 22 requests written for the experiment | Fresh: run 17 October 2026 | This repository |
+| 11 | 144 grading tasks generated in code | Fresh: 22 October 2026 | This repository |
+| 12 | 12 made-up companies and seven paraphrased reference sources | Fresh: 17 October 2026 | This repository; the original IRS documents are US government material |
+| 13 | 100 model-written texts | Fresh: 19 October 2026 | Writer and provider per text in `data/corpus.csv` |
+| 14 | 24 numeric tables generated in code | Fresh: 19 October 2026 | This repository |
+| 15 | Two evidence packets generated in code | Fresh: 19 October 2026 | This repository |
+| 16 | Six public series: IESO electricity demand, Open-Meteo weather analysis, Wikimedia page views and Bank of Canada exchange rates | Fresh: forecasts start between 20 August and 17 October 2026 | Per source in [ATTRIBUTION.md](notebooks/16-time-series-zero-shot/data/ATTRIBUTION.md) |
+| 17 | 24 evidence packets generated in code, evidence copied from 15, and forms for a human study whose results are pending | Fresh: 21 October 2026 | This repository |
+| 18 | Records, ledgers and lookups generated in code | Fresh: from 20 October 2026 | This repository ([ATTRIBUTION.md](notebooks/18-decisions-api-comparison/data/ATTRIBUTION.md)) |
+| 19 | Two eight-slide deck tasks written for the study | Fresh: 21 October 2026 | This repository |
+| 21 | 84 invoices generated in code | Fresh: 22 October 2026 | This repository |
+| 22 | Excerpts from nine official UK, US and EU reports and releases | Fresh: published 13 to 22 October 2026 | Open Government Licence v3.0, US public domain, CC BY 4.0 or European Parliament reuse terms, per excerpt in `data/real_v2/sources.json` |
+| 23 | Fictional order threads generated in code | Fresh: 24 October 2026 | [provenance.json](notebooks/23-synthetic-data-curation/data/provenance.json); the saved model outputs carry no claim of unrestricted training permission |
+| 24 | 8 tasks generated with fixed seeds: 4 mazes and 4 Reasoning Gym questions | Fresh: 24 October 2026 | Maze environment MIT, Reasoning Gym Apache-2.0, OpenEnv BSD-3-Clause |
+| 25 | 12 office tasks on a made-up calendar, IBM's quarterly results and US Treasury daily cash records | Fresh: tasks written 24 October 2026; results published 21 October, cash records 19 to 22 October | Calendar CC0; IBM copyright, numerical extracts only; Treasury data public domain |
+| 26 | 32 made-up expense claims generated in code, and the Pythia-14M model checkpoint | Fresh: 24 October 2026 | Claims in this repository; Pythia-14M Apache-2.0, downloaded on demand |
+| 27 | Fictional calendar and office tasks generated in code, worded by Claude Opus 5.5 | Fresh: 24 and 26 October 2026 | CC0; OpenEnv BSD-3-Clause |
+| 28 | 15 prepared agent conversations over small code repositories written for the experiment, with the agent's words by Claude Haiku 5.5 | Fresh | This repository |
 
 ## For AI agents
 
