@@ -20,7 +20,7 @@ included.
 - Some check whether general-purpose models hold up on work that matters in practice: reading regulatory filings
   and lab forms, writing safe SQL, staying inside permissions, grading other models, preparing tax workpapers,
   building slide decks, turning subsidiaries' workbooks into financial statements, reading government spending
-  reports and keeping watch on other organisations' news pages.
+  reports, keeping watch on other organisations' news pages and editing long documents without damaging them.
 - Some test pretrained models that predict without being fitted to the data in front of them: forecasting a new
   time series from its recent history (16) and predicting from a small table (14).
 - Some study the step before training a model: generating examples with exact answers, and collecting scored
@@ -236,6 +236,18 @@ pictures of the draft, on decks that judge models compare head to head.
 |---|---|---|---|
 | 19 | [Which model and tools make a better deck?](notebooks/19-powerpoint-harness/) | A model asked to build a decision deck, then update it when the plan changes, has to carry every changed figure to each slide and lay it out readably, without ever seeing the slides it describes. Which of three models (GPT-6.1 Sol, Claude Opus 5.5, Muse Wonder Full) makes the decks that judge models prefer, and do ready-made layout blocks or pictures of its own draft help? 24 eight-slide decks on two tasks written for the study, judged from images: 72 individual scores and 288 head-to-head judgments of 48 deck pairs. | GPT-6.1 Sol's decks were preferred in every setup (81% to 96% win credit); Muse Wonder Full won none of its 96 head-to-head judgments. Most of GPT's lead over Claude came from one task, where all four Claude decks left a figure off the closing slide that only the judges' checklist asked for (GPT won 22 of 24 there; 12 to 9 with 3 ties on the other task). Pictures of the draft were preferred (61% win credit), layout blocks were not (38%), and neither passed the adoption rule set in advance. Two tasks, one deck per setup |
 
+## Editing long documents
+
+To change one number in a 40-page rule, a model can send back the whole document, which takes minutes and can quietly
+straighten every quotation mark on the way, or only the change, which a program then has to merge in the right place
+and which fails if the model quotes the text wrongly or leaves an occurrence out. Code editors built on language models
+face the same choice each time they apply a suggestion. This experiment compares the ways of writing such edits and of
+merging them.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 38 | [How should a model send back its edits to a long document?](notebooks/38-long-text-edits/) | A model asked to change one number in a 12,000-word document can send back the whole document, which is slow and can change text nobody asked about, or only the change, which a program must then put in the right place. On 36 edit requests with exact answers in nine US Federal Register rules published in late October 2026 (1,842 to 12,762 words; one change, six mixed changes, renaming an abbreviation everywhere, twenty small changes), which of seven reply formats (the whole document, SEARCH/REPLACE blocks, JSON find-and-replace pairs, a unified diff, OpenAI's patch format, line-number edits, an edit sketch), merged in which way (exact, tolerant or fuzzy matching, `git apply`, GNU `patch`, a second model writing out the document, one retry with the error), most often gives exactly the requested document for five models (GPT-6.1 Sol, Claude Sonnet 5.5, Claude Haiku 5.5, DeepSeek V4.1 Flash, Qwen3.8 27B), and at what cost? | Find-and-replace pairs merged by exact match did best: 82% and 84% of 180 requests exact, 85% and 86% with one retry, in a median 17 seconds at every length; tolerant and fuzzy matching rescued none, because the failures were edits left out. Whole rewrites 81% (31 to 115 seconds), diffs 79% with a forgiving merge but 41% through plain `git apply`, line-number edits 78%, edit sketches 64%, OpenAI's patch format 59% at best. A second model writing out the merged document lost edits (57% for find-and-replace). Renames were find-and-replace's weak spot (51%, against 84% for rewrites). GPT-6.1 Sol was at the ceiling in three formats, so the ranking comes from the other four models |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
@@ -312,6 +324,7 @@ command-line tool installed and signed in.
 | [29](notebooks/29-theory-of-mind/) | Nothing extra; the stories are generated again in code | `NB_LIVE=1`; `N_PAIRS` sets the size; capped at USD 30 of OpenRouter spend and 15,000 `claude`, `codex` and `muse` calls | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
 | [30](notebooks/30-workbook-to-statements/) | Nothing extra; the workbooks are regenerated in a temporary folder and checked against the frozen copies, and every saved program runs again | `NB_LIVE=1`; capped at 400 new calls and USD 60 of Claude list price | `claude`, `codex` |
 | [31](notebooks/31-self-repairing-scrapers/) | Nothing extra; `NB_RERUN_PROGRAMS=1` also runs every saved program again and reports any difference | `NB_LIVE=1` | `OPENROUTER_API_KEY`; `claude`, `codex` |
+| [38](notebooks/38-long-text-edits/) | Nothing extra; every merge method runs again on the cached replies (needs `git`, and GNU `patch` for that method) | `NB_LIVE=1`; `NB_N_DOCS` and `NB_MODELS` set the size; capped at 3,000 CLI calls, USD 80 of Claude list price and USD 15 of OpenRouter spend | `OPENROUTER_API_KEY`; `claude`, `codex` |
 
 ## Data and licences
 
@@ -357,6 +370,7 @@ here with their data and caches.
 | 29 | 480 stories in 240 twin pairs over eight families, generated in code with exact answers, and six assistant requests written for the experiment | Fresh: 29 October 2026 | This repository |
 | 30 | 20 fictional subsidiary workbooks generated in code, with exact answers | Fresh: 29 October 2026 | This repository |
 | 31 | 20 fictional news sites built in code, with 240 release texts written by GPT-6.1 Sol | Fresh: releases dated 17 August to 23 October 2026, weekly runs 5 to 26 October 2026 | This repository |
+| 38 | Nine US Federal Register rules and proposed rules converted to Markdown, with 36 edit requests and their exact answers generated in code | Fresh: published 19 to 29 October 2026 | [Federal Register API](https://www.federalregister.gov/developers/documentation/api/v1); US government works, public domain |
 
 ## For AI agents
 
