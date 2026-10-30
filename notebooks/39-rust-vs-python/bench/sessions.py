@@ -38,7 +38,7 @@ def session_files(author, task):
 
 def request_hash(author, task, files=None):
     files = session_files(author, task) if files is None else files
-    author_config = dict(C.AUTHORS[author], private_cargo_home=C.SOL_PRIVATE_CARGO_HOME if author == "sol" else False)
+    author_config = dict(C.AUTHORS[author], private_cargo_home=C.SOL_PRIVATE_CARGO_HOME if C.AUTHORS[author]["cli"] == "codex" else False)
     request = dict(author=author_config, prompt_sha256=sha256(C.BENCH / "AUTHOR_PROMPT.md"),
                    files={name: hashlib.sha256(value).hexdigest() for name, value in sorted(files.items())})
     return hashlib.sha256(json.dumps(request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -132,7 +132,7 @@ def run(author, task, force=False):
     folder, digest = prepare(author, task)
     command, executable = command_for(author, task)
     env = C.session_environment()
-    if author == "sol" and C.SOL_PRIVATE_CARGO_HOME:
+    if C.AUTHORS[author]["cli"] == "codex" and C.SOL_PRIVATE_CARGO_HOME:
         env["CARGO_HOME"] = str(folder / ".cargo-home")
     log = C.DATA / "sessions" / author / f"{task}.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -180,7 +180,7 @@ def run(author, task, force=False):
                 requested_model=C.AUTHORS[author]["model"], effort=C.AUTHORS[author]["effort"],
                 start_utc=started, end_utc=ended, wall_seconds=wall, exit_code=exit_code,
                 timed_out=timed_out, files=inventory(folder), missing=missing,
-                private_cargo_home=author == "sol" and C.SOL_PRIVATE_CARGO_HOME, **event_metadata(gz_path))
+                private_cargo_home=C.AUTHORS[author]["cli"] == "codex" and C.SOL_PRIVATE_CARGO_HOME, **event_metadata(gz_path))
     write_json(meta_path, meta)
 
 
@@ -192,6 +192,8 @@ def table():
     with path.open("w", encoding="utf-8", newline="") as stream:
         csv.DictWriter(stream, fieldnames=fields, lineterminator="\n").writeheader()
     for meta_path in sorted(C.PROGRAMS.glob("*/*/meta.json")):
+        if meta_path.parent.parent.name not in C.AUTHORS:
+            continue  # the "reference" pseudo-author has no session
         meta = read_json(meta_path)
         row = {key: meta.get(key) for key in fields}
         for key in ("usage", "missing"):

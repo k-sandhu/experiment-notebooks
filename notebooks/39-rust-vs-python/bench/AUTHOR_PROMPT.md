@@ -32,7 +32,9 @@ start other programs, or read any file other than the input.
 
 The programs will be run on Windows 11 on a 16-core laptop, on larger inputs of the same kind; SPEC.md gives
 the benchmark size. Test all three versions against every sample before you finish. Work only inside this
-folder, and take at most about 45 minutes.
+folder, and take at most about 45 minutes. Other programs run on this machine at the same time:
+never stop a process you did not start yourself, so do not kill processes by name (for example
+`taskkill /IM python.exe` or `Stop-Process -Name python`); stop only your own processes, by process ID.
 
 When you are done, reply with a short summary: the algorithm, the main choices you made for speed in each
 version, and which samples each version passes.

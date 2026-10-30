@@ -49,20 +49,22 @@ TINY = {
 }
 
 AUTHORS = {
-    "claude": dict(cli="claude", model="claude-opus-5-5", effort="high", flags=[
-        "-p", "--safe-mode", "--model", "claude-opus-5-5", "--effort", "high",
+    "sonnet": dict(cli="claude", model="claude-sonnet-5-5", effort="high", flags=[
+        "-p", "--safe-mode", "--model", "claude-sonnet-5-5", "--effort", "high",
         "--permission-mode", "bypassPermissions", "--tools", "Bash,Read,Write,Edit,Glob,Grep",
         "--output-format", "stream-json", "--verbose"]),
-    "sol": dict(cli="codex", model="gpt-6.1-sol", effort="high", flags=[
-        "exec", "-m", "gpt-6.1-sol", "-c", 'model_reasoning_effort="high"',
+    "terra": dict(cli="codex", model="gpt-6.1-terra", effort="high", flags=[
+        "exec", "-m", "gpt-6.1-terra", "-c", 'model_reasoning_effort="high"',
         # --ignore-user-config drops the user's approval policy and Windows sandbox, which commands need.
         "-c", 'approval_policy="never"', "-c", 'windows.sandbox="elevated"',
         "--ignore-user-config", "--ephemeral", "--sandbox", "workspace-write",
         "--skip-git-repo-check", "-C", "{session}", "--json", "-o", "{last}", "-"]),
 }
+# Heat-only pilot sessions by Claude Opus 5.5 and GPT-6.1 Sol, kept under data/programs/{opus,sol}/heat.
+PILOT_AUTHORS = ("opus", "sol")
 SOL_PRIVATE_CARGO_HOME = False  # Sandbox feasibility requires a model call; deliberately untested.
 SESSION_TIMEOUT = 75 * 60
-SESSION_JOBS_PER_AUTHOR = 2
+SESSION_JOBS_PER_AUTHOR = 3
 CORRECT_TIMEOUT = 900
 BUILD_TIMEOUT = 900
 MEASURE_TIMEOUT = 900
