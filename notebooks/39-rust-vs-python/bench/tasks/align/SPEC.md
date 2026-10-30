@@ -38,7 +38,8 @@ D[i][j] = min( D[i-1][j]   + del[s_i],
                D[i-1][j-1] + sub[s_i][t_j] )            for i = 1..n, j = 1..m
 ```
 
-The cost of the pair is D[n][m].
+The cost of the pair is D[n][m], exactly as this recurrence defines it. Use the substitution costs as given;
+do not first replace them with cheaper chains of substitutions, deletions and insertions.
 
 ## Output
 

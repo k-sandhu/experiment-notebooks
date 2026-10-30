@@ -12,7 +12,8 @@ row_(H-1)
 ```
 
 The first line gives the number of rows H, the number of columns W and the number of steps S. Then H lines
-of exactly W characters each: `.` is an open cell, `#` is a wall, and a digit `1`-`9` is a heat source.
+of exactly W characters each: `.` is an open cell, `#` is a wall, and a digit `1`-`9` is a heat source. The
+grid contains at least one open cell.
 
 ## Simulation
 

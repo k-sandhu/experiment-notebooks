@@ -52,4 +52,4 @@ template's requests in milliseconds with exactly one decimal (452 tenths prints 
 
 ## Benchmark size
 
-About 2,000,000 lines (about 250 MB), of which about 1% are malformed. The samples are smaller.
+About 2,000,000 lines (about 230 MB), of which about 1% are malformed. The samples are smaller.

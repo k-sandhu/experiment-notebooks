@@ -62,4 +62,4 @@ are ASCII and contain no spaces.
 
 ## Benchmark size
 
-About 1,000,000 transactions (about 200 MB). The samples are smaller.
+About 1,000,000 transactions (about 380 MB). The samples are smaller.

@@ -53,4 +53,4 @@ relative tolerance of 1e-9, so the order in which you add up a sum does not matt
 
 ## Benchmark size
 
-N = 4,000 masses and S = 5,000 steps (20 million mass updates). The samples are smaller.
+N = 4,000 masses and S = 15,000 steps (60 million mass updates). The samples are smaller.
