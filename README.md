@@ -204,7 +204,11 @@ Teams often let one model grade another's work, because reading every answer by 
 only if it reflects the work rather than the judge: a polished wrong answer should still fail, and a draft should
 score the same whoever wrote it and whichever judge reads it. These experiments test model judges on answers
 whose correct grade is computed in code (11) and on short decision documents (15, 17), measuring how often the
-grade is right and how much the instruction, the author's name and the choice of judge move it.
+grade is right and how much the instruction, the author's name and the choice of judge move it. They live in
+[`notebooks/judges/`](notebooks/judges/), whose README introduces model judges, the ways they fail and the
+experiments in progress there: which models judge best, whether a weaker model can settle a disagreement between
+stronger ones, whether a judge can learn one person's taste, and how the grading set-up and instructions change
+the verdicts.
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
