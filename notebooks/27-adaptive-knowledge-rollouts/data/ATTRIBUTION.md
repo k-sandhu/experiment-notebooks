@@ -33,3 +33,21 @@ and certificates are code-generated. One new Claude Opus 5.5 wording call costs 
 The reported list cost across all authoring calls is $0.1417238.
 Policy CLI and actual subscription billing remain unavailable. The source index
 and task creation dates are in frontier_v5/provenance.json. No weights are updated.
+
+## Token-budget follow-up, 26 October 2026
+
+The two 16-case banks in `frontier_v6/` were generated from new seeded code on 26 October 2026. The initial bank belongs to an interrupted launch; the unchanged replacement bank supplies the token comparison. Fictional calendars, numeric records and authored fixture code use CC0-1.0. The OpenEnv revision and BSD-3-Clause environment licence remain pinned in the data provenance.
+
+No new authoring model call was made. Claude Opus 5.5 wording from `frontier_v5/authoring_fees.json` was reused. All four historical authoring responses together report USD 0.1417238 in list metadata. Tested-policy billing is unavailable. No model weights were loaded locally or updated.
+
+## Capacity recovery, 27 October 2026
+
+The provider reported that the selected Sol model was at capacity after twelve whole arms reached their token cutoffs. The recovery protocol retains those twelve and repeats every incomplete or unstarted arm from a fresh environment, using the same numeric case bank, requested models, medium reasoning and controller. All original partial outcomes, the failed request without usage and availability probes remain archived outside the matched comparison. Selection uses completion status rather than rewards. The procedure was recorded after the outage and frozen before restarted trajectories.
+
+`comparison_complete/` contains unchanged copies of the selected source records from `comparison_final/`, `comparison_capacity/` and `comparison_session/`. Its manifest links every file to its origin and hash. Duplicate copies are counted once for physical invocation totals. Incomplete groups with known success/failure contrast are reported as a post hoc diagnostic, while complete groups of four remain the primary metric. Unknown rewards are never relabeled as failures.
+
+## Local session recovery, 27 October 2026
+
+After a tool-session refresh, the last collector and its child were no longer present. Fifteen entire arms had finished. The one unfinished Sol adaptive arm remains archived with 100 completed requests, 3,576,478 reported tokens, four known failures and one abandoned pending request whose usage and outcome are unknown. The pending raw file is never rewritten or resubmitted. Selection used completion status, not rewards.
+
+A new frozen protocol repeats only that arm from a fresh calendar and the full 6M-token allowance. The same requested model, medium reasoning, cases, tool workflow and controller are retained. No availability probe was added. The composite takes twelve whole arms from the original collection, three from capacity recovery and one from local session recovery. All source bytes are unchanged and included copies are counted once. Both recoveries are additional timing limitations; no model weights were updated.

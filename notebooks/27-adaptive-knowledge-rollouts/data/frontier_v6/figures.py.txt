@@ -1,0 +1,125 @@
+def draw_token_figures(state,root):
+    from pathlib import Path
+    import json,math
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import MaxNLocator
+    root=Path(root);out=root/'figures';out.mkdir(exist_ok=True)
+    summary=state['summary'];blocks=state['blocks'];groups=state['groups'];eps=state['episode_table'];curves=state['checkpoints']
+    policies=['GPT-6.1 Sol','GPT-6 Luna'];methods=['uniform','adaptive'];colors={'uniform':'#5853a0','adaptive':'#197880'};markers=['o','s','^','D']
+    def row(policy,method):return summary[(summary.policy==policy)&(summary.allocator==method)].iloc[0]
+    def finish(fig,name):fig.savefig(out/name,bbox_inches='tight');plt.close(fig)
+    fig,axes=plt.subplots(1,2,figsize=(10.7,4.2),sharey=True)
+    peak=max(3,int(summary.mixed_groups.max())+1)
+    for ax,policy in zip(axes,policies):
+        values=[int(row(policy,m).mixed_groups) for m in methods]
+        ax.bar(range(2),values,color=[colors[m] for m in methods],width=.58)
+        for i,m in enumerate(methods):
+            for b in range(4):
+                z=blocks[(blocks.policy==policy)&(blocks.allocator==m)&(blocks.block==b)].iloc[0]
+                ax.scatter(i+(b-1.5)*.105,z.mixed_groups,marker=markers[b],s=30,facecolor='white',edgecolor='#222222',zorder=3,label='Block '+str(b+1) if i==0 else None)
+            ax.text(i,values[i]+.16,str(values[i]),ha='center',fontweight='bold')
+        ax.set_xticks(range(2),['Uniform','Adaptive']);ax.set_title(policy);ax.set_ylim(-.15,peak+.4);ax.set_ylabel('Complete mixed groups of four')
+    axes[0].legend(fontsize=8,ncol=2,loc='upper left')
+    su,sa=[int(row('GPT-6.1 Sol',m).mixed_groups) for m in methods];lu,la=[int(row('GPT-6 Luna',m).mixed_groups) for m in methods]
+    fig.suptitle(f'With a 24M token cutoff each: Sol {su} vs {sa}, Luna {lu} vs {la} mixed groups (uniform vs adaptive)')
+    finish(fig,'token6_yield.png')
+    fig,axes=plt.subplots(1,2,figsize=(10.7,4.0),sharey=True)
+    for ax,policy in zip(axes,policies):
+        for m in methods:
+            c=curves[(curves.policy==policy)&(curves.allocator==m)]
+            ax.step(c.total_budget_tokens/1e6,c.mixed_groups,where='post',label=m.title(),color=colors[m],linestyle='-' if m=='uniform' else '--',marker='o' if m=='uniform' else 's',markersize=4)
+        ax.set_title(policy);ax.set_xlabel('Combined equal allowance over four blocks (million tokens)');ax.set_ylabel('Complete mixed groups');ax.legend();ax.set_xlim(-.3,24.5);ax.set_xticks(range(0,25,4));ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    fig.suptitle('Only groups completed before each frozen token checkpoint receive credit')
+    fig.tight_layout(rect=(0,0,1,.94))
+    finish(fig,'token6_curves.png')
+    fig,axes=plt.subplots(1,2,figsize=(10.7,4.0),sharey=True)
+    for ax,policy in zip(axes,policies):
+        for b in range(4):
+            pair=[int(blocks[(blocks.policy==policy)&(blocks.allocator==m)&(blocks.block==b)].iloc[0].mixed_groups) for m in methods]
+            ax.plot([b-.12,b+.12],pair,color='#777777',lw=1)
+            for i,m in enumerate(methods):ax.scatter(b+(-.12 if i==0 else .12),pair[i],color=colors[m],marker='o' if i==0 else 's',s=55,label=m.title() if b==0 else None,zorder=3)
+            ax.text(b,max(pair)+.15,f'{pair[0]} / {pair[1]}',ha='center',fontsize=9)
+        ax.set_xticks(range(4),['1','2','3','4']);ax.set_xlabel('Disjoint task block, 6M tokens per collector');ax.set_ylabel('Complete mixed groups');ax.set_title(policy);ax.set_ylim(-.2,max(3,int(blocks.mixed_groups.max())+1));ax.legend();ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    fig.suptitle('Four separate blocks show the observed collector differences')
+    fig.tight_layout(rect=(0,0,1,.94))
+    finish(fig,'token6_blocks.png')
+    fig,axes=plt.subplots(2,2,figsize=(11.0,7.7))
+    for b,ax in enumerate(axes.flat):
+        tids=sorted(tid for tid,t in state['tasks'].items() if t['block']==b)
+        for i,(policy,m) in enumerate([(p,m) for p in policies for m in methods]):
+            for j,tid in enumerate(tids):
+                z=eps[(eps.policy==policy)&(eps.allocator==m)&(eps.task_id==tid)];known=z[z.reward.notna()];n=len(known);wins=int((known.reward==1).sum());unknown=int(z.reward.isna().sum())
+                color=plt.colormaps['YlGnBu'](.15+.8*wins/n) if n else '#eeeeee'
+                ax.add_patch(plt.Rectangle((j-.46,i-.4),.92,.8,facecolor=color,edgecolor='white'))
+                label=f'{wins}/{n}'+(f'\n{unknown} cutoff' if unknown else '') if n else (f'{unknown} cutoff\n0 known' if unknown else 'unvisited')
+                ax.text(j,i,label,ha='center',va='center',fontsize=8.5,color='white' if n and wins/n>.6 else '#202020')
+        ax.set_xlim(-.5,3.5);ax.set_ylim(3.5,-.5);ax.set_xticks(range(4),tids,rotation=15);ax.set_yticks(range(4),['Sol / uniform','Sol / adaptive','Luna / uniform','Luna / adaptive']);ax.set_title('Block '+str(b+1));ax.grid(False)
+    fig.suptitle('Coverage changes with collection: each cell shows successes / known attempts')
+    finish(fig,'token6_coverage.png')
+    labels=[p.replace('GPT-6.1 ','').replace('GPT-6 ','')+'\n'+m.title() for p in policies for m in methods]
+    ordered=[row(p,m) for p in policies for m in methods];x=np.arange(4)
+    fig,axes=plt.subplots(1,2,figsize=(11.1,4.5))
+    eligible=np.array([r.eligible_tokens for r in ordered])/1e6;cross=np.array([r.actual_tokens-r.eligible_tokens for r in ordered])/1e6
+    axes[0].bar(x,eligible,color=[colors[m] for p in policies for m in methods],label='Eligible requests')
+    axes[0].bar(x,cross,bottom=eligible,color='#b87531',hatch='//',label='Whole crossing requests')
+    axes[0].axhline(24,color='#333333',linestyle='--',label='24M eligibility cutoff');axes[0].set_ylabel('Reported input + output tokens (million)');axes[0].set_title('Actual spend includes the last crossing request');axes[0].legend(fontsize=8)
+    reasoning=np.array([r.reasoning_output_tokens for r in ordered])/1e3;other=np.array([r.output_tokens-r.reasoning_output_tokens for r in ordered])/1e3
+    axes[1].bar(x,reasoning,color=[colors[m] for p in policies for m in methods],label='Reasoning output')
+    axes[1].bar(x,other,bottom=reasoning,color='#bcbcbc',hatch='//',label='Other output');axes[1].set_ylabel('Output tokens (thousand)');axes[1].set_title('Reasoning is already included in total output');axes[1].legend(fontsize=8)
+    for ax in axes:ax.set_xticks(x,labels)
+    finish(fig,'token6_resources.png')
+    sol=eps[(eps.policy=='GPT-6.1 Sol')&eps.reward.notna()];valid=sol[sol.feasible]
+    quality=state['results']['sol_quality'];counts=[quality['optima'],quality['feasible_nonoptimal'],quality['constraint_or_protocol_failures']]
+    fig,axes=plt.subplots(1,2,figsize=(10.9,4.2))
+    axes[0].bar(range(3),counts,color=['#197880','#b18031','#a9483b']);axes[0].set_xticks(range(3),['Valid optimum','Valid, higher cost','Constraint or\nprotocol failure']);axes[0].set_ylabel('Known Sol attempts')
+    for i,n in enumerate(counts):axes[0].text(i,n+.15,str(n),ha='center')
+    axes[0].set_ylim(0,max(3,max(counts)*1.18+1));axes[0].set_title('A zero reward can have different causes')
+    for i,m in enumerate(methods):
+        z=valid[valid.allocator==m].sort_values('episode_id');jitter=np.linspace(-.16,.16,len(z)) if len(z)>1 else np.zeros(len(z))
+        axes[1].scatter(i+jitter,z.gap_pct,color=colors[m],marker='o' if m=='uniform' else 's',alpha=.8,s=35)
+    axes[1].axhline(0,linestyle='--',color='#444444');axes[1].set_xticks(range(2),['Uniform','Adaptive']);axes[1].set_ylabel('Extra total penalty cost above optimum (%)');axes[1].set_title('Each point is one valid final Sol agenda')
+    fig.suptitle(f'Sol: {counts[0]} optima, {counts[1]} valid higher-cost plans, {counts[2]} other failures')
+    finish(fig,'token6_quality.png')
+    failures=sol[(sol.reward==0)&sol.feasible&(sol.gap_points>0)&(sol.status=='ok')].sort_values('episode_id')
+    if failures.empty:failures=eps[eps.reward==0].sort_values('episode_id')
+    if not failures.empty:
+        q=failures.iloc[0];e=state['episodes'][q.episode_id];t=state['tasks'][q.task_id];actual={r['event_id']:r for r in e['verification']['final_state']['events']}
+        import datetime as dt
+        base=dt.datetime(2026,11,6,9,tzinfo=dt.timezone.utc)
+        def hours(value):
+            z=dt.datetime.fromisoformat(str(value).replace('Z','+00:00'))
+            if z.tzinfo is None:z=z.replace(tzinfo=dt.timezone.utc)
+            return (z-base).total_seconds()/3600
+        fig,axes=plt.subplots(1,2,figsize=(11.0,6.6),sharey=True)
+        for ax,kind in zip(axes,['Observed','One certified optimum']):
+            for j,sp in enumerate(t['specs']):
+                for person in sp['people']:
+                    for slot in t['busy'][person]:ax.broken_barh([(slot/4,.25)],(j-.36,.72),facecolors='#dddddd',hatch='//',edgecolor='#999999',linewidth=.2)
+                start=hours(actual['target-'+str(j)]['start_datetime']) if kind=='Observed' else t['oracle']['starts'][j]/4
+                ax.broken_barh([(start,sp['duration']/4)],(j-.29,.58),facecolors=colors[q.allocator] if kind=='Observed' else '#777777')
+            cost=q.objective_points if kind=='Observed' else q.optimum_points
+            ax.set_title(f'{kind}: {int(cost):,} penalty points');ax.set_xticks(range(0,13,2),[f'{9+h:02d}:00' for h in range(0,13,2)]);ax.set_xlim(-.1,12.1);ax.set_xlabel('UTC start time, 6 November 2026');ax.set_yticks(range(12),[f'Review {j}' for j in range(12)]);ax.set_ylim(11.6,-.6)
+        axes[0].set_ylabel('Hatching marks protected availability for each review');fig.suptitle(f'Measured {q.policy} failure on {q.task_id}, episode {q.episode_id}')
+        finish(fig,'token6_failure.png')
+    from matplotlib.patches import Patch
+    diagnostic=state['results']['known_contrast_diagnostic']['rows']
+    peak=max(2,max(r['all_observed_contrast'] for r in diagnostic)+1.4)
+    fig,axes=plt.subplots(1,2,figsize=(10.7,4.3),sharey=True)
+    for ax,policy in zip(axes,policies):
+        selected=[next(r for r in diagnostic if r['policy']==policy and r['allocator']==m) for m in methods]
+        full=[r['primary_complete_mixed'] for r in selected];partial=[r['additional_partial_known_contrast'] for r in selected]
+        ax.bar(range(2),full,width=.58,color=[colors[m] for m in methods],edgecolor='#333333')
+        ax.bar(range(2),partial,bottom=full,width=.58,facecolor='white',edgecolor=[colors[m] for m in methods],hatch='///',linewidth=1.3)
+        for i,(c,prefix) in enumerate(zip(full,partial)):
+            if c:ax.text(i,c/2,str(c),ha='center',va='center',color='white',fontweight='bold')
+            if prefix:ax.text(i,c+prefix/2,str(prefix),ha='center',va='center',fontweight='bold')
+            ax.text(i,c+prefix+.12,str(c+prefix),ha='center',fontweight='bold')
+        ax.set_xticks(range(2),['Uniform','Adaptive']);ax.set_title(policy);ax.set_ylim(-.1,peak)
+        ax.set_xlabel('Collector, 24M token eligibility allowance');ax.set_ylabel('Groups with observed success/failure contrast')
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    axes[0].legend(handles=[Patch(facecolor='#666666',label='Complete groups of four (primary)'),Patch(facecolor='white',edgecolor='#444444',hatch='///',label='Additional incomplete groups (post hoc)')],fontsize=8,loc='upper left')
+    total=sum(r['additional_partial_known_contrast'] for r in diagnostic)
+    fig.suptitle(f'{total} additional incomplete groups contain known reward contrast (post hoc)')
+    finish(fig,'token6_partial_contrast.png')
+    return ['token6_yield.png','token6_curves.png','token6_blocks.png','token6_coverage.png','token6_resources.png','token6_quality.png','token6_partial_contrast.png']+(['token6_failure.png'] if not failures.empty else [])
