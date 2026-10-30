@@ -309,6 +309,7 @@ command-line tool installed and signed in.
 | [26](notebooks/26-model-auditability/) | Nothing extra; no Torch or model checkpoint | `NB26_LIVE=1`, in a copy, for hosted replies; `NB26_LOCAL=1` (and `NB26_DOWNLOAD=1` if the checkpoint is absent) recomputes the local probes into git-ignored `data/tmp/` | `OPENROUTER_API_KEY`; `codex`; optional packages for the local probes |
 | [27](notebooks/27-adaptive-knowledge-rollouts/) | `requirements-replay.txt`; allow 1,800 seconds per cell | `requirements-live.txt` and the pinned OpenEnv source, in a new folder; steps and switches in `data/PROTOCOL.md` | `codex` |
 | [28](notebooks/28-monitor-removal-honesty/) | Nothing extra | `NB_LIVE=1`; the prepared conversations are rebuilt only with `NB_REBUILD_TRACES=1` | `OPENROUTER_API_KEY`; `claude`, `codex` |
+| [29](notebooks/29-theory-of-mind/) | Nothing extra; the stories are generated again in code | `NB_LIVE=1`; `N_PAIRS` sets the size; capped at USD 30 of OpenRouter spend and 15,000 `claude`, `codex` and `muse` calls | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
 | [30](notebooks/30-workbook-to-statements/) | Nothing extra; the workbooks are regenerated in a temporary folder and checked against the frozen copies, and every saved program runs again | `NB_LIVE=1`; capped at 400 new calls and USD 60 of Claude list price | `claude`, `codex` |
 | [31](notebooks/31-self-repairing-scrapers/) | Nothing extra; `NB_RERUN_PROGRAMS=1` also runs every saved program again and reports any difference | `NB_LIVE=1` | `OPENROUTER_API_KEY`; `claude`, `codex` |
 
@@ -353,6 +354,7 @@ here with their data and caches.
 | 26 | 32 made-up expense claims generated in code, and the Pythia-14M model checkpoint | Fresh: 24 October 2026 | Claims in this repository; Pythia-14M Apache-2.0, downloaded on demand |
 | 27 | Fictional calendar and office tasks generated in code, worded by Claude Opus 5.5 | Fresh: 24 and 26 October 2026 | CC0; OpenEnv BSD-3-Clause |
 | 28 | 15 prepared agent conversations over small code repositories written for the experiment, with the agent's words by Claude Haiku 5.5 | Fresh | This repository |
+| 29 | 480 stories in 240 twin pairs over eight families, generated in code with exact answers, and six assistant requests written for the experiment | Fresh: 29 October 2026 | This repository |
 | 30 | 20 fictional subsidiary workbooks generated in code, with exact answers | Fresh: 29 October 2026 | This repository |
 | 31 | 20 fictional news sites built in code, with 240 release texts written by GPT-6.1 Sol | Fresh: releases dated 17 August to 23 October 2026, weekly runs 5 to 26 October 2026 | This repository |
 
