@@ -80,9 +80,21 @@ GPT-6 Astra last of six; giving every writer the same judges put it first. The O
 282 drafts higher than the Claude judge, by 9.01 points on average, so the precaution ranked writers partly by
 which judge they drew.
 
+### Teaching a judge one person's taste (35)
+
+[Notebook 35](35-judge-taste/) asked whether a judge can learn what one editor prefers when two versions of a
+paragraph both follow the written rules. The test pairs came from this repository's own README rewrites: 42
+paragraph pairs from eight READMEs, each an earlier version and the version the owner merged. With no guidance,
+Claude Opus 5.5 picked the merged version on 73% of judgments and GPT-6.1 Sol on 60%. Eight of the owner's past
+choices in the prompt raised them to 92% and 82%, while the written style rules alone changed nothing clear. Claude
+Haiku 5.5 and Qwen3.5-9B gained nothing from any guidance and tended to pick whichever version came second. A
+program that simply picks the version with fewer long words matched the owner on 83% of pairs, so much of what the
+examples taught was a preference for plain words. Almost every merged version was drafted by Claude, so the judges
+may be learning that rewriter's habits as much as the owner's taste.
+
 ## Experiments in progress
 
-These five experiments share one aim: to find out how a team should choose, combine and instruct judges. Four of
+These four experiments share one aim: to find out how a team should choose, combine and instruct judges. All of
 them use one exam, built in notebook 33, of answer pairs where code decides which answer is better and where the
 pairs are hard enough that strong judges make mistakes.
 
@@ -96,10 +108,6 @@ pairs are hard enough that strong judges make mistakes.
   reasons? This is the setting of debate studies such as
   [Khan et al. (2024)](https://arxiv.org/abs/2402.06782), in which a weaker judge decides between stronger models'
   arguments.
-- Teaching a judge one person's taste (35, [issue #96](https://github.com/k-sandhu/experiment-notebooks/issues/96)).
-  This repository's owner had every README rewritten to a stricter house style and merged the versions they
-  accepted. Can a judge pick the accepted paragraph with no guidance, with the written style rules, with examples
-  of past choices, or with a rubric distilled from those examples?
 - How to build a judging harness (36, [issue #97](https://github.com/k-sandhu/experiment-notebooks/issues/97)).
   One part of the grading set-up changes at a time: one answer graded alone or two compared, one answer order or
   both, reasoning before or after the verdict, one reply or a majority of five, low or high reasoning effort, a
