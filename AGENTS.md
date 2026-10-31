@@ -391,8 +391,98 @@ no notebook and does not know the topic or tools:
   out any model whose licence forbids this use.
 - Anything that costs money has a size knob (`N_...`, `MODELS`) at the top of the notebook. Defaults stay
   small. Print the spend at the end.
-- Cache every model response on disk, keyed by the full request. Never commit keys or tokens.
+- Cache every model response on disk, keyed by the full request, and store the request (model, prompt or
+  messages, settings) in the same cache row. Never commit keys or tokens.
+- Send every fresh model call to the local Langfuse when it is running (see [Tracing model calls](#tracing-model-calls)).
 - Judges are top models (Claude Opus, GPT via Codex, Muse) and never the model being judged alone.
+
+## Tracing model calls
+
+The owner's machine runs a long-term [Langfuse](https://langfuse.com/) instance (self-hosted, v4) that holds
+a trace of every cached model call from every notebook, so calls can be searched, compared and inspected
+across experiments. It listens at `http://localhost:3300`. The deployment, its secrets and a backfill script
+live in `D:\projects\langfuse` (outside this repo; see the `README.md` there).
+
+- Always look for the instance before a notebook makes model calls: `GET {LANGFUSE_HOST}/api/public/health`
+  with a 2-second timeout. If it answers, send each fresh call (a cache miss) as one trace. If it does not
+  answer, or the keys are missing, skip tracing silently. A notebook must run without Langfuse, and a replay
+  from the cache sends nothing.
+- Read the address and keys from the user environment variables `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY` and
+  `LANGFUSE_SECRET_KEY`. Never write them into a notebook, cache or commit.
+- Langfuse v4 takes traces only through its OpenTelemetry endpoint, `POST /api/public/otel/v1/traces`
+  (OTLP/HTTP JSON). The older `/api/public/ingestion` endpoint rejects traces.
+- Derive the trace ID from the notebook folder name and the cache key, as in the helper below. The backfill
+  script uses the same IDs and skips spans that are already stored. Sending the same span twice stores it
+  twice, so send each call once.
+- Define the helper inside the notebook (notebooks import nothing from the repo) and call it right after a
+  fresh response is written to the cache. For agent loops, send one trace per call, with the episode or task
+  ID as `session_id` so the calls of one episode line up in the Langfuse session view.
+- When a notebook adds cached calls without tracing them (an older notebook, a run with Langfuse stopped),
+  run `python D:\projects\langfuse\backfill\backfill_traces.py` after the run. It reads every cache in every
+  checkout and worktree, maps the common cache layouts to traces, and sends only what Langfuse lacks. A new
+  cache layout may need a small change to its `normalise` function; check its `--dry-run` report first.
+
+```python
+import datetime as dt, hashlib, json, os
+import requests
+
+NOTEBOOK = "NN-short-name"                       # the notebook's folder name
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST", "http://localhost:3300").rstrip("/")
+LANGFUSE_AUTH = (os.environ.get("LANGFUSE_PUBLIC_KEY", ""), os.environ.get("LANGFUSE_SECRET_KEY", ""))
+
+
+def _langfuse_running():
+    if not all(LANGFUSE_AUTH):
+        return False
+    try:
+        return requests.get(f"{LANGFUSE_HOST}/api/public/health", timeout=2).ok
+    except requests.RequestException:
+        return False
+
+
+LANGFUSE_ON = _langfuse_running()
+
+
+def trace_call(cache_key, name, model, request, response, start, end, usage=None, cost_usd=None,
+               session_id=None, metadata=None, error=None):
+    """Send one fresh model call to the local Langfuse. start and end are timezone-aware datetimes.
+    usage uses Langfuse keys: {"input": n, "output": n, "input_cache_read": n, "output_reasoning": n},
+    with input excluding cached tokens and output excluding reasoning tokens. Never raises."""
+    if not LANGFUSE_ON:
+        return
+
+    def attr(k, v):  # Langfuse reads input, output, usage and metadata values as JSON strings
+        return {"key": k, "value": {"stringValue": v if isinstance(v, str) else json.dumps(v, default=str)}}
+
+    tags = {"key": "langfuse.trace.tags", "value": {"arrayValue": {"values": [{"stringValue": f"nb{NOTEBOOK[:2]}"}]}}}
+
+    attrs = [attr("langfuse.observation.type", "generation"), attr("langfuse.observation.model.name", model),
+             attr("langfuse.observation.input", request), attr("langfuse.observation.output", response),
+             attr("langfuse.trace.name", f"{NOTEBOOK[:2]} {name}"), tags,
+             attr("langfuse.environment", "notebook"), attr("langfuse.trace.metadata.notebook", NOTEBOOK),
+             attr("langfuse.trace.metadata.cache_key", cache_key)]
+    if usage:
+        attrs.append(attr("langfuse.observation.usage_details", usage))
+    if cost_usd is not None:
+        attrs.append(attr("langfuse.observation.cost_details", {"total": cost_usd}))
+    if session_id:
+        attrs.append(attr("langfuse.session.id", f"{NOTEBOOK}/{session_id}"))
+    if error:
+        attrs += [attr("langfuse.observation.level", "ERROR"), attr("langfuse.observation.status_message", str(error))]
+    for k, v in (metadata or {}).items():
+        attrs.append(attr(f"langfuse.observation.metadata.{k}", v))
+    span = {"traceId": hashlib.sha256(f"{NOTEBOOK}|{cache_key}".encode()).hexdigest()[:32],
+            "spanId": hashlib.sha256(f"{NOTEBOOK}|{cache_key}|gen|0".encode()).hexdigest()[:16],
+            "name": name, "kind": 1, "attributes": attrs,
+            "startTimeUnixNano": str(int(start.timestamp() * 1e9)),
+            "endTimeUnixNano": str(int(end.timestamp() * 1e9))}
+    body = {"resourceSpans": [{"resource": {"attributes": [attr("service.name", "experiment-notebooks")]},
+                               "scopeSpans": [{"scope": {"name": NOTEBOOK}, "spans": [span]}]}]}
+    try:
+        requests.post(f"{LANGFUSE_HOST}/api/public/otel/v1/traces", json=body, auth=LANGFUSE_AUTH, timeout=10)
+    except requests.RequestException:
+        pass
+```
 
 ## Data
 
