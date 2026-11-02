@@ -254,6 +254,18 @@ merging them.
 |---|---|---|---|
 | 38 | [How should a model send back its edits to a long document?](notebooks/38-long-text-edits/) | A model asked to change one number in a 12,000-word document can send back the whole document, which is slow and can change text nobody asked about, or only the change, which a program must then put in the right place. On 36 edit requests with exact answers in nine US Federal Register rules published in late October 2026 (1,842 to 12,762 words; one change, six mixed changes, renaming an abbreviation everywhere, twenty small changes), which of seven reply formats (the whole document, SEARCH/REPLACE blocks, JSON find-and-replace pairs, a unified diff, OpenAI's patch format, line-number edits, an edit sketch), merged in which way (exact, tolerant or fuzzy matching, `git apply`, GNU `patch`, a second model writing out the document, one retry with the error), most often gives exactly the requested document for five models (GPT-6.1 Sol, Claude Sonnet 5.5, Claude Haiku 5.5, DeepSeek V4.1 Flash, Qwen3.8 27B), and at what cost? | Find-and-replace pairs merged by exact match did best: 82% and 84% of 180 requests exact, 85% and 86% with one retry, in a median 17 seconds at every length; tolerant and fuzzy matching rescued none, because the failures were edits left out. Whole rewrites 81% (31 to 115 seconds), diffs 79% with a forgiving merge but 41% through plain `git apply`, line-number edits 78%, edit sketches 64%, OpenAI's patch format 59% at best. A second model writing out the merged document lost edits (57% for find-and-replace). Renames were find-and-replace's weak spot (51%, against 84% for rewrites). GPT-6.1 Sol was at the ceiling in three formats, so the ranking comes from the other four models |
 
+## Writing fast code
+
+A script that summarises a day's web-server log, or totals a million bank transactions, can take seconds in Python
+and a fraction of that in a compiled language such as Rust. Teams usually stay with Python because the faster version
+takes longer to write and to get right. An AI coding model writes either language for about the same effort, which
+makes the old trade worth measuring again: how much speed and memory does the model's Rust buy over its Python, and
+when does Python's usual shortcut, the NumPy array library, close the gap?
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 39 | [Rust or Python: how much faster is the code an AI model writes?](notebooks/39-rust-vs-python/) | A morning summary of a 2-million-line web log takes about 5 seconds in straightforward Python; a Rust version is usually faster but costs developer time, a cost an AI coding model mostly removes. When Claude Sonnet 5.5 and GPT-6.1 Terra each write eight tasks made up for the study (a physics simulation, word-pair counts, JSON transaction totals, log parsing, shortest routes, an edit-cost table, a heat grid, parallel random walks) in Rust, in standard-library Python and in Python with NumPy (48 programs), how much faster and smaller is the Rust, how much of the gap does NumPy close, and is every version correct? A straightforward Python solution of each task is timed as well | All 48 programs and the 8 straightforward solutions were correct on every hidden input, a ceiling. Rust was the fastest version in all 16 task-model pairs: 6.0 times faster than the faster of each model's two Python versions (geometric mean, 2.2 to 14.5 times), about 25 times faster than its standard-library Python and 41 times faster than the straightforward Python. NumPy made Python 3 to 28 times faster on numeric tasks but did nothing for JSON and log parsing, where Rust stayed 3 to 7 times ahead of the best Python. Rust used less memory than both Python versions in 15 of 16 pairs and was 1.5 to 2.6 times as long. One program per model and task, timed on a busy Windows laptop |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
@@ -269,8 +281,8 @@ label. Each one gives the question, the fresh data to use, the models, the measu
 
 | Provider | Models used | How |
 |---|---|---|
-| Anthropic | Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 and older versions in 15 | `claude -p` (Claude Code CLI), headless, no tools |
-| OpenAI | GPT-6.1, GPT-6 Astra/Sol/Luna and GPT-5.6 Sol/Terra/Luna | `codex exec` (Codex CLI), read-only sandbox |
+| Anthropic | Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 and older versions in 15 | `claude -p` (Claude Code CLI), headless, no tools; in 39 a coding agent with shell and file tools |
+| OpenAI | GPT-6.1 Sol/Terra, GPT-6 Astra/Sol/Luna and GPT-5.6 Sol/Terra/Luna | `codex exec` (Codex CLI), read-only sandbox; in 39 a coding agent in a workspace-write sandbox |
 | Meta | Muse Spark 1.2/1.3 and Muse Wonder/Wonder Full | `muse exec` (Muse CLI), empty preset |
 | Decision models | OpenAI Decisions, Jev 1.14, Mercury Decide, Clef Flash | OpenRouter Decisions HTTP API; dated IDs and provider pins in 18 |
 | Prior Labs | TabPFN-3.5, numeric tabular classification and regression | Prior Labs REST API, labeled context and unlabeled test features |
@@ -333,6 +345,7 @@ command-line tool installed and signed in.
 | [33](notebooks/judges/33-judge-exam/) | `requirements-replay.txt`; replays all 4,320 judgments and 960 solves from `data/cache_requests.jsonl.gz` | `NB_LIVE=1` runs a small smoke profile; `NB_PROFILE=full` for the frozen exam; $5 OpenRouter cap | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
 | [35](notebooks/judges/35-judge-taste/) | The notebook's own `requirements.txt`; replays all 2,016 judgments from `data/cache/` | `NB_LIVE=1` judges two development pairs by default; `NB_PROFILE=full` for the frozen test; $5 OpenRouter cap | `OPENROUTER_API_KEY`; `claude`, `codex` |
 | [38](notebooks/38-long-text-edits/) | Nothing extra; every merge method runs again on the cached replies (needs `git`, and GNU `patch` for that method) | `NB_LIVE=1`; `NB_N_DOCS` and `NB_MODELS` set the size; capped at 3,000 CLI calls, USD 80 of Claude list price and USD 15 of OpenRouter spend | `OPENROUTER_API_KEY`; `claude`, `codex` |
+| [39](notebooks/39-rust-vs-python/) | Nothing extra; the notebook reads the saved programs and measurements | `python -m bench.sessions run-all` (skipped while the saved programs match their request hashes), then `python -m bench.measure all --authors sonnet terra reference`: about an hour of local timing, Windows only | `claude`, `codex`; Rust 1.99, Python 3.13, NumPy 2.2 |
 
 ## Data and licences
 
@@ -381,6 +394,7 @@ here with their data and caches.
 | 33 | 264 answer pairs (240 test) generated in code, with answers written by Gemma 3 4B and 27B and checked by hidden tests, exact arithmetic or rule checkers | Fresh: generated 30 October 2026 | This repository |
 | 35 | 88 paragraph pairs (earlier and merged versions) from this repository's README rewrites of 27 to 30 October 2026 | Fresh: lines dated 17 to 30 October 2026 | This repository (MIT) |
 | 38 | Nine US Federal Register rules and proposed rules converted to Markdown, with 36 edit requests and their exact answers generated in code | Fresh: published 19 to 29 October 2026 | [Federal Register API](https://www.federalregister.gov/developers/documentation/api/v1); US government works, public domain |
+| 39 | Eight programming tasks with inputs generated in code from fixed seeds and exact expected outputs | Fresh: written 30 October 2026 | This repository |
 
 ## For AI agents
 
