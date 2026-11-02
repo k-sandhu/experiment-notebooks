@@ -390,7 +390,7 @@ sections.append(('9. Future work and further reading','''Links checked November 
 - [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) (Anthropic, accessed 2026). Explains cache reads/writes and growing conversation prefixes, including why denominator definitions matter.
 '''))
 
-readme=intro+'\n'+summary+'\n'+contents+'\n'+'\n\n'.join('## '+title+'\n\n'+body for title,body in sections)+'\n'
+readme=(intro+'\n'+summary+'\n'+contents+'\n'+'\n\n'.join('## '+title+'\n\n'+body for title,body in sections)).rstrip()+'\n'
 (ROOT/'README.md').write_text(readme,encoding='utf-8')
 posts=['# Saved smoke outputs\n\nRaw generated text is preserved. The post/preface/note split is derived by the documented boundary parser. No quality score is implied.\n']
 for arm in records:

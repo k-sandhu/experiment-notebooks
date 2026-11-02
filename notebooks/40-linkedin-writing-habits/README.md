@@ -301,4 +301,3 @@ Links checked November 1, 2026 (Toronto local date).
 - [Why Does ChatGPT "Delve" So Much? Exploring the Sources of Lexical Overrepresentation in Large Language Models](https://arxiv.org/abs/2412.11385) (Juzek and Ward, 2024). Examines overrepresented vocabulary; its scientific-writing setting does not by itself establish LinkedIn habits.
 - [Prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching) (OpenAI, accessed 2026). Explains prefix reuse, minimum lengths and usage fields; API controls must not be assumed available through Codex.
 - [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) (Anthropic, accessed 2026). Explains cache reads/writes and growing conversation prefixes, including why denominator definitions matter.
-
