@@ -62,6 +62,10 @@ def main():
     rows=read_csv('counts.csv');examples=read_csv('match_examples.csv')
     with (ROOT/'data/decision_audit/counts.csv').open(encoding='utf-8',newline='') as f:decision_counts=list(csv.DictReader(f))
     decision_summary=json.loads((ROOT/'data/decision_audit/summary.json').read_text(encoding='utf-8'))
+    new_path=ROOT/'data/plain_prose_v2/decisions/counts.csv'
+    intervention_counts=None
+    if new_path.exists():
+        with new_path.open(encoding='utf-8',newline='') as f:intervention_counts=list(csv.DictReader(f))
     source={x['id']:x for x in catalog['sources']}
     def cite(ids):return ', '.join('['+i+': '+source[i]['title']+']('+source[i]['url']+')' for i in ids)
     parts=['''# A guide to recurring AI writing patterns
@@ -86,6 +90,13 @@ The classifier sees the post and its source article, with no writer identity or 
 
 ## Contents
 ''']
+    if intervention_counts is not None:
+        parts[0]=parts[0].replace('The 400 posts were already collected before this guide and its 70 additional rules were defined.',
+            'The 400 minimal-request posts were collected before this guide and its 70 surface rules were defined. A further 400 posts use the explicit prose prompt on the same sources.')
+        parts[0]=parts[0].replace('Each of the 400 posts is evaluated for all 40 patterns in six locations.',
+            'Each of the 800 posts across both prompt conditions is evaluated for all 40 patterns in six locations.')
+        parts[0]=parts[0].replace('## Contents',
+            'The per-pattern tables compare minimal request → explicit prose prompt, with 100 posts per writer in each condition. The unchanged classifier receives neither the condition nor its generating prompt. [Paired results](../prompt_comparison/patterns.csv) and [worked comparisons](../../README.md) show the intervention. Literal surface diagnostics and measured excerpts below retain their original minimal-request scope.\n\n## Contents')
     for i,style in enumerate(catalog['styles'],1):
         parts.append(f"{i}. [{style['name']}](#{style['id'].replace('_','-')})")
     parts.append('\n[All 70 counting rules](#all-70-counting-rules) · [Sources and evidence strength](#sources-and-evidence-strength) · [Reproduce](#reproduce)\n')
@@ -97,8 +108,13 @@ The classifier sees the post and its source article, with no writer identity or 
               f"**Clearer alternative.** {style['clearer_rewrite']}\n\n"
               f"**When it can help.** {style['useful_when']}\n\n**Basis.** {cite(style['source_ids'])}. The definition and editing explanation here are the study author's operational interpretation.\n")
         judged=[next(r for r in decision_counts if r['writer_model']==m and r['zone']=='whole' and r['style_id']==style['id']) for m in MODELS]
-        parts.append('**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.\n')
-        parts.append(md_table(SHORT,[[r['posts_labelled_present']+' ('+r['high_confidence_present']+')' for r in judged]])+'\n')
+        if intervention_counts is not None:
+            new=[next(r for r in intervention_counts if r['writer_model']==m and r['zone']=='whole' and r['style_id']==style['id']) for m in MODELS]
+            parts.append('**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.\n')
+            parts.append(md_table(['Cutoff',*SHORT],[[cut,*[b[field]+' → '+n[field] for b,n in zip(judged,new)]] for cut,field in [('p ≥ 0.5','posts_labelled_present'),('p ≥ 0.8','high_confidence_present')]])+'\n')
+        else:
+            parts.append('**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.\n')
+            parts.append(md_table(SHORT,[[r['posts_labelled_present']+' ('+r['high_confidence_present']+')' for r in judged]])+'\n')
         if not es:
             parts.append('**Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.\n')
             continue
@@ -137,11 +153,14 @@ Links and relevant source passages were checked November 1, 2026 in Toronto (Nov
         [x['id'],'['+x['title']+']('+x['url']+')',x['kind'],x['locator']+'. '+x['finding']] for x in catalog['sources']]))
     parts.append('''\n## Reproduce
 
-From the experiment folder, run `python expanded_audit.py` and `python build_style_guide.py`. These commands read saved responses and make no model calls. The embedded notebook replays the same calculations without importing repository helpers. When full article files are absent, the frozen [source checks](source_overlap.json) verify the criteria and response fingerprints before replaying paired source-presence counts.
+From the experiment folder, run `python expanded_audit.py` and `python build_style_guide.py`. These commands read saved responses and make no model calls. The embedded notebook replays analysis without importing repository helpers. When full article files are absent, the frozen [source checks](source_overlap.json) verify the criteria and response fingerprints before replaying paired source-presence counts.
 
-The surface audit adds no model calls. The Decisions classifier uses 800 requests and returns 96,000 independent probabilities, with no new post generation. [Classifier usage](../decision_audit/usage.csv) retains native token/cost records; unavailable cache counters remain missing. [Per-post surface measures](per_post.csv), [per-turn diagnostics](by_turn.csv), [family diagnostics](by_family.csv), [summary](summary.json) and [protocol history](../PROTOCOL.md) preserve the distinct methods. Family rows expose both tested member models; two models do not represent every member of a provider's family. The original [111-entry inventory](../prose_lexicon.json) and [fixed counts](../main/fixed_prose_counts.csv) remain separately available.
+The surface audit adds no model calls. The minimal-request classifier uses 800 requests and returns 96,000 independent probabilities, with no new post generation. [Classifier usage](../decision_audit/usage.csv) retains native token/cost records; unavailable cache counters remain missing. [Per-post surface measures](per_post.csv), [per-turn diagnostics](by_turn.csv), [family diagnostics](by_family.csv), [summary](summary.json) and [protocol history](../PROTOCOL.md) preserve the distinct methods. Family rows expose both tested member models; two models do not represent every member of a provider's family. The original [111-entry inventory](../prose_lexicon.json) and [fixed counts](../main/fixed_prose_counts.csv) remain separately available.
 ''')
-    parts.append(f"\nClassifier reported cost: ${decision_summary['reported_cost_usd']:.6f}. This is separate from the original writers' usage. The endpoint exposes no effort control, and returned cache counters for {decision_summary['cache_read_counter_available_requests']}/800 requests. Missing counters do not mean zero reuse. Region/whole label conflicts: {decision_summary['whole_region_conflicting_labels']}; these are not manually repaired.\n")
+    parts.append(f"\nMinimal-request classifier reported cost: ${decision_summary['reported_cost_usd']:.6f}. This is separate from the original writers' usage. The endpoint exposes no effort control, and returned cache counters for {decision_summary['cache_read_counter_available_requests']}/800 requests. Missing counters do not mean zero reuse. Minimal-request region/whole label conflicts: {decision_summary['whole_region_conflicting_labels']}; these are not manually repaired.\n")
+    if intervention_counts is not None:
+        extra=json.loads((ROOT/'data/plain_prose_v2/decisions/summary.json').read_text(encoding='utf-8'))
+        parts.append(f"\nThe explicit-prompt classifier adds {extra['requests']} requests, {extra['predicate_answers']:,} probabilities and ${extra['reported_cost_usd']:.6f} reported cost. Its region/whole conflicts are {extra['whole_region_conflicting_labels']}. Both conditions retain raw answers; no manual relabelling is applied. The prompt was designed after observing baseline habits and provides no human quality result.\n")
     text='\n'.join(parts).rstrip()+'\n'
     (AUDIT/'STYLE_GUIDE.md').write_text(text,encoding='utf-8')
     print('Style guide bytes:',len(text.encode()))

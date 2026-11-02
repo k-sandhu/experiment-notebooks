@@ -4,7 +4,7 @@ This guide explains 40 patterns an editor may want to review in a LinkedIn draft
 
 Every example labelled **Illustration** below is an authored teaching example, with invented facts used only to explain the pattern. It is not a response from a tested model or a factual claim about a real release. The suggested rewrites demonstrate an editing choice, not a universal rule. Measured excerpts, where available, are separately labelled and linked to stable response IDs.
 
-The 400 posts were already collected before this guide and its 70 additional rules were defined. This is an exploratory audit. The original 111-entry inventory and its preregistered results remain unchanged. The guide is not an authorship detector, and recurring does not mean annoying to every reader. The categories overlap, so their counts must not be added into a score of bad writing. Each post's pattern labels come from the pinned Decisions API classifier, not manual classification or the surface counters.
+The 400 minimal-request posts were collected before this guide and its 70 surface rules were defined. A further 400 posts use the explicit prose prompt on the same sources. This is an exploratory audit. The original 111-entry inventory and its preregistered results remain unchanged. The guide is not an authorship detector, and recurring does not mean annoying to every reader. The categories overlap, so their counts must not be added into a score of bad writing. Each post's pattern labels come from the pinned Decisions API classifier, not manual classification or the surface counters.
 
 ## How to use the examples
 
@@ -14,9 +14,11 @@ The earlier validation study is a reason for this care: fresh model judges raise
 
 ## How the multi-label classification works
 
-The classifier is `openai/gpt-6-luna-decisions-20261006` through OpenRouter, with fallback disabled. Each of the 400 posts is evaluated for all 40 patterns in six locations. Each yes/no probability is independent: a post can have several patterns, and the probabilities do not sum to one. A label uses p ≥ 0.5; p ≥ 0.8, p ≤ 0.2 and the ambiguous middle band are also retained. These thresholds were fixed before classification, but have not been calibrated against a human-labelled corpus. Definitions and useful exceptions form the rubric; formatting labels describe structure while contextual criteria ask whether the stated prose problem occurs.
+The classifier is `openai/gpt-6-luna-decisions-20261006` through OpenRouter, with fallback disabled. Each of the 800 posts across both prompt conditions is evaluated for all 40 patterns in six locations. Each yes/no probability is independent: a post can have several patterns, and the probabilities do not sum to one. A label uses p ≥ 0.5; p ≥ 0.8, p ≤ 0.2 and the ambiguous middle band are also retained. These thresholds were fixed before classification, but have not been calibrated against a human-labelled corpus. Definitions and useful exceptions form the rubric; formatting labels describe structure while contextual criteria ask whether the stated prose problem occurs.
 
 The classifier sees the post and its source article, with no writer identity or previous drafts. It receives no tools or search. The intended poster supplied no biography. Whole-post judgments are primary; location judgments can disagree and are retained separately. Model labels are not independently verified defects. The separate surface measurements below are diagnostics and never determine an API label. [Protocol](../decision_audit/protocol.json), [all probabilities](../decision_audit/classifications.csv), [counts](../decision_audit/counts.csv).
+
+The per-pattern tables compare minimal request → explicit prose prompt, with 100 posts per writer in each condition. The unchanged classifier receives neither the condition nor its generating prompt. [Paired results](../prompt_comparison/patterns.csv) and [worked comparisons](../../README.md) show the intervention. Literal surface diagnostics and measured excerpts below retain their original minimal-request scope.
 
 ## Contents
 
@@ -80,11 +82,12 @@ The classifier sees the post and its source article, with no writer identity or 
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [N17: Notebook 17: Writing validation](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/17-writing-validation-extension). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 3 (0) | 2 (0) | 18 (0) | 9 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 3 → 0 | 2 → 0 | 18 → 0 | 9 → 1 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **What is counted.** `vague_connection`: An association is described as close, deep or strong; specificity must be checked in context.
 
@@ -120,11 +123,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [N17: Notebook 17: Writing validation](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/17-writing-validation-extension). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 0 (0) | 1 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 0 → 0 | 1 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -145,11 +149,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [N17: Notebook 17: Writing validation](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/17-writing-validation-extension), [W: Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 8 (1) | 3 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 8 → 0 | 3 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 1 → 0 | 0 → 0 |
 
 **What is counted.** `importance_copula`: An is/are statement calls its subject key, crucial or essential.; `broader_trend`: A cue places an event in a broader movement or calls it a significant shift or turning point.
 
@@ -185,11 +190,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [N17: Notebook 17: Writing validation](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/17-writing-validation-extension). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 3 (1) | 0 (0) | 16 (1) | 4 (1) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 3 → 2 | 0 → 1 | 16 → 6 | 4 → 1 |
+| p ≥ 0.8 | 1 → 0 | 0 → 1 | 1 → 3 | 1 → 1 |
 
 **What is counted.** `ultimately`: A conventional summary transition appears; whether it repeats a conclusion is not judged.
 
@@ -227,11 +233,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [N17: Notebook 17: Writing validation](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/17-writing-validation-extension). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 1 (0) | 1 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 1 → 1 | 1 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -252,11 +259,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [N17: Notebook 17: Writing validation](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/17-writing-validation-extension). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 14 (1) | 13 (3) | 64 (25) | 46 (13) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 14 → 0 | 13 → 0 | 64 → 0 | 46 → 0 |
+| p ≥ 0.8 | 1 → 0 | 3 → 0 | 25 → 0 | 13 → 0 |
 
 **What is counted.** `canned_insight`: An introductory cue claims to reveal a truth, reality, essence or bigger point.; `good_news`: A familiar transition reassures the reader or announces good news.
 
@@ -286,11 +294,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [N17: Notebook 17: Writing validation](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/17-writing-validation-extension). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 0 (0) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -311,11 +320,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [N17: Notebook 17: Writing validation](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/17-writing-validation-extension). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 0 (0) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 1 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -336,11 +346,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [JW: Why Does ChatGPT "Delve" So Much?](https://aclanthology.org/2025.coling-main.426/), [K: Delving into LLM-assisted writing in biomedical publications through excess vocabulary](https://arxiv.org/abs/2406.07016v5), [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 0 (0) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **What is counted.** `jw_delves`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_delved`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_delving`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_showcasing`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_delve`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_boasts`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_underscores`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_comprehending`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_intricacies`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_surpassing`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_intricate`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_underscoring`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_garnered`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_showcases`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_emphasizing`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_underscore`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_realm`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_surpasses`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_groundbreaking`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_advancements`: Exact word form from Appendix A; no stemming or semantic judgment.; `jw_aligns`: Exact word form from Appendix A; no stemming or semantic judgment.
 
@@ -377,11 +388,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [W: Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing), [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 85 (49) | 59 (29) | 89 (56) | 56 (35) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 85 → 6 | 59 → 2 | 89 → 21 | 56 → 21 |
+| p ≥ 0.8 | 49 → 2 | 29 → 1 | 56 → 11 | 35 → 7 |
 
 **What is counted.** `less_more`: A sentence contrasts less about one thing with more about another within a bounded span.; `appositive_not`: A comma is followed by not and a short phrase; the negation may be useful or factually necessary.
 
@@ -420,11 +432,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [W: Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing), [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 47 (17) | 30 (14) | 53 (25) | 43 (15) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 47 → 3 | 30 → 1 | 53 → 5 | 43 → 3 |
+| p ≥ 0.8 | 17 → 0 | 14 → 0 | 25 → 2 | 15 → 1 |
 
 **What is counted.** `more_than_just`: The exact expansion phrase more than just.
 
@@ -453,11 +466,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [W: Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 4 (0) | 3 (0) | 22 (8) | 9 (3) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 4 → 0 | 3 → 0 | 22 → 2 | 9 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 8 → 1 | 3 → 0 |
 
 **What is counted.** `triad_candidate`: Matches three short lexical spans; does not establish three parallel grammatical items.; `three_item_lists`: Contiguous marked list runs containing exactly three lines.
 
@@ -491,11 +505,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [W: Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing), [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 0 (0) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 1 | 0 → 0 | 0 → 2 | 0 → 2 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 2 | 0 → 1 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -516,11 +531,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [W: Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing), [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 0 (0) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -541,11 +557,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [T: Anti-AI Writing Guide, Tundra AI Labs](https://tundraailabs.com/writing-guide), [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 17 (12) | 8 (6) | 17 (9) | 5 (3) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 17 → 0 | 8 → 0 | 17 → 0 | 5 → 0 |
+| p ≥ 0.8 | 12 → 0 | 6 → 0 | 9 → 0 | 3 → 0 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -566,11 +583,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 1 (0) | 0 (0) | 10 (2) | 11 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 1 → 0 | 0 → 0 | 10 → 0 | 11 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 2 → 0 | 0 → 0 |
 
 **What is counted.** `rhetorical_label`: A colon-ended label announces the kind of statement about to follow.
 
@@ -599,11 +617,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [W: Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing), [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 0 (0) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **What is counted.** `named_authority_absent`: A fixed expression invokes unnamed experts, observers or shared belief; a name elsewhere may resolve it.
 
@@ -632,11 +651,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 1 (1) | 5 (2) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 1 → 0 | 5 → 0 | 0 → 0 |
+| p ≥ 0.8 | 0 → 0 | 1 → 0 | 2 → 0 | 0 → 0 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -657,11 +677,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [H: Fixing AI LinkedIn Posts That Scream ChatGPT, Iris Vandermeer](https://humanizedcopy.com/posts/fixing-ai-linkedin-posts-that-scream-chatgpt). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 3 (2) | 41 (31) | 41 (33) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 3 → 0 | 41 → 0 | 41 → 0 |
+| p ≥ 0.8 | 0 → 0 | 2 → 0 | 31 → 0 | 33 → 0 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -682,11 +703,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [W: Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 3 (2) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 3 → 0 | 0 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 2 → 0 | 0 → 0 |
 
 **What is counted.** `challenges_close`: A bounded despite-these/the/its-challenges formula; a concrete obstacle can still be useful.; `future_outlook`: A future-outlook/prospects label or a claim that the future looks bright or promising.
 
@@ -716,11 +738,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [T: Anti-AI Writing Guide, Tundra AI Labs](https://tundraailabs.com/writing-guide). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 6 (5) | 5 (3) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 6 → 2 | 5 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 5 → 1 | 3 → 0 |
 
 **What is counted.** `honesty_cue`: The writer explicitly labels the statement as honest or candid.
 
@@ -757,11 +780,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [T: Anti-AI Writing Guide, Tundra AI Labs](https://tundraailabs.com/writing-guide). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 4 (2) | 1 (1) | 2 (0) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 4 → 1 | 1 → 0 | 2 → 3 | 0 → 0 |
+| p ≥ 0.8 | 2 → 0 | 1 → 0 | 0 → 0 | 0 → 0 |
 
 **What is counted.** `demonstrative_payoff`: A this/that cue introduces a why/where explanation or labels an unlock, shift, point or lesson.
 
@@ -796,11 +820,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [T: Anti-AI Writing Guide, Tundra AI Labs](https://tundraailabs.com/writing-guide). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 1 (0) | 0 (0) | 1 (0) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 1 → 0 | 0 → 0 | 1 → 1 | 0 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 1 | 0 → 0 |
 
 **What is counted.** `fake_objection`: A cue imagines what the reader thinks or asks them to hear the writer out; it may address a real objection.
 
@@ -829,11 +854,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [T: Anti-AI Writing Guide, Tundra AI Labs](https://tundraailabs.com/writing-guide), [C: Claudisms](https://claudisms.ai/). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 1 (0) | 1 (0) | 12 (6) | 3 (1) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 1 → 0 | 1 → 0 | 12 → 2 | 3 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 6 → 1 | 1 → 0 |
 
 **What is counted.** `quietly`: The adverbs quietly and silently; literal and figurative uses are both counted.; `load_bearing`: The literal expression load-bearing, with a space or hyphen; metaphor requires inspection.; `does_real_work`: A claim that a distinction or other subject does real work, without judging whether the work is explained.; `physics_metaphor`: A fixed physics phrase; the rule cannot distinguish literal science from a grand metaphor.; `lives_in`: The expression lives in or lives at; physical residence and abstract placement are both matched.
 
@@ -871,11 +897,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [C: Claudisms](https://claudisms.ai/). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 12 (9) | 6 (6) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 12 → 0 | 6 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 9 → 0 | 6 → 0 |
 
 **What is counted.** `reflective_pose`: A fixed phrase frames a thought as worth contemplation or an idea the writer has arrived at.; `coming_back`: The writer describes returning to a thought; literal movement is also matched.; `recurring_question`: A question is framed as repeatedly arising or occupying the writer.; `discovery_arc`: A first-person setup says the writer did not plan, intend or expect the discovery.; `false_singularity`: A personal-superlative cue selects the most surprising or memorable item; a justified ranking is also matched.
 
@@ -912,11 +939,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 0 (0) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 0 → 1 | 0 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **What is counted.** `from_to`: Finds a range-shaped span; real numeric and temporal ranges are also matched.
 
@@ -953,11 +981,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [R: Do LLMs write like humans? Variation in grammatical and rhetorical styles](https://arxiv.org/abs/2410.16107v2), [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 17 (3) | 7 (0) | 29 (5) | 19 (2) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 17 → 34 | 7 → 3 | 29 → 44 | 19 → 27 |
+| p ≥ 0.8 | 3 → 5 | 0 → 0 | 5 → 13 | 2 → 8 |
 
 **What is counted.** `nominal_suffix`: Counts suffix-bearing tokens, including false positives; no part-of-speech tagging.
 
@@ -994,11 +1023,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [R: Do LLMs write like humans? Variation in grammatical and rhetorical styles](https://arxiv.org/abs/2410.16107v2). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 1 (0) | 1 (1) | 35 (10) | 28 (4) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 1 → 13 | 1 → 1 | 35 → 36 | 28 → 18 |
+| p ≥ 0.8 | 0 → 5 | 1 → 0 | 10 → 12 | 4 → 9 |
 
 **What is counted.** `comma_ing`: Counts an immediately post-comma -ing word, not all participial clauses.
 
@@ -1033,11 +1063,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [T: Anti-AI Writing Guide, Tundra AI Labs](https://tundraailabs.com/writing-guide). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 49 (31) | 14 (9) | 67 (45) | 46 (26) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 49 → 0 | 14 → 0 | 67 → 0 | 46 → 0 |
+| p ≥ 0.8 | 31 → 0 | 9 → 0 | 45 → 0 | 26 → 0 |
 
 **What is counted.** `short_sentence_run3`: Maximal runs of at least three consecutive sentences, each one to six words.
 
@@ -1066,11 +1097,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [WS: Wikipedia: Signs of AI writing/Style](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing/Style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 4 (3) | 3 (2) | 74 (67) | 69 (60) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 4 → 0 | 3 → 0 | 74 → 0 | 69 → 0 |
+| p ≥ 0.8 | 3 → 0 | 2 → 0 | 67 → 0 | 60 → 0 |
 
 **What is counted.** `bold_spans`: Number of **...** or __...__ spans.; `bold_word_share`: Bold-span words divided by all post words.
 
@@ -1100,11 +1132,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [WS: Wikipedia: Signs of AI writing/Style](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing/Style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 4 (3) | 6 (6) | 42 (38) | 46 (41) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 4 → 0 | 6 → 0 | 42 → 0 | 46 → 0 |
+| p ≥ 0.8 | 3 → 0 | 6 → 0 | 38 → 0 | 41 → 0 |
 
 **What is counted.** `bold_leadins`: Lines with a list marker or emoji, then a bold label and a colon.
 
@@ -1133,11 +1166,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [WS: Wikipedia: Signs of AI writing/Style](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing/Style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 2 (2) | 11 (9) | 89 (87) | 64 (63) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 2 → 0 | 11 → 0 | 89 → 0 | 64 → 0 |
+| p ≥ 0.8 | 2 → 0 | 9 → 0 | 87 → 0 | 63 → 0 |
 
 **What is counted.** `emoji_prefixed_lines`: Lines beginning with a code point in the documented emoji ranges.
 
@@ -1166,11 +1200,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [WS: Wikipedia: Signs of AI writing/Style](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing/Style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 2 (1) | 6 (4) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 2 → 0 | 6 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 1 → 0 | 4 → 0 |
 
 **What is counted.** `headings`: Lines beginning with one to six # signs and a space.; `title_case_headings`: Headings with at least three alphabetic words, all non-stopwords beginning uppercase.
 
@@ -1200,11 +1235,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [H: Fixing AI LinkedIn Posts That Scream ChatGPT, Iris Vandermeer](https://humanizedcopy.com/posts/fixing-ai-linkedin-posts-that-scream-chatgpt). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 97 (88) | 82 (52) | 96 (80) | 96 (78) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 97 → 1 | 82 → 0 | 96 → 0 | 96 → 0 |
+| p ≥ 0.8 | 88 → 0 | 52 → 0 | 80 → 0 | 78 → 0 |
 
 **What is counted.** `single_sentence_paragraph_share`: Share of substantive, non-list paragraphs split into one sentence.; `single_sentence_run3`: Maximal runs of at least three one-sentence substantive non-list paragraphs.
 
@@ -1234,11 +1270,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [W: Wikipedia: Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 8 (8) | 6 (6) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 8 → 0 | 6 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 8 → 0 | 6 → 0 |
 
 **What is counted.** `assistant_residue`: A fixed assistant-facing introduction, helpfulness closing or AI/cutoff self-reference appears.; `horizontal_rules`: Lines containing at least three identical -, * or _ characters.; `code_fences`: Lines beginning with three backticks.; `placeholder`: Bracketed insert/add/your-text placeholders.
 
@@ -1270,11 +1307,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style), [N17: Notebook 17: Writing validation](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/17-writing-validation-extension). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 20 (17) | 3 (3) | 51 (45) | 51 (42) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 20 → 0 | 3 → 0 | 51 → 0 | 51 → 1 |
+| p ≥ 0.8 | 17 → 0 | 3 → 0 | 45 → 0 | 42 → 0 |
 
 **What is counted.** `experience_cue`: Finds a small set of first-person verbs; unsupported experience requires comparison with the article.
 
@@ -1310,11 +1348,12 @@ Case and punctuation are normalized for matching; the full raw response is in [t
 
 **Basis.** [T: Anti-AI Writing Guide, Tundra AI Labs](https://tundraailabs.com/writing-guide). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 1 (0) | 1 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 1 → 0 | 1 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
 
 **What is counted.** `generic_benefit_phrase`: A benefit is expressed through a fixed effort, clarity, friction, momentum or alignment slogan.
 
@@ -1343,11 +1382,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [G: How To Write Without Sounding Like AI, George Kao](https://georgekao.substack.com/p/how-to-write-without-sounding-like). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 11 (0) | 4 (1) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 11 → 0 | 4 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 0 → 0 | 1 → 0 |
 
 **Surface diagnostic.** No regex rule is assigned to this contextual criterion. Its labels above come only from the Decisions API.
 
@@ -1368,11 +1408,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 0 (0) | 0 (0) | 1 (1) | 0 (0) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 0 → 0 | 0 → 0 | 1 → 0 | 0 → 0 |
+| p ≥ 0.8 | 0 → 0 | 0 → 0 | 1 → 0 | 0 → 0 |
 
 **What is counted.** `em_dashes`: Literal em dash characters in the proposed post.; `exclamations`: Literal exclamation marks in the proposed post.
 
@@ -1402,11 +1443,12 @@ No measured text excerpt is asserted for this category. Layout measures are in t
 
 **Basis.** [N15: Notebook 15: What changes an AI judge's writing score?](https://github.com/k-sandhu/experiment-notebooks/tree/main/notebooks/15-analytical-writing-style). The definition and editing explanation here are the study author's operational interpretation.
 
-**Decisions API classification of saved posts.** Each cell is model-labelled present at p ≥ 0.5, followed by the count at p ≥ 0.8 in parentheses. Denominator: 100 readable whole-post judgments per writer.
+**Decisions API labels: minimal request → explicit prompt.** Each cell reports the two counts out of 100 whole posts per writer. These are model estimates under an unchanged rubric, not verified faults.
 
-| Sol | Terra | Opus | Sonnet |
-|---|---|---|---|
-| 84 (81) | 100 (100) | 100 (99) | 100 (99) |
+| Cutoff | Sol | Terra | Opus | Sonnet |
+|---|---|---|---|---|
+| p ≥ 0.5 | 84 → 0 | 100 → 0 | 100 → 0 | 100 → 0 |
+| p ≥ 0.8 | 81 → 0 | 100 → 0 | 99 → 0 | 99 → 0 |
 
 **What is counted.** `hashtags`: Hash-prefixed word tokens; headings with # plus a space are excluded.
 
@@ -1518,9 +1560,12 @@ Links and relevant source passages were checked November 1, 2026 in Toronto (Nov
 
 ## Reproduce
 
-From the experiment folder, run `python expanded_audit.py` and `python build_style_guide.py`. These commands read saved responses and make no model calls. The embedded notebook replays the same calculations without importing repository helpers. When full article files are absent, the frozen [source checks](source_overlap.json) verify the criteria and response fingerprints before replaying paired source-presence counts.
+From the experiment folder, run `python expanded_audit.py` and `python build_style_guide.py`. These commands read saved responses and make no model calls. The embedded notebook replays analysis without importing repository helpers. When full article files are absent, the frozen [source checks](source_overlap.json) verify the criteria and response fingerprints before replaying paired source-presence counts.
 
-The surface audit adds no model calls. The Decisions classifier uses 800 requests and returns 96,000 independent probabilities, with no new post generation. [Classifier usage](../decision_audit/usage.csv) retains native token/cost records; unavailable cache counters remain missing. [Per-post surface measures](per_post.csv), [per-turn diagnostics](by_turn.csv), [family diagnostics](by_family.csv), [summary](summary.json) and [protocol history](../PROTOCOL.md) preserve the distinct methods. Family rows expose both tested member models; two models do not represent every member of a provider's family. The original [111-entry inventory](../prose_lexicon.json) and [fixed counts](../main/fixed_prose_counts.csv) remain separately available.
+The surface audit adds no model calls. The minimal-request classifier uses 800 requests and returns 96,000 independent probabilities, with no new post generation. [Classifier usage](../decision_audit/usage.csv) retains native token/cost records; unavailable cache counters remain missing. [Per-post surface measures](per_post.csv), [per-turn diagnostics](by_turn.csv), [family diagnostics](by_family.csv), [summary](summary.json) and [protocol history](../PROTOCOL.md) preserve the distinct methods. Family rows expose both tested member models; two models do not represent every member of a provider's family. The original [111-entry inventory](../prose_lexicon.json) and [fixed counts](../main/fixed_prose_counts.csv) remain separately available.
 
 
-Classifier reported cost: $2.265358. This is separate from the original writers' usage. The endpoint exposes no effort control, and returned cache counters for 0/800 requests. Missing counters do not mean zero reuse. Region/whole label conflicts: 996; these are not manually repaired.
+Minimal-request classifier reported cost: $2.265358. This is separate from the original writers' usage. The endpoint exposes no effort control, and returned cache counters for 0/800 requests. Missing counters do not mean zero reuse. Minimal-request region/whole label conflicts: 996; these are not manually repaired.
+
+
+The explicit-prompt classifier adds 800 requests, 96,000 probabilities and $2.263088 reported cost. Its region/whole conflicts are 639. Both conditions retain raw answers; no manual relabelling is applied. The prompt was designed after observing baseline habits and provides no human quality result.
