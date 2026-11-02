@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import nbformat
 import smoke_study as s
+from build_style_guide import audit_report_section
 
 ROOT=Path(__file__).resolve().parent
 DATA=ROOT/'data/main'
@@ -78,12 +79,28 @@ for model,label,color,marker in zip(MODELS,LABELS,COLORS,['o','s','^','D']):
 ax.set(xticks=range(1,6),xlabel='Turn in the same conversation (20 articles per point)',ylabel='Mean proposed-post words',
        title='Post length varies by model and conversation turn')
 ax.legend(frameon=False,bbox_to_anchor=(1,1),loc='upper left');fig.tight_layout();fig.savefig(FIG/'main_turns.png');plt.close(fig)
+
+extra=pd.read_csv(ROOT/'data/decision_audit/counts.csv')
+chosen=[('negative_contrast','Negative\\ncontrast'),('engagement_close','Generic\\nengagement close'),
+        ('clipped_rhythm','Clipped\\nrhythm'),('single_sentence_paragraphs','One-sentence\\nparagraphs'),
+        ('bold_leadins','Bold list\\nlabels'),('hashtag_tail','Generic\\nhashtag tail')]
+matrix=[[int(extra[(extra.writer_model==m)&(extra.zone=='whole')&(extra.style_id==k)].iloc[0].posts_labelled_present)
+         for k,_ in chosen] for m in MODELS]
+fig,ax=plt.subplots(figsize=(11.2,4.1));im=ax.imshow(matrix,cmap='Blues',vmin=0,vmax=100,aspect='auto')
+for i,row in enumerate(matrix):
+    for j,value in enumerate(row):ax.text(j,i,f'{value}/100',ha='center',va='center',color='white' if value>=60 else '#222')
+ax.set(xticks=range(len(chosen)),xticklabels=[v for _,v in chosen],yticks=range(4),yticklabels=LABELS,
+       title='The decision model assigns different pattern frequencies across writers')
+ax.grid(False);fig.colorbar(im,ax=ax,label='Posts labelled present at p ≥ 0.5 (%)',shrink=.8)
+fig.text(.5,.01,'Exploratory classifier estimates, without human validation; 100 posts per writer.',ha='center',fontsize=9)
+fig.tight_layout(rect=(0,.04,1,1));fig.savefig(FIG/'main_expanded_styles.png');plt.close(fig)
 '''
 
 
 def main():
     summary=s.load(DATA/'summary.json');assert all(summary['gates'].values()),summary['gates']
     models=summary['models'];articles=s.load(DATA/'articles.json');fixed=rows('fixed_prose_counts.csv')
+    decision_summary=s.load(ROOT/'data/decision_audit/summary.json');assert decision_summary['complete']
     fmt=rows('formatting_summary.csv');candidates=rows('phrase_candidates.csv')
     valid=[s.load(p) for p in sorted((DATA/'responses').glob('*/*/*.json')) if '.started.' not in p.name]
     posts=rows('posts.csv');by_id={a['item_id']:a for a in articles}
@@ -157,14 +174,16 @@ The complete article body was used, including substantive lists, code, captions 
 
 The date rule is recorded in [the model freshness record](data/main/freshness.json). Sol's documented cutoff is April 30, 2026 and Terra's is June 1. The Claude release-date fallbacks are September 22 for Opus 5.5 and September 28 for Sonnet 5.5. Every selected article was published later. Recent publication reduces ordinary training-data overlap, but undated model IDs and undocumented later updates mean it cannot prove that a provider never saw a page.
 
-An announcement date and the date described by an article are not always identical. The Dartmouth departure was announced October 28, the compromised extension was distributed October 29, Zest introduced its feature October 29, and the orbital-compute article describes first model prompts that week. These all remain inside the event window. The manifest records those distinctions. The smoke-test Mistral article is excluded from the main set so that its inspected outputs do not enter the main comparison.'''))
+The manifest distinguishes publication and event dates; both remain inside the window. The previously inspected Mistral smoke article is excluded.'''))
     model_table=table(['Model','Requested version / immutable pin','Provider and call','Size / precision','Settings','Why included'],[
         [label,f'`{m}`; no immutable dated revision exposed','OpenAI, `codex exec`' if m.startswith('gpt') else 'Anthropic, `claude -p`',
          'Not published','High effort; default supported sampling; neutral optional base instruction',
-         'Requested GPT-6.1 family member' if m.startswith('gpt') else 'Requested Claude 5.5 family member'] for m,label in zip(MODELS,NAMES)])
+         'Requested GPT-6.1 family member' if m.startswith('gpt') else 'Requested Claude 5.5 family member'] for m,label in zip(MODELS,NAMES)]+[
+        ['Decisions classifier','`openai/gpt-6-luna-decisions-20261006`','OpenAI via OpenRouter Decisions API','Not published',
+         '40 independent predicates × 6 regions; effort not exposed; no tools or fallback','Requested multi-label classification of writing patterns']])
     sections.append(('2. Models and controlled requests',f'''{model_table}
 
-The requested model IDs are fixed and the raw CLI traces retain reported IDs when available. The table also names the limit on that control: the CLIs expose no immutable dated revision for this collection. Matching a named effort setting does not establish identical hidden computation across providers. These are the four requested models, with no automatic fallback model.
+The four writers' CLI IDs have no immutable dated revision; returned IDs are retained. The classifier has a dated pin. Matching high effort across writers does not establish identical hidden computation. No fallback is allowed.
 
 Every new model/article conversation begins with:
 
@@ -182,7 +201,7 @@ Each of the next four turns contains only:
 Generate another post.
 ```
 
-The follow-up does not repeat the article or ask for a different angle. It does not specify a length, audience, style, opening, hashtag policy or avoidance of familiar words. The models cannot see the phrase inventory or any analysis result. The optional CLI base instruction is the same neutral line, `You are a helpful assistant.` There are 80 separate conversations, one for each model/article pair; no article's outputs become context for a different article.
+The follow-up adds no article, stylistic direction or request for a different angle. Models cannot see the audit inventory. The optional base instruction is `You are a helpful assistant.` Each of the 80 model/article conversations stays separate.
 
 ```mermaid
 flowchart LR
@@ -209,17 +228,17 @@ sequenceDiagram
     end
 ```
 
-The four model workers can run in parallel. Within a model/article conversation the five calls are strictly sequential, and the harness waits for each response before asking for another. The article order is shuffled with a saved seed. The models do not exchange messages. The response cache is keyed by the complete request fingerprint and by turn, so a provider cache hit cannot substitute a local copy of an earlier post for a new generation.
+The four model workers run independently. Each conversation's five calls are sequential, and article order uses a saved shuffle seed. The local response cache records the full request and turn; all 400 posts required new generation requests.
 
-All models were called only through their CLIs. Web search, command execution, browser/computer/image operations, MCP connections, optional skills, plugins, hooks, memories and multi-agent operation were disabled through the smoke-tested controls. Claude init records require empty executable-tool, MCP and skill catalogues. Codex's supported feature switches disable those operations, and raw events are checked for tool calls. The observed number of tool calls is zero.
+The four writers use only CLIs. Search, shell, browser/computer/image tools, MCP, optional skills, plugins, hooks, memories and multi-agent operation were disabled with smoke-tested controls. Init catalogues and raw events were checked; observed tool calls: zero. The classifier uses the API separately, with supplied evidence and no tools.
 
-Each model's 100 proposed post bodies is distinct after case and whitespace normalisation, with zero exact duplicate pairs within an article conversation. This verifies a basic collection property, not stylistic variety. The phrase and formatting analyses can still find repeated passages and structures inside different complete posts.
+Each writer returned 100 distinct normalised post bodies, with no exact duplicate pair within a conversation. Distinct posts can still share phrases and structure.
 
 Some runtime instructions cannot be removed. Claude still lists three built-in plugin inventory labels, and Codex debug output retains mandatory runtime catalogue/team/environment scaffolding despite feature disables. No repository writing rules enter the generation working directory. Thus zero observed tool use and the supported disable switches are verified, while an identical pure provider system prompt is not. [The protocol](data/PROTOCOL.md) and saved command records document that distinction.
 
 ### How the study got here
 
-The earlier smoke test checked repeated generations, explicit session resumes, cache counters and output boundaries. It found that Codex token counters and Claude cost counters accumulate across resumed sessions, and that assistant notes should be separated from the proposed post. Those engineering repairs were made before the full run. The 40 smoke outputs and their diagnostics remain saved separately and do not enter any main result below. The owner then authorised the 400-post collection and fixed the short follow-up wording.'''))
+The smoke test verified new outputs and session resumes, exposed cumulative usage counters and identified assistant notes outside post bodies. Those repairs preceded the full run. Its 40 outputs remain separate from all main results; details are in [the protocol](data/PROTOCOL.md).'''))
     sections.append(('3. What counts as repeated prose','''The first analysis uses a fixed inventory of 111 vocabulary items, phrases and structure candidates, saved before the smoke generations and retained unchanged for the full run. It includes expressions such as `my takeaway`, `why this matters` and `the opportunity`, vocabulary candidates such as `delve` and `underscore`, and sentence patterns such as a negative contrast followed by a positive claim. [The inventory](data/prose_lexicon.json) gives every exact matching rule and its provenance.
 
 The research papers in Further reading motivate counting lexical overrepresentation; they do not establish that every item is overused by these four models on LinkedIn. The repository's editorial watchlist supplies candidates, and the LinkedIn-specific expressions are stated investigator hypotheses. A match is descriptive, not automatically a defect or an AI-authorship signal. Literal technical use and useful signposting remain possible.
@@ -232,7 +251,7 @@ The second analysis searches all two-to-eight-word sequences. A sequence contrib
 
 Ten article topics were assigned to discovery and ten to confirmation before main generation. A discovered phrase needs at least five discovery posts across at least three discovery topics. It is labelled confirmed only if it also occurs in at least five confirmation posts across at least three confirmation topics. Each half contains 50 posts per model. Other observations remain exploratory. The threshold was fixed in [the preregistration](data/main/preregistration.json), not chosen to make a particular model look distinctive.
 
-The displayed 95% intervals resample whole articles, with all five posts kept together, using 2,000 bootstrap draws. They describe variation across this 20-topic sample under the same procedure. They are not intervals across independent model weights or randomly chosen LinkedIn users. All-zero observations can yield a zero-width bootstrap interval; they do not prove a phrase has zero probability in future writing. Held-out support is a replication threshold, not a multiple-testing-adjusted significance claim.'''))
+The 95% intervals use 2,000 article-bootstrap draws, keeping each article's five posts together. They describe topic variation in this sample. An all-zero bootstrap does not prove future impossibility. Held-out support is a replication threshold, not a multiple-testing-adjusted significance claim.'''))
     fmt_table=table(['Model','Bold','Emoji','Hashtags','Em dash','Closing question','Wrapper / note'],[
         [label,*[f"{feature(m,k)['posts_containing']}/100" for k in ['bold_spans','emoji_codepoints','hashtags','em_dashes','closing_question']],
          f"{feature(m,'response_preface')['posts_containing']} / {feature(m,'editorial_note')['posts_containing']}"] for m,label in zip(MODELS,NAMES)])
@@ -258,7 +277,7 @@ The complete [per-post formatting table](data/main/formatting.csv) includes word
         for row in pool:
             if any(row['phrase'] in p['phrase'] or p['phrase'] in row['phrase'] for p in selection):continue
             selection.append(row)
-            if len(selection)==3:break
+            if len(selection)==2:break
         chosen.extend(selection)
     candidate_table=table(['Model','Location','Source-absent phrase','Posts','Topics','Discovery / confirmation posts'],[
         [NAMES[MODELS.index(r['model'])],r['zone'],f"`{r['phrase']}`",r['posts_containing'],r['distinct_topics'],f"{r['discovery_posts']} / {r['confirmation_posts']}"] for r in chosen]) if chosen else 'No three-word-or-longer phrase passed the frozen confirmation threshold in the displayed locations.'
@@ -274,11 +293,11 @@ The negative-contrast rule is broader than an exact phrase. It flags a nearby pa
 
 The teaser-question candidate is near the floor: one Sol post, one Terra post and no Opus or Sonnet posts match it. This sample cannot rank the models reliably on such a rare candidate. A zero count means it was not observed under this matching rule, not that the model never writes it.
 
-The next table shows a small selection from the source-filtered phrase search. Selection is deterministic: within each model, take up to three of the most prevalent confirmed phrases of at least three words in the displayed locations, skipping phrases nested inside an already selected phrase. This prevents the table being filled with overlapping fragments of one longer sentence. It does not make the selected expressions the only interesting patterns.
+The table selects up to two prevalent confirmed phrases per model, each at least three words long, skipping nested phrases. The full search remains linked below.
 
 {candidate_table}
 
-Every displayed phrase met the frozen support threshold separately on discovery and confirmation topics. The posts and topics columns use all 20 topics, while the last column exposes the held-out support rather than hiding it behind a single frequency. Source-derived occurrences were removed on a paired article basis. Function-word phrases and ordinary English constructions can still pass the threshold; confirmation of recurrence does not establish an exclusive model fingerprint.
+Every displayed phrase meets the frozen discovery and confirmation thresholds. Totals cover all 20 topics; the final column separates the two halves. Paired source-derived occurrences are excluded. Ordinary English can pass this threshold, so recurrence does not establish an exclusive model fingerprint.
 
 The complete search is in [phrase_candidates.csv](data/main/phrase_candidates.csv), including phrases that did not confirm. Openings, transitions, point endings and closings can be inspected separately. [Family fixed counts](data/main/family_fixed_counts.csv) show both member models alongside the two-family totals. [Shared confirmed phrases](data/main/family_shared_phrases.csv) require confirmation for each of the family's two tested models separately. A phrase common to one family member alone is not presented as shared by the family.
 
@@ -297,7 +316,7 @@ Family totals pool 200 posts but still represent only two tested models and the 
         opening=z['opening_paragraph'];closing=z['closing']
         examples.append(f'''### {title}
 
-Case `{pid}` uses [{by_id[item]['title']}]({by_id[item]['url']}). The expected behaviour is a newly generated post based on that article; there is no single correct wording. The observed opening is:
+Case `{pid}` uses [{by_id[item]['title']}]({by_id[item]['url']}). The expected output is a new article-based draft. Its observed opening is:
 
 {quoted(opening[:650])}
 
@@ -305,7 +324,7 @@ The proposed post closes with:
 
 {quoted(closing[:450])}
 
-This post has {features['words']} words, {features['paragraphs']} paragraph blocks and {features['hashtags']} hashtags. A closing question is recorded as {str(features['closing_question']).lower()}, and a separate editorial note as {str(features['editorial_note']).lower()}. These are observable output properties, not a quality score. The full response and source ID remain available in [the saved-post collection](data/main/posts.md).''')
+Measured: {features['words']} words, {features['paragraphs']} paragraphs, {features['hashtags']} hashtags; closing question: {str(features['closing_question']).lower()}; editorial note: {str(features['editorial_note']).lower()}. [Full response](data/main/posts.md).''')
         if item=='01-kimi':
             examples[-1]+='''
 
@@ -329,9 +348,9 @@ The following cases were selected to make the workflow inspectable: two consecut
 
 All 400 planned responses were readable, so there is no unreadable model response to invent as an error example. Readability is at the ceiling and does not rank the models' skill. A response can still contain a factual mistake, an unsuitable claim or awkward writing; no gold-post or factual adjudication was performed. The saved text is the evidence for a later quality review.
 
-Two models can legitimately emphasise different aspects of the same article. The same-article cases above show the actual input source, observed opening and closing, and measured formatting. Their differences establish different returned drafts, not that one model understood the news better.
+The same-article examples show different emphasis and wording; there is no adjudicated best post.
 
-Parser boundaries also matter. A label announcing a post is not the reader-facing hook, and an assistant note after the draft is not necessarily the post closing. The smoke test exposed those cases before main collection, and the raw responses are retained alongside the derived view. Potentially ambiguous cases should be inspected from the raw response rather than silently reclassified to support a preferred result. [Protocol history](data/PROTOCOL.md) records the earlier parser amendments and preserved old classifications.'''))
+Wrappers and editorial notes are separated from proposed posts. The raw responses preserve ambiguous boundaries; [protocol history](data/PROTOCOL.md) records the parser rules and earlier amendments.'''))
     cache_table=table(['Model','All input tokens','Cache reads','New cache writes','Cached share, turns 2-5','Reported CLI dollar equivalent'],[
         [NAMES[i],f"{r['input_tokens']:,}",f"{r['cache_read_tokens']:,}",f"{r['cache_write_tokens']:,}",pct(r['cache_read_fraction_turns_2_to_5']),
          f"${r['reported_cost_usd']:.4f}" if r['reported_cost_usd'] is not None else 'Unavailable'] for i,r in enumerate(models)])
@@ -360,13 +379,13 @@ The five sequential posts are conditional on earlier drafts. The phrase counts a
 
 Provider families are represented by two models each. Model versions are requested undated IDs rather than immutable weight snapshots, and mandatory CLI/runtime instructions are not identical across providers. No observed tool use was allowed, but the retained platform scaffolding limits claims about a bare model's intrinsic style. These are results for the named CLI workflows and settings.
 
-The analysis design, source set, fixed inventory, follow-up wording and confirmation thresholds were fixed before main generation. Earlier smoke-driven parser repairs and the user's change to continued conversations are recorded in [the protocol](data/PROTOCOL.md). The practical use of the findings is to know what to look for in drafts, with a new experiment needed to test whether those habits affect reader preference or publishing outcomes.'''))
+The original source set, 111-item inventory, follow-up wording and confirmation thresholds were fixed before main generation. The 40-pattern taxonomy and 70 surface rules were added after collection. Classifier questions and thresholds were frozen before its API run, but the overall audit remains exploratory. A single decision model may favor particular voices or misapply a criterion; 996 region/whole label conflicts illustrate that limit. [The protocol](data/PROTOCOL.md) preserves the amendments. Human validation is needed before interpreting labels as reader annoyances.'''))
     known=sum(r['reported_cost_usd'] or 0 for r in models)
-    sections.append(('9. Spend, saved data and reproduction',f'''The main collection contains 400 generation requests: 100 per model, 80 separate conversations, five responses each. All 400 were readable, with no observed tool calls, no content retry and no fallback model. There are no paid judge calls. The source set contains {word_total:,} words, and the full model input is larger because conversations and runtime context are included.
+    sections.append(('9. Spend, saved data and reproduction',f'''The collection contains 400 generation requests and 800 classifier requests. All posts and 96,000 classifier answers were readable, with no observed writer tool calls or fallback models. Two smoke-classified posts are reused in the main classification cache, not billed twice.
 
-For the 200 included Claude responses, the CLI-reported list-price equivalent totals ${known:.6f}. Codex dollar equivalents are unavailable in the saved events, so the full dollar total and actual subscription charge cannot be stated. These are reported token-price equivalents, not an invoice. Earlier smoke and diagnostic costs remain separate; one interrupted smoke diagnostic has unknown final usage. [The main financial summary](data/main/financial_summary.json) keeps those boundaries explicit.
+The 200 Claude responses report ${known:.6f}; the classifier reports ${decision_summary['reported_cost_usd']:.6f}. Codex dollar equivalents and the actual subscription charge remain unavailable. Earlier generation smoke costs are separate, including one interrupted diagnostic with unknown final usage. [Writer finances](data/main/financial_summary.json) and [classifier usage](data/decision_audit/usage.csv) retain the native records.
 
-The main public data are under `data/main/`. Every response has raw JSONL stdout, stderr, parsed text, request fingerprint, source ID, model ID, conversation ID, turn, settings, timing and native usage. Article text is retained locally and git-ignored; public source metadata and overlap fingerprints support reproducibility without redistributing the source bodies.
+The `data/main/` cache retains raw CLI streams, parsed posts, request fingerprints, IDs, settings, timing and usage. Article bodies stay local and git-ignored; committed metadata and overlap checks support replay. The added definitions and counts are in `data/expanded_audit/`.
 
 - [Executed notebook](40_linkedin_writing_habits.ipynb), with collection and analysis helpers embedded for self-contained replay.
 - [All main generated responses](data/main/posts.md), with stable article/model/turn IDs.
@@ -379,16 +398,18 @@ The main public data are under `data/main/`. Every response has raw JSONL stdout
 From this folder, the ordinary reproduction path is offline:
 
 ```powershell
-python -m unittest -v test_smoke_study.py test_full_study.py
+python -m unittest -v test_smoke_study.py test_full_study.py test_expanded_audit.py test_decision_audit.py
 python main_analysis.py
+python expanded_audit.py
+python decision_audit.py analyse
 python -m nbconvert --to notebook --execute --inplace 40_linkedin_writing_habits.ipynb
 ```
 
 The notebook imports no helper from another repository folder. It embeds its own CLI wrappers and analysis functions, reads the committed response caches and derived source-overlap records, and makes no model or network call during default execution. Python, NumPy, pandas, matplotlib, nbformat and nbconvert are needed for replay; the collector also uses requests and Beautiful Soup for source acquisition. Article source hashes prevent a changed web page from silently becoming the original input.
 
-Live collection is explicit and budgeted. The complete run used the preregistered allowance of 400 new calls; in this version the explicit equivalent is `python full_study.py collect --max-new 400`, while the collector's ordinary default limit stays small. Existing request slots are verified and reused locally, not regenerated. Interrupted starts and holes in saved conversation history require reconciliation rather than silently appending a replacement turn to a later-mutated conversation. Never delete a middle turn just to rerun it: later posts already depend on that history.
+Live collection is explicit and defaults stay small. The surface audit makes no model calls; the classifier replays its saved responses by default. Complete classifier wire bodies remain local because they contain publisher articles. Public response records retain request hashes, source/post hashes and typed answers. The classifier's transport exposed no cache counters or effort control; neither is invented as zero or high.
 
-The main notebook and README present one answer from the full run. Earlier smoke evidence remains in its original cache folders and protocol history, with no smoke posts pooled into main counts. The original full source files need not be present for default offline analysis because the saved overlap fingerprints are checked against the unchanged cached outputs.'''))
+Default replay needs no full source files: saved overlap fingerprints are checked against the unchanged outputs and criteria. Smoke evidence stays separate.'''))
     sections.append(('10. Future work and further reading','''Links checked November 1, 2026 (Toronto local date).
 
 ### Future work
@@ -405,6 +426,12 @@ The main notebook and README present one answer from the full run. Earlier smoke
 - [Prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching) (OpenAI, accessed 2026). Explains prefix caching and usage fields, with API controls that must not be assumed to exist in Codex.
 - [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) (Anthropic, accessed 2026). Explains read/write counters and growing conversation prefixes, which determine the cache denominator used here.
 '''))
+    for i,(title,body) in enumerate(sections):
+        if title.startswith('3.'):
+            body+='\n\nThe [guide](data/expanded_audit/STYLE_GUIDE.md) defines 40 editorial patterns with illustrations, rewrites and exceptions, drawing on notebooks 15 and 17 and online sources. Their labels come from the Decisions API. Seventy separate surface rules are diagnostics, not the classifier. These additions are exploratory; their labels are model estimates rather than human-verified faults.'
+        elif title.startswith('5.'):body+='\n\n'+audit_report_section()
+        sections[i]=(title,body)
+    study_summary+='\n\nThe Decisions API independently labels all 40 editorial patterns in each post and five smaller regions: 96,000 probabilities. At p ≥ 0.5, it labels unnecessary negative contrast in 85 Sol, 59 Terra, 89 Opus and 56 Sonnet posts. These are classifier estimates, with 996 region/whole disagreements and no human validation. [Definitions and examples for every pattern](data/expanded_audit/STYLE_GUIDE.md) explain the exploratory taxonomy; the original 111-item inventory remains unchanged.\n'
     readme=(intro+'\n'+study_summary+'\n'+contents+'\n'+'\n\n'.join('## '+title+'\n\n'+body for title,body in sections)).rstrip()+'\n'
     (ROOT/'README.md').write_text(readme,encoding='utf-8')
     saved=['# Main generated responses\n\n400 responses from 80 article-specific conversations; no quality score is implied.\n']
@@ -417,12 +444,16 @@ The main notebook and README present one answer from the full run. Earlier smoke
     smoke_code=(ROOT/'smoke_study.py').read_text(encoding='utf-8').split("\nif __name__ == '__main__':")[0]
     full_code=(ROOT/'full_study.py').read_text(encoding='utf-8').split("\nif __name__=='__main__':")[0].replace('import smoke_study as s\n','')
     analysis_code=(ROOT/'main_analysis.py').read_text(encoding='utf-8').split("\nif __name__=='__main__':")[0].replace('import smoke_study as s\n','')
+    expanded_code=(ROOT/'expanded_audit.py').read_text(encoding='utf-8').split("\nif __name__=='__main__':")[0].replace('import smoke_study as s\n','')
+    decision_code=(ROOT/'decision_audit.py').read_text(encoding='utf-8').split("\nif __name__=='__main__':")[0].replace('import smoke_study as s\n','')
     setup=smoke_code+'''\nimport types
 s=types.SimpleNamespace(**{key:value for key,value in globals().copy().items() if not key.startswith('_')})
-'''+full_code+'\n'+analysis_code
+'''+full_code+'\n'+analysis_code+'\n'+expanded_code+'\n'+decision_code
     setup+='''\n# Default replay only. Live collection is a separate, explicit CLI command.
 MAX_NEW_CALLS=5
 main_rows=analyse()
+expanded_rows=analyse_expanded()
+decision_rows=analyse_decisions()
 assert all(s.load(DATA/'summary.json')['gates'].values())
 '''
     for title,body in sections:
@@ -430,7 +461,7 @@ assert all(s.load(DATA/'summary.json')['gates'].values())
         if title.startswith('2.'):
             notebook.cells.append(nbformat.v4.new_markdown_cell('The next cell defines all helpers inside this notebook and replays the committed responses. It does not call a model or download an article. The small new-call setting is retained for any separately requested live collection.'))
             notebook.cells.append(nbformat.v4.new_code_cell(setup))
-            notebook.cells.append(nbformat.v4.new_markdown_cell('One plotting style block below creates all four main figures from saved tables. The later numbered results sections explain what to compare in each image.'))
+            notebook.cells.append(nbformat.v4.new_markdown_cell('One plotting style block below creates all five main figures from saved tables. The later numbered results sections explain what to compare in each image.'))
             notebook.cells.append(nbformat.v4.new_code_cell(PLOT_CODE))
         elif title.startswith('5.'):
             notebook.cells.append(nbformat.v4.new_code_cell("display(pd.read_csv(DATA/'fixed_prose_counts.csv').query(\"zone == 'whole' and phrase_id in ['my_takeaway','the_opportunity','isnt_x_its_y']\")[[\"model\",\"phrase_id\",\"posts_containing\",\"distinct_topics\",\"posts_containing_when_source_absent\"]])"))
@@ -439,7 +470,7 @@ assert all(s.load(DATA/'summary.json')['gates'].values())
             notebook.cells.append(nbformat.v4.new_code_cell("display(pd.DataFrame(main_rows)[['model','input_tokens','cache_read_tokens','cache_write_tokens','cache_read_fraction_turns_2_to_5','reported_cost_usd']])"))
             notebook.cells.append(nbformat.v4.new_markdown_cell('These are per-turn-corrected aggregates. Missing Codex dollar totals remain missing rather than being changed to zero. Cache shares include the input history supplied by the CLI.'))
         elif title.startswith('9.'):
-            notebook.cells.append(nbformat.v4.new_code_cell("known=sum(r['reported_cost_usd'] or 0 for r in main_rows)\nprint(f'Main Claude CLI list-price equivalent: ${known:.6f}')\nprint('Main Codex dollar equivalent and actual total spend: unavailable.')"))
+            notebook.cells.append(nbformat.v4.new_code_cell("known=sum(r['reported_cost_usd'] or 0 for r in main_rows)\nprint(f'Main Claude CLI list-price equivalent: ${known:.6f}')\nprint('Decisions classifier reported cost:',s.load(DECISIONS/'summary.json')['reported_cost_usd'])\nprint('Main Codex dollar equivalent and actual total spend: unavailable.')"))
     nbformat.write(notebook,ROOT/'40_linkedin_writing_habits.ipynb')
     print('Full README bytes',len(readme.encode()),'notebook cells',len(notebook.cells))
 
