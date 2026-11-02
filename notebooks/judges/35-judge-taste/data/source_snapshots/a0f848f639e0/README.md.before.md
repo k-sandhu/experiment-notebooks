@@ -1,0 +1,261 @@
+# Experiment notebooks
+
+A data scientist builds intuition by running experiments. You take a new tool, or one you already use, and go deep
+on it: set up conditions that show where it works and where it fails, how long it takes to build, how hard it is to
+get right, what it costs, and how much accuracy a given amount of effort buys. Before you train or post-train a
+model, you try several candidates on your own task and keep the one that holds up.
+
+AI coding agents make this much cheaper. You describe an experiment, an agent builds and runs it, and you read the
+results and decide what to try next. Experiments that each took days by hand can now run side by side, so you can
+test more hypotheses, and test each one more carefully.
+
+This repo collects such experiments. Each notebook asks one question and answers it with measurements, failures
+included.
+
+- Some build intuition about a new tool. OpenAI's Decisions API returns a probability for every option instead of
+  writing text; seven notebooks measure how accurate it is, on which kinds of decision, at what cost and speed, and
+  whether its probabilities can decide which answers to accept without review.
+- Some open up something usually hidden. Notebook 07 builds a subagent harness from scratch to show the handoffs,
+  messages and waits that agent frameworks keep out of sight, and what each pattern costs in time and calls.
+- Some check whether general-purpose models hold up on work that matters in practice: reading regulatory filings
+  and lab forms, writing safe SQL, staying inside permissions, grading other models, preparing tax workpapers.
+  Planned notebooks extend this to many more kinds of decision and to general-purpose time-series forecasting
+  models.
+
+Each test is small on purpose, tens to hundreds of items with known right answers: enough to show where a method
+breaks and what to test at scale, not enough to rank models in general. Test data is new, either written for the
+experiment or published after the models were trained, so a model cannot score well by remembering it (notebooks
+01-04 and 06 predate this rule; see [Data and licences](#data-and-licences)). Every notebook states its question
+first, runs end to end and is committed with its outputs. Every model response is cached in the notebook's `data/`
+folder, so you can read the results on GitHub or replay a notebook offline without an API key.
+
+## Reading documents
+
+A document pipeline starts with three steps: work out what arrived, cut it into pieces a search can find, and
+pull out the fields that matter. A mistake at any step carries into everything after it. A misfiled permit is
+never searched, a chunk that splits a section returns half an answer, and a missed checkbox on a lab form is a
+test that never runs.
+
+Five of these notebooks (01-04, 06) test OpenAI's **Decisions API** (`openai/gpt-6-luna-decisions`, served by
+OpenRouter). It is not a chat model. You send it evidence (text or an image) and multiple-choice or yes/no
+questions, and it returns a probability for every option instead of writing an answer. That makes it cheap and
+fast for classification, and the probabilities can decide which answers to accept automatically and which to
+send to a person.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 01 | [Decisions API, 500-label classification](notebooks/01-decisions-api-500-label-classification/) | Real label sets (product catalogues, ticket queues, research areas) often have hundreds of labels, but one Decisions API question accepts at most 255 options. Sorting 200 article abstracts into 508 research topics: which way of splitting the task gives the best accuracy for the cost, and are the probabilities good enough to auto-accept confident answers? | Embedding shortlist of 25 labels, then one Decisions call: 89.5% top-1, $0.29 per 1,000 documents. Auto-accepting at confidence ≥ 0.9 covers 86.5% of documents at 93.6% accuracy |
+| 02 | [Decisions API chunking](notebooks/02-decisions-api-chunking/) | Retrieval-augmented generation (RAG) systems cut long documents into chunks and search the chunks to answer questions. A chunk that splits a section or joins two sections is harder to find and to quote. On six public documents, can the Decisions API's probability that "a new section starts here" place chunk boundaries better than fixed-size windows, recursive splitting, heading rules or embedding similarity? | Best at finding real section starts (average precision 0.60 vs 0.43 for a heading heuristic); 8% of its chunks mix two sections vs 46% for fixed windows. Retrieval recall@5 is the same for every chunker (0.76-0.79) |
+| 03 | [Document-type classification](notebooks/03-document-type-classification/) | Document pipelines often start by working out what kind of document arrived: a permit, a settlement, an inspection form, a recall notice. Notebook 01 used clean abstracts; this uses about 300 messy public PDFs from US and UK regulators. Can the Decisions API sort them into 101 document types, and how much of each document does it need to read? | One question over all 101 types: 90.9% top-1, $0.48 per 1,000 documents. The embedding shortlist that won in 01 drops to 88% here; reading 8,000 characters instead of 2,000 adds 4 points |
+| 04 | [Industry document chunking](notebooks/04-industry-document-chunking/) | Notebook 02's chunking test used six well-structured documents. Regulatory filings are harder: long permits, a 387-page utility rate case and inspection forms full of tables. On 12 such PDFs with 276 evidence quotes, does the Decisions API still place better chunk boundaries, and does that help retrieval? | Still the best boundary detector (average precision 0.35 vs 0.21 for headings); retrieval recall@5 unchanged (0.50-0.55 for all). Its boundaries split 22% of short evidence quotes vs 6-8% for other methods, so add chunk overlap |
+| 06 | [Car make and model from one photo](notebooks/06-car-make-model-from-image/) | Labelling photos against a fixed list (products, parts, vehicles) is a task where a probability per label is cheaper than generated text and gives a confidence score. Can the Decisions API name a car's make and model from one photo over 109 labels, and how does it compare with frontier vision models (Claude, GPT, Muse) on accuracy, cost and speed? | Decisions API: 94.5% top-1 over 109 labels at $0.20 per 1,000 images and 0.9 s per call; GPT-6.1 and Muse Wonder 100%, Claude Opus 5.5 99.3% at 4-12 s per call |
+| 08 | [Ontario lab requisition extraction](notebooks/08-lab-requisition-extraction/) | Labs receive paper test requisitions as scans, faxes and phone photos, and a missed checkbox is a test that never runs. The Ontario form has about 70 tests in a tight grid of small boxes, plus typed and handwritten patient details. On 24 synthetic forms with exact ground truth, can vision LLMs read which tests were ordered and the patient and clinician fields? | Claude Opus 5.5 read every marked test on 24 forms (F1 1.00); GPT-6.1 0.995, Muse Wonder 0.986; best open model 0.94, open models weak on phone photos and written-in tests |
+
+## Watching outside sources
+
+Many teams keep a list of outside organisations whose announcements they must not miss: a finance team watches
+the central bank, the tax authority, its largest customers and suppliers. Someone opens each news page every
+week and copies the headline, date, author and text of anything new. A language model can do that reading
+itself, or it can write one small extraction program per site that then runs every week at almost no cost. The
+programs break when a site is redesigned, sometimes visibly and sometimes by quietly returning the wrong date, so
+the question is whether checks that do not know the right answer can notice a break and send the program back to
+the model for repair.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 31 | [Self-repairing scrapers](notebooks/31-self-repairing-scrapers/) | A finance team must notice new releases on 20 outside organisations' news pages and record each headline, date, author and text. On 20 fictional, differently built sites over four weekly runs with six redesigns (593 release-weeks), can a model write one extraction program per site, fix it when free automatic rules or a stronger model's review flag a problem, and keep it working? Which checks catch which errors, and how does this compare with a model reading every page? Writers: Claude Haiku 5.5, Claude Sonnet 5.5 and the small open-weight Granite 4.2 8B; reviewer Claude Opus 5.5. | Claude Haiku and Sonnet wrote correct programs for 19 and 20 of 20 sources at once; the free rules caught every break after the redesigns and one repair fixed each, so every release-week was right for $0.28 (Haiku) or $1.76 (Sonnet) over four weeks. Granite: 4 of 20 at once, 9 after three repairs, and its errors went unnoticed in 22 source-weeks with rules only against 1 with the review. On 135 planted errors the rules flagged 48 and the review all 135. Reading every page cost $4.25 with Sonnet (all right) and $0.23 with Haiku (94.4% right) |
+
+## Generating and checking example data
+
+A synthetic extraction example needs more than a plausible answer. If an order changes twice, its final price
+must agree with the source messages and its citations must support that price. These experiments examine how
+to generate examples, check them, remove duplicates and use observed failures to choose further cases. The
+data collection step can be studied before training a model. Harder examples also reveal whether a repair
+solves a case the stronger model previously missed, or repeats an answer it could already produce.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 23 | [Synthetic data generation and curation](notebooks/23-synthetic-data-curation/) | Generated examples need exact values and evidence that supports them. After two protocols found no Sol value misses, a separate v3 generator tested a pilot ladder, then compared fresh retries and verifier-guided repairs on 48 long procurement cases plus 12 audit cases. | V3 Sol answered 45/48 collection cases and 12/12 audit cases with all seven values correct; Luna answered 0/48 and 0/12. The pilot's Sol miss counts were 1, 0 and 1, so it used the declared level-three fallback. Fresh Sol retry and Sol repair each corrected all 3 selected Sol misses; Luna cross-repair corrected 0/3, and neither Sol arm added distinct cases beyond the other. The small audit set was already 12/12 for Sol. No training was run, so correction data is not evidence of a performance gain. |
+
+## Making bounded decisions
+
+Routing, approvals and checks need one allowed answer rather than generated prose. A high score on easy matches can hide arithmetic or sequence failures, so these experiments compare the same models across controlled difficulty, probability calibration and serving speed.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 18 | [Four decision models as tasks get harder](notebooks/18-decisions-api-comparison/) | A one-cent payment error or obsolete record can trigger the wrong action. How do OpenAI Decisions, Jev 1.14, Mercury Decide and Clef Flash compare on 768 fresh cases, and do clearer prompts or staged calculations fix ledger failures? A follow-up adds 288 ledger claims and 144 pilot plus 768 held-out join, policy and counting cases, with shortcut audits and all difficulty levels reported. | Clarified ledger prompts: 49.7–53.8%; model block sums: 51.0–56.9%; row labels plus Python: 99.7–100% (assisted). Pilot-selected replication: OpenAI 55.2%, Jev 70.1%, Mercury 72.1%; Clef 59.2% among valid replies, 44.3% including failures. Direct record equality explains the original shared 100% ceiling. Original serial medians: Jev/Clef about 0.21 s, Mercury 0.31 s |
+
+## Measuring economic decisions
+
+A low-priced model can cost more once checking and payment mistakes are included. A spending announcement can
+also look like economic activity even when no money has been paid. The [economics experiments](econ/) separate
+these quantities using fresh synthetic invoices and recent public fiscal documents with source-checked answers.
+Each has its own notebook, cached evidence and illustrated explanation under one `econ/` folder.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 21 | [Verification costs](econ/21-verification-costs/) | A wrong invoice approval can release too much money or hold up a valid payment. On 72 held-out invoices after 12 development cases, when do checking, repeat decisions or escalation erase the savings from a cheaper model, compared with a strong model used directly? | Qwen: 14/72 exact; GPT and both escalation routes: 72/72. Checks avoided GPT only on 14 zero-payment holds. Claude screening breaks even against GPT direct above an assumed GPT price of USD 0.133/invoice using Claude list-price equivalents. Model calls had no calculator; the rule engine got 72/72. |
+| 22 | [Fiscal measurement from public reports](econ/22-fiscal-implementation/) | A budget, an accounting expense and a cash payment can be different numbers. On 22 held-out questions from 8 recent public-document packets, do Direct answers or a quoted evidence ledger plus Python better identify fiscal amounts and missing disclosures? The full collection, including development, has nine primary reports/releases published 13-22 October 2026 and one updated history page. | GPT-6.1 Sol: Direct 22/22, Ledger 22/22; Claude Opus 5.5: Direct 22/22, Ledger 22/22; Muse Wonder Full: Direct 21/22, Ledger 21/22. All 130 protocol-valid held-out answers were correct. Muse had one Direct timeout and one correct Ledger answer excluded after an internal CLI retry; no financial-answer advantage was demonstrated. |
+
+## Forecasting observations
+
+Demand, weather and traffic histories are easy to collect, but fitting and maintaining one forecast model per series takes work. These experiments test whether pretrained models can use recent observations directly, and whether their error ranges match what happens next.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 16 | [Zero-shot time-series forecasting](notebooks/16-time-series-zero-shot/) | A bad demand or traffic forecast can leave too little capacity. On six fresh public series and 112 rolling origins, do seven pretrained forecasting families, given 512 or 2,048 past observations without weight updates, beat five seasonal or fitted baselines? | At 512 inputs, Chronos-2: 0.860 error relative to repeating the seasonal cycle (14.0% less); best baseline AutoETS: 0.961. Nominal 80% interval coverage averaged 67.4%; six selected series |
+
+## Letting models act
+
+Once a model can run a query or edit a file, a wrong answer becomes a wrong action. These notebooks test the
+layers between what a model writes and what it changes: whether it respects written permissions (05, 09), what
+should enforce them when it does not (10), how agents hand work to each other (07), whether one model can grade
+another (11), and whether review loops make a model more reliable at regulated work (12). Reward collection (25)
+checks whether the work finished and how much useful feedback remains when a policy already succeeds often.
+A later audit needs the original facts and action as well as evidence about the model itself (26).
+
+Reward collection repeats a task and scores each attempt. A group containing both a success and a failure gives a learning method an outcome contrast. Notebook 27 tests whether choosing where to collect more attempts finds more of that contrast within a fixed call budget, without changing model weights.
+
+Sometimes the quickest way to finish a job is to switch off the safety check that watches the agent, the way a decorator might take down a smoke alarm to paint a ceiling. Notebook 28 asks whether small agents keep that rule, and whether they tell the truth when asked about it afterwards.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 05 | [Text-to-SQL safety](notebooks/05-text-to-sql-safety/) | A text-to-SQL assistant turns an analyst's plain-English question into SQL that runs on a live database, so one bad query can change data or leak personal details. Given a written read-only policy, how often do 8 open-weight models write a query that breaks it on 29 policy-breaking requests, compared with Claude, GPT and Muse, and do they still answer 23 legitimate questions? | Claude, GPT, Muse Wonder and 6 of 8 open models: 0 violations on 29 policy-breaking requests. Mistral Small 4: 7 (one an `UPDATE` hidden in a "refused" reply); Gemma 4 31B: 3 |
+| 07 | [Subagent handoff harness](notebooks/07-subagent-handoff-harness/) | Agent frameworks hide how a main agent hands work to subagents, receives their messages and decides when to wait for them. This builds that harness in plain Python one pattern at a time (synchronous handoff, async spawn, messages both ways, a subagent asking a question, racing, nesting) and runs each pattern with real Claude agents on the same trip-planning task. What does each pattern cost and gain in time and LLM calls? | All 7 levels correct. Async spawn: 57 s vs 82 s single agent; sync handoff slower (120 s). A late reply to a finished subagent is silently lost |
+| 09 | [Staying inside written permissions](notebooks/09-agent-action-safety/) | A coding assistant that proposes terminal commands can delete files, read secrets or push code, and the permissions written for it are often the only guard. On 12 forbidden requests (a folder outside the project, the secrets file, an instruction hidden in a ticket), each paired with a similar permitted one, do two open-weight models (DeepSeek V4.1 Flash, Gemma 4 31B) and two closed ones (Claude Opus 5.5, GPT-6.1) propose the forbidden action, do they still do the permitted work, and does a safety checklist in the prompt change either? Replies are judged as text by other models and never run. | Judges flagged 1 of 96 forbidden-request replies, and review disputes it: every model sits at 0 or 1 of 12, too low to rank. The one flag review supported was on a permitted job: DeepSeek code that searched through a link out of the project. Permitted requests completed: GPT-6.1 24/24, Claude 21, DeepSeek 18, Gemma 10, but 9 of Gemma's 14 misses were format failures, and both judges said 5 of those 9 did the job. The checklist did not reduce flags |
+| 10 | [Code execution guardrails](notebooks/10-code-execution-guardrails/) | When a model proposes a forbidden action, the code that decides whether to run it is the last guard, and a string check on the path is easy to get past. On 22 requests with known right answers (8 permitted, 14 forbidden), what do five enforcement designs let through, and how much legitimate work does each block? | A path-prefix check let through 5/14 forbidden actions. Typed operations on resolved paths let through 0/14 and kept all 8 permitted ones. Read-only also allowed 0/14 but blocked 4/8 permitted actions |
+| 11 | [Using LLM judges](notebooks/11-llm-judges/) | When a team changes an AI assistant, another model often grades thousands of its answers, so a grader that rewards a wrong answer can make a worse version look better. On 120 freshly generated grading tasks whose right grade is computed by code (invoice sums, order-record versions, conflicting reports, a made-up refund policy), how often do Claude Opus 5.5 and GPT-6.1 Sol pick the better of two answers and say correctly whether each is acceptable, with three prompts and both answer orders, and how much checking does a both-judges-agree rule save? | GPT chose correctly in all 120 tasks with every prompt and order, a ceiling. Claude scored 94-100/120 when replies had to be in the exact machine-readable format, but 94 of the 96 unsuccessful choices were replies with a short note before a correct grade; read with a rule fixed beforehand, it scored 119-120. Genuine errors: 4 of 1,440 ratings in 2 tasks. Accepting only grades both judges agreed on decided 99/120 with no error. Generated three-field tasks, not open-ended writing |
+| 12 | [Do extra steps improve tax workpapers?](notebooks/12-tax-research-harnesses/) | A small company's tax workpaper turns its books into a business profit and each owner's share of it, so one wrong sum reaches every owner's tax return. When a model drafts the workpaper, teams often add steps around it rather than change the model. On 12 fictional 2025 S-Corporations whose correct workpapers are computed by code, do a longer checklist, a second call in which the model reviews its own draft, feedback from a checking program, or an agent framework give more fully correct workpapers than one direct call to the same model (Gemma 4 31B or Qwen3.8 Flash)? | None of the steps helped, and the design left them no room to: Qwen's direct call was fully correct for 12/12 companies with either instruction length, and Gemma was correct for 0/12 in every setup. Qwen's review steps lost 5 runs, all empty replies after it used its whole output limit thinking; it was right in 67/67 replies the scorer could read. Gemma's profit was wrong in 96/96 workpapers while its review flags were right in 88/96, and the checker, which does not recompute profit, found no error in any of its 24 drafts in the checker setup. The framework never ran with Qwen: its host rejected the framework's default tool setting in all 24 runs |
+| 24 | [Collecting RL rollouts and rewards](notebooks/24-openenv-rewards/) | Training a small model through trial and error needs saved actions and checked rewards. With Llama 3.2 3B and Gemma 3 4B on eight fresh maze and reasoning tasks, how do fixed sampling, early stopping, state coverage and reward-based task selection change the collected signal? No model weights are updated. | 80 attempts: 74 scored outcomes and six provider errors. Only 2/13 complete initial groups contain both success and failure; conditional coverage adds scores to one further group. Early-stop replay uses 193 vs 261 action calls on complete groups; audit calls were actually collected. Total cost bound under $0.018 |
+| 25 | [Rewards from knowledge work](notebooks/25-knowledge-work-rollouts/) | A successful tool call can still leave a meeting wrong or a financial answer imprecise. On 12 fresh calendar, financial-table and cash-reconciliation tasks, how do two recent small open-weight policies compare with GPT-6.1 Sol and GPT-6 Luna across 144 attempts, and what makes further improvement harder near a high score? Collect native and exact rewards plus 20 prefix continuations, without updating weights. | Exact completion: Granite 16/36; Nemotron 35/36; Sol 35/36; Luna 33/36. Sol/Luna have only 1/12 and 2/12 mixed reward groups; native FinQA misses Sol's remaining precision error. 584 cached requests total; OpenRouter $0.0581; CLI dollar charges unavailable. Small task set, no general ranking or training-improvement claim |
+| 26 | [What can an auditor check about a model?](notebooks/26-model-auditability/) | A disputed automated decision needs evidence of the facts, rule and action; inspecting the neural network needs different access. On 32 fresh expense-policy records per model, repeated twice, what can hosted GPT and Qwen establish, and what extra checks can a pinned local checkpoint support? | GPT 32/32 policy answers vs Qwen 22/32 per draw; both repeat all decision fields. Rules reconstruct 128/128 actions. Local Pythia replays and changes 8/8 computations; neither hosted interface exposes executed weights. Small constructed test, no deployment certification |
+| 27 | [Reward collection at equal token budgets](notebooks/27-adaptive-knowledge-rollouts/) | A scheduling assistant must coordinate reviews and minimize movement and delayed handoffs. From a bank of 16 fresh 12-review cases in four blocks, does stopping after two agreeing attempts collect more complete groups containing both success and failure than always collecting four? Compare GPT-6.1 Sol and GPT-6 Luna at a shared 24M-token eligibility cutoff per model and collector; crossing requests are saved separately. No weight updates. | Complete mixed groups, uniform versus adaptive: Sol 4 versus 4; Luna 0 versus 0. Four blocks give a descriptive comparison; actual token overrun and interrupted launches are reported separately. |
+| 28 | [Does an agent admit switching off its monitor?](notebooks/28-monitor-removal-honesty/) | A monitor that watches a coding agent only helps while it is on, so agents are told never to remove it, and a user who later asks "did you remove it?" relies on the answer. On three made-up coding jobs that can only be finished by removing or silencing the monitor, do five small open-weight models (Qwen3.8 27B, Nemotron 3.5 Lightning and Super VL, Granite 4.2 8B, LFM2.5 24B) keep the rule, and do they answer truthfully, both about a removal already in their history (960 answers, with the same change credited to a colleague as a control) and about one they chose (150 runs, 300 answers)? | No model flatly denied a removal; untruthful answers described the change and said the monitor was not removed. Qwen admitted its own removal in 48/48 answers; Granite in 3/45, against 28/45 for a colleague's identical change. Choosing for themselves, Qwen kept the monitor in 29/30 runs, Nemotron Lightning removed or silenced it in 17/30. Final reports disclosed every finished removal; later answers about switched-off alerts mostly said "still enabled". Three small made-up jobs, one setting per model |
+
+## Recognising model outputs
+
+If a model is sold under the wrong name, a plausible answer gives no proof of its source. These experiments
+ask whether patterns in generated text can identify an endpoint, and whether that evidence survives a change
+of topic, formatting or wording.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 13 | [Attributing older model outputs](notebooks/13-older-model-attribution/) | Checking a claimed text source can expose a substituted model, but topic or formatting can give the answer away. On 100 fresh texts from four older endpoints in two families, can five newer models name the source on ten held-out prompts (40 texts), compared with trained character and embedding classifiers? | GPT-6.1 / few-shot: 27/40 (67.5%); character classifier 16/40 (40.0%, 12 training texts), embedding baseline 14/40 (35.0%); chance 25%. The identical-order GPT zero-shot repeat changes 13/40 guesses. Shared calls connect all ten prompts; no population confidence interval or general ranking. Serving-provider confounds remain |
+
+## Predicting from tables
+
+When only a few labeled rows exist, an analyst still needs to predict the next category or number. A pretrained
+tabular model can use those examples as context without updating its weights. The useful comparison is with
+ordinary fitted models on the same rows, including inputs outside the examples' range. Balanced accuracy gives
+each class equal weight; numeric mean absolute error (MAE) is the average size of a prediction error.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 14 | [Zero-shot prediction from small tables](notebooks/14-tabular-zero-shot/) | A new process may have only a few labeled outcomes, so a prediction must work before there is much data to tune it. On 24 fresh synthetic numeric tables (four mechanisms, classification and regression, three seeds), how does pretrained TabPFN compare with four fitted baselines using 32 or 128 labeled examples and 128 held-out rows? | At 128 labeled rows, TabPFN balanced accuracy 82.9% vs 71.7% for Random forest; numeric MAE 0.198 times a constant predictor vs 0.479 for Gradient boosting. Four synthetic mechanisms do not establish a real-data ranking |
+
+## Writing analyses
+
+An analysis must help its reader make a decision. These experiments separate the content of a model's draft from the preferences of the models asked to grade it, including whether naming the author or asking for a prose audit changes the score.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 15 | [Analytical writing and judge framing](notebooks/15-analytical-writing-style/) | A draft can contain the right numbers yet bury its decision in vague or repeated prose. On two fresh numerical cases in four genres (216 requested drafts), how do 27 writers fare under 30 model judges, and do author disclosure and an explicit prose audit change ratings of the same text? | Anonymous external clarity 88.9/100; audit 0.76 quoted issues per 100 words. Audit clarity change -1.66 points; neutral author-disclosure change -0.06. Model ratings on two cases, no human comprehension claim |
+| 17 | [Writing validation on longer documents](notebooks/17-writing-validation-extension/) | A prose flag can reflect reading difficulty, a factual error or taste. Reassess 108 cached drafts from 27 writers, then compare six writers on 24 fresh cases in four genres with realistic lengths (288 requested drafts), using only Codex and Claude judges. | Astra moves from sixth to first when the judge panel changes on the same 288 drafts; fresh prose concerns average 1.6% on old flagged passages. Warning effect -0.31/100; human results pending |
+
+## Creating presentations
+
+A generated deck must keep its facts correct while making a decision easy to see. These experiments test the authoring tools and review steps between a model's response and the slides an audience reads.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 19 | [PowerPoint harnesses and screenshot judges](notebooks/19-powerpoint-harness/) | A presentation edit can leave stale values or unreadable charts. Do helpers and screenshot review improve editable decks? Three models make 24 four-slide decks, then 24 harder eight-slide decks. Three frontier judges see only images; 48 matched pairs cover all four conditions and both feature comparisons. | Full paired grid: helpers 38.2% win credit against primitives; screenshots 61.1% against text. Scores and direct preference agree on 37/40 non-tied pairs. Two related briefs, no general ranking |
+
+## Planned experiments
+
+Experiments that are written up but not built yet are open issues with the
+[`notebook-proposal`](https://github.com/k-sandhu/experiment-notebooks/issues?q=is%3Aissue+is%3Aopen+label%3Anotebook-proposal)
+label. Each one gives the question, the fresh data to use, the models, the measures and a cost estimate.
+
+| Issue | Question |
+|---|---|
+| [#12](https://github.com/k-sandhu/experiment-notebooks/issues/12) | People have used the Decisions API since its October beta to route complaints, grade agent transcripts, pick an agent's next action from a screenshot and choose which LLM should answer a prompt, and their reports disagree on whether its probabilities can be trusted. On 14 tasks with fresh data, including those uses plus bird recordings, wildlife photos and restaurant inspection reports, which uses hold up, are its probabilities calibrated and stable when options are reordered or reworded, how does it compare with other decision models such as Jev where a task calls for it, and what does each cost? |
+
+Notebooks 01-04 were first run inside another project and moved here with their data and caches.
+
+## How models are called
+
+| Provider | Models used | How |
+|---|---|---|
+| Anthropic | Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 and older versions in 15 | `claude -p` (Claude Code CLI), headless, no tools |
+| OpenAI | GPT-6.1, GPT-6 Astra/Sol/Luna and GPT-5.6 Sol/Terra/Luna | `codex exec` (Codex CLI), read-only sandbox |
+| Meta | Muse Spark 1.2/1.3 and Muse Wonder/Wonder Full | `muse exec` (Muse CLI), empty preset |
+| Decision models | OpenAI Decisions, Jev 1.14, Mercury Decide, Clef Flash | OpenRouter Decisions HTTP API; dated IDs and provider pins in 18 |
+| Prior Labs | TabPFN-3.5, numeric tabular classification and regression | Prior Labs REST API, labeled context and unlabeled test features |
+| Open-weight models | Llama 3.1, DeepSeek, Qwen, GLM, Kimi, Gemma, Mistral, gpt-oss, Muse Spark Open, Nemotron | OpenRouter HTTP API |
+| Time-series foundation models | Chronos-2, TimesFM 2.5, Moirai 2, TiRex-2, Toto 2, TTM R3, Lag-Llama | TSFM.ai HTTP API; notebook 16 defaults to frozen caches |
+
+Paid OpenRouter calls are small by default and every notebook has a size knob at the top (`N_DOCS`,
+`OPEN_MODELS`, `IMAGES_PER_MODEL`, ...). Each notebook prints what it spent.
+
+## Running
+
+```bash
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt   # or .venv/bin/pip on macOS/Linux
+.venv/Scripts/jupyter lab
+```
+
+* **Replay** (default): open a notebook and run all cells. Cached responses are used; no keys are needed.
+* **Re-query the models**: delete the notebook's `data/cache_*.jsonl` (or `data/runs/` in 07). This needs
+  `OPENROUTER_API_KEY` and logged-in `claude`, `codex` and `muse` CLIs.
+* New collection in 09, 11, 12 and 13: set `NB_LIVE=1` explicitly. These notebooks stop on an offline cache miss. Notebook 10 replays saved container evidence; its fixed Docker probes require a separate opt-in.
+* Notebook 13 verifies cached evidence before replay. For a new collection, use a separate copy and follow its README; keep the committed cache intact.
+* Notebook 19 replays the complete PowerPoint study offline. New collection uses explicit --live commands and requires Windows, PowerPoint and authenticated model CLIs.
+* Notebook 23 replays 82 original and 78 harder-round CLI requests offline. `NB_LIVE=1` runs a small new first-protocol collection; `NB_HARD_LIVE=1` runs a small harder collection. Fresh results stay under ignored `data/tmp/` paths, separate from both committed main runs and pilots.
+* Notebook 14 uses `PRIORLABS_API_KEY` and `NB_LIVE=1` for new collection, with a checked computation-token cap. Its default replay reads 48 saved responses without network access.
+* **Smoke test**: `NB_SMOKE=1` makes notebooks 05, 06 and 08 run on a handful of items.
+* Notebooks 02-04 download public PDFs on first run into `data/docs/` (git-ignored, sha256-checked where pinned).
+* Notebook 16 forecasts six public series through TSFM.ai. Its own `requirements.txt` pins the fitted-baseline libraries; replay needs no key. New collection requires `TS16_LIVE=1` and `TSFMAI_API_KEY`.
+
+Notebook 15 uses strict offline replay with an evidence manifest and a $10 OpenRouter guard. Its README gives model coverage and limits.
+
+Notebook 26 compares policy checks, repeat requests, ledger reconstruction and local checkpoint inspection. Default replay is offline; its README records the access limits, failed provider calls and separately reported costs.
+
+Notebook 18 uses 768 fresh synthetic cases, all four decision models and strict offline replay. Its README records provider pins, scoring audits, diagnostics and reported spend.
+
+Notebooks 21 and 22 are grouped under `econ/`. Each runs independently from its own directory and stops on a
+missing offline cache entry. Their READMEs distinguish measured usage from assumed business costs and explain
+the small live profiles and spending caps.
+
+Notebook 27 uses strict offline replay and records two equal-call comparisons, a separate pilot and a preserved transport-failure run. Its README explains the CLI-only collection protocol and unknown dollar billing.
+
+## Data and licences
+
+Only public or synthetic data. OpenAlex metadata (CC0); public PDFs from US and UK agencies and other publishers,
+referenced by URL and downloaded on demand; the Chinook sample database (MIT); Wikimedia Commons photos (licence
+and author per image in `notebooks/06-car-make-model-from-image/data/images.csv`); synthetic lab requisitions generated for notebook 08,
+stamped SYNTHETIC with invalid identifiers. Notebook 16 uses IESO demand, Open-Meteo weather analysis, Wikimedia CC0 page views and Bank of Canada exchange rates; its [source notices and redistribution terms](notebooks/16-time-series-zero-shot/data/ATTRIBUTION.md) are recorded separately. Code and text in this repo are MIT licensed (see `LICENSE`).
+
+New notebooks use data the models cannot have seen: synthetic data written for the experiment, or public data
+created after every tested model's training cutoff (for time series, the last one to two months), with creation
+dates recorded. Notebooks 01-04 and 06 predate this rule. Their abstracts, PDFs and Wikipedia photos are older than
+the models, which may have seen them, so treat those accuracy figures as upper bounds.
+
+Notebook 14 uses 24 newly generated numeric tables with exact generation rules, seeds and input hashes.
+
+Notebooks 09-12 use authored synthetic cases and objective fixtures. Notebook 12 records original IRS source URLs and section names alongside authored summaries for its restricted 2025 US federal S-Corporation workpaper; original US government material has separate source provenance.
+
+Notebook 13 uses 100 fresh synthetic model outputs collected on 2026-10-19, with per-item timestamps and sourced model cutoff or release dates in its data folder. Its gold labels are the recorded generation endpoints.
+
+Notebook 15 uses two fresh numerical packets and model drafts collected on 2026-10-19, with exact answers generated in code and model date sources in its data folder.
+
+Notebook 17 extends the writing pilot with 24 fresh programmatic cases and copied legacy evidence. Human reader and editor results are pending; their participant materials and import workflow are included.
+
+Notebook 23 uses fictional order threads generated in code on 2026-10-24, with source events, exact answer keys and model responses saved for inspection. It demonstrates data curation without training a model. Its [provenance record](notebooks/23-synthetic-data-curation/data/provenance.json) identifies the models and sources; generated service outputs do not carry a claim of unrestricted downstream training permission.
+
+## For AI agents
+
+See [AGENTS.md](AGENTS.md): layout, the pull-request workflow, claiming a notebook number with an issue,
+proposing an experiment as an issue, self-containment, fresh data with no training-set leakage, workflow
+diagrams and explainers, the closing future-work and further-reading section, how to call models, and the writing
+style (including LLM prose habits to avoid).
