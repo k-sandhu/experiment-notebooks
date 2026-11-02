@@ -13,13 +13,18 @@ notebooks/NN-short-name/
     PROTOCOL.md         run history: preregistration, amendments, outages, settings (see Protocol history)
   figures/              PNGs saved by the notebook (used by README.md)
 
+notebooks/judges/        experiments on models that grade other models' work, grouped at the owner's request
+  README.md              introduction to model judges and comparison of the judge experiments
+  NN-short-name/         the same notebook, README, data and figures layout as above
+
 econ/                    economics experiments grouped at the owner's request
   README.md              introduction and comparison of the economics experiments
   NN-short-name/         the same notebook, README, data and figures layout as above
 ```
 
-Notebook numbers are global across `notebooks/` and `econ/`. Economics notebooks follow all the same
-claim, reproduction and explanation requirements. Each remains self-contained within its own folder.
+Notebook numbers are global across `notebooks/`, `notebooks/judges/` and `econ/`. Judge and economics notebooks
+follow all the same claim, reproduction and explanation requirements. Each remains self-contained within its own
+folder. A PR that adds a notebook to a grouped folder also updates that folder's `README.md`.
 
 ## Git workflow
 
@@ -43,12 +48,12 @@ issue, and close the proposal when the notebook's PR merges. The root `README.md
 Several agents may build notebooks at the same time. To keep two of them from picking the same `NN`, claim
 the number with a GitHub issue before you create any file for a new notebook.
 
-1. **Find the lowest free number**: the lowest `NN` not used by a folder in `notebooks/` or `econ/` on `origin/main`
+1. **Find the lowest free number**: the lowest `NN` not used by a folder in `notebooks/`, `notebooks/judges/` or `econ/` on `origin/main`
    and not claimed by an open issue titled `Notebook NN: ...`.
 
    ```bash
    git fetch origin
-   git ls-tree -d --name-only origin/main notebooks/ econ/
+   git ls-tree -d --name-only origin/main notebooks/ notebooks/judges/ econ/
    gh issue list --state open --search "Notebook in:title" --json number,title
    ```
 
