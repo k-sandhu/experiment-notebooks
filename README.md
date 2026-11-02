@@ -248,6 +248,14 @@ merging them.
 |---|---|---|---|
 | 38 | [How should a model send back its edits to a long document?](notebooks/38-long-text-edits/) | A model asked to change one number in a 12,000-word document can send back the whole document, which is slow and can change text nobody asked about, or only the change, which a program must then put in the right place. On 36 edit requests with exact answers in nine US Federal Register rules published in late October 2026 (1,842 to 12,762 words; one change, six mixed changes, renaming an abbreviation everywhere, twenty small changes), which of seven reply formats (the whole document, SEARCH/REPLACE blocks, JSON find-and-replace pairs, a unified diff, OpenAI's patch format, line-number edits, an edit sketch), merged in which way (exact, tolerant or fuzzy matching, `git apply`, GNU `patch`, a second model writing out the document, one retry with the error), most often gives exactly the requested document for five models (GPT-6.1 Sol, Claude Sonnet 5.5, Claude Haiku 5.5, DeepSeek V4.1 Flash, Qwen3.8 27B), and at what cost? | Find-and-replace pairs merged by exact match did best: 82% and 84% of 180 requests exact, 85% and 86% with one retry, in a median 17 seconds at every length; tolerant and fuzzy matching rescued none, because the failures were edits left out. Whole rewrites 81% (31 to 115 seconds), diffs 79% with a forgiving merge but 41% through plain `git apply`, line-number edits 78%, edit sketches 64%, OpenAI's patch format 59% at best. A second model writing out the merged document lost edits (57% for find-and-replace). Renames were find-and-replace's weak spot (51%, against 84% for rewrites). GPT-6.1 Sol was at the ceiling in three formats, so the ranking comes from the other four models |
 
+## Writing short posts
+
+A person sharing an AI news article can open a new chat for every draft or stay in the first chat and ask for another post. The second choice lets the model see its earlier writing and may reuse more provider-side input computation. These tests separate newly generated wording, recurring prose and formatting, and the input tokens actually reported as cached.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 40 | [LinkedIn writing habits: repeated-generation smoke test](notebooks/40-linkedin-writing-habits/) | Before a larger writing study, can GPT-6.1 Sol, GPT-6.1 Terra, Claude Opus 5.5 and Claude Sonnet 5.5 each produce five different posts from one complete recent AI article at high effort, and how does provider cache reuse differ between fresh sessions and one conversation followed by four requests to generate another post? Two conditions, 40 posts; a fixed inventory counts 111 prose candidates plus formatting. | Every model returned five distinct post bodies in both conditions, with no observed tool calls. On requests 2-5, Terra's cached-input fraction was 49.46% fresh versus 98.26% continued; Sol's was 0% versus 48.39%. Claude fresh repeats were already 99.97% cached; continued turns were about 89% and processed more history. Different complete posts still shared wording and formatting. One article and ordered conditions cannot rank general writing quality or establish a universal cost saving |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
@@ -371,6 +379,7 @@ here with their data and caches.
 | 30 | 20 fictional subsidiary workbooks generated in code, with exact answers | Fresh: 29 October 2026 | This repository |
 | 31 | 20 fictional news sites built in code, with 240 release texts written by GPT-6.1 Sol | Fresh: releases dated 17 August to 23 October 2026, weekly runs 5 to 26 October 2026 | This repository |
 | 38 | Nine US Federal Register rules and proposed rules converted to Markdown, with 36 edit requests and their exact answers generated in code | Fresh: published 19 to 29 October 2026 | [Federal Register API](https://www.federalregister.gov/developers/documentation/api/v1); US government works, public domain |
+| 40 | One October 29 Hugging Face article about Mistral Large 4, plus 40 CLI-generated responses | Fresh: source published 29 October 2026; calls 1 November Toronto time | Source article rights retained by its publisher; full input git-ignored, public URL and hashes retained; generated response caches in the experiment |
 
 ## For AI agents
 
