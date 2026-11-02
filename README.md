@@ -266,6 +266,14 @@ when does Python's usual shortcut, the NumPy array library, close the gap?
 |---|---|---|---|
 | 39 | [Rust or Python: how much faster is the code an AI model writes?](notebooks/39-rust-vs-python/) | A morning summary of a 2-million-line web log takes about 5 seconds in straightforward Python; a Rust version is usually faster but costs developer time, a cost an AI coding model mostly removes. When Claude Sonnet 5.5 and GPT-6.1 Terra each write eight tasks made up for the study (a physics simulation, word-pair counts, JSON transaction totals, log parsing, shortest routes, an edit-cost table, a heat grid, parallel random walks) in Rust, in standard-library Python and in Python with NumPy (48 programs), how much faster and smaller is the Rust, how much of the gap does NumPy close, and is every version correct? A straightforward Python solution of each task is timed as well | All 48 programs and the 8 straightforward solutions were correct on every hidden input, a ceiling. Rust was the fastest version in all 16 task-model pairs: 6.0 times faster than the faster of each model's two Python versions (geometric mean, 2.2 to 14.5 times), about 25 times faster than its standard-library Python and 41 times faster than the straightforward Python. NumPy made Python 3 to 28 times faster on numeric tasks but did nothing for JSON and log parsing, where Rust stayed 3 to 7 times ahead of the best Python. Rust used less memory than both Python versions in 15 of 16 pairs and was 1.5 to 2.6 times as long. One program per model and task, timed on a busy Windows laptop |
 
+## Writing short posts
+
+A person sharing an AI news article can open a new chat for every draft or stay in the first chat and ask for another post. The second choice lets the model see its earlier writing and may reuse more provider-side input computation. These tests separate newly generated wording, recurring prose and formatting, and the input tokens actually reported as cached.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 40 | [Can explicit instructions change recurring LinkedIn writing habits?](notebooks/40-linkedin-writing-habits/) | Different drafts can repeat the same hooks, transitions and endings. Does a prose specification reduce those habits? Four writers each produce five posts from 20 frozen AI news articles with a minimal request and an explicit prompt: 400 posts per condition. A pinned decision model assigns 40 overlapping patterns in six locations; all four writers use high effort. | All ten targeted classifier-label frequencies decreased. Negative contrasts fell from 289/400 posts to 50/400; one-sentence paragraph patterns fell from 371 to 1, and formulaic framing from 137 to 0. Noun-heavy wording rose from 72 to 108 and some writers produced longer posts. These are exploratory classifier judgments, with no human quality validation and baseline collected first. |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
@@ -395,6 +403,7 @@ here with their data and caches.
 | 35 | 88 paragraph pairs (earlier and merged versions) from this repository's README rewrites of 27 to 30 October 2026 | Fresh: lines dated 17 to 30 October 2026 | This repository (MIT) |
 | 38 | Nine US Federal Register rules and proposed rules converted to Markdown, with 36 edit requests and their exact answers generated in code | Fresh: published 19 to 29 October 2026 | [Federal Register API](https://www.federalregister.gov/developers/documentation/api/v1); US government works, public domain |
 | 39 | Eight programming tasks with inputs generated in code from fixed seeds and exact expected outputs | Fresh: written 30 October 2026 | This repository |
+| 40 | Twenty complete public AI news articles and 400 CLI-generated LinkedIn responses | Fresh: sources published 23-30 October 2026; main collection 1 November Toronto time | Publishers retain article rights; full source text git-ignored, public URLs and hashes retained; generated response caches in the experiment |
 
 ## For AI agents
 
