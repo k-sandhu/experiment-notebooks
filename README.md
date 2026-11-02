@@ -254,7 +254,7 @@ A person sharing an AI news article can open a new chat for every draft or stay 
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
-| 40 | [LinkedIn writing habits: repeated-generation smoke test](notebooks/40-linkedin-writing-habits/) | Before a larger writing study, can GPT-6.1 Sol, GPT-6.1 Terra, Claude Opus 5.5 and Claude Sonnet 5.5 each produce five different posts from one complete recent AI article at high effort, and how does provider cache reuse differ between fresh sessions and one conversation followed by four requests to generate another post? Two conditions, 40 posts; a fixed inventory counts 111 prose candidates plus formatting. | Every model returned five distinct post bodies in both conditions, with no observed tool calls. On requests 2-5, Terra's cached-input fraction was 49.46% fresh versus 98.26% continued; Sol's was 0% versus 48.39%. Claude fresh repeats were already 99.97% cached; continued turns were about 89% and processed more history. Different complete posts still shared wording and formatting. One article and ordered conditions cannot rank general writing quality or establish a universal cost saving |
+| 40 | [How four models write LinkedIn posts](notebooks/40-linkedin-writing-habits/) | A person asking for several drafts of a news post may receive different complete posts that still share openings, transitions and endings. Across 20 recent AI news topics, what prose and formatting recur when GPT-6.1 Sol, GPT-6.1 Terra, Claude Opus 5.5 and Claude Sonnet 5.5 each write five posts in one article-specific conversation at high effort? 400 posts, one full initial article and four short requests to generate another post. | All 400 responses were readable, with 100 distinct post bodies per model and no observed tool calls. Emoji appeared in 2 Sol posts, 15 Terra posts, 94 Opus posts and 69 Sonnet posts out of 100 each; em dashes appeared in 92, 74, 2 and 0. An "isn't X / it's Y" pattern check flagged 31, 29, 14 and 6 posts. The fixed prose inventory, source-filtered phrase search and formatting tables describe writing habits, not quality rankings or an AI-authorship detector |
 
 ## Planned experiments
 
@@ -379,7 +379,7 @@ here with their data and caches.
 | 30 | 20 fictional subsidiary workbooks generated in code, with exact answers | Fresh: 29 October 2026 | This repository |
 | 31 | 20 fictional news sites built in code, with 240 release texts written by GPT-6.1 Sol | Fresh: releases dated 17 August to 23 October 2026, weekly runs 5 to 26 October 2026 | This repository |
 | 38 | Nine US Federal Register rules and proposed rules converted to Markdown, with 36 edit requests and their exact answers generated in code | Fresh: published 19 to 29 October 2026 | [Federal Register API](https://www.federalregister.gov/developers/documentation/api/v1); US government works, public domain |
-| 40 | One October 29 Hugging Face article about Mistral Large 4, plus 40 CLI-generated responses | Fresh: source published 29 October 2026; calls 1 November Toronto time | Source article rights retained by its publisher; full input git-ignored, public URL and hashes retained; generated response caches in the experiment |
+| 40 | Twenty complete public AI news articles and 400 CLI-generated LinkedIn responses | Fresh: sources published 23-30 October 2026; main collection 1 November Toronto time | Publishers retain article rights; full source text git-ignored, public URLs and hashes retained; generated response caches in the experiment |
 
 ## For AI agents
 
