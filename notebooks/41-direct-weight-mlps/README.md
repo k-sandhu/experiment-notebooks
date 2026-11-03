@@ -218,16 +218,16 @@ Before comparing accuracies, check whether each response could be used as a netw
 
 | Submission | Workflow | Official test | Wilson 95% | Visible accuracy | Unused training | Format/service failures |
 |---|---|---|---|---|---|---|
-| Astra | First submission | 1645/1797 (91.54%) | 90.16–92.74% | 93.16% | 94.03% | 0 |
-| Sol | First submission | 1422/1797 (79.13%) | 77.19–80.95% | 82.91% | 83.61% | 0 |
+| Astra | First submission | 1645/1797 (91.54%), 152 wrong | 90.16–92.74% | 93.16% | 94.03% | 0 |
+| Sol | First submission | 1422/1797 (79.13%), 375 wrong | 77.19–80.95% | 82.91% | 83.61% | 0 |
 | Opus 5.5 | First submission | Thinking/output limit, then budget exhaustion | N/A | N/A | N/A | 1 unusable response |
-| Muse Wonder | First submission | 606/1797 (33.72%) | 31.57–35.94% | 37.74% | 37.86% | 0 |
-| Nemotron | First submission | Incomplete or failed model response | N/A | N/A | N/A | 1 unusable response |
+| Muse Wonder | First submission | 606/1797 (33.72%), 1191 wrong | 31.57–35.94% | 37.74% | 37.86% | 0 |
+| Nemotron | First submission | Output limit; reasoning only; no weights | N/A | N/A | N/A | 1 unusable response |
 | Gemini batch | First submission | Provider rejected schema before decoding | N/A | N/A | N/A | 1 unusable response |
 | Opus 5.5 continuation | Recovery | Refusal citing provider safety classifier; no weights | N/A | N/A | N/A | 1 unusable response |
 | Gemini batch schema retry | Recovery | Incomplete or failed model response | N/A | N/A | N/A | 1 unusable response |
 | Gemini batch low effort | Recovery | Expected 6570 weights; received 6013 | N/A | N/A | N/A | 1 unusable response |
-| Gemini batch indexed | Indexed, 2 calls | 1091/1797 (60.71%) | 58.43–62.95% | 61.82% | 63.83% | 0 |
+| Gemini batch indexed | Indexed, 2 calls | 1091/1797 (60.71%), 706 wrong | 58.43–62.95% | 61.82% | 63.83% | 0 |
 | Nemotron indexed | Indexed, 3 calls | 3 provider errors before numerical output | N/A | N/A | N/A | 3 provider errors |
 
 ![Official test accuracy, with pending or unreadable submissions explicitly labelled](figures/test_accuracy.png)

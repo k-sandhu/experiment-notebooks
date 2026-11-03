@@ -47,13 +47,14 @@ def build_mlp():
         if r in valid:
             lo,hi=np.array(r['test']['wilson_95'])*100
             workflow=f"Indexed, {r['outer_requests']} calls" if r.get('indexed') else ('Recovery' if r.get('recovery') else 'First submission')
-            resultrows.append([r['label'],workflow,f"{r['test']['correct']}/1797 ({100*r['test']['accuracy']:.2f}%)",f'{lo:.2f}–{hi:.2f}%',
+            resultrows.append([r['label'],workflow,f"{r['test']['correct']}/1797 ({100*r['test']['accuracy']:.2f}%), {1797-r['test']['correct']} wrong",f'{lo:.2f}–{hi:.2f}%',
                                f"{100*r['visible']['accuracy']:.2f}%",f"{100*r['hidden_train']['accuracy']:.2f}%",'0'])
         else:
             reason='Pending' if r.get('pending') else r['format_failure']
             if r['model_key']=='gemini' and not r.get('recovery') and not r.get('pending'):reason='Provider rejected schema before decoding'
             if r['model_key']=='opus' and not r.get('recovery') and not r.get('pending'):reason='Thinking/output limit, then budget exhaustion'
             if r['model_key']=='opus' and r.get('recovery') and not r.get('pending'):reason='Refusal citing provider safety classifier; no weights'
+            if r['model_key']=='nemotron' and not r.get('indexed'):reason='Output limit; reasoning only; no weights'
             workflow=f"Indexed, {r['outer_requests']} calls" if r.get('indexed') else ('Recovery' if r.get('recovery') else 'First submission')
             failures=f"{r['outer_requests']} provider errors" if r.get('indexed') else '1 unusable response'
             resultrows.append([r['label'],workflow,reason,'N/A','N/A','N/A','Pending' if r.get('pending') else failures])
