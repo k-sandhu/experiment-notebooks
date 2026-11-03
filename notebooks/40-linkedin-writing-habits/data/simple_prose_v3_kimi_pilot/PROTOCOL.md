@@ -25,3 +25,7 @@ Warm-turn cache-read shares are Sol 91.7551%, Terra 72.2995%, Opus 81.0580% and 
 All 31 regression tests pass. The validation checks all 20 full private request/cache fingerprints, exact input and follow-up messages, source identity, native output identity, four new sessions, extraction and format outcomes. The review export reproduces byte-for-byte with article inputs absent and network and subprocess calls blocked. See `validation.json`, `summary.json` and `outputs.md` beside this file.
 
 Local Langfuse was unavailable, so fresh tracing was skipped. The required backfill dry run recognized all 20 complete private requests and responses with no missing inputs, missing outputs or normalization errors. The subsequent backfill attempt could not reach the local service; `tracing_status.json` records this. Nothing was sent twice, and the saved full caches can be backfilled when the service is available.
+
+## 2026-11-02, subsequent free classifier audit
+
+The owner subsequently requested free decision-model classifications. The 19 valid enclosed post bodies are classified separately under `../free_decision_pilot/`; the first Terra response stays excluded as a format failure. See that folder's report and protocol for the pinned free model, results, sanity controls and costs. This adds no writer generation or full-study rerun and does not change the saved writer-stage summary.
