@@ -2,6 +2,7 @@
 
 import argparse
 import concurrent.futures
+import contextlib
 import csv
 import gzip
 import hashlib
@@ -147,10 +148,33 @@ def trace():
         script = Path(os.environ.get("NB39_LANGFUSE_BACKFILL", r"D:\projects\langfuse\backfill\backfill_traces.py"))
         if not script.is_file():
             raise FileNotFoundError(script)
-        result = subprocess.run([sys.executable, str(script), "--only", "39"], capture_output=True, text=True, timeout=600)
+        # Langfuse stores a resent span twice, so two backfills must never overlap (threads or processes).
+        with TRACE_LOCK, exclusive_file(C.WORK / "trace.lock"):
+            result = subprocess.run([sys.executable, str(script), "--only", "39"], capture_output=True, text=True, timeout=600)
         print("trace:", f"exit {result.returncode}", (result.stdout or result.stderr).strip().splitlines()[-1:] or [], flush=True)
     except Exception as exc:
         print("trace skipped:", exc, flush=True)
+
+
+TRACE_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def exclusive_file(path, timeout=900):
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"lock held: {path}")
+            time.sleep(1)
+    try:
+        yield
+    finally:
+        os.close(fd)
+        os.unlink(path)
 
 
 def backfill_requests():
