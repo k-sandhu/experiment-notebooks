@@ -8,6 +8,7 @@ from pathlib import Path
 from bench import config as C
 from bench.common import read_csv, write_json, write_text
 from bench.measure import Harness, machine
+from bench import selftest_langs
 
 HEAT_RS = r'''
 use std::{env, fs};
@@ -149,10 +150,45 @@ def report(harness):
     print(json.dumps(result, indent=2))
 
 
+def languages():
+    folder = C.WORK.resolve() / "selftest_programs" / "languages" / "heat"
+    for lang, name, code in (("cpp", "main.cpp", selftest_langs.CPP), ("java", "src/Main.java", selftest_langs.JAVA),
+                             ("csharp", "Program.cs", selftest_langs.CSHARP), ("go", "main.go", selftest_langs.GO),
+                             ("js", "main.js", selftest_langs.JS)):
+        write_text(folder / lang / name, code)
+        for extra in {"csharp": ["solution.csproj"], "go": ["go.mod"]}.get(lang, []):
+            write_text(folder / lang / extra, (C.BENCH / "template" / lang / extra).read_text())
+    broken = C.WORK.resolve() / "selftest_programs" / "broken" / "heat" / "cpp/main.cpp"
+    write_text(broken, "int main() { broken syntax }\n")
+    harness = Harness(selftest=True, tasks=("heat",), authors=("languages", "broken"), repeats=2)
+    harness.results = C.WORK.resolve() / "selftest_langs_results"
+    harness.build_root = C.WORK.resolve() / "selftest_langs_build"
+    harness.run_root = C.WORK.resolve() / "selftest_langs_runs"
+    harness.build(); harness.loc()
+    for lang in C.LANG_VARIANTS:
+        for name in (*C.TINY["heat"], "s2", "s3", "t1"):
+            harness.run_one("correctness", "languages", "heat", lang, name, 1, 0, C.CORRECT_TIMEOUT)
+        for repeat in range(2):
+            harness.run_one("runs", "languages", "heat", lang, "t1", 1, repeat, C.MEASURE_TIMEOUT)
+    builds = [r for r in harness.rows("builds") if r["author"] in ("languages", "broken")]
+    rows = [r for r in harness.rows("runs") if r["author"] == "languages" and r["task"] == "heat" and r["input"] == "t1"]
+    checks = [r for r in harness.rows("correctness") if r["author"] == "languages" and r["task"] == "heat"]
+    for lang in C.LANG_VARIANTS:
+        assert any(r["variant"] == lang and r["status"] == "ok" for r in builds), lang
+        assert len([r for r in checks if r["variant"] == lang and r["status"] == "correct"]) == len(C.TINY["heat"]) + 3, lang
+        measured = [r for r in rows if r["variant"] == lang and r["status"] == "correct"]
+        assert len(measured) == 2 and all(r["cpu_wall_ratio"] and int(r["peak_working_set"]) > 0 for r in measured), lang
+    assert any(r["author"] == "broken" and r["status"] == "build_failed" for r in builds)
+    print(json.dumps(dict(builds=builds, runs=rows), indent=2))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["setup", "run", "report"], default="run", nargs="?")
+    parser.add_argument("command", choices=["setup", "run", "report", "languages"], default="run", nargs="?")
     args = parser.parse_args()
+    if args.command == "languages":
+        languages()
+        return
     if args.command == "setup":
         setup()
         return
