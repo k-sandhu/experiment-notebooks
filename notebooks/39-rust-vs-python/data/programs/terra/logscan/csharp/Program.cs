@@ -1,0 +1,10 @@
+﻿using System.Text;
+using System.Text.RegularExpressions;
+using System.Globalization;
+class Program {
+ static readonly Regex Line = new(@"\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z [a-z]+-[0-9]+ (?:GET|POST|PUT|DELETE|PATCH) (/[A-Za-z0-9_/-]*)(?:\?[^ ]*)? ([0-9])[0-9]{2} [0-9]+B ([0-9]+)\.([0-9])ms ""[^""]*""\z", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+ static string Template(string s) {var b=new StringBuilder(s.Length);int i=0;while(i<s.Length){b.Append('/');int start=++i;bool number=true;while(i<s.Length&&s[i]!='/'){char c=s[i++];if(c<'0'||c>'9')number=false;}if(i>start&&number)b.Append("{id}");else b.Append(s,start,i-start);}return b.ToString();}
+ static string Format(string s)=>s.Length==1?"0."+s:s[..^1]+"."+s[^1];
+ static void Main(string[] args){var paths=new Dictionary<string,List<string>>(StringComparer.Ordinal);long[] statuses=new long[10];long lines=0,bad=0;using(var r=new StreamReader(args[0],Encoding.ASCII,false,1<<20)){string line;while((line=r.ReadLine())!=null){lines++;var m=Line.Match(line);if(!m.Success){bad++;continue;}string path=Template(m.Groups[1].Value);if(!paths.TryGetValue(path,out var v))paths[path]=v=new List<string>();string whole=m.Groups[3].Value;int i=0;while(i<whole.Length&&whole[i]=='0')i++;v.Add(whole[i..]+m.Groups[4].Value);statuses[m.Groups[2].Value[0]-'0']++;}}
+ var o=new StringBuilder();o.Append("lines ").Append(lines).Append("\nmalformed ").Append(bad).Append('\n');for(int i=0;i<10;i++)if(statuses[i]>0)o.Append("status ").Append(i).Append("xx ").Append(statuses[i]).Append('\n');var top=paths.ToList();top.Sort((a,b)=>{int c=b.Value.Count.CompareTo(a.Value.Count);return c!=0?c:StringComparer.Ordinal.Compare(a.Key,b.Key);});for(int i=0;i<Math.Min(10,top.Count);i++){var (p,v)=top[i];v.Sort((a,b)=>{int c=a.Length.CompareTo(b.Length);return c!=0?c:StringComparer.Ordinal.Compare(a,b);});int n=v.Count;o.Append("path ").Append(p).Append(' ').Append(n).Append(' ').Append(Format(v[(n-1)/2])).Append(' ').Append(Format(v[n-n/20-1])).Append(' ').Append(Format(v[n-1])).Append('\n');}Console.Write(o.ToString());}
+}
