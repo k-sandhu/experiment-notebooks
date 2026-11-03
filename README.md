@@ -25,6 +25,8 @@ included.
   time series from its recent history (16) and predicting from a small table (14).
 - Some study the step before training a model: generating examples with exact answers, and collecting scored
   attempts that a training method could learn from (23, 24, 25, 27).
+- Some attempt a smaller-model replication of direct weight writing: a language model emits a network's
+  numerical parameters, and a separate tester loads them unchanged to see which functions work (41, 42).
 
 You can learn from every notebook without reading code. Each README starts by teaching its topic with a small
 example, then states the question, shows worked examples from the saved results, explains each chart, and says
@@ -98,6 +100,25 @@ costs.
 | 24 | [Collecting scored attempts to train a small model](notebooks/24-openenv-rewards/) | Training a model by trial and error compares its successful and failed tries at the same task, so a group of tries that all succeed or all fail teaches it nothing, yet every try costs model calls. Two small open-weight models (Llama 3.2 3B, Gemma 3 4B) each make four scored tries at 8 freshly generated tasks (4 mazes, 4 arithmetic or list-reversal questions). How many groups of four hold both a success and a failure, and would stopping once the first tries agree, or choosing second-round tasks from first-round scores, find them for fewer calls? No model is trained. | Only 2 of 13 complete groups held both outcomes, both Llama's. 1 of 29 maze tries reached the exit, and Gemma's four tries were identical in 7 of its 8 groups. Skipping the fourth try when the first three agree would have used 193 of 261 calls and kept both groups; a score-guided second round of 16 tries found none. Eight tasks and two models give illustrative counts, not a ranking |
 | 25 | [Scored attempts at office tasks](notebooks/25-knowledge-work-rollouts/) | Training a model on its own attempts needs a score that says whether the job was really done, and repeated attempts at the same task that sometimes succeed and sometimes fail, because the training learns from comparing them. On 12 new office tasks (calendar changes, questions on IBM's October 2026 results, reconciliations of US Treasury cash records), each attempted three times by two small open-weight models (Granite 4.2 8B, Nemotron 3.5 Lightning) and two OpenAI models (GPT-6.1 Sol, GPT-6 Luna), how often is the work actually finished, do the environments' own scores agree, and how many of the 48 groups of three attempts hold both a success and a failure? No model is trained. | 119/144 attempts finished: Granite 16/36, Nemotron 35, Sol 35, Luna 33 (one Luna failure was a withheld reply that held the correct booking). The calendar's point per successful action could not tell finished bookings from broken ones, and the finance score's 1% tolerance passed 6 wrong answers. Only 9/48 groups were mixed; Sol and Nemotron had 1 each, at over 100 model calls per mixed group against 30 for Granite |
 | 27 | [When to stop repeating a task while collecting training attempts](notebooks/27-adaptive-knowledge-rollouts/) | Training a model by trial and error compares its successful and failed attempts at the same task, but each attempt by a tool-using agent costs many model calls, and a strong model mostly succeeds, so most groups of attempts teach nothing. One proposed saving is to try each task twice and move on when the two attempts agree. On fictional scheduling tasks with exactly computed answers (and, at first, ledger and purchasing tasks), attempted by GPT-6.1 Sol and GPT-6 Luna, does that collect more groups of four attempts holding both a success and a failure than always making four? The budgets are equal in model calls in four comparisons, and in tokens (24 million per model and collector) on 16 new twelve-review scheduling tasks. No model is trained. | No. At equal tokens both rules collected 4 mixed groups with Sol and 0 with Luna, and across all five comparisons always-four collected 11 against 10 for stopping early. Sol solved all 111 known attempts on the first three task sets, so no Sol group could be mixed until the tasks gained competing handoff charges; Luna then solved none of 55. Most of Sol's failures on the hardest tasks were valid agendas a median 4.7% above the cheapest. Four blocks of four tasks cannot rule out a small difference either way. |
+
+## Replicating weight-space programming on smaller networks
+
+A classifier usually gets its numerical weights from a training program. Another possibility is to ask a
+language model to write every number itself, then load those numbers into a fixed network. A successful reply
+must be both complete enough to execute and accurate on the intended task. These experiments separate those
+two requirements and preserve the teacher's original output without fitting or repairing its values.
+
+The starting point is [Sparks of Weight-Space Programming](https://rikiyat.github.io/blog/weight-space-programming/).
+Our programme tests direct numerical writing on much smaller architectures: known mathematical rules, geometric
+classification, digit recognition and a tiny SQL generator. It also retains the initial random-network control,
+verbal-feedback attempts, ordinary decoding controls and numerical-prior rewrites. Functional MLPs reproduce the
+mechanism on our tasks; failed SQL generation and incomplete replies mark limits of those attempts. The blog's
+blind weight-reading and competent pretrained-model repair claims have not been reproduced here.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 41 | [Directly written MLP classifiers](notebooks/41-direct-weight-mlps/) | Can six tool-free models emit all 6,570 weights and biases of a digit classifier from the same 2,048 labelled eight-by-eight images, with exact preprocessing code? Test the networks unchanged on 1,797 official hidden test images, and compare with earlier 17- and 388-parameter known-rule tasks. | First submitted networks: Astra 1,645/1,797 correct (91.54%), Sol 1,422 (79.13%), Muse 606 (33.72%). The same-sample nearest-neighbour reference gets 1,750 (97.38%). Claude produced no weights, Nemotron exhausted its response on reasoning, and Gemini's final recovery returned 6,013 of 6,570 required values. A later numbered-output continuation completes Gemini's network and scores 1,091/1,797 (60.71%); its earlier failures remain separate. Nemotron's indexed recovery encounters three upstream timeouts. This old public benchmark may have appeared in teacher training, so scores are upper bounds on learning new data. |
+| 42 | [Tiny SQL generators written as weights](notebooks/42-tiny-sql-direct-weights/) | Can a tool-free teacher write 2,208 editable values of a tiny transformer with frozen word vectors to generate a SELECT query using the supplied table and column names? Do ordinary decoding controls or bounded numerical priors recover useful behaviour? | The unbounded Astra checkpoint matches 0/123 requested schemas in every one of 11 decoder conditions, across 1,845 outputs. Bounded weights pass all numerical constraints but match 0/16 schemas. Zeros fall from 57.1% to 5.4% and maximum magnitude from 10²² to 1, without functional SQL success. The task scores sit at a floor and do not rank the failed generators. |
 
 ## Making bounded decisions
 
@@ -295,6 +316,7 @@ label. Each one gives the question, the fresh data to use, the models, the measu
 | Decision models | OpenAI Decisions, Jev 1.14, Mercury Decide, Clef Flash | OpenRouter Decisions HTTP API; dated IDs and provider pins in 18 |
 | Prior Labs | TabPFN-3.5, numeric tabular classification and regression | Prior Labs REST API, labeled context and unlabeled test features |
 | Open-weight models | Llama 3.1, DeepSeek, Qwen, GLM, Kimi, Gemma, Mistral, gpt-oss, Muse Spark Open, Nemotron | OpenRouter HTTP API |
+| Google | Gemini 4 Argon, notebook 41 only | Owner-requested OpenRouter Batch API exception, dated model and provider pinned |
 | Time-series foundation models | Chronos-2, TimesFM 2.5, Moirai 2, TiRex-2, Toto 2, TTM R3, Lag-Llama | TSFM.ai HTTP API; notebook 16 defaults to frozen caches |
 
 Paid OpenRouter calls are small by default and every notebook has a size knob at the top (`N_DOCS`,
@@ -404,6 +426,8 @@ here with their data and caches.
 | 38 | Nine US Federal Register rules and proposed rules converted to Markdown, with 36 edit requests and their exact answers generated in code | Fresh: published 19 to 29 October 2026 | [Federal Register API](https://www.federalregister.gov/developers/documentation/api/v1); US government works, public domain |
 | 39 | Eight programming tasks with inputs generated in code from fixed seeds and exact expected outputs | Fresh: written 30 October 2026 | This repository |
 | 40 | Twenty complete public AI news articles and 400 CLI-generated LinkedIn responses | Fresh: sources published 23-30 October 2026; main collection 1 November Toronto time | Publishers retain article rights; full source text git-ignored, public URLs and hashes retained; generated response caches in the experiment |
+| 41 | UCI Optical Recognition of Handwritten Digits; archived synthetic 17- and 388-parameter tasks | Public-data exception requested by owner; UCI donated 1998, possible pretraining exposure; earlier synthetic points created for these experiments | UCI data CC BY 4.0, E. Alpaydin and C. Kaynak; hashes and attribution in the notebook's manifest |
+| 42 | Synthetic SQL schemas, teacher-generated parameters, frozen GloVe subset and pinned Pythia diagnostic statistics | Schema requests authored for the experiment; pretrained vectors/reference are older inputs, not fresh target data | GloVe pretrained vectors PDDL; Pythia Apache 2.0; exact subset and pinned reference provenance retained |
 
 ## For AI agents
 
