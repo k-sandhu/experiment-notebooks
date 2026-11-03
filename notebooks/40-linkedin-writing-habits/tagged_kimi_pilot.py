@@ -96,7 +96,7 @@ def make_tracer():
                attr('langfuse.observation.model.name',request['model']),
                attr('langfuse.observation.input',request),
                attr('langfuse.observation.output',response['text']),
-               attr('langfuse.trace.name','40 tagged Kimi prose pilot'),
+               attr('langfuse.trace.name','40 '+PROTOCOL),
                attr('langfuse.environment','notebook'),
                attr('langfuse.trace.metadata.notebook',NOTEBOOK),
                attr('langfuse.trace.metadata.cache_key',key),
@@ -109,7 +109,7 @@ def make_tracer():
             attrs.extend([attr('langfuse.observation.level','ERROR'),attr('langfuse.observation.status_message',response['status'])])
         span=dict(traceId=hashlib.sha256(f'{NOTEBOOK}|{key}'.encode()).hexdigest()[:32],
                   spanId=hashlib.sha256(f'{NOTEBOOK}|{key}|gen|0'.encode()).hexdigest()[:16],
-                  name='tagged Kimi prose pilot',kind=1,attributes=attrs,
+                  name=PROTOCOL,kind=1,attributes=attrs,
                   startTimeUnixNano=str(int(start.timestamp()*1e9)),endTimeUnixNano=str(int(end.timestamp()*1e9)))
         body={'resourceSpans':[{'resource':{'attributes':[attr('service.name','experiment-notebooks')]},
                               'scopeSpans':[{'scope':{'name':NOTEBOOK},'spans':[span]}]}]}
@@ -136,9 +136,12 @@ def full_cache_record(key, request, response):
                 reported_cost_usd=response.get('reported_cost_usd'))
 
 
-def collect(max_new=MAX_NEW_CALLS):
+def collect(max_new=MAX_NEW_CALLS, design=None, source=None, write_export=True,
+            continue_capacity_failures=False):
     assert 0<=max_new<=20
-    design,source=register()
+    if design is None:design,source=register()
+    assert source is not None
+    item_id=design['article']['item_id']
     initial=design['initial_template'].replace('{{complete_article_text}}',source)
     isolation=s.isolation_dir()
     s.isolation_dir=lambda:isolation
@@ -152,20 +155,19 @@ def collect(max_new=MAX_NEW_CALLS):
             messages=history+[{'role':'user','content':prompt}]
             cmd=s.command(model,conversation=True,session_id=session)
             request=dict(protocol=PROTOCOL,model=model,effort='high',turn=turn,
-                         item_id='01-kimi',source_sha256=design['article']['text_sha256'],
+                         item_id=item_id,source_sha256=design['article']['text_sha256'],
                          system_prompt=s.NEUTRAL,stdin=prompt,messages=messages,command=cmd,
                          cwd=str(isolation),prior_session_id=session,tools='disabled',web_search='disabled',
                          history_representation='Exact user and visible assistant text; native CLI manages thinking and runtime metadata.')
             key=s.sha(s.canonical(request))
             private=PRIVATE/'cache'/f'{key}.json'
-            stem=OUT/'responses/01-kimi'/model/f'{turn:02d}'
+            stem=OUT/'responses'/item_id/model/f'{turn:02d}'
             public_path=stem.with_suffix('.json')
             if public_path.exists():
                 record=s.load(public_path)
                 assert record['request_sha256']==key and private.exists()
                 cached=s.load(private)
                 assert cached['request']==request and cached['response']['text']==record['text']
-                if record['status']!='ok':return
             else:
                 if stem.with_suffix('.started.json').exists():
                     raise RuntimeError(f'Unresolved request: {model}/{turn}; do not regenerate')
@@ -195,7 +197,7 @@ def collect(max_new=MAX_NEW_CALLS):
                 if any(cat.get('tools') or cat.get('mcp_servers') or cat.get('skills') for cat in record['catalogues']):status='catalogue_protocol_violation'
                 if session is not None and record['session_id']!=session:status='session_protocol_violation'
                 record.update(parse_post(record['text']))
-                record.update(status=status,requested_model=model,item_id='01-kimi',turn=turn,effort='high',
+                record.update(status=status,requested_model=model,item_id=item_id,turn=turn,effort='high',
                               request_sha256=key,prompt_sha256=s.sha(prompt),source_sha256=design['article']['text_sha256'],
                               started_at=start.isoformat(),ended_at=end.isoformat(),seconds=time.monotonic()-tick,
                               exit_code=child.returncode,timeout=timed_out,
@@ -214,6 +216,13 @@ def collect(max_new=MAX_NEW_CALLS):
                 (PRIVATE/'started'/f'{key}.json').unlink()
                 print('DONE',model,turn,status,record['format_status'],f"{record['seconds']:.1f}s",flush=True)
             if record['status']!='ok':
+                native=stem.with_suffix('.jsonl').read_text(encoding='utf-8')
+                if (continue_capacity_failures and not record['text'] and record['exit_code']==1
+                        and 'Selected model is at capacity.' in native and session==record['session_id']):
+                    # Retain the failed slot. Resume later numbered turns without a fabricated
+                    # assistant message or another attempt at the failed generation.
+                    history=messages
+                    continue
                 raise RuntimeError(f"{model}/{turn}: {record['status']}")
             history=messages+[{'role':'assistant','content':record['text']}]
             session=record['session_id'];previous_usage=record['raw_usage'];previous_cost=record.get('reported_session_cost_usd')
@@ -225,9 +234,10 @@ def collect(max_new=MAX_NEW_CALLS):
             except Exception as exc:
                 events.append(dict(model=futures[future],error=str(exc)))
                 print('ERROR',futures[future],str(exc),flush=True)
-    s.save(OUT/'collection_events.json',events)
-    export()
+    s.save(OUT/'collection_events.json' if write_export else OUT/'collection_events'/f'{item_id}.json',events)
+    if write_export:export()
     print('NEW CALLS',counter['new'],'ERRORS',len(events),flush=True)
+    return dict(new_calls=counter['new'],errors=events)
 
 
 def export():

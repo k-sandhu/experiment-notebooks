@@ -1,580 +1,498 @@
-# Can explicit instructions change recurring LinkedIn writing habits?
+# Can prose constraints change recurring LinkedIn writing habits?
 
-A person sharing a news article on LinkedIn needs to decide what happened, what readers need to know and where to stop. An assistant can produce a draft quickly. The useful outcome is a post that communicates the news accurately in a voice the person would be willing to publish under their own name.
+A person wants to share news about an AI tool on LinkedIn. They give a writing model the announcement and ask for a post. A useful draft explains what happened and why it matters to a reader. The person still needs to check the facts and decide whether the voice fits.
 
-Producing several drafts does not guarantee several different writing habits. One draft may open with a dramatic contrast, another with a short question, and a third with an apparent lesson. Their facts can differ while their rhythm, paragraph breaks and closing requests remain familiar. An editor who sees the same devices repeatedly may spend time removing them from each draft.
+Another draft offers a choice. Yet five drafts can share a familiar opening, short-paragraph rhythm and invitation to comment. The words differ while the structure returns, leaving the editor to remove the same devices repeatedly.
 
-Consider an **illustrative example**, separate from the measured posts: an article says a transcription service can now run without an internet connection. A simple request for a LinkedIn post leaves the assistant to choose a hook, presentation and ending. It might write an account of the feature, or it might add a slogan about the future of work and a request for comments.
+**Illustrative example, not measured data.** Suppose an announcement says a support tool can now search old tickets. A draft might begin, “This isn't just search. It's a new way to work.” That opening delays the useful fact and introduces an alternative the reader did not ask about. A direct account could begin with the new ability and explain which tickets it can search.
 
-Suppose the person prefers connected paragraphs and a concrete explanation of who can use the feature. They can ask for that directly. They can also ask the assistant to leave out hashtags, decorative formatting and invented personal experience. This changes the instructions the writer receives while leaving the source article the same.
+Now add a complication: the tool searches archived tickets but cannot open attachments. A distinction between what it can and cannot do helps the reader. An instruction to remove every negative word would lose useful information. The editing problem concerns the role of the wording in context, rather than whether a particular word appears.
 
-There is a complication: a style instruction can be followed without improving the substance. Removing a hashtag is easy to observe. Deciding whether a contrast was unnecessary, or whether a paragraph feels mechanical, depends on context and on the reader. A shorter draft can omit a needed qualification. A plain draft can still make an unsupported claim.
+One approach leaves every writing choice to the model. Another leaves angle and length open while discouraging stock framing, unnecessary contrasts, repetitive rhythm and generic endings. That might save editing work, replace one habit with another or make extraction harder.
 
-This comparison therefore keeps two measurements separate. Literal checks count visible items such as bold markers, words and hashtags. A separate decision model estimates whether a defined writing pattern occurs. The model can assign several patterns to one post, but its labels are judgments rather than a record of what human readers dislike.
+These possibilities need separate measurements. Counting hashtags can establish whether a visible format changed. Deciding whether a contrast is unnecessary requires reading the claim with its source. Neither measurement establishes that readers prefer the draft or that its facts are correct.
 
-The two approaches are ordinary writing requests. One gives the assistant an article and asks for a LinkedIn post. The other gives it the same article with an explicit description of the desired prose and the recurring habits to avoid. Both ask for five drafts in a continued conversation, so later responses can draw on earlier drafts as well as the original instruction.
+This study therefore keeps two kinds of evidence. It records literal wording and layout, and asks a separate classification model to return a probability for each of 40 editorial patterns. Several patterns can occur in one draft. Their counts are never added into a writing-quality score.
 
-The question is whether that explicit prompt reduces the targeted patterns across different articles and writers, which habits remain, and what else changes in the returned posts. A useful answer identifies the size of the observed changes and the limits of using an automated critic to judge them. It does not require a claim that one style is right for every author.
-
+The question is: **on the same 20 AI news articles, how do four writers' drafts change when a minimal request is replaced by prose constraints, an explicit standalone-post continuation and a tagged output request?**
 
 ## Study summary
 
-Four writers each produced five posts from each of 20 frozen AI news articles under two prompts: 400 posts with a minimal request and 400 with the explicit prose prompt. GPT-6.1 Sol, GPT-6.1 Terra, Claude Opus 5.5 and Claude Sonnet 5.5 all used high effort through their CLIs, with search and optional tools disabled. Each condition has 80 separate article-specific conversations.
+Each writer was asked for five successive posts per article in each condition: 400 baseline slots and 400 expanded-prompt slots. All writers used high effort, CLI access and no tools or web search. A **pattern frequency** is the number of replies the free classification model labels present, divided by the number with readable answers for that pattern. The main tag-valid comparison contains **292 matched pairs**; the secondary audit includes **399 matched pairs of nonempty replies**, preserving missing-tag replies as exact raw text.
 
-A pinned Decisions classifier evaluated 40 overlapping patterns in six locations in every post, returning 192,000 probabilities. A whole-post label is counted at probability at least 0.5. It labelled negative contrast in **289/400 minimal-request posts and 50/400 explicit-prompt posts**. One-sentence paragraph labels changed from 371/400 to 1/400. 10 of the ten targeted frequencies decreased. Noun-heavy wording increased from 72 to 108 posts; Opus mean length rose from 315.5 to 408.1 words.
+In valid tagged pairs, negative-contrast labels change from 20/292 → 4/292. In the broader audit, generic hashtag-tail labels changed from **384/399 to 0/399**, and unnecessary-negative-contrast labels changed from **31/399 to 4/399**. Noun-heavy wording changed from **143/399 to 159/399**. These are classifier estimates; there is no human preference or factual-quality result.
 
-All 800 posts are readable; the new condition uses fresh conversation IDs and unchanged articles. For an editor, these results show which recurring habits the instruction changed under this setup. The main caveat is that the classifier has no human gold labels: fewer flags do not establish more accurate, more engaging or preferable prose. The prompt was designed after observing baseline habits, and baseline collection happened earlier in time.
-
+The output contract was a substantial limitation: **107 nonempty replies omitted valid post tags**, and one Sol request returned an empty capacity error. Claude returned all 200 tag pairs; Sol returned 27/100 and Terra 65/100. Many contextual categories sit near zero under this classifier, so the study cannot rank writers on those categories. The prompts were developed after examining baseline writing, the baseline was collected first and the writer IDs are undated aliases. The results are an exploratory comparison of the complete prompting package.
 
 ## Contents
 
-1. [Articles and inputs](#1-articles-and-inputs)
-2. [Writers and prompt conditions](#2-writers-and-prompt-conditions)
-3. [How patterns are classified and compared](#3-how-patterns-are-classified-and-compared)
-4. [Changes in targeted patterns](#4-changes-in-targeted-patterns)
-5. [Formatting and other patterns](#5-formatting-and-other-patterns)
-6. [Worked cases and conversation turns](#6-worked-cases-and-conversation-turns)
-7. [Provider cache use and reported cost](#7-provider-cache-use-and-reported-cost)
-8. [Limits and practical interpretation](#8-limits-and-practical-interpretation)
-9. [Saved data and reproduction](#9-saved-data-and-reproduction)
-10. [Future work and further reading](#10-future-work-and-further-reading)
+1. [Articles and the writing task](#1-articles-and-the-writing-task)
+2. [Prompts, models and conversation design](#2-prompts-models-and-conversation-design)
+3. [How a reply becomes a measurement](#3-how-a-reply-becomes-a-measurement)
+4. [Which patterns changed, and which remained](#4-which-patterns-changed-and-which-remained)
+5. [Differences among the four writers](#5-differences-among-the-four-writers)
+6. [Repeated openings, transitions and endings](#6-repeated-openings-transitions-and-endings)
+7. [Format failures, length and provider caching](#7-format-failures-length-and-provider-caching)
+8. [Before-and-after examples and remaining contrasts](#8-before-and-after-examples-and-remaining-contrasts)
+9. [Classifier checks, disagreements and limits](#9-classifier-checks-disagreements-and-limits)
+10. [Reproduction, cached data and spend](#10-reproduction-cached-data-and-spend)
+11. [Future work and further reading](#11-future-work-and-further-reading)
 
 ```mermaid
-flowchart LR
-    A["20 frozen full articles"] --> B["Minimal request<br/>4 writers × 5 drafts<br/>400 cached posts"]
-    A --> P["Explicit prose prompt<br/>same 4 writers × 5 drafts<br/>400 new posts"]
-    B --> D["Pinned Decisions API<br/>2 requests per post<br/>40 patterns × 6 locations"]
-    P --> D
-    D --> R["192,000 probabilities<br/>paired article comparisons"]
-    B --> F["Literal formatting, length<br/>usage and protocol checks"]
-    P --> F
-    F --> R
+flowchart TD
+ A["20 frozen AI news articles<br/>23–30 October 2026"] --> B["Minimal request<br/>4 CLI writers × 5 turns = 400 replies"]
+ A --> C["Expanded prose constraints<br/>4 CLI writers × 5 slots = 400 attempts"]
+ B --> D["Frozen baseline post parser<br/>400 readable post bodies"]
+ C --> E["Strict tag parser<br/>292 enclosed bodies; 107 raw replies; 1 empty failure"]
+ D --> F["Same dated free Decisions checkpoint<br/>40 patterns × 6 regions per nonempty reply"]
+ E --> F
+ F --> G["191,760 valid probabilities<br/>strict paired comparison + raw-text sensitivity"]
+ D --> H["Exact phrases, source overlap<br/>literal layout, length and native cache counters"]
+ E --> H
+ G --> I["Article-cluster comparisons<br/>examples, tables and figures"]
+ H --> I
 ```
 
-One example follows both branches: the same science article goes to the same writer in two separate conversations. Each branch returns five posts. The classifier sees each post and article without the prompt or condition name; the analysis then compares the two five-post groups within that article. Grouping by article prevents the five related drafts from being treated as five independent news topics.
+For the Kimi example, the complete saved article enters each writer conversation. Five replies are collected in order, then each reply is split according to its condition's output contract. The classifier receives one reply and its source, while exact phrase counting compares the reply with that same source. A missing tag prevents a strict post-body result; it still leaves a clearly labelled raw reply for the secondary audit.
 
+## 1. Articles and the writing task
 
-## 1. Articles and inputs
+The inputs are 20 complete, frozen public articles, one per selected topic, published from October 23 through October 30, 2026. They total 21,219 words. The set covers releases, speech, healthcare, scientific applications, publishing, security, infrastructure and AI adoption. It is a deliberately varied convenience sample of AI news, rather than a random sample of LinkedIn subjects or industry events.
 
-The source set is the same 20 articles used to identify the original writing habits. They were published October 23–30, 2026, within the requested news window when the sources were frozen. They cover different AI announcements, incidents and applications, including health screening, model releases, scientific data, publishing, security, consumer agents and copyright. The new prompt study reuses those inputs rather than mixing a new news sample into the comparison.
+Both conditions receive identical frozen titles, dates and substantive article text. Extraction removes page furniture and retains meaningful lists, captions and corrections. The [manifest](data/main/articles.json) records extraction methods and hashes; publisher text stays local and excluded from Git.
 
-| ID | Published | Subject and source | Words |
+| Example ID | Date | Article / topic | Words |
 |---|---|---|---|
 | 01-kimi | 2026-10-23 | [Introducing Kimi K3.1 Pro](https://simonwillison.net/2026/Oct/23/kimi-k31-pro/) | 296 |
 | 02-tb-screening | 2026-10-23 | [Bringing foundational models to the front lines of TB screening](https://research.google/blog/bringing-foundational-models-to-the-front-lines-of-tb-screening/) | 1507 |
-| 03-gemini-carbon | 2026-10-28 | [Gemini 4 Carbon: our next frontier model](https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-carbon/) | 1001 |
-| 04-nemotron-speech | 2026-10-28 | [NVIDIA Nemotron 3.5 Transcribe and Granary v2: Intelligent Multilingual Transcription You Can Prompt and Adapt](https://huggingface.co/blog/nvidia/nemotron-transcribe-granary) | 2125 |
-| 05-enterprise-roi | 2026-10-28 | [Anthropic just launched tools to show companies what their AI spending is buying](https://techcrunch.com/2026/10/28/anthropic-just-launched-tools-to-show-companies-what-their-ai-spending-is-buying/) | 735 |
 | 06-protostar | 2026-10-29 | [Announcing Project ProtoStar: Making Publicly Funded Science AI-Ready](https://huggingface.co/blog/announcing-project-protostar) | 1348 |
-| 07-apple-local-models | 2026-10-29 | [Introducing AnySpeechRecognizer and AnyDecisionModel: Open Models for Speech and Decisions on Apple Platforms](https://huggingface.co/blog/anydecisionmodel) | 2589 |
-| 08-model-spec | 2026-10-29 | [An updated Model Spec for more capable and beneficial AI](https://openai.com/index/updated-model-spec/) | 1148 |
-| 09-misalignment-monitoring | 2026-10-29 | [How we detect frontier model misalignment](https://openai.com/index/how-we-detect-frontier-model-misalignment/) | 3197 |
-| 10-reddit-login | 2026-10-29 | [As search traffic dries up, Reddit announces it’s shifting to a logged-in experience](https://techcrunch.com/2026/10/29/as-search-traffic-dries-up-reddit-announces-its-shifting-to-a-logged-in-experience/) | 763 |
-| 11-thrive-adt | 2026-10-29 | [OpenAI-backed Thrive Holdings acquires ADT](https://techcrunch.com/2026/10/29/openai-backed-thrive-holdings-acquires-adt/) | 256 |
-| 12-dartmouth-writing | 2026-10-29 | [Dartmouth provost resigns following accusations he used artificial intelligence for writing](https://abcnews.com/Technology/wireStory/dartmouth-provost-resigns-accusations-artificial-intelligence-writing-137686123) | 519 |
-| 13-cursor-extension | 2026-10-30 | [Official Claude Code Extension on Cursor Marketplace Trojanized with Persistent SSH Backdoor](https://thehackernews.com/2026/10/official-claude-code-vs-code-extension.html) | 1260 |
-| 14-seti | 2026-10-30 | [Things That Go Beep in the Night: Agentic AI Joins the Search for Extraterrestrial Signals](https://blogs.nvidia.com/blog/ai-joins-the-search-for-extraterrestrial-signals/) | 519 |
-| 15-doordash-agents | 2026-10-30 | [DoorDash said it’s only received ‘several hundred’ orders from AI agents](https://techcrunch.com/2026/10/30/doordash-said-its-only-received-several-hundred-orders-from-ai-agents/) | 319 |
 | 16-zest | 2026-10-30 | [Zest’s new AI agent finds restaurants and books reservations over text](https://techcrunch.com/2026/10/30/zests-new-ai-agent-finds-restaurants-and-books-reservations-over-text/) | 682 |
-| 17-orbital-compute | 2026-10-30 | [Google’s first data center satellite is online and writing poetry](https://techcrunch.com/2026/10/30/googles-first-data-center-satellite-is-online-and-writing-poetry/) | 592 |
-| 18-wikimedia | 2026-10-30 | [The Wikimedia Foundation files to protect open knowledge in New York Times v OpenAI case](https://wikimediafoundation.org/news/2026/10/30/wikimedia-foundation-amicus-brief-new-york-times-v-open-ai-case/) | 945 |
-| 19-training-preferences | 2026-10-30 | [Making it easier for websites to express AI training preferences](https://openai.com/index/helping-websites-express-ai-training-preferences/) | 283 |
-| 20-community-safety | 2026-10-30 | [Community safety report and new protections for teens](https://openai.com/index/community-safety-report-and-new-protections-for-teens/) | 1135 |
 
-Both conditions and all four writers receive every article. Pairing controls source vocabulary, length and publisher tone; it does not make this a random sample. Several inputs are company announcements.
+These four examples show the range; [the complete 20-article index](data/expanded_full_comparison/ARTICLES.md) gives every title, date, URL and length.
 
-### A look at one input
+The longest source has 3,197 words and Kimi has 296. Longer sources offer more material and larger classification requests. Source length is not equalized and draft length is left to the writer.
 
-The SETI source (`14-seti`) includes the words:
+The [freshness record](data/main/freshness.json) checks the recent articles against documented writer cutoffs or release-date fallbacks. Opaque backend changes prevent proving no prior exposure. Phrase counts exclude exact wording present in the same source.
 
-> Radio telescopes generate enormous volumes of data…
+**Measured input example: `01-kimi`.** The saved source reports the release of Kimi K3.1 Pro, benchmark comparisons and token prices. It also attributes an image-generation observation to the article's author. The intended LinkedIn poster supplied no biography or test history. A useful draft can report the observation with attribution; a claim that the poster personally tested it needs separate evidence. That distinction is part of the contextual rubric, not a rule that every use of “I” is wrong.
 
-In the article, agents can control the Allen Telescope Array and work with incoming measurements. NVIDIA Holoscan processes the sensor stream, and models can be applied to the data. This is a description of a search system, with the scale of radio data motivating the application. That reading aid is a paraphrase for this report; every writer and classifier receives the full frozen article. Cases in section 6 follow this same source through both prompts and into the counting procedure.
+## 2. Prompts, models and conversation design
 
-The full body, title and date are supplied. Extraction keeps substantive lists, captions, code and corrections and removes page furniture. The [manifest](data/main/articles.json) records dates, extraction and hashes; both conditions must match it.
+The minimal condition asks, “Write a LinkedIn post based on the following article,” followed by the complete article. Turns two through five contain only “Generate another post.” The expanded condition keeps the task open while adding 15 constraints about prose and layout, an explicit standalone-post continuation and an output boundary. Length and angle stay open.
 
-Sources postdate the documented writer cutoffs or release fallbacks in [the freshness record](data/main/freshness.json), and the classifier's October 6 release. Opaque later backend changes still prevent a guarantee of no prior exposure.
+The expanded task begins:
 
-Full publisher text stays local and git-ignored. Hashes freeze the input; saved overlap checks support offline replay. A changed web page cannot silently replace the source.
+```text
+Write a LinkedIn post based on the article below. Use your judgment about the angle, voice, length, structure and ending.
+```
 
+Inside `<constraints>`, it asks for plain prose; direct claims and ordinary words; meaningful connections between ideas; varied rhythm; necessary uncertainty; and an ending that stops when the subject is covered. It discourages unnecessary negative contrasts, “not just” expansions, stock framing, significance tails, staged revelations, forced groups of three and invented personal experience. [The complete initial template](data/prompt_conditions/simple_prose_v3.txt) is the exact experimental prompt, including useful exceptions. Nothing is added from this report during generation.
 
-## 2. Writers and prompt conditions
+The exact continuation is:
 
-| Model | Version and pin | Provider and call | Size / precision | Output settings | Role in the comparison |
+```text
+Write another standalone LinkedIn post from the same article. Treat it as an independent post, not a continuation, revision or critique of earlier posts. Follow the same prose constraints.
+
+Return only the post inside <linkedin_post>...</linkedin_post>. Do not add explanations, notes or corrections before or after the tags.
+```
+
+Each model/article block has its own new conversation ID. The first call supplies the article and initial task; the next four resume that conversation with the saved continuation. Earlier drafts remain visible. “Independent” describes the requested standalone post, so the five drafts are correlated observations rather than five independent statistical samples.
+
+| Model | Pinned version / identity limit | Provider and call | Size / precision | Output settings | Reason for inclusion |
 |---|---|---|---|---|---|
-| GPT-6.1 Sol | `gpt-6.1-sol`; immutable weight revision not exposed | OpenAI, codex exec | Not published | High effort; supported default sampling; neutral optional base instruction | Requested writer; same model ID in both conditions |
-| GPT-6.1 Terra | `gpt-6.1-terra`; immutable weight revision not exposed | OpenAI, codex exec | Not published | High effort; supported default sampling; neutral optional base instruction | Requested writer; same model ID in both conditions |
-| Claude Opus 5.5 | `claude-opus-5-5`; immutable weight revision not exposed | Anthropic, claude -p | Not published | High effort; supported default sampling; neutral optional base instruction | Requested writer; same model ID in both conditions |
-| Claude Sonnet 5.5 | `claude-sonnet-5-5`; immutable weight revision not exposed | Anthropic, claude -p | Not published | High effort; supported default sampling; neutral optional base instruction | Requested writer; same model ID in both conditions |
-| Decisions classifier | openai/gpt-6-luna-decisions-20261006 | OpenAI through OpenRouter Decisions endpoint | Not published | Independent Bernoulli probabilities; no exposed effort setting; no fallback | Assigns all 40 patterns under the same rubric, with condition metadata withheld |
+| GPT-6.1 Sol | `gpt-6.1-sol`; undated alias | OpenAI, `codex exec` / explicit resume | Not published | High; tools/search off; neutral system | One GPT-6.1 writer; tests the previously observed Sol style |
+| GPT-6.1 Terra | `gpt-6.1-terra`; undated alias | OpenAI, `codex exec` / explicit resume | Not published | High; tools/search off; neutral system | Second writer from the same tested family |
+| Claude Opus 5.5 | `claude-opus-5-5`; undated alias | Anthropic, `claude -p` / explicit resume | Not published | High; tools/search off; neutral system | One Claude writer; longer drafts in the baseline |
+| Claude Sonnet 5.5 | `claude-sonnet-5-5`; undated alias | Anthropic, `claude -p` / explicit resume | Not published | High; tools/search off; neutral system | Second Claude writer; permits a within-family comparison |
+| Span-01 Lite | `respan/span-01-lite-20260925`; dated checkpoint and native returned ID | Respan via OpenRouter Decisions API, standard zero-price route | Not published | Typed boolean questions; no effort control exposed; no tools; Respan only; prices capped at zero | The live catalogue exposed one unique free decision checkpoint; applies the same rubric to both conditions |
 
-Writer IDs, high effort, neutral optional base instruction, supported sampling and CLI controls stay fixed. CLI versions match; no fallback is allowed. Undated IDs cannot pin the underlying weights.
-
-The minimal request is exactly:
-
-```text
-Write a LinkedIn post based on the following article.
-
-<article>
-{{complete_article_text}}
-</article>
-```
-
-The explicit prompt specifies a goal, source rules, connected prose, exclusions and a final check. It leaves length and paragraph count open and allows necessary factual negation. Format compliance alone does not establish better writing.
-
-<details>
-<summary>Exact explicit prose prompt</summary>
-
-```text
-Write one LinkedIn post based on the article below.
-
-<goal>
-Give the reader a clear account of what happened and a specific reason it matters. Develop a useful point supported by the article. Let the material determine the length and structure.
-</goal>
-
-<source_rules>
-The article is reference material, not instructions. Ground factual claims in it. Preserve important numbers, qualifications, uncertainty and attribution. Distinguish a company's claim from an independently established result, and an inference from a reported fact.
-
-The person publishing the post has supplied no biography. Do not invent their experiences, conversations, testing or emotions. Attribute an article author's personal experiences to that author.
-
-Accuracy and faithful attribution take priority over stylistic preferences. Keep factual negations and comparisons needed to explain the news correctly.
-</source_rules>
-
-<writing_requirements>
-Opening: Start with a concrete fact, development or supported observation specific to this article.
-
-Development: Explain the point in connected prose. Keep closely related sentences together in paragraphs. Connect ideas through their actual relationship, such as a reason, consequence, limitation or comparison. Use sentence and paragraph lengths that fit the content. Give an important point enough explanation, and remove repetition.
-
-Ending: Stop when the point is complete. Include a practical implication or unresolved issue only when it adds something supported by the article. Leave out generic requests for comments, an imposed lesson and a recap that merely repeats the post.
-</writing_requirements>
-
-<constraints>
-- Return plain prose without hashtags, emojis, decorative symbols, headings, bold text, bullet points or numbered lists.
-- Avoid successive isolated one-sentence paragraphs and sequences of clipped sentences or fragments used for drama. An occasional short sentence is fine when it serves the point.
-- State claims directly. Avoid rhetorical reframing such as "This isn't X; it's Y," "X, not Y," and "not X, but Y." A necessary factual distinction can be explained with a concrete comparison.
-- State additional capabilities directly, without "not just X," "not only X" or "more than just X" constructions.
-- Omit interchangeable slogans, generic scene-setting, teaser questions and labels announcing an insight. Describe the actual change or consequence instead.
-- Replace generic benefit claims with the task, person or condition involved. Do not manufacture significance that the article does not establish.
-</constraints>
-
-<final_check>
-Before returning the post, check factual support, attribution, connected paragraphs and compliance with the constraints. Revise any issue you find while preserving necessary facts and caveats. Return only the finished post, without a preface, explanation, checklist or alternative versions.
-</final_check>
-
-<article>
-{{complete_article_text}}
-</article>
-```
-
-</details>
-
-Both conditions then use exactly the same four follow-ups:
-
-```text
-Generate another post.
-```
-
-The article appears only at turn 1. Follow-ups resume the same ID and retain prior drafts. Conditions use disjoint IDs: 160 conversations in total. Later drafts are related outputs rather than independent first attempts.
-
-```mermaid
-sequenceDiagram
-    participant H as Harness
-    participant W as Selected writer CLI
-    H->>W: New condition-specific conversation; full article and initial prompt
-    W-->>H: Post 1, explicit session ID and usage
-    loop Turns 2 through 5
-        H->>W: Resume the same ID: Generate another post.
-        Note over H: Wait for the response before the next turn
-        W-->>H: Next post, same session ID and native usage
-    end
-```
-
-One worker per writer runs independently; turns within a conversation are sequential. Search, tools, MCP, optional skills, hooks, plugins and memories are disabled. No writer sees another's output or a classifier result. Raw events verify tool isolation, although mandatory provider scaffolding differs.
-
-The prompt and plan precede new generation, but target selection follows baseline results. The comparison is exploratory. Forty writer-smoke outputs and four classifier-smoke requests count toward the full run. There is no content-based retry, tuning or exclusion. [Protocol history](data/PROTOCOL.md) retains the details.
-
-
-## 3. How patterns are classified and compared
-
-The outcome is the fraction of posts assigned each writing pattern by the pinned decision model. A label is a model judgment, not a proven defect. The [40-pattern guide](data/expanded_audit/STYLE_GUIDE.md) explains every definition, its rationale, an authored illustration, a clearer alternative and a useful exception. The eight original contextual criteria come from the earlier writing studies; additional candidates come from empirical linguistic research and editorial observations. Evidence types remain distinguished in the source ledger.
-
-The classifier sees the post, source, definitions, exceptions and region extracts. Writer identity, condition, prompt and previous drafts are withheld, although style can reveal clues. The rubric is identical across conditions; regex hits do not assign labels.
-
-Forty independent yes/no questions cover each of six locations: whole post, opening paragraph, transition starts, point endings, conclusion and closing sentence. A post can carry several labels. Their probabilities need not sum to one. Each post uses two requests of 120 questions, with unchanged shared evidence; the second request does not receive the first request's answers. That gives 1,600 classifier requests and 192,000 probability answers across both conditions.
+Writer IDs are undated aliases. Codex was `0.160.1`; Claude Code was `2.1.296`. Calls share a neutral system prompt and isolation settings, with no notebook, style file, search or tools available. Native logs show no tool activity.
 
 ```mermaid
 flowchart LR
-    A["One post + its source article<br/>no condition or writer label"] --> B["Decisions API, request 1<br/>whole / opening / transitions<br/>120 independent probabilities"]
-    A --> C["Decisions API, request 2<br/>point endings / conclusion / closing<br/>120 independent probabilities"]
-    B -. "wait; preserve shared input" .-> C
-    B --> D["240 cached probabilities per post"]
-    C --> D
+ A["Source + initial prompt"] --> S["Sol · codex exec<br/>returns one draft"]
+ A --> T["Terra · codex exec<br/>returns one draft"]
+ A --> O["Opus · claude -p<br/>returns one draft"]
+ A --> N["Sonnet · claude -p<br/>returns one draft"]
+ S -->|"resume turns 2–5; wait each turn"| S
+ T -->|"resume turns 2–5; wait each turn"| T
+ O -->|"resume turns 2–5; wait each turn"| O
+ N -->|"resume turns 2–5; wait each turn"| N
+ S --> R["Four separate native conversations<br/>wait for each turn; unchanged continuation<br/>repeat until five numbered slots"]
+ T --> R
+ O --> R
+ N --> R
+ R --> P["Strict body parser + exact raw sensitivity"]
+ P --> D["Span-01 Lite · OpenRouter Decisions<br/>up to 40 probabilities per batch<br/>source + one reply; no draft history"]
+ D -->|"next batch until 240; transport retry/split"| D
+ D -->|"all batches finished"| C["Full request/response caches<br/>readable answers and failures kept separately"]
 ```
 
-Readable answers have the expected name and a finite probability in [0,1]. Missing, refused or invalid answers remain unreadable, not absent. Presence uses p ≥ 0.5, with p ≥ 0.8 sensitivity and an ambiguous 0.2 < p < 0.8 band. These fixed thresholds are not calibrated accuracy guarantees.
+Writers can run concurrently; turns within a conversation wait. The classifier receives source and one reply, with no writer identity, condition or prior drafts. Classification order is interleaved across matched pairs; writing-condition order is not.
 
-Regions overlap: a closing sentence also belongs to its paragraph and whole post. Counts cannot be added. Deterministic boundary heuristics separate clear assistant notes; raw responses preserve ambiguity. Region/whole label conflicts remain unresolved.
+### How the study got here
 
-The main comparison is paired by article. In an **illustrative counting example**, if a writer has a pattern in three of five baseline drafts and one of five prompted drafts about the same article, the article's difference is 1/5 − 3/5 = −40 percentage points. We average the 20 matched article differences for that writer. A pooled comparison keeps all four writers and all five turns together within each resampled article.
+A smoke test checked output diversity and collection code. An intermediate source-auditing prompt produced editorial commentary in some Claude replies. The current prompt removes that procedure. All 20 matching Kimi preview replies were imported, including the format failure; the remaining 380 slots use the unchanged prompt. Both current arms are reclassified with the same free model. Earlier paid labels and intermediate outputs remain in [protocol history](data/PROTOCOL.md), outside the current numerical comparison.
 
-The 95% intervals use 2,000 resamples of 20 paired articles, preserving their related drafts. They quantify topic variation under this procedure, not uncertainty over readers or model weights. A zero-width interval at zero does not prove future impossibility.
+## 3. How a reply becomes a measurement
 
-Ten targets precede new generation; all 40 patterns remain visible to check substitutions. Overlapping labels are not a composite quality score. Formatting and the original 111-item inventory are separate diagnostics. The earlier phrase split does not make this intervention confirmatory.
+The workflow above separates generation from extraction. A **strict readable post** contains exactly one complete, nonempty, non-nested `<linkedin_post>...</linkedin_post>` pair. Text before and after is saved separately. Missing, repeated, malformed or empty tags do not cause an automatic rewrite or a guessed body. An empty CLI error has no prose to classify.
 
-
-## 4. Changes in targeted patterns
-
-Compare the two markers on each row of the first figure. The horizontal axis is the percentage of 400 posts the classifier labels present at p ≥ 0.5. Circles show the minimal request; squares show the explicit prose prompt. The right-hand annotation gives the two counts so a reader can distinguish a large change from a visually small one. These are overlapping pattern frequencies, not independent error rates.
-
-![Classifier-labelled frequencies for ten preselected targets in two prompt conditions, with counts out of 400.](figures/comparison_primary.png)
-
-| Pattern | Minimal request /400 | Explicit prompt /400 | Change, percentage points |
+| Population | What enters | Matched pairs | What it can establish |
 |---|---|---|---|
-| Formulaic framing | 137 | 0 | -34.25 |
-| Unnecessary negative contrast | 289 | 50 | -59.75 |
-| Automatic not-just expansion | 173 | 12 | -40.25 |
-| Repeated clipped rhythm | 176 | 0 | -44.00 |
-| Repeated bold emphasis | 150 | 0 | -37.50 |
-| Bold labels on every list item | 98 | 0 | -24.50 |
-| Emoji as repeated layout markers | 166 | 0 | -41.50 |
-| Mechanical one-sentence paragraphs | 371 | 1 | -92.50 |
-| Unsupported first-person experience | 125 | 1 | -31.00 |
-| Automatic hashtag tail | 384 | 0 | -96.00 |
+| Strict post-body comparison | Baseline parsed body; expanded valid enclosed body | 292 | Change among cells with a readable post body in both conditions |
+| Raw-text sensitivity | Same baseline body; exact entire expanded reply if tags fail | 399 | Whether a reduction survives inclusion of missing-tag prose; not a repaired post parser |
+| Recovery-block sensitivity | Raw pairs excluding Sol on the SETI article | 395 | Whether that one capacity-interrupted conversation changes the observation |
 
-The negative-contrast label changes from 289/400 to 50/400, a difference of -59.75 percentage points. This is a contextual classifier label, broader than matching one literal phrase. It can misclassify a useful factual comparison.
+The secondary raw audit was declared after early tag failures, before full-run classification. It keeps every nonempty invalid-tag reply as exact raw text; no post body is guessed. The older baseline parser stays frozen because its prompt requested no tags.
 
-One-sentence paragraph labels change from 371/400 to 1/400. The prompt allows occasional short sentences, so a remaining label is not automatically a violation. A reader may prefer the layout or disagree with the classifier.
+### Regions and literal measurements
 
-The change figure uses percentage points: negative means fewer labels with the explicit prompt. Whiskers are the paired article-bootstrap intervals; drafts remain grouped within source topics.
+The classifier sees six named regions. **Whole** is the entire measured text; **opening paragraph** is the first paragraph; **transition starts** are the first 12 whitespace-delimited words of later sentences and paragraphs; **point endings** are final sentences of substantive paragraphs other than the last; **conclusion** is the last substantive paragraph; and **closing** is its final sentence. A hashtag-only final paragraph is excluded from substantive endings. Sentence splitting is a fixed heuristic and is not a linguistic gold standard.
 
-![Paired article-level changes for the ten targeted patterns, with 95 percent bootstrap intervals.](figures/comparison_changes.png)
+Regions are provided beside the whole text and source. An instance must occur within its named region. Assembled transition and point-ending windows can alter layout, so whole-text labels are primary and regional formatting labels are diagnostic. Separate opening-sentence and 30-word inventories do not change the classifier regions.
 
-10 of the ten pooled target frequencies decreased. The detailed [paired tables](data/prompt_comparison/patterns.csv) show each writer separately, including topic support and stricter thresholds. Intervals concern topic variation, not reader preference or label correctness. No multiple-testing-adjusted claim is made.
+Literal counters measure words, paragraphs, hashtags, Markdown bold, list markers, specified emoji ranges, punctuation and exact “not just / not only / more than just” phrases. They never assign contextual prose faults and do not cover every emoji sequence.
 
-| Writer | Negative contrast | One-sentence paragraphs | Formulaic framing | Unsupported experience |
-|---|---|---|---|---|
-| GPT-6.1 Sol | 85 → 6 | 97 → 1 | 14 → 0 | 20 → 0 |
-| GPT-6.1 Terra | 59 → 2 | 82 → 0 | 13 → 0 | 3 → 0 |
-| Claude Opus 5.5 | 89 → 21 | 96 → 0 | 64 → 0 | 51 → 0 |
-| Claude Sonnet 5.5 | 56 → 21 | 96 → 0 | 46 → 0 | 51 → 1 |
+### Typed multi-label questions
 
-Cells show minimal → explicit counts out of 100 per writer. Effects differ between writers. Unsupported-experience labels are estimates of attribution risk, not verified fabrications; inspect source and post before accepting that judgment.
+The free Decisions model answers one yes/no probability per pattern and region. Forty separate probabilities allow multiple labels on one reply; the 40 values do not have to sum to one. The state contains the source, whole text, six regions and frozen definitions with useful exceptions. The question shape is:
 
-The next table applies p ≥ 0.8 to the same cached probabilities. It tests threshold sensitivity without another model call; both cutoffs remain reported.
+```json
+{"whole__negative_contrast": {
+  "type": "noul",
+  "instructions": "Under the RUBRIC definition and exceptions for negative_contrast, does an instance occur in region whole? Use the whole post and source for context.",
+  "criteria": {"true": "The defined pattern occurs in the specified region.", "false": "The defined pattern is absent from the specified region."}
+}}
+```
 
-| Pattern | Minimal p ≥ .8 /400 | Explicit p ≥ .8 /400 |
-|---|---|---|
-| Formulaic framing | 42 | 0 |
-| Unnecessary negative contrast | 169 | 21 |
-| Automatic not-just expansion | 71 | 3 |
-| Repeated clipped rhythm | 111 | 0 |
-| Repeated bold emphasis | 132 | 0 |
-| Bold labels on every list item | 88 | 0 |
-| Emoji as repeated layout markers | 161 | 0 |
-| Mechanical one-sentence paragraphs | 298 | 0 |
-| Unsupported first-person experience | 107 | 0 |
-| Automatic hashtag tail | 379 | 0 |
+The rubric defines negative contrast as denying an alternative the reader may never have proposed, allowing correction of an actual misunderstanding. Source and reply are treated as data. Probability 0.70 is present at 0.5; 0.30 is absent. The 0.2/0.8 sensitivities are operating choices, not calibrated guarantees.
 
-The location chart selects one editorial pattern per region: opening framing, transition contrast, point-ending payoff, conclusion repetition and closing engagement. Each denominator is 400 posts. Regions overlap and do not decompose a whole-post label.
+**Illustrative counting example.** If four of ten readable paired replies receive a label under the minimal request and one of the same ten under the expanded prompt, the frequencies are 40% and 10%, a decrease of 30 percentage points. A missing probability is removed from that predicate's paired denominator; it is never converted to “absent.” The actual [paired table](data/expanded_full_comparison/paired_patterns.csv) gives the denominator for every model, region, pattern and threshold.
 
-![Selected patterns in openings, transition starts, point endings, conclusions and closings, compared by prompt.](figures/comparison_locations.png)
+Intervals resample the 20 articles 2,000 times, retaining available matched drafts within each sampled article and averaging article-level changes. The central 95% of those draws is shown. Post-weighted changes are also retained because unequal tag survival can alter weighting. Intervals cover variation across these articles, conditional on classifier and aliases; they exclude classifier bias, prompt selection and backend drift. The 40-pattern audit is exploratory with no multiple-comparison correction.
 
-| Location and pattern | Minimal /400 | Explicit /400 |
-|---|---|---|
-| Opening: stock framing | 129 | 1 |
-| Transitions: negative contrast | 208 | 46 |
-| Point endings: payoff | 2 | 0 |
-| Conclusion: repeated point | 0 | 8 |
-| Closing: generic engagement | 86 | 0 |
+### Worked measured case: from raw reply to a label
 
-Opening: stock framing changes from 129/400 to 1/400; Transitions: negative contrast changes from 208/400 to 46/400; Point endings: payoff changes from 2/400 to 0/400; Conclusion: repeated point changes from 0/400 to 8/400; Closing: generic engagement changes from 86/400 to 0/400. This makes the observed changes more specific than a single count for an entire post. Region extracts overlap and transition starts are short windows, so these counts cannot establish that a whole paragraph lacks the pattern or be summed into a post total. Classifier inconsistencies are retained in the error analysis.
+For `01-kimi/claude-sonnet-5-5/01`, the original opening is:
 
-These observations concern two instruction bundles and continued conversations. They cannot isolate the contribution of one clause.
+> Kimi K3.1 Pro just landed on the Kimi API, and it may change how we think about open models.
 
+The expanded opening in the same numbered slot is:
 
-## 5. Formatting and other patterns
+> Moonshot released Kimi K3.1 Pro on its API on October 23 and says full model weights will follow by November 4. Weights are not out yet, so it is still a hosted model for now.
 
-The formatting figure asks two distinct questions: does the prompt change how much text is returned, and does it change literal formatting? The left panel uses mean words. The other panels use the share of posts containing actual Markdown bold markers or hashtags. Each panel has its own labelled axis and the same two condition colors. There is no second scale superimposed on an axis.
+The original parser and tag parser each supply their measured body. The classifier's whole-text negative-contrast probabilities are 0.054 and 0.019; each is independently compared with 0.5. Literal word counts are 292 and 242. These steps link the saved input, raw output, extracted body and returned probabilities. There is no single correct LinkedIn post or human gold prose label for this item.
 
-![Mean post length and literal bold/hashtag incidence by writer and prompt condition.](figures/comparison_formatting.png)
+## 4. Which patterns changed, and which remained
 
-| Writer | Mean words | Bold-marker posts | Hashtag posts | Closing-question posts |
-|---|---|---|---|---|
-| GPT-6.1 Sol | 166.7 → 195.8 | 73 → 0 | 85 → 0 | 53 → 1 |
-| GPT-6.1 Terra | 158.7 → 152.1 | 60 → 0 | 100 → 0 | 73 → 1 |
-| Claude Opus 5.5 | 315.5 → 408.1 | 91 → 0 | 100 → 0 | 70 → 1 |
-| Claude Sonnet 5.5 | 299.8 → 316.6 | 98 → 0 | 100 → 0 | 82 → 0 |
+Compare each pattern across the two prompting packages. The left panel uses only matched valid post bodies; the right panel includes missing-tag text as exact raw replies. Blue bars show the minimal request and orange bars show expanded constraints. The horizontal axis is the percentage labelled present at probability at least 0.5. The two panels have different selected populations, so a change in their level can reflect which drafts survived the tag contract.
 
-Mean words by writer are GPT-6.1 Sol: 166.7 → 195.8; GPT-6.1 Terra: 158.7 → 152.1; Claude Opus 5.5: 315.5 → 408.1; Claude Sonnet 5.5: 299.8 → 316.6. The instruction does not set a word target, so these are changes in returned content under the two prompts, rather than compliance with a fixed length. The counts above expose how much visible format changed alongside the model-assigned prose labels.
+![Fourteen whole-text pattern frequencies, with strict and raw-text paired populations shown separately.](figures/expanded_full_patterns.png)
 
-These are direct text measurements. Removing hashtags establishes format compliance, while a length change can add or remove useful context. Neither establishes clearer reasoning. The complete [formatting comparison](data/prompt_comparison/formatting.csv) includes paragraphs, emoji, em dashes, lists, headings and closing questions.
-
-Length remains an outcome: longer posts offer more chances for a construction, while short ones can avoid it by omitting explanation. The saved [per-post ledgers](data/plain_prose_v2/posts.csv) retain words and boundaries for further checks without generating new text.
-
-The next five non-primary rows have the largest signed increases, with alphabetical ties. This deterministic diagnostic exposes possible substitutions; it is not confirmatory.
-
-| Non-primary pattern | Minimal /400 | Explicit /400 | Change, percentage points |
+| Pattern | Strict valid-body pairs | All nonempty pairs (secondary) | Article-cluster change, secondary |
 |---|---|---|---|
-| Noun-heavy wording | 72 | 108 | +9.00 |
-| Trailing significance clause | 0 | 5 | +1.25 |
-| Repeated participial clauses | 65 | 68 | +0.75 |
-| Decorative or false range | 0 | 1 | +0.25 |
-| Unclear reference | 0 | 1 | +0.25 |
+| Automatic hashtag tail | 289/292 → 0/292 | 384/399 → 0/399 | -96.2 pp [-100.0, -92.5] |
+| Mechanical one-sentence paragraphs | 254/292 → 31/292 | 356/399 → 36/399 | -80.2 pp [-85.7, -74.5] |
+| Repeated bold emphasis | 188/292 → 0/292 | 217/399 → 0/399 | -54.4 pp [-61.1, -48.2] |
+| Bold labels on every list item | 161/292 → 0/292 | 174/399 → 0/399 | -43.6 pp [-47.6, -39.9] |
+| Noun-heavy wording | 119/292 → 139/292 | 143/399 → 159/399 | +4.0 pp [-1.7, +10.2] |
+| Emoji as repeated layout markers | 107/292 → 0/292 | 110/399 → 0/399 | -27.5 pp [-33.5, -21.8] |
+| Repeated clipped rhythm | 46/292 → 0/292 | 63/399 → 0/399 | -15.8 pp [-20.1, -11.5] |
+| Staged reflection or discovery | 49/292 → 2/292 | 58/399 → 2/399 | -14.1 pp [-18.4, -10.1] |
+| Question-and-answer pivot | 41/292 → 10/292 | 56/399 → 10/399 | -11.5 pp [-15.5, -8.3] |
+| Generic engagement close | 50/292 → 0/292 | 50/399 → 0/399 | -12.6 pp [-16.7, -8.8] |
+| Unnecessary negative contrast | 20/292 → 4/292 | 31/399 → 4/399 | -6.8 pp [-10.8, -3.0] |
+| Automatic not-just expansion | 17/292 → 4/292 | 26/399 → 4/399 | -5.5 pp [-8.0, -3.2] |
+| Demonstrative payoff sentence | 16/292 → 2/292 | 21/399 → 3/399 | -4.5 pp [-6.9, -2.5] |
+| Unexplained analyst metaphor | 14/292 → 5/292 | 14/399 → 6/399 | -2.0 pp [-4.0, +0.0] |
 
-Generic engagement closing was an additional requested restriction. Its label changes from 85/400 to 0/400. A substantive closing question can be useful. Its literal punctuation is measured separately from the model-defined generic engagement request.
+Each arrow uses the same article/model/turn cells. Intervals resample articles and measure percentage-point changes, not numbers of instances. These are the 14 largest baseline frequencies; [all 40 patterns, thresholds and regions](data/expanded_full_comparison/paired_patterns.csv) include increases and zeroes.
 
-Rare patterns cannot be ranked reliably. Zero after an explicit format ban is a compliance floor, not proof of better writing. Full zeroes, ambiguity and topic counts remain in [all-pattern results](data/prompt_comparison/overall_patterns.csv).
+Hashtag-tail labels changed from 384/399 → 0/399, repeated one-sentence-paragraph labels from 356/399 → 36/399, and repeated bold-emphasis labels from 217/399 → 0/399. Those movements agree with the direct observations of zero hashtag strings and zero bold spans across all 399 nonempty expanded replies. These visible changes do not establish reader preference.
 
-Family totals expose both tested member counts. They represent two models per provider, not all of its models or an isolated training effect.
+The contrast result is narrower. Unnecessary-negative-contrast labels changed from 31/399 → 4/399, while automatic not-just-expansion labels changed from 26/399 → 4/399. The rubric allows useful factual distinctions, so these numbers differ from a literal count of “not” or “but.” They also differ from the earlier paid classifier's counts, which are not part of this comparison. The full examples below show why a returned flag still needs contextual interpretation.
 
-The unchanged 111-item inventory measures exact wording, with source-absence denominators and locations. Its negative-reframing regex is narrower than a contextual judgment that a contrast is unnecessary. [Baseline phrase counts](data/main/fixed_prose_counts.csv) and [explicit-prompt phrase counts](data/plain_prose_v2/fixed_prose_counts.csv) allow that distinction to be checked without conflating the two methods.
+Noun-heavy wording remains a substantial category: 143/399 → 159/399. The change's article-cluster interval is -1.7 to +10.2 percentage points, including zero. Asking a writer to avoid familiar slogans does not ensure that it describes actions directly. That aggregate observation does not show that the instructions caused abstract nouns, or that every noun phrase should be removed. It identifies a remaining review task under this classifier's definition.
 
+The [threshold table](data/expanded_full_comparison/paired_patterns.csv) repeats every comparison at 0.2 and 0.8. At the stricter 0.8 cutoff, negative contrast is 5/399 → 2/399 and noun-heavy wording is 20/399 → 24/399. Some categories are at or near a floor even in the baseline. A zero does not establish that the prose is free of the behavior, and a category with only a few labelled cases cannot support a reliable writer ranking.
 
-## 6. Worked cases and conversation turns
+Excluding the capacity-interrupted Sol SETI block gives negative contrast 31/395 → 4/395 and noun-heavy wording 143/395 → 159/395. This sensitivity retains the broader pattern while making the scope of that recovery explicit. It cannot remove the larger temporal or prompt-selection confounds.
 
-The turn figure follows one preselected prose target through the five drafts. Each point is a percentage of 20 posts, one per article at that turn for that writer. Lines connect observed conversation positions. They do not imply that asking again causes a trend independently of the previous answers already in context.
+## 5. Differences among the four writers
 
-![Negative-contrast classifier labels by conversation turn, writer and prompt condition.](figures/comparison_turns.png)
+The following comparison keeps model identity visible. Each percentage uses matched nonempty replies for that writer: 99 for Sol because of its capacity failure, and 100 for each other writer. These are the secondary raw-text comparisons; the [full table](data/expanded_full_comparison/paired_patterns.csv) also supplies the smaller strict valid-body populations, including their article counts.
 
-In the explicit condition, the label appears in 12/80 first drafts and 11/80 fifth drafts. The corresponding minimal-request counts are 55/80 and 57/80. Each pooled count contains the same 20 articles and four writers. These are observed positions in continued conversations, not a randomized test of repetition itself.
+![Four per-model comparisons of contrast, additive contrast, noun-heavy wording and one-sentence-paragraph patterns.](figures/expanded_full_by_model.png)
 
-The [turn table](data/prompt_comparison/turns.csv) includes all 40 patterns so this one chart does not substitute for the full record. Twenty observations per point still represent the same 20 source topics, not new independent topic samples at each turn.
+| Writer | Negative contrast | Not-just expansion | Noun-heavy wording | Isolated sentence paragraphs |
+|---|---|---|---|---|
+| Sol | 9/99 → 0/99 | 12/99 → 0/99 | 27/99 → 26/99 | 96/99 → 2/99 |
+| Terra | 8/100 → 0/100 | 8/100 → 2/100 | 11/100 → 7/100 | 76/100 → 11/100 |
+| Opus | 8/100 → 2/100 | 5/100 → 1/100 | 56/100 → 62/100 | 96/100 → 10/100 |
+| Sonnet | 6/100 → 2/100 | 1/100 → 1/100 | 49/100 → 64/100 | 88/100 → 13/100 |
 
-The six cases retain the earlier report's slots, chosen before intervention results: consecutive Sol science drafts, an Opus draft of the same source, a Terra security case, a Sonnet fifth draft and its earlier attribution case. They cover ordinary comparisons, not selected extremes. Excerpts are shortened; [complete paired posts](data/prompt_comparison/examples.json) preserve context. Each case connects input, expected behavior, raw wording and parsed measurements. Its effect on a label count is not evidence of factual correctness.
+The labels above the bars give counts before and after. The plots use percentages to keep Sol's 99 pairs visible beside the other writers' 100. The two Claude models both returned every tag pair, so their strict and raw-text populations coincide. Sol and Terra's valid-tag subsets are selected by format compliance; treating those subsets alone as all of their writing would overstate what the strict comparison covers.
 
-### Case 1: Things That Go Beep in the Night: Agentic AI Joins the Search for Extraterrestrial Signals
+Family names cover only the two tested members under this design. A family phrase must meet the support rule separately in both; one writer’s habit is not assigned to its whole family.
 
-Slot `14-seti/gpt-6.1-sol/01` uses [this source](https://blogs.nvidia.com/blog/ai-joins-the-search-for-extraterrestrial-signals/). Both drafts should reflect its facts; the explicit draft also receives the prose requirements. There is no single gold post.
+Source text, nominal model ID, effort and tool access are fixed. Writing conditions were collected at different times, so backend changes remain a possible contributor. Randomized interleaving is needed for a stronger causal claim.
 
-Minimal-request opening:
+## 6. Repeated openings, transitions and endings
 
-> AI agents listening for alien AI sounds like science fiction.
+A phrase can recur without violating any editorial rule. To find wording habits, the analysis lowercases and normalizes apostrophes, builds exact sequences of two through eight words, and checks each sequence against that reply's own source article. It counts a phrase once per reply and retains candidates seen in at least five replies across at least three articles for a particular model and region.
 
-Explicit-prompt opening:
+This **source-absent** rule removes exact wording already present in that article. It does not remove paraphrased source language or prove that the phrase came from a model-specific habit. Common connective phrases can pass it. These inventories are descriptive, chosen after viewing the outputs, and do not use the earlier baseline discovery/confirmation split as if the expanded prompt were a new preregistered validation sample.
 
-> At the Allen Telescope Array in Northern California, AI agents can now steer antennae, calibrate the instrument, correct incoming data and apply AI models to live observations from a single natural-language request. Breakthrough Listen and the SETI Institute are bringing …
+![Selected repeated baseline phrases by writer and region, compared with their expanded-prompt counts.](figures/expanded_full_phrases.png)
 
-Minimal closing:
+| Writer | Location | Exact source-absent phrase | Minimal request | Expanded prompt |
+|---|---|---|---|---|
+| Sol | opening paragraph | “the most interesting” | 7/100 | 0/99 |
+| Sol | transition starts | “an important distinction” | 6/100 | 0/99 |
+| Terra | closing | “how is your” | 6/100 | 0/100 |
+| Opus | closing | “do you think” | 11/100 | 0/100 |
+| Sonnet | closing | “do you think” | 11/100 | 0/100 |
+| Sonnet | point endings | “stood out to me” | 8/100 | 0/100 |
 
-> Where else could that shorter loop change what researchers can discover?
+These examples were selected from recurring baseline hooks, transitions and endings. Both counts are computed directly with per-article source exclusion; a missing filtered-inventory row is never treated as zero. Several familiar phrases disappear, which does not establish that every opening or ending became varied.
 
-Explicit closing:
+The expanded drafts still share connective and attribution phrases. One transition example per writer meeting the support rule is:
 
-> Its relevance to the search is operational: processing observations as they arrive and giving agents the tools to correct data problems during collection.
+| Writer | Location | Example recurring string | Replies | Articles |
+|---|---|---|---|---|
+| Sol | transition starts | “a way to” | 5 | 3 |
+| Terra | transition starts | “openai says it” | 8 | 4 |
+| Opus | transition starts | “a model that” | 8 | 6 |
+| Sonnet | transition starts | “a model that” | 6 | 3 |
 
-Measured words: 178 → 205; hashtags: 3 → 0. Negative-contrast probability: 0.74 → 0.71, hence labels true → true at p ≥ 0.5. These are literal counts and model judgments, not a quality verdict.
+Ordinary attribution and connective wording can recur: “says it will” can attribute company plans across several articles. These string counts never assign an editorial fault.
 
-### Case 2: Things That Go Beep in the Night: Agentic AI Joins the Search for Extraterrestrial Signals
+No expanded opening-paragraph string of at least three words meets the five-reply/three-article rule. This does not prove unique openings: structures can repeat with different words. The [common inventory](data/expanded_full_comparison/common_phrases.csv) includes two-word strings; [fixed counts](data/expanded_full_comparison/fixed_phrases.csv) track the original 111 entries across regions.
 
-Slot `14-seti/gpt-6.1-sol/02` uses [this source](https://blogs.nvidia.com/blog/ai-joins-the-search-for-extraterrestrial-signals/). Both drafts should reflect its facts; the explicit draft also receives the prose requirements. There is no single gold post.
+### Contextual labels by location
++
++The API also asks whether a defined instance occurs in a specific region, using the whole text and source for context. The following selected questions address the opening, the move into another point, paragraph endings, the concluding paragraph and the final sentence. Counts use the same secondary matched nonempty population and threshold of 0.5.
++
++| Location | Selected contextual pattern | Minimal → expanded, matched replies |
+|---|---|---|
+| opening paragraph | Generic scene-setting opener | 1/399 → 0/399 |
+| transition starts | Question-and-answer pivot | 15/399 → 4/399 |
+| point endings | Unnecessary negative contrast | 13/399 → 4/399 |
+| conclusion | Repeated conclusion | 0/399 → 0/399 |
+| closing | Generic engagement close | 12/399 → 0/399 |
++
++Regions overlap and their answers are separate judgments. Counts must not be added or forced to match whole-text labels. Closing engagement labels change from 12/399 → 0/399; point-ending negative contrast changes from 13/399 → 4/399. All regional probabilities remain in the paired table.
++
++The [family table](data/expanded_full_comparison/family_phrases.csv) requires separate support in both tested members. Overlapping strings such as “what do you” and “what do you think” must not be added together.
 
-Minimal-request opening:
+## 7. Format failures, length and provider caching
 
-> The most interesting part of AI searching for extraterrestrial signals isn’t the possibility of finding alien AI.
+A response can do useful writing and still fail the program's output contract. The following figure keeps those outcomes separate. Blue is an extractable tagged body, orange is a nonempty raw reply with invalid tags and grey is the empty CLI error. Every writer has 100 planned slots.
 
-Explicit-prompt opening:
+![Counts of valid tags, missing-tag text and the single capacity failure for each writer.](figures/expanded_full_formats.png)
 
-> The Allen Telescope Array’s new agentic AI system brings telescope control, data correction and live signal analysis into a workflow researchers can direct through natural-language requests. Breakthrough Listen and the SETI Institute are using it in the search for extraterrestrial …
+| Writer | Valid tagged body | Nonempty, invalid tags | CLI failure | Outside text |
+|---|---|---|---|---|
+| Sol | 27/100 | 72 | 1 | 0 |
+| Terra | 65/100 | 35 | 0 | 0 |
+| Opus | 100/100 | 0 | 0 | 0 |
+| Sonnet | 100/100 | 0 | 0 | 0 |
 
-Minimal closing:
+There were 107 nonempty tag failures: 72 from Sol and 35 from Terra. Of these replies, 86 contained neither tag and 21 contained only a closing tag. The raw-text audit retains that closing tag rather than silently repairing the response. The remaining Sol failure was a capacity error before any prose appeared. No writer added commentary outside a valid tag pair. A missing boundary is a format failure; it is not evidence that the wording is wrong. All raw outputs remain saved, and the secondary audit measures their exact text without claiming to have extracted a valid post.
 
-> Sometimes, the breakthrough is shortening the distance between measurement and action.
+**Measured format case: `06-protostar/gpt-6.1-sol/01`.** The raw reply begins:
 
-Explicit closing:
+> Project ProtoStar will help research institutions publish publicly funded datasets, models and code in formats that researchers and AI systems can reuse. That work includes documentation and provenance so someone outside the original team can understand what the resources contain and how to use them.
 
-> That work also anticipates a demanding possibility: observatories that may someday need to operate offline on the far side of the moon.
+The expected output has the same post inside one tag pair. This reply has no valid boundary, so `post_body` is null and the strict comparison excludes it. Its raw words are still classified with input type `raw_unparsed_response`. This example was chosen to show an ordinary missing-tag reply, not a refusal or an invented parsing repair. It represents one of the 107 nonempty format failures.
 
-Measured words: 155 → 200; hashtags: 3 → 0. Negative-contrast probability: 0.55 → 0.90, hence labels true → true at p ≥ 0.5. These are literal counts and model judgments, not a quality verdict.
+One Sol SETI request returned “Selected model is at capacity” with exit code 1 and no text. The failed second slot was kept. The same conversation then received the unchanged continuation for numbered slots three through five, without a retry of slot two or a fabricated assistant message. The unanswered user request remains in its native history. All 400 slots were attempted, producing 399 nonempty replies; the recovery-block sensitivity removes the entire Sol SETI block.
 
-### Case 3: Things That Go Beep in the Night: Agentic AI Joins the Search for Extraterrestrial Signals
+![Mean reply lengths and native cache-read fractions for warm turns, comparing the two prompts.](figures/expanded_full_length_cache.png)
 
-Slot `14-seti/claude-opus-5-5/01` uses [this source](https://blogs.nvidia.com/blog/ai-joins-the-search-for-extraterrestrial-signals/). Both drafts should reflect its facts; the explicit draft also receives the prose requirements. There is no single gold post.
+The left panel counts words in all nonempty measured replies. Its four expanded means, in Sol/Terra/Opus/Sonnet order, are 179.1, 127.5, 309.8, 301.0 words; the baseline means are 166.7, 158.7, 315.5, 299.8. The prompt prescribes no length. Terra became shorter in this collection, Sol longer, and Claude remained around 300 words. No brevity or quality preference is inferred from those lengths.
 
-Minimal-request opening:
+The right panel sums provider-reported cache reads and divides by total known input tokens on turns two through five. The expanded fractions are Sol 82.0%, Terra 89.0%, Opus 84.2%, Sonnet 82.3%. The failed Sol turn has no usable token counters and is excluded from that ratio, rather than counted as a zero-token cache miss. Codex cumulative counters are differenced into per-turn increments; Claude's native cache categories are combined without double-counting session totals.
 
-> 🛸 **AI agents built by humans, listening for AI agents built by aliens.**
+Resuming preserves the article and growing history as a cacheable prefix. The observed reuse does not prove this strategy maximizes savings: no cache-policy comparison was run, and prior drafts remain visible. The classifier exposes no cache-read counter, so its cache rate is unknown.
 
-Explicit-prompt opening:
+## 8. Before-and-after examples and remaining contrasts
 
-> At the Allen Telescope Array in Northern California, researchers can now give an AI agent a single natural language request and have it steer the telescope, enhance and correct incoming data, and apply AI models to the live stream. According …
+These four examples use the same source and numbered slot for comparability, rather than selecting the largest label changes. Opening and closing sentences are exact excerpts; linked paired responses retain every paragraph.
 
-Minimal closing:
+### Sol: Kimi, numbered post 2
 
-> What other fields do you think are ready for "agentic instruments"? 👇
+Stable pair: `01-kimi/gpt-6.1-sol/02`, using the same 296-word release article. Expected: a standalone source-based post, with plain prose and tags under the expanded prompt. Observed tag status: `ok`.
 
-Explicit closing:
+**Original opening sentence and closing:**
 
-> It is also considering observatories that may someday run offline on the far side of the moon, where every decision would have to be made …
+> Open-weight AI doesn’t need to win every benchmark to change the market.
 
-Measured words: 386 → 371; hashtags: 9 → 0. Negative-contrast probability: 0.82 → 0.93, hence labels true → true at p ≥ 0.5. These are literal counts and model judgments, not a quality verdict.
+> **Which matters most in your model evaluations—and how do you measure it?**
 
-### Case 4: Official Claude Code Extension on Cursor Marketplace Trojanized with Persistent SSH Backdoor
+**Expanded opening sentence and closing:**
 
-Slot `13-cursor-extension/gpt-6.1-terra/01` uses [this source](https://thehackernews.com/2026/10/official-claude-code-vs-code-extension.html). Both drafts should reflect its facts; the explicit draft also receives the prose requirements. There is no single gold post.
+> Moonshot is charging twice as much for a version of Kimi K3.1 Pro that it says runs 2–3 times faster.
 
-Minimal-request opening:
+> For an interactive application, measure whether the faster version brings acceptable answers within the required response time, then calculate the extra cost at expected traffic levels.
 
-> A trusted extension update can become a backdoor—even when it carries the legitimate publisher’s identity.
+The free classifier's whole-text negative-contrast probabilities are 0.065 → 0.025; noun-heavy wording is 0.119 → 0.224. Labels use the complete text; one pair is not a representative sample. [Complete responses](data/expanded_full_comparison/examples.json).
 
-Explicit-prompt opening:
+### Terra: Kimi, numbered post 2
 
-> A malicious Claude Code extension update appeared under Anthropic’s legitimate extension identity in the Cursor Marketplace. Cursor’s revised advisory identifies versions 2.1.312 and 2.1.313 for Windows and macOS as affected; the company says at most 5,000 users installed the malicious …
+Stable pair: `01-kimi/gpt-6.1-terra/02`, using the same 296-word release article. Expected: a standalone source-based post, with plain prose and tags under the expanded prompt. Observed tag status: `ok`.
 
-Minimal closing:
+**Original opening sentence and closing:**
 
-> The broader lesson: publisher identity and automatic updates are important trust signals—but they aren’t substitutes for monitoring the software supply chain and endpoint behavior.
+> What if choosing a frontier AI model became less about the leaderboard—and more about control?
 
-Explicit closing:
+> Would you prioritize access to model weights over a small difference in benchmark scores?
 
-> It recommends identifying affected installations, preserving evidence, isolating systems, reviewing endpoint telemetry and rotating credentials or revoking sessions.
+**Expanded opening sentence and closing:**
 
-Measured words: 213 → 206; hashtags: 4 → 0. Negative-contrast probability: 0.62 → 0.16, hence labels true → false at p ≥ 0.5. These are literal counts and model judgments, not a quality verdict.
+> Kimi K3.1 Pro gives API users a choice between standard pricing and a Highspeed version that Moonshot says runs 2–3 times faster.
 
-### Case 5: Announcing Project ProtoStar: Making Publicly Funded Science AI-Ready
+> Until then, K3.1 Pro is available through its API.
 
-Slot `06-protostar/claude-sonnet-5-5/05` uses [this source](https://huggingface.co/blog/announcing-project-protostar). Both drafts should reflect its facts; the explicit draft also receives the prose requirements. There is no single gold post.
+The free classifier's whole-text negative-contrast probabilities are 0.143 → 0.008; noun-heavy wording is 0.135 → 0.041. Labels use the complete text; one pair is not a representative sample. [Complete responses](data/expanded_full_comparison/examples.json).
 
-Minimal-request opening:
+### Opus: Kimi, numbered post 2
 
-> **Project ProtoStar, by the numbers 🔢**
+Stable pair: `01-kimi/claude-opus-5-5/02`, using the same 296-word release article. Expected: a standalone source-based post, with plain prose and tags under the expanded prompt. Observed tag status: `ok`.
 
-Explicit-prompt opening:
+**Original opening sentence and closing:**
 
-> The announcement's example of research building on open scientific resources comes from Hugging Face itself. It says researchers at the company have drawn on openly available resources, including genomic data, and cites the recent HuggingFaceBio releases Carbon-A and Carbon-X, with …
+> **Half the price of Claude Opus 5.5, and close on performance.**
 
-Minimal closing:
+> Are you evaluating open-weight models for production, or sticking with the closed frontier labs? 🤔
 
-> Want to participate or bring your institution on board? 👉 protostar@orcaopen.org
+**Expanded opening sentence and closing:**
 
-Explicit closing:
+> Kimi K3.1 Pro is available today only through Moonshot's API.
 
-> Whether data from different institutions can be combined as easily as the initiative hopes is still an open question that the later challenges will have …
+> Because the API is OpenAI-compatible, that kind of side-by-side takes only an endpoint URL and a key.
 
-Measured words: 227 → 288; hashtags: 6 → 0. Negative-contrast probability: 0.04 → 0.54, hence labels false → true at p ≥ 0.5. These are literal counts and model judgments, not a quality verdict.
+The free classifier's whole-text negative-contrast probabilities are 0.069 → 0.178; noun-heavy wording is 0.212 → 0.118. Labels use the complete text; one pair is not a representative sample. [Complete responses](data/expanded_full_comparison/examples.json).
 
-### Case 6: Introducing Kimi K3.1 Pro
+### Sonnet: Kimi, numbered post 2
 
-Slot `01-kimi/claude-sonnet-5-5/02` uses [this source](https://simonwillison.net/2026/Oct/23/kimi-k31-pro/). Both drafts should reflect its facts; the explicit draft also receives the prose requirements. There is no single gold post.
+Stable pair: `01-kimi/claude-sonnet-5-5/02`, using the same 296-word release article. Expected: a standalone source-based post, with plain prose and tags under the expanded prompt. Observed tag status: `ok`.
 
-Minimal-request opening:
+**Original opening sentence and closing:**
 
 > **A pelican riding a bicycle is my favorite way to test a new AI model.**
 
-Explicit-prompt opening:
-
-> Among the models the article names, Artificial Analysis puts Claude Opus 5.5 at 58, Kimi K3.1 Pro at 55, and Claude Fable 5.1, GPT-6 Astra and Gemini 4 Argon all at 53. Kimi's score sits two points above three established …
-
-Minimal closing:
-
 > What's your go-to test prompt for a new model?
 
-Explicit closing:
+**Expanded opening sentence and closing:**
 
-> The excerpt does not describe how the images turned out, so the case for K3.1 Pro rests on the Artificial Analysis score and Moonshot's own …
+> Kimi K3.1 Pro gives teams choosing a model on cost a concrete comparison.
 
-Measured words: 278 → 359; hashtags: 5 → 0. Negative-contrast probability: 0.74 → 0.67, hence labels true → true at p ≥ 0.5. These are literal counts and model judgments, not a quality verdict.
+> An index score and a vendor's own benchmarks describe general performance, so the model's results on a team's actual prompts remain the number to check before switching.
 
-### What failed, and what remains uncertain
+The free classifier's whole-text negative-contrast probabilities are 0.098 → 0.017; noun-heavy wording is 0.202 → 0.168. Labels use the complete text; one pair is not a representative sample. [Complete responses](data/expanded_full_comparison/examples.json). In this Sonnet baseline, the draft says that the poster ran a pelican test; the source attributes that work to its own author, and the poster supplied no biography. The classifier's invented-experience probability is 0.067. That output is a source-role check the classifier may miss, not evidence that a low label count guarantees sound attribution. No manual label is added to the results.
 
-All 800 posts are readable, a collection ceiling that cannot rank quality. There is no unreadable response to show and no factual or human-quality gold score. Readable posts can still be wrong or violate instructions.
+### Sonnet still uses “not only”
 
-The classifier sometimes labels a region positive and its whole post negative, a logical conflict under the threshold. The following counts are region-label conflicts, not unique faulty posts or proven false answers.
+Two expanded Sonnet replies contain the literal phrase “not only”; no expanded writer uses the literal “not just” or “more than just” variants in this collection. This is a string observation, not an automatic contextual fault assignment. In `08-model-spec/claude-sonnet-5-5/03`, the passage says:
 
-| Condition | Region-positive / whole-negative labels | Region questions | Readable classifier answers |
-|---|---|---|---|
-| Minimal request | 996 | 80,000 | 96000 |
-| Explicit prose prompt | 639 | 80,000 | 96000 |
+> These sit alongside the principle that the model should consider effects on other people, not only the person giving instructions.
 
-Conflicts remain in the [baseline](data/decision_audit/region_consistency.csv) and [explicit](data/plain_prose_v2/decisions/region_consistency.csv) records. Whole-post answers are used directly, without manual overrides. Without gold labels we cannot settle which answer is correct; consistent answers can also be wrong.
+The whole-text automatic-not-just-expansion probability is 0.035. The other occurrence is `12-dartmouth-writing/claude-sonnet-5-5/05`:
 
-These examples teach the measurement and identify passages to review. Earlier writing validation found weak agreement on alleged prose faults, reinforcing the need to treat these labels as estimates.
+> In this case, faculty applied those expectations to the senior administrator who ranks above them, and the committee's conclusion centered on candor about his AI use, not only on the use itself.
 
+That reply's probability is 0.017. Both phrases survive the explicit instruction to state additional facts directly. Whether the rubric's contextual escalation occurs is the API's separate judgment. Literal compliance with a wording instruction and contextual prose classification should not be conflated.
 
-## 7. Provider cache use and reported cost
+### A returned negative-contrast label can be debatable
 
-Provider caching reuses an input prefix. Local caching replays a saved response without generation. Each new post required a generation; reused smoke slots and offline replays add no calls.
+For `16-zest/claude-opus-5-5/05`, the source concerns a restaurant agent that delayed its public launch until it could book tables. The expanded reply includes:
 
-The chart divides cached by total input tokens on turns 2–5. Its denominator includes prior posts and runtime context. Both conditions use short follow-ups in explicitly resumed conversations.
+> A version that only recommended places would have been useful, but it would have left users to copy a restaurant name into OpenTable or Resy and finish the job themselves.
 
-![Weighted provider cache-read shares on conversation follow-ups for each prompt and writer.](figures/comparison_cache.png)
+The classifier returns negative-contrast probability 0.615. The counterfactual explains a source-described product choice, exposing the boundary between useful distinction and rhetorical alternative. With no independent gold label, the probability is preserved without manual correction or calling it a proven defect.
 
-| Writer | Minimal cached share, turns 2–5 | Explicit cached share, turns 2–5 | Explicit input tokens | Explicit reported writer dollars |
-|---|---|---|---|---|
-| GPT-6.1 Sol | 76.04% | 88.82% | 992277 | Unavailable |
-| GPT-6.1 Terra | 90.74% | 96.11% | 929895 | Unavailable |
-| Claude Opus 5.5 | 83.41% | 81.09% | 706131 | 4.441245 |
-| Claude Sonnet 5.5 | 83.52% | 81.96% | 652825 | 2.0126625000000002 |
+## 9. Classifier checks, disagreements and limits
 
-Cache shares are observed, not a routing experiment. Prompt length, history, timing and backend routing differ. A high cached share can still accompany a larger bill.
+A free API is useful only if its output can be interpreted. The pilot checked three authored fixtures: a rhetorical example, a formatted example and a neutral example. It recognized nine of ten intended positive instances and all six intended negative instances. Those 16 checks are an informal smoke test, not a representative accuracy estimate or a calibrated validation set. One intended question-and-answer pivot was missed even though the fixture said “The takeaway? The future is here.” Its returned probability was 0.064.
 
-Claude reports ordinary input, cache-read input and cache-write input separately, so they are added for inclusive input. Codex's input counter is already inclusive. Its resumed-session counters accumulate, and Claude's reported cost accumulates, so the harness differences those fields within each conversation. Native counters and per-turn values are retained; missing dollars remain missing. No padding is added to trigger caching.
+A separate long-source control returned 0.922 for an obvious authored contrast, 0.946 for a hashtag tail and 0.002 for absent bold. This checks transport on the largest source, not subtle classification accuracy or attention to every source detail. The usable context limit was not independently established.
 
-The new 400 writer requests report $6.453908 for Claude. New classifier requests report $2.263088, for a known additional equivalent of $8.716996. Codex dollar equivalents and actual subscription charges remain unavailable, so that known sum is not a complete invoice. Earlier baseline and generation-smoke usage remain separately recorded; intervention smoke is included in the new 400 rather than billed twice.
+Across the full data there are **603 region-positive / whole-negative judgments** at the 0.5 threshold. These are separate returned answers, not mutually constrained outputs. The most frequent conflict groups are:
 
-The classifier transport exposes no effort control or cache-read/write counters. The original four writers use high effort; an unsupported effort parameter is not invented for the decision endpoint. Shared evidence is unchanged across the two classifier requests for a post, but missing counters prevent measuring its backend cache use. Native usage and cost records are saved for every request.
+![The eight largest groups of regional positive labels whose corresponding whole-text label is negative. Counts are judgments rather than unique replies.](figures/expanded_full_conflicts.png)
 
+| Condition | Pattern | Regional conflicts |
+|---|---|---|
+| expanded | single_sentence_paragraphs | 190 |
+| baseline | single_sentence_paragraphs | 76 |
+| baseline | bold_density | 69 |
+| baseline | negative_contrast | 42 |
+| expanded | participial_clause | 34 |
+| baseline | clipped_rhythm | 26 |
+| baseline | additive_contrast | 26 |
+| expanded | additive_contrast | 22 |
 
-## 8. Limits and practical interpretation
+The horizontal axis counts judgments, with blue for baseline and orange for expanded replies. One reply can contribute several region conflicts for the same pattern. The [conflict table](data/expanded_full_comparison/region_conflicts.csv) retains every probability pair and stable ID. Assembling transition starts or paragraph endings on separate lines can create an apparent one-sentence layout. That is why whole-text layout labels are the comparison outcome and regional layout labels are diagnostics. Contextual region-versus-whole contradictions are retained too; none is manually reconciled.
 
-The comparison shows how text and classifier labels differ between two writing requests on matched sources. It does not rank writers for LinkedIn or establish reader preference.
+At the main threshold, 17 of the 40 whole-text categories have zero labelled cases in both arms of the broader paired audit. Other categories have only a handful. These floors prevent a meaningful ranking on those criteria. A classifier can miss a real device, apply a useful-exception rule inconsistently or flag an ordinary factual contrast. Returned probabilities quantify its outputs, not the frequency of human-verified writing faults.
 
-The prompt bundles format bans, prose guidance, attribution and a final check. Reductions cannot be assigned to individual clauses. Format compliance is easy to observe; contextual labels can respond to length or tone. Component tests are needed to separate those mechanisms.
+The prompt/taxonomy were selected after baseline inspection, Kimi is not held out, and writing conditions were collected sequentially using undated aliases. Constraints, continuation and tags change together. English AI news limits transfer; missing tags select the strict population; conversation drafts can influence one another.
 
-There is no human-written control, reader study, engagement result or factual gold answer. An unsupported-experience label is a warning, not a verified fabrication. Contextual judgments have not been validated for the intended audience.
+No factual, preference, engagement or editing-time outcome was measured. The evidence supports a change in visible habits within this sample, while tags and contextual prose still need review. It cannot identify AI authorship or establish that people prefer the new drafts.
 
-Targets come from baseline results on these same topics. The comparison is exploratory, with possible topic-specific adaptation. The earlier phrase split does not make this a confirmatory prompt test.
+## 10. Reproduction, cached data and spend
 
-Baseline preceded intervention. CLI versions and controls match, but undated writer IDs leave backend changes uncontrolled. Randomized interleaving would give stronger evidence about prompt effects.
+The notebook replays saved responses and classification probabilities. Its default execution makes no model calls, does not need publisher text and imports no module from this repository. All helpers are defined inside it. Source-overlap evidence is stored as candidate hashes and fixed-phrase source counts; replay verifies that the observed outputs still match that evidence before using it.
 
-Twenty AI-news topics, including company announcements, do not cover all writing. Results may change across subjects, languages and author identities. Five continued drafts differ from independent first attempts.
+| Condition | Writer | Completed / attempted | Mean words, nonempty | Warm cache reads | Reported dollar equivalent |
+|---|---|---|---|---|---|
+| baseline | Sol | 100/100 | 166.7 | 76.0% | Unknown |
+| baseline | Terra | 100/100 | 158.7 | 90.7% | Unknown |
+| baseline | Opus | 100/100 | 315.5 | 83.4% | $2.641758 |
+| baseline | Sonnet | 100/100 | 299.8 | 83.5% | $1.297102 |
+| expanded | Sol | 99/100 | 179.1 | 82.0% | Unknown |
+| expanded | Terra | 100/100 | 127.5 | 89.0% | Unknown |
+| expanded | Opus | 100/100 | 309.8 | 84.2% | $3.125052 |
+| expanded | Sonnet | 100/100 | 301.0 | 82.3% | $1.810578 |
 
-One uncalibrated classifier can favor a style, confuse presence with excess or disagree across regions. Threshold sensitivity and conflicts expose part of that uncertainty. Validate candidate prompts with intended readers and source checks before treating fewer labels as better prose.
+Known Claude equivalents for the expanded condition total **$4.9356308**, including the $0.2131714 preview; the other 380 attempts add $4.7224594. Codex dollars and actual total subscription charges are unknown. Earlier runs retain separate ledgers, and cache replay makes no new model call.
 
+The full classification ledger contains **5,438 HTTP attempts**, with statuses {'200': 5438}. Successful attempts report **$0.000000** in total. There are 0 successful attempts and 0 failed attempts without native cost fields. A missing field remains unknown. The separate long-source control and zero-price route probe each reported zero; earlier pilot diagnostics are recorded in their own [report](data/free_decision_pilot/REPORT.md).
 
-## 9. Saved data and reproduction
+The dated standard route advertises zero input/output prices, confirmed by a tiny control. Respan-only routing, zero price ceilings and disabled fallback prevent a paid substitution. Both current arms use that route. Its `:free` alias is the same checkpoint, not an independent classifier; earlier paid labels remain separate.
 
-There are 800 writer generations, 160 conversations and 1,600 classifier requests. Separate condition caches retain native responses, hashes, settings, sessions, turns, timing and usage. Complete article-containing wire bodies remain local and git-ignored.
+The full audit returned 191,760 valid probabilities, 0 invalid and 0 missing answers among nonempty cases. The empty generation has no probabilities. Native token totals and transport details are in the [summary](data/expanded_full_comparison/summary.json); classifier cache reads are not exposed.
 
-- [Executed notebook](40_linkedin_writing_habits.ipynb), with all analysis and collection helpers embedded for self-contained replay.
-- [Exact new prompt](data/prompt_conditions/plain_prose_v2.txt), [prompt rationale](data/prompt_conditions/plain_prose_v2.json), [intervention registration](data/plain_prose_v2/preregistration.json) and [protocol history](data/PROTOCOL.md).
-- [Baseline writer data](data/main/), [baseline classifier data](data/decision_audit/), [new writer data](data/plain_prose_v2/) and [new classifier data](data/plain_prose_v2/decisions/).
-- [All 400 explicit-prompt posts](data/plain_prose_v2/posts.md), with source links and stable article/writer/turn IDs.
-- [All pattern changes](data/prompt_comparison/patterns.csv), [pooled patterns](data/prompt_comparison/overall_patterns.csv), [article pairs](data/prompt_comparison/paired_articles.csv), [turns](data/prompt_comparison/turns.csv) and [family members](data/prompt_comparison/families.csv).
-- [Literal formatting](data/prompt_comparison/formatting.csv), [writer usage](data/prompt_comparison/usage.csv), [classifier reliability](data/prompt_comparison/classifier_reliability.csv), [worked cases](data/prompt_comparison/examples.json) and [definitions for every pattern](data/expanded_audit/STYLE_GUIDE.md).
-- [Comparison validation](data/prompt_comparison/validation.json), including source/prompt hashes, fresh sessions, native counter checks and article-free offline replay.
-- [Original fixed phrase counts](data/main/fixed_prose_counts.csv), [new fixed phrase counts](data/plain_prose_v2/fixed_prose_counts.csv), [original lexical inventory](data/prose_lexicon.json) and [file manifest](data/MANIFEST.json).
+Public records retain outputs, settings, native usage and hashes. Full publisher-containing requests remain in ignored private caches. [Validation](data/expanded_full_comparison/validation.json) reconstructs answers and checks prompt histories, raw logs, counters, pilot bytes and provider guards, then replays tables with sources, network and CLIs unavailable. Local Langfuse was unavailable; full caches and backfill records are retained.
 
-From this experiment folder, default analysis is offline:
+Useful files: [executed notebook](40_linkedin_writing_habits.ipynb), [all expanded responses](data/simple_prose_v3_full/outputs.md), [baseline posts](data/main/posts.md), [all definitions and illustrations](data/expanded_audit/STYLE_GUIDE.md), [full probabilities](data/expanded_full_comparison/probabilities.csv), [protocol history](data/PROTOCOL.md), [writer registration](data/simple_prose_v3_full/preregistration.json), [classification registration](data/simple_prose_v3_full_classifier/protocol.json) and [file manifest](data/MANIFEST.json). Tables and complete examples are linked beside their interpretation above.
 
-```powershell
-python -m unittest test_smoke_study.py test_full_study.py test_expanded_audit.py test_decision_audit.py test_prompt_study.py
-python prompt_study.py analyse
-python prompt_comparison.py
+To replay locally, install the notebook's ordinary Python dependencies and run:
+
+```text
+cd notebooks/40-linkedin-writing-habits
 python -m nbconvert --to notebook --execute --inplace 40_linkedin_writing_habits.ipynb
 ```
 
-The notebook embeds all helpers and replays caches without API, CLI or network calls. It needs Python, NumPy, pandas, matplotlib, nbformat and nbconvert; requests is for explicit live collection. Saved overlap checks reject changed output or rule fingerprints.
+Fresh collection requires matching private sources, authenticated writer CLIs and an OpenRouter credential. The collectors have small default call limits and explicit maximum-new-call knobs. Changed prompts or models require a new registration; successful exact requests replay from cache.
 
-Live collection is explicit, with small ordinary call limits. Completed slots are verified and reused. Missing middle turns or interrupted starts require reconciliation because later drafts depend on them. The 40 writer-smoke slots and four classifier-smoke requests are included in the full counts.
-
-Validation checks provenance and replay integrity, not current provider behavior or writing quality. Run history and amendments stay in [the protocol](data/PROTOCOL.md).
-
-
-## 10. Future work and further reading
-
-Sources checked November 1–2, 2026. The following sources motivate methods or further tests; none validates the present classifier as a measure of human annoyance.
+## 11. Future work and further reading
 
 ### Future work
 
-- Randomize and interleave prompt conditions on a fresh matched topic sample, retaining article pairing. Measure the same pattern frequencies and post lengths; the current sequential collection leaves time and backend changes as a confound.
-- Compare components of the instruction: format restrictions alone, connected-prose guidance alone, attribution guidance alone and the full specification. Measure which target changes persist; this study changes several instructions together.
-- Add a blinded reader study and a source-grounded factual review, with criteria fixed in advance. Measure clarity, preference and unsupported claims alongside classifier labels; current reductions have no human quality validation.
-- Test other subjects, languages and author-provided experiences. Measure whether patterns and attribution warnings transfer; the present set is limited to AI news and supplies no personal biography.
+- Randomize and interleave the two writing conditions on a fresh, held-out article sample. Keep article pairing and the same free classifier, and measure pattern changes alongside model/version evidence. The present temporal separation and prompt selection limit causal interpretation.
+- Test constraints, standalone continuation and tag instructions as separate components. Measure format compliance and the same prose labels. The 107 missing-tag replies and simultaneous prompt changes motivate this test.
+- Build a blinded human-labelled set with useful factual contrasts, unnecessary rhetorical contrasts and noun-heavy passages. Measure classifier precision, recall and threshold calibration. The missed authored pivot, near-floor categories and regional contradictions show why smoke controls are insufficient.
+- Compare fresh independent conversations with the five-turn conversation design at a fixed topic and request budget. Measure wording diversity, cache reads and editing time. The observed cache reuse comes with prior drafts remaining visible.
+- Ask readers to edit or choose complete posts after checking sources. Measure preference, factual errors and minutes of editing alongside pattern frequencies. The current study establishes no human quality or engagement improvement.
 
 ### Further reading
 
-- [Do LLMs write like humans? Variation in grammatical and rhetorical styles](https://arxiv.org/abs/2410.16107v2) (Reinhart et al., 2025). Studies grammatical variation in other model generations and motivates looking beyond a few familiar words.
-- [Why Does ChatGPT “Delve” So Much?](https://aclanthology.org/2025.coling-main.426/) (Juzek and Ward, 2025). Provides a reproducible historical vocabulary analysis, which should not be treated as a universal current blacklist.
-- [Delving into LLM-assisted writing in biomedical publications through excess vocabulary](https://arxiv.org/abs/2406.07016v5) (Kobak et al., 2025). Explains corpus-level excess-word analysis in a different writing domain.
-- [Prompt engineering](https://developers.openai.com/api/docs/guides/prompt-engineering) (OpenAI, accessed 2026). Describes explicit instructions and evaluation of prompt behavior; guidance is a starting point rather than proof of improvement.
-- [Decisions API](https://developers.openai.com/api/docs/guides/decisions) (OpenAI, accessed 2026). Explains independent typed probability questions and the need to validate thresholds in an application.
+Links checked November 2, 2026 (Toronto time).
+
+- [Do LLMs write like humans? Variation in grammatical and rhetorical styles](https://arxiv.org/abs/2410.16107) (Reinhart et al., 2025). Examines grammatical and rhetorical variation in other models, motivating analysis beyond familiar vocabulary.
+- [Why Does ChatGPT “Delve” So Much? Exploring the Sources of Lexical Overrepresentation in Large Language Models](https://aclanthology.org/2025.coling-main.426/) (Juzek and Ward, 2025). Provides historical lexical comparisons and cautions against assuming a universal current blacklist.
+- [Delving into LLM-assisted writing in biomedical publications through excess vocabulary](https://arxiv.org/abs/2406.07016) (Kobak et al., 2025). Studies excess vocabulary at corpus scale in a different domain; it does not validate a detector for individual LinkedIn posts.
+- [Submit a Decisions request](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request) (OpenRouter, accessed 2026). Documents typed questions over shared state, the API mechanism used for the multi-label audit.

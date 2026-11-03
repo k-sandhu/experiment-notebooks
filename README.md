@@ -272,7 +272,7 @@ A person sharing an AI news article can open a new chat for every draft or stay 
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
-| 40 | [Can explicit instructions change recurring LinkedIn writing habits?](notebooks/40-linkedin-writing-habits/) | Different drafts can repeat the same hooks, transitions and endings. Does a prose specification reduce those habits? Four writers each produce five posts from 20 frozen AI news articles with a minimal request and an explicit prompt: 400 posts per condition. A pinned decision model assigns 40 overlapping patterns in six locations; all four writers use high effort. | All ten targeted classifier-label frequencies decreased. Negative contrasts fell from 289/400 posts to 50/400; one-sentence paragraph patterns fell from 371 to 1, and formulaic framing from 137 to 0. Noun-heavy wording rose from 72 to 108 and some writers produced longer posts. These are exploratory classifier judgments, with no human quality validation and baseline collected first. |
+| 40 | [Can prose constraints change recurring LinkedIn writing habits?](notebooks/40-linkedin-writing-habits/) | Different drafts can repeat hooks, transitions and endings. Four writers each attempt five posts from 20 frozen AI articles under a minimal request and expanded prose constraints: 400 slots per condition, all at high effort. The same free typed classifier audits 40 overlapping patterns in six regions; 292 tag-valid pairs and 399 nonempty pairs are compared separately. | In the broader nonempty audit, hashtag-tail labels change from 384/399 → 0/399, negative contrast from 31/399 → 4/399 and noun-heavy wording from 143/399 → 159/399. The expanded prompt produces 107 nonempty tag failures and one empty capacity failure. Visible habits change, but contextual categories often sit near a floor and no human writing-quality improvement is established. |
 
 ## Planned experiments
 
@@ -403,7 +403,7 @@ here with their data and caches.
 | 35 | 88 paragraph pairs (earlier and merged versions) from this repository's README rewrites of 27 to 30 October 2026 | Fresh: lines dated 17 to 30 October 2026 | This repository (MIT) |
 | 38 | Nine US Federal Register rules and proposed rules converted to Markdown, with 36 edit requests and their exact answers generated in code | Fresh: published 19 to 29 October 2026 | [Federal Register API](https://www.federalregister.gov/developers/documentation/api/v1); US government works, public domain |
 | 39 | Eight programming tasks with inputs generated in code from fixed seeds and exact expected outputs | Fresh: written 30 October 2026 | This repository |
-| 40 | Twenty complete public AI news articles and 400 CLI-generated LinkedIn responses | Fresh: sources published 23-30 October 2026; main collection 1 November Toronto time | Publishers retain article rights; full source text git-ignored, public URLs and hashes retained; generated response caches in the experiment |
+| 40 | Twenty complete public AI news articles; 800 writer slots across the current two prompting conditions | Fresh when collected: sources published 23–30 October 2026; writer collection 1–2 November Toronto time | Publishers retain article rights; full source text git-ignored, public URLs and hashes retained; generated outputs and free-classifier responses cached in the experiment |
 
 ## For AI agents
 
