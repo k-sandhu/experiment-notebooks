@@ -15,21 +15,24 @@ import sys
 import time
 import tokenize
 import tomllib
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import psutil
 
 from bench import config as C
-from bench.common import append_csv, manifest, read_csv, remove_tree, sha256, utc_now, vendor_config, write_json, write_text
+from bench.common import append_csv, manifest, read_csv, read_json, remove_tree, sha256, utc_now, vendor_config, write_json, write_text
 from bench.compare import compare
 from bench.winjob import cpu_sets, run
+from bench.sessions import verify_vendor, render_template, harvest_files
+from bench.common import shim_command
 
 ACCOUNT_FIELDS = ["wall_seconds", "user_seconds", "kernel_seconds", "cpu_seconds", "cpu_wall_ratio", "peak_job_commit",
                   "peak_process_commit", "peak_working_set", "processes", "exit_code", "timed_out", "affinity", "active_at_exit",
                   "other_busy_cores"]
 RUN_FIELDS = ["key", "author", "task", "variant", "input", "workers", "repeat", "status", "detail", "input_sha256", "expected_sha256", "binary_sha256", "harness_version",
               "source_sha256", "stdout", "stderr", "stdout_path", "stderr_path", "started_utc"] + ACCOUNT_FIELDS
-BUILD_FIELDS = ["key", "author", "task", "status", "compiler_errors", "clean_seconds", "incremental_seconds", "binary_bytes",
+BUILD_FIELDS = ["key", "author", "task", "variant", "status", "compiler_errors", "clean_seconds", "incremental_seconds", "binary_bytes",
                 "binary_sha256", "crates_kept", "pruned_crates", "unpruned_fallback", "source_sha256"]
 LOC_FIELDS = ["key", "author", "task", "variant", "file", "total_lines", "code_lines", "bytes", "unsafe_blocks", "detail"]
 
@@ -38,7 +41,7 @@ def fingerprint(folder):
     digest = hashlib.sha256()
     if folder.exists():
         for path in sorted(folder.rglob("*")):
-            if path.is_file() and path.suffix in (".py", ".rs", ".toml") and "target" not in path.parts:
+            if path.is_file() and path.suffix in (".py", ".rs", ".toml", ".cpp", ".cc", ".h", ".hpp", ".java", ".cs", ".csproj", ".go", ".mod", ".js", ".mjs", ".cjs") and "target" not in path.parts:
                 digest.update(path.relative_to(folder).as_posix().encode())
                 digest.update(bytes.fromhex(sha256(path)))
     return digest.hexdigest()
@@ -123,6 +126,46 @@ def rust_without_comments(text, keep_literals=True):
     return "".join(result)
 
 
+def c_code_lines(text):
+    result, i, quote, block = [], 0, None, False
+    while i < len(text):
+        c = text[i]
+        if block:
+            if text.startswith("*/", i):
+                result.extend("  "); i += 2; block = False
+            else:
+                result.append("\n" if c == "\n" else " "); i += 1
+        elif quote:
+            result.append(c); i += 1
+            if c == "\\" and i < len(text):
+                result.append(text[i]); i += 1
+            elif c == quote:
+                quote = None
+        elif c in ("\"", "'", "`"):
+            quote = c; result.append(c); i += 1
+        elif text.startswith("//", i):
+            end = text.find("\n", i)
+            end = len(text) if end < 0 else end
+            result.extend(" " * (end-i)); i = end
+        elif text.startswith("/*", i):
+            result.extend("  "); i += 2; block = True
+        else:
+            result.append(c); i += 1
+    return sum(bool(line.strip()) for line in "".join(result).splitlines())
+
+
+def build_rule(lang, source):
+    if lang == "csharp":
+        tree = ET.parse(source / "solution.csproj")
+        if any(e.tag.split("}")[-1].lower() == "packagereference" for e in tree.iter()):
+            return "PackageReference is not allowed"
+    if lang == "go":
+        text = re.sub(r"/\*.*?\*/|//[^\n]*", "", (source / "go.mod").read_text(encoding="utf-8"), flags=re.S)
+        if re.search(r"(?m)^\s*require(?:\s|\()", text):
+            return "go.mod require is not allowed"
+    return ""
+
+
 def python_code_lines(text):
     docstrings = set()
     detail = ""
@@ -148,11 +191,11 @@ def python_code_lines(text):
     return len(rows), detail
 
 
-def version(command):
+def version(command, both=False):
     try:
         result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                 timeout=C.VERSION_TIMEOUT, env=C.environment())
-        return (result.stdout or result.stderr).strip()
+        return (result.stdout + "\n" + result.stderr if both else result.stdout or result.stderr).strip()
     except (OSError, subprocess.TimeoutExpired) as exc:
         return str(exc)
 
@@ -168,7 +211,13 @@ def machine(path):
                           windows_build=sys.getwindowsversion().build, active_power_plan=version(["powercfg", "/getactivescheme"]),
                           on_ac_power=None if battery is None else battery.power_plugged, python_version=sys.version,
                           numpy_version=np.__version__, rustc_version=version(["rustc", "--version"]),
-                          cargo_version=version(["cargo", "--version"]), date_utc=utc_now()))
+                          cargo_version=version(["cargo", "--version"]),
+                          toolchain_versions={k: version([str(v), "version" if k == "GO" else "--version"])
+                                              for k, v in C.TOOLCHAINS.items() if k != "VCVARS"},
+                          # cmd needs the whole line as one string to keep the quoted vcvars path intact.
+                          msvc_version=next((line for line in version(f'cmd.exe /d /s /c ""{C.TOOLCHAINS["VCVARS"]}" >nul && cl"', both=True)
+                                             .splitlines() if "Version" in line), "not recorded"),
+                          date_utc=utc_now()))
 
 
 class Harness:
@@ -176,10 +225,10 @@ class Harness:
         self.selftest = selftest
         self.programs = C.WORK / "selftest_programs" if selftest else C.PROGRAMS
         self.results = C.WORK / "selftest_results" if selftest else C.RESULTS
-        self.build_root = C.WORK / "selftest_build" if selftest else C.BUILD
+        self.build_root = C.WORK.resolve() / "selftest_build" if selftest else C.WORK.resolve() / "build"
         self.run_root = C.WORK / "selftest_runs" if selftest else C.RUNS
         self.tasks = tuple(tasks)
-        self.authors = tuple(authors or (["selftest"] if selftest else C.AUTHORS))
+        self.authors = tuple(authors or (["selftest"] if selftest else (*C.AUTHORS, "reference", *C.PILOT_AUTHORS)))
         self.repeats = repeats
         self.entries = manifest()
         self.cpu = cpu_sets()
@@ -206,7 +255,18 @@ class Harness:
         return self.build_root / author / task / "target/release/solution.exe"
 
     def program_list(self, task):
-        return [(a, v) for a in self.authors for v in C.VARIANTS]
+        return [(a, v) for a in self.authors for v in C.VARIANTS if self.variant_source(a, task, v).exists()]
+
+    def variant_source(self, author, task, variant):
+        source = self.source(author, task)
+        return source / (f"{variant}.py" if variant in ("plain", "fast") else variant)
+
+    def lang_dir(self, author, task, variant):
+        return self.build_root / author / task / variant
+
+    def artifact(self, author, task, variant):
+        folder = self.lang_dir(author, task, variant)
+        return folder / ({"cpp": "solution.exe", "java": "out/Main.class", "csharp": "out/solution.exe", "go": "solution.exe", "js": "main.js"}[variant])
 
     def entry(self, task, name):
         return next(e for e in self.entries if e["task"] == task and e["name"] == name)
@@ -221,7 +281,7 @@ class Harness:
                 if previous and (previous["status"] != "ok" or self.binary(author, task).exists()):
                     continue
                 row = dict.fromkeys(BUILD_FIELDS, "")
-                row.update(key=key, author=author, task=task, source_sha256=source_hash, status="missing", unpruned_fallback=False)
+                row.update(key=key, author=author, task=task, variant="rust", source_sha256=source_hash, status="missing", unpruned_fallback=False)
                 if not (source / "src/main.rs").exists() or not (source / "Cargo.toml").exists():
                     self.append("builds", row, BUILD_FIELDS)
                     continue
@@ -300,12 +360,91 @@ class Harness:
                 self.append("builds", row, BUILD_FIELDS)
                 print("build", author, task, row["status"], row["crates_kept"], flush=True)
 
+        self.build_languages()
+
+    def build_languages(self):
+        verify_vendor()
+        for author in self.authors:
+            for task in self.tasks:
+                for lang in C.LANG_VARIANTS:
+                    source = self.source(author, task) / lang
+                    if not source.exists():
+                        continue
+                    digest = fingerprint(source)
+                    key = key_for("build", author, task, lang, digest, C.BUILD_REPEATS, C.HARNESS_VERSION)
+                    artifact = self.artifact(author, task, lang)
+                    previous = next((r for r in self.rows("builds") if r["key"] == key), None)
+                    if previous and (previous["status"] != "ok" or artifact.exists()):
+                        continue
+                    row = dict.fromkeys(BUILD_FIELDS, "")
+                    row.update(key=key, author=author, task=task, variant=lang, source_sha256=digest, status="missing")
+                    main = {"cpp": "main.cpp", "java": "src/Main.java", "csharp": "Program.cs", "go": "main.go", "js": "main.js"}[lang]
+                    if not (source / main).is_file():
+                        self.append("builds", row, BUILD_FIELDS); continue
+                    try:
+                        reason = build_rule(lang, source)
+                        if reason:
+                            row.update(status="disallowed_dependency", compiler_errors=reason)
+                        else:
+                            project = self.lang_dir(author, task, lang)
+                            remove_tree(project, self.build_root)
+                            project.mkdir(parents=True)
+                            for name in harvest_files(self.source(author, task), "langs"):
+                                if name.startswith(lang + "/"):
+                                    src = self.source(author, task) / name
+                                    if src.is_file() and not src.is_symlink():
+                                        target = project / Path(name).relative_to(lang)
+                                        target.parent.mkdir(parents=True, exist_ok=True)
+                                        shutil.copyfile(src, target)
+                            for name in read_json(C.VENDOR_LANGS_MANIFEST):
+                                if name.startswith(lang + "/"):
+                                    relative = Path(name).relative_to(lang)
+                                    target = project / ("include" if lang == "cpp" else "lib") / relative
+                                    target.parent.mkdir(parents=True, exist_ok=True)
+                                    shutil.copyfile(C.VENDOR_LANGS / name, target)
+                            if lang == "js":
+                                row.update(status="ok", binary_bytes=artifact.stat().st_size, binary_sha256=sha256(artifact))
+                            else:
+                                (project / "build.cmd").write_bytes(render_template(C.BENCH / "template" / lang / "build.cmd.tmpl"))
+                                times, errors = [], ""
+                                for repeat in range(C.BUILD_REPEATS + 1):
+                                    if repeat < C.BUILD_REPEATS:
+                                        for name in {"cpp": ["solution.exe"], "java": ["out"], "csharp": ["bin", "obj", "out", ".dotnet-home", ".nuget-packages"], "go": ["solution.exe", ".gocache", ".gopath"]}[lang]:
+                                            path = project / name
+                                            if path.is_dir(): remove_tree(path, self.build_root)
+                                            elif path.exists(): path.unlink()
+                                        if lang == "cpp":
+                                            for suffix in ("*.obj", "*.pdb", "*.ilk", "*.iobj", "*.ipdb", "*.exp", "*.lib"):
+                                                for path in project.glob(suffix): path.unlink()
+                                    else:
+                                        stamp = time.time() + 1; os.utime(project / main, (stamp, stamp))
+                                    scratch = self.run_root / "build" / author / task / lang / str(repeat)
+                                    result = run(shim_command([str(project / "build.cmd")]), project, scratch / "stdout.txt", scratch / "stderr.txt", C.BUILD_TIMEOUT)
+                                    errors = "\n".join(((scratch / "stdout.txt").read_text(encoding="utf-8", errors="replace") + "\n" + (scratch / "stderr.txt").read_text(encoding="utf-8", errors="replace")).splitlines()[:40])
+                                    if result["exit_code"] or result["timed_out"]: break
+                                    times.append(result["wall_seconds"])
+                                row["clean_seconds"] = json.dumps(times[:C.BUILD_REPEATS])
+                                if len(times) != C.BUILD_REPEATS + 1 or not artifact.exists():
+                                    row.update(status="build_failed", compiler_errors=errors)
+                                else:
+                                    sizepath = project / "out" if lang in ("java", "csharp") else artifact
+                                    size = sum(p.stat().st_size for p in sizepath.rglob("*") if p.is_file()) if sizepath.is_dir() else sizepath.stat().st_size
+                                    row.update(status="ok", incremental_seconds=times[-1], binary_bytes=size, binary_sha256=sha256(artifact))
+                    except (OSError, ValueError, ET.ParseError) as exc:
+                        row.update(status="build_failed", compiler_errors=str(exc))
+                    self.append("builds", row, BUILD_FIELDS)
+                    print("build", author, task, lang, row["status"], flush=True)
+
     def loc(self):
         for author in self.authors:
             for task in self.tasks:
                 source = self.source(author, task)
                 files = [("rust", p) for p in sorted((source / "rust/src").rglob("*.rs"))]
                 files += [(v, source / f"{v}.py") for v in ("plain", "fast") if (source / f"{v}.py").exists()]
+                for lang in C.LANG_VARIANTS:
+                    folder = source / lang
+                    names = harvest_files(source, "langs")
+                    files += [(lang, source / name) for name in names if name.startswith(lang + "/") and (source / name).is_file() and (source / name).suffix in (".cpp", ".cc", ".h", ".hpp", ".java", ".cs", ".go", ".js", ".mjs", ".cjs")]
                 for variant, path in files:
                     relative = path.relative_to(source).as_posix()
                     key = key_for("loc", author, task, relative, sha256(path))
@@ -316,6 +455,8 @@ class Harness:
                         code = rust_without_comments(text)
                         code_lines, detail = sum(bool(line.strip()) for line in code.splitlines()), ""
                         unsafe = len(re.findall(r"\bunsafe\s*\{", rust_without_comments(text, keep_literals=False)))
+                    elif variant in C.LANG_VARIANTS:
+                        code_lines, detail, unsafe = c_code_lines(text), "", ""
                     else:
                         code_lines, detail = python_code_lines(text)
                         unsafe = ""
@@ -325,20 +466,33 @@ class Harness:
 
     def availability(self, author, task, variant):
         source = self.source(author, task)
-        if variant != "rust":
+        if variant in ("plain", "fast"):
             return "" if (source / f"{variant}.py").exists() else "missing"
+        if variant in C.LANG_VARIANTS:
+            src = source / variant
+            builds = [r for r in self.rows("builds") if r["author"] == author and r["task"] == task and r.get("variant") == variant and r["source_sha256"] == fingerprint(src)]
+            if not src.exists(): return "missing"
+            return "" if builds and builds[-1]["status"] == "ok" and self.artifact(author, task, variant).exists() else (builds[-1]["status"] if builds else "build_failed")
         builds = [r for r in self.rows("builds") if r["author"] == author and r["task"] == task
                   and r["source_sha256"] == fingerprint(source / "rust")]
         if not (source / "rust/src/main.rs").exists():
             return "missing"
         return "" if builds and builds[-1]["status"] == "ok" and self.binary(author, task).exists() else "build_failed"
 
+    def source_digest(self, author, task, variant):
+        path = self.variant_source(author, task, variant)
+        return fingerprint(path) if path.is_dir() else sha256(path) if path.exists() else "missing"
+
+    def binary_digest(self, author, task, variant):
+        path = self.binary(author, task) if variant == "rust" else self.artifact(author, task, variant) if variant in C.LANG_VARIANTS else None
+        return sha256(path) if path and path.exists() else ""
+
     def run_one(self, table, author, task, variant, name, workers, repeat, timeout):
         entry = self.entry(task, name)
         source = self.source(author, task)
-        source_hash = fingerprint(source / "rust") if variant == "rust" else (sha256(source / f"{variant}.py") if (source / f"{variant}.py").exists() else "missing")
+        source_hash = self.source_digest(author, task, variant)
         # Executable hash captures compiler/profile changes, not just source edits.
-        binary_hash = sha256(self.binary(author, task)) if variant == "rust" and self.binary(author, task).exists() else ""
+        binary_hash = self.binary_digest(author, task, variant)
         expected_path = C.DATA / "expected" / task / f"{name}.out"
         expected_hash = sha256(expected_path)
         key = key_for(table, author, task, variant, name, workers, repeat, entry["sha256"], source_hash,
@@ -360,8 +514,13 @@ class Harness:
                 self.verified_inputs.add((task, name))
             scratch = self.run_root / table / author / task / variant / f"{name}_w{workers}_r{repeat}"
             stdout, stderr = scratch / "stdout.txt", scratch / "stderr.txt"
-            program = self.binary(author, task) if variant == "rust" else source / f"{variant}.py"
-            command = [str(program)] if variant == "rust" else [str(C.PYTHON), "-X", "utf8", str(program)]
+            if variant == "rust": command = [str(self.binary(author, task))]
+            elif variant in ("plain", "fast"): command = [str(C.PYTHON), "-X", "utf8", str(source / f"{variant}.py")]
+            elif variant == "java":
+                folder = self.lang_dir(author, task, variant)
+                command = [str(C.TOOLCHAINS["JAVA"]), "-cp", str(folder / "out") + ";" + str(folder / "lib" / "*"), "Main"]
+            elif variant == "js": command = [str(C.TOOLCHAINS["NODE"]), str(self.artifact(author, task, variant))]
+            else: command = [str(self.artifact(author, task, variant))]
             command.append(str(C.input_path(task, name)))
             if task == "walkers":
                 command.append(str(workers))
@@ -410,13 +569,13 @@ class Harness:
             if self.availability(author, task, variant):
                 continue
             source = self.source(author, task)
-            digest = fingerprint(source / "rust") if variant == "rust" else sha256(source / f"{variant}.py")
+            digest = self.source_digest(author, task, variant)
             rows = [r for r in self.rows("correctness") if r["author"] == author and r["task"] == task and r["variant"] == variant
                     and r["source_sha256"] == digest and r["input"] in ("t1", "full")
                     and r["input_sha256"] == self.entry(task, r["input"])["sha256"]]
             rows = [r for r in rows if r["expected_sha256"] == sha256(C.DATA / "expected" / task / f'{r["input"]}.out')
                     and r["harness_version"] == C.HARNESS_VERSION
-                    and (variant != "rust" or r["binary_sha256"] == sha256(self.binary(author, task)))]
+                    and r["binary_sha256"] == self.binary_digest(author, task, variant)]
             by_key = {(r["input"], int(r["workers"])): r for r in rows}
             required = [("t1", C.CORRECT_WORKERS), ("full", C.CORRECT_WORKERS)] if task == "walkers" else [("t1", 1), ("full", 1)]
             if task == "walkers":
@@ -470,6 +629,28 @@ class Harness:
         commands = {"python": [str(C.PYTHON), "-X", "utf8", "-c", "pass"],
                     "numpy": [str(C.PYTHON), "-X", "utf8", "-c", "import numpy"],
                     "rust": [str(project / "target/release/solution.exe")]}
+        verify_vendor()
+        for lang in C.LANG_VARIANTS:
+            folder = self.build_root / "baseline" / lang
+            folder.mkdir(parents=True, exist_ok=True)
+            for path in (C.BENCH / "template" / lang).rglob("*"):
+                if path.is_file():
+                    relative = path.relative_to(C.BENCH / "template" / lang)
+                    target = folder / (str(relative)[:-5] if str(relative).endswith(".tmpl") else relative)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(render_template(path) if path.suffix == ".tmpl" else path.read_bytes())
+            for name in read_json(C.VENDOR_LANGS_MANIFEST):
+                if name.startswith(lang + "/"):
+                    target = folder / ("include" if lang == "cpp" else "lib") / Path(name).relative_to(lang)
+                    target.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(C.VENDOR_LANGS / name, target)
+            if lang != "js":
+                scratch = self.run_root / "baseline_build" / lang
+                result = run(shim_command([str(folder / "build.cmd")]), folder, scratch / "stdout.txt", scratch / "stderr.txt", C.BUILD_TIMEOUT)
+                if result["exit_code"] or result["timed_out"]:
+                    raise RuntimeError(f"{lang} baseline build failed: " + (scratch / "stderr.txt").read_text(encoding="utf-8", errors="replace"))
+            commands[lang] = ([str(C.TOOLCHAINS["JAVA"]), "-cp", str(folder / "out") + ";" + str(folder / "lib" / "*"), "Main"] if lang == "java" else
+                              [str(C.TOOLCHAINS["NODE"]), str(folder / "main.js")] if lang == "js" else
+                              [str(folder / ("out/solution.exe" if lang == "csharp" else "solution.exe"))])
         fields = ["key", "variant", "repeat", "started_utc"] + ACCOUNT_FIELDS
         for repeat in range(C.BASELINE_REPEATS):
             for variant, command in commands.items():
@@ -482,9 +663,21 @@ class Harness:
                 self.append("baseline", dict(key=key, variant=variant, repeat=repeat, started_utc=utc_now(), **result), fields)
 
 
+def archive_results():
+    destination = C.DATA / "results_2026-10-30"
+    if destination.exists():
+        raise FileExistsError(f"Archive already exists: {destination}")
+    sources = list(C.RESULTS.glob("*.csv"))
+    if (C.RESULTS / "derived").exists(): sources.append(C.RESULTS / "derived")
+    if (C.DATA / "machine.json").exists(): sources.append(C.DATA / "machine.json")
+    destination.mkdir(parents=True)
+    for source in sources:
+        shutil.move(str(source), str(destination / source.name))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["machine", "baseline", "build", "loc", "correct", "bench", "sweep", "scaling", "all"])
+    parser.add_argument("command", choices=["machine", "baseline", "build", "loc", "correct", "bench", "sweep", "scaling", "all", "archive-results"])
     parser.add_argument("--selftest", action="store_true", help="Use WORK/selftest_programs and WORK/selftest_results only")
     parser.add_argument("--tasks", nargs="+", choices=C.TASKS, default=C.TASKS)
     parser.add_argument("--authors", nargs="+")
@@ -492,6 +685,11 @@ def main():
     args = parser.parse_args()
     if args.repeats is not None and args.repeats < 1:
         parser.error("--repeats must be positive")
+    if args.command == "archive-results":
+        archive_results()
+        return
+    if not args.selftest and args.command in ("machine", "baseline", "build", "loc", "correct", "bench", "sweep", "scaling", "all") and not (C.DATA / "results_2026-10-30").exists() and (list(C.RESULTS.glob("*.csv")) or (C.DATA / "machine.json").exists()):
+        parser.error("Run archive-results before the first new measurement")
     harness = Harness(selftest=args.selftest, tasks=args.tasks, authors=args.authors, repeats=args.repeats)
     commands = ["machine", "baseline", "build", "loc", "correct", "bench", "sweep", "scaling"] if args.command == "all" else [args.command]
     for command in commands:

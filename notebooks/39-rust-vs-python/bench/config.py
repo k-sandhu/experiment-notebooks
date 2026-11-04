@@ -16,10 +16,23 @@ PROGRAMS = DATA / "programs"
 RESULTS = DATA / "results"
 PYTHON = Path(r"C:\Python313\python.exe")
 TASKS = ("springs", "wordpairs", "ledger", "logscan", "routes", "align", "heat", "walkers")
-VARIANTS = ("rust", "plain", "fast")
+LANG_VARIANTS = ("cpp", "java", "csharp", "go", "js")
+VARIANTS = ("rust", "plain", "fast") + LANG_VARIANTS
+TOOLCHAINS = {name: Path(os.environ.get("NB39_" + name, default)) for name, default in {
+    "VCVARS": r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat",
+    "JAVA": r"C:\Program Files\Java\jdk-23\bin\java.exe", "JAVAC": r"C:\Program Files\Java\jdk-23\bin\javac.exe",
+    "DOTNET": r"D:\projects\toolchains\dotnet8\dotnet.exe", "GO": r"D:\projects\toolchains\go1.27.3\go\bin\go.exe",
+    "NODE": r"C:\Program Files\nodejs\node.exe",
+}.items()}
+VENDOR_LANGS = WORK.resolve() / "vendor-langs"
+VENDOR_LANGS_MANIFEST = BENCH / "template/vendor_langs.json"
+SESSION_KINDS = {
+    "main": dict(prompt=BENCH / "AUTHOR_PROMPT.md", sessions=SESSIONS, suffix="", meta="meta.json", timeout=75 * 60),
+    "langs": dict(prompt=BENCH / "AUTHOR_PROMPT_LANGS.md", sessions=WORK.resolve() / "sessions-langs", suffix=".langs", meta="meta_langs.json", timeout=100 * 60),
+}
 SWEEP_TASKS = ("wordpairs", "routes", "heat")
 GENERATOR_VERSION = "39.2"
-HARNESS_VERSION = "39.2"
+HARNESS_VERSION = "39.3"
 SMALL_ALIGN_LENGTHS = dict(min_length=8, max_length=40)
 
 # Editing these parameters changes future inputs; existing files are never silently replaced.

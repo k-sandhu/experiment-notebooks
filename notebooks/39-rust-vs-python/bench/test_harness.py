@@ -14,9 +14,46 @@ from bench import config as C
 from bench.common import manifest, sha256, shim_command, write_json, write_text
 from bench.compare import Unreadable, compare, parse
 from bench.generate import generate
-from bench.measure import Harness, dependencies, python_code_lines, rust_without_comments, toml_value
-from bench.sessions import event_metadata, prepare, request_hash
+from bench.measure import Harness, dependencies, python_code_lines, rust_without_comments, toml_value, c_code_lines, build_rule
+from bench.sessions import event_metadata, prepare, request_hash, render_template, harvest_files
 from bench.winjob import Job, cpu_sets, run
+
+
+class LanguageTests(unittest.TestCase):
+    def test_main_hashes(self):
+        ledger = {(r["author"], r["task"]): r["request_hash"] for r in json.loads((C.DATA / "preparation_hashes.json").read_text())}
+        self.assertEqual(len(ledger), 16)
+        for author in C.AUTHORS:
+            for task in C.TASKS:
+                with self.subTest(author=author, task=task):
+                    self.assertEqual(request_hash(author, task), ledger[author, task])
+                    self.assertEqual(request_hash(author, task), json.loads((C.PROGRAMS / author / task / "meta.json").read_text())["request_hash"])
+
+    def test_render(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            path = Path(folder) / "test.tmpl"
+            path.write_text("{{JAVA}}\n{{GO}}\n", encoding="utf-8")
+            self.assertEqual(render_template(path), (str(C.TOOLCHAINS["JAVA"]) + "\r\n" + str(C.TOOLCHAINS["GO"]) + "\r\n").encode())
+
+    def test_harvest(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            root = Path(folder)
+            for name in ("cpp/main.cpp", "cpp/include/nlohmann/json.hpp", "csharp/bin/x.cs", "csharp/A.cs", "go/.gocache/a.go", "go/a.go", "java/src/A.java", "java/lib/A.java", "js/a.mjs"):
+                path = root / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_text("x")
+            files = harvest_files(root, "langs")
+            for name in ("cpp/main.cpp", "csharp/A.cs", "go/a.go", "java/src/A.java", "js/a.mjs"): self.assertIn(name, files)
+            for name in ("cpp/include/nlohmann/json.hpp", "csharp/bin/x.cs", "go/.gocache/a.go", "java/lib/A.java"): self.assertNotIn(name, files)
+
+    def test_lexer(self):
+        self.assertEqual(c_code_lines("\"// not a comment\"; // x\n'/*';\n`// text`;\n/* only\ncomment */\n"), 3)
+
+    def test_rules(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            root = Path(folder)
+            (root / "solution.csproj").write_text('<Project><ItemGroup><PackageReference Include="x" /></ItemGroup></Project>')
+            (root / "go.mod").write_text('module x\nrequire example.com/x v1.0.0\n')
+            self.assertTrue(build_rule("csharp", root))
+            self.assertTrue(build_rule("go", root))
 
 
 class GrammarTests(unittest.TestCase):
@@ -90,10 +127,10 @@ class HarnessTests(unittest.TestCase):
 
     def test_prepare_never_launches_a_cli(self):
         with mock.patch("subprocess.Popen", side_effect=AssertionError("No process may be launched")):
-            folder, digest = prepare("sol", "heat")
-            self.assertEqual(digest, request_hash("sol", "heat"))
+            folder, digest = prepare("terra", "heat")
+            self.assertEqual(digest, request_hash("terra", "heat"))
             self.assertEqual(sorted(p.name for p in folder.iterdir()), ["SPEC.md", "rust", "samples"])
-            self.assertEqual(digest, prepare("sol", "heat")[1])
+            self.assertEqual(digest, prepare("terra", "heat")[1])
 
     def test_event_streams(self):
         with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
