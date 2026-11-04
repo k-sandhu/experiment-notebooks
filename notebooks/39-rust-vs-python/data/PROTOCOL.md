@@ -88,3 +88,43 @@ trust the result. All times are local (EDT, UTC-4) on 2026-10-30 unless marked U
   after the timing results were seen, because every program was correct and the "faster of the two Python
   versions" is the comparison a developer choosing between them would make. The notebook also reports the
   speed-up over each Python version separately.
+
+## Extension to five more languages (2026-11-03)
+
+- Requested after notebook 39 (Rust and Python) merged in PR #108: the same tasks in other widely used languages,
+  on branch `extend-39-languages`. The owner chose C++, Java, JavaScript, C# and Go, vendored JSON libraries for
+  C++ and Java (the standard libraries have none), and extending this notebook rather than starting a new one.
+- Toolchains: MSVC 19.40 from the installed Visual Studio 2022; Oracle JDK 23 and Node.js 22.17.0 already
+  installed; .NET SDK 8.0.427 (runtime 8.0.33) installed without admin rights to `D:\projects\toolchains\dotnet8`
+  with Microsoft's signed `dotnet-install.ps1`; Go 1.27.3 unpacked to `D:\projects\toolchains\go1.27.3` from the
+  official zip (SHA-256 checked against go.dev). nlohmann/json 3.12.0 (identical SHA-256 from the release asset and
+  the tagged source) and Jackson 2.22.4 core and databind with annotations 2.22 (SHA-1 checked against Maven
+  Central); hashes in `bench/template/vendor_langs.json`. Maven's "latest" annotations entry pointed to a 3.0
+  release candidate; the 2.22 line that databind 2.22.4 declares was used instead.
+- Inside the Codex sandbox, `javac` could not read jars through a path under the user profile; language sessions
+  therefore run under the resolved D: path of the work folder. A `java\run.cmd` wrapper was added after the Java
+  classpath command was mangled when typed in Git Bash during a smoke test.
+- Harness extension written by GPT-6.1 Terra at high effort (commit `8b4e5d02`): templates, build scripts with
+  fixed flags, builds, runs, line counts, start-up baselines, and a stored `request` object (CLI, model, flags,
+  prompt, file hashes) in every session's metadata. The 18 earlier sessions were given their `request` after the
+  fact; each reproduces its recorded request hash. The main-session hashes were unchanged by the extension.
+- Language sessions: heat with both models first (both passed every input), then the other 14, three per model at
+  a time; all 16 exited normally with every file present. Claude Sonnet 5.5: 34.2 minutes, USD 3.77. GPT-6.1 Terra:
+  27.6 minutes on the Codex subscription.
+- Langfuse tracing: the backfill script in `D:\projects\langfuse` was changed to read the prompt from session
+  metadata (the CLI receives it on stdin, so it is not in the event stream). The 18 earlier sessions had already
+  been sent by an earlier backfill without their prompts; they were not deleted and resent. The two language heat
+  sessions finished at the same moment and both trace uploads ran, storing each trace twice; trace uploads now take
+  a lock. The other 14 language sessions were traced once each, with their prompts.
+- Line endings: Terra's language files were written with CRLF; the working copies were normalised to LF (what git
+  stores) and builds, line counts and correctness were run again so recorded source hashes match a checkout.
+- Measurement (2026-11-03): the October results moved to `data/results_2026-10-30/`. Builds, line counts and
+  correctness 18:35-19:18 EST; a queued timing script started early in a gap between two correctness steps and
+  measured start-up times for about a minute while builds ran; it was stopped and its `baseline.csv` deleted.
+  Timing from 19:18 to 20:13 EST: start-up baselines, timed runs, size sweep and scaling, all programs of every
+  version interleaved per task. Other programs kept a median of 4.4 of 22 logical processors busy. Every run was
+  correct.
+- Analysis choices made after the results were seen: relative time (to each model's fastest version per task) as
+  the main speed summary; memory as peak working set for every task including walkers (at one worker every
+  walkers program ran as one process; job commit had counted the Java heap reservation, 645 MB against a 49 MB
+  working set); code size in bytes rather than lines, because Terra often wrote several statements per line.

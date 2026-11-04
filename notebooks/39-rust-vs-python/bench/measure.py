@@ -191,11 +191,11 @@ def python_code_lines(text):
     return len(rows), detail
 
 
-def version(command):
+def version(command, both=False):
     try:
         result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                 timeout=C.VERSION_TIMEOUT, env=C.environment())
-        return (result.stdout or result.stderr).strip()
+        return (result.stdout + "\n" + result.stderr if both else result.stdout or result.stderr).strip()
     except (OSError, subprocess.TimeoutExpired) as exc:
         return str(exc)
 
@@ -212,8 +212,12 @@ def machine(path):
                           on_ac_power=None if battery is None else battery.power_plugged, python_version=sys.version,
                           numpy_version=np.__version__, rustc_version=version(["rustc", "--version"]),
                           cargo_version=version(["cargo", "--version"]),
-                          toolchain_versions={k: version([str(v), "--version"]) for k, v in C.TOOLCHAINS.items() if k != "VCVARS"},
-                          msvc_version=version(["cmd.exe", "/d", "/c", f'call "{C.TOOLCHAINS["VCVARS"]}" >nul && cl']), date_utc=utc_now()))
+                          toolchain_versions={k: version([str(v), "version" if k == "GO" else "--version"])
+                                              for k, v in C.TOOLCHAINS.items() if k != "VCVARS"},
+                          # cmd needs the whole line as one string to keep the quoted vcvars path intact.
+                          msvc_version=next((line for line in version(f'cmd.exe /d /s /c ""{C.TOOLCHAINS["VCVARS"]}" >nul && cl"', both=True)
+                                             .splitlines() if "Version" in line), "not recorded"),
+                          date_utc=utc_now()))
 
 
 class Harness:
