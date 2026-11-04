@@ -2,27 +2,30 @@
 
 A processor follows small instructions: fetch a number, add another number, jump to a different instruction, or return an answer. Software developers usually describe the work in a programming language. A compiler translates that description into the instruction bytes the processor can run. Testing whether a language model can supply those bytes itself asks how much of that translation it can carry out without the usual software tools.
 
-That question matters in two different situations. Someone building a tiny calculation may want to know whether a model understands the processor's instructions well enough to produce a working function. Someone asking for a program they can launch needs more: an operating system must recognise the file and know where its instructions begin. A useful result must identify which of these capabilities was demonstrated.
+Someone building a tiny calculation may want to know whether a model understands a processor's instructions well enough to produce a working function. Someone asking for a program they can launch needs more: an operating system must recognise the file and know where its instructions begin. A useful result must identify which of these capabilities was demonstrated and what kind of work the program performs.
 
 Consider this **illustrative example**, separate from the measured tests. A calculation takes two whole numbers, multiplies the first by 37 and the second by 11, and adds 23. With inputs 2 and 3, the answer is 74 + 33 + 23 = 130. A programmer could write that calculation in a familiar language and ask a compiler to translate it.
 
-The complication is that a processor stores a fixed amount of information in each number. This study uses unsigned 64-bit numbers, which run from zero to 18,446,744,073,709,551,615. Adding one to the largest value wraps back to zero. That wrap is part of the requested calculation, so a program that merely works for 2 and 3 has not yet shown that it handles the whole interface correctly.
+The complication is that a processor stores a fixed amount of information in each number. With unsigned 64-bit numbers, adding one to 18,446,744,073,709,551,615 wraps back to zero. That wrap can be part of the requested calculation. A program that works for 2 and 3 has not yet shown that it handles the whole numerical interface correctly.
 
-One approach lets the model describe the processor instructions using names such as “multiply” and “return.” An assembler turns those instruction names into bytes and calculates their encodings. This removes a clerical burden while leaving the algorithm to the model. Assembly is the name for that readable instruction language.
+A file-processing tool adds another kind of work. An integer sorter might receive `3 -1 3 0`, recognise four numbers, keep the duplicate 3, and write `-1`, `0`, `3`, `3` in order. It must find where each number begins and ends, store an unknown number of values within its limit, and write digits back out. Someone using that tool needs the complete file handled correctly, including a clear error if a token is invalid.
 
-A second approach asks the model for the bytes themselves. We write them to memory unchanged and check the answer when a processor emulator runs them. There is no assembler in that path. A third approach asks for an entire executable file, including the information Linux needs to load it and the instructions for reading inputs and writing the answer. ELF is the executable file format used for this test.
+There are three practical routes to an executable. The model can write C source and let a compiler translate it. It can choose processor instructions using readable names and let an assembler encode those instructions, then let a linker construct the file. Or it can return every executable byte directly. The last route carries the work of encoding instructions and arranging the file itself. Assembly is the name for the readable instruction language.
 
-These are different amounts of work. A working function proves that generated instruction bytes can calculate an answer under a supplied calling convention. A working ELF file also proves that the model can put instructions into a file the Linux loader accepts. Neither result establishes that the model can produce a large application, make it portable, or improve on an optimising compiler.
+An executable also contains information for the operating system: where to load the program and which instruction to start with. ELF is the executable file format used here. The model's direct response must include that information as well as the program logic. Converting its hexadecimal text into bytes is the only preparation allowed on that route; no missing header or instruction is added.
 
-The question is therefore narrow: can one current coding model produce correct raw functions and complete executable files for two small tasks, on its first attempt, without using generation tools? The assembly version supplies a control for the same calculations, and the saved usage answers a second practical question: how many tokens did those attempts actually take?
-
+The question is how far this works on five small but different tasks: two numerical calculations and three tools with variable-length input. The file tools are an integer sorter, a binary run-length compressor and an account-total summariser. Within each file task, all three routes must satisfy the same input, output and error contract. Hidden inputs check the result; saved usage records show what generation actually cost.
 ## Study summary
 
-GPT-6.1 Sol produced all six requested programs correctly: two raw functions, two complete ELF files, and two assembly controls. Each program passed all 128 hidden input pairs. The complete executable files were 192 and 224 bytes and ran through the actual Linux loader in a local container, with every byte supplied by the model. No compiler, assembler, generated header or wrapper was added to either ELF response.
+GPT-6.1 Sol produced 9 fully correct first attempts out of nine complete file-processing programs. Each was checked on 128 hidden files with exact expected output bytes and exit status. There were 0 unreadable or unbuildable/unloadable artifacts. Across all five tasks, 15 of fifteen first attempts passed their whole test set, including the six original numerical artifacts. Those original artifacts include four callable functions and two complete executables, so their interfaces are shown separately in the results.
 
-There were zero unreadable replies, zero execution failures and zero wrong answers. Correctness means the exact requested integer result on all hidden inputs, plus a successful return for functions or exactly eight output bytes and exit status zero for executables. The all-attempt and readable-only scores are both six of six. This is a ceiling: no task separates the formats, and these two familiar algorithms cannot rank methods or establish reliability on larger software.
+Direct ELF passed 3/3 programs across the three file tasks; among readable artifacts it passed 3/3. NASM + linker passed 3/3 programs across the three file tasks; among readable artifacts it passed 3/3. C + compiler passed 3/3 programs across the three file tasks; among readable artifacts it passed 3/3.
 
-The six calls used 43,327 input tokens and 4,903 output tokens. The CLI identifies 4,311 of those output tokens as reasoning and 592 as final artifacts. Their standard API equivalent is US$0.124254, including reported input-cache reads. This is a conversion from measured tokens, not an observed subscription invoice. The evidence supports a small existence claim: direct executable generation already works for these cases. It does not test the stronger claim that direct binaries will replace normal software development or outperform compilers.
+The 1,920 comparisons evaluate fifteen generated programs, with one generation per slot. The numerical artifacts and all three file tasks are at a correctness ceiling: no case separates the routes. One candidate per slot cannot establish a model's general reliability or a stable ranking of workflows. C and assembly use different external assistance from direct bytes, and C may use a runtime library. No execution-speed or compiler-efficiency claim is tested.
+
+The fifteen calls report 109,522 input tokens and 50,189 output tokens, including 38,965 reasoning tokens. Their recorded standard API equivalent is US$0.698073; actual subscription charges are unavailable. All calls have saved usage records. The result supports the task-specific conclusions below, with exact returned artifacts available for inspection.
+
+Excluding unreadable artifacts does not change the observed ordering of the three file-program routes. This is an ordering of these candidates only, with three tasks per route.
 
 ## Contents
 
@@ -30,129 +33,157 @@ The six calls used 43,327 input tokens and 4,903 output tokens. The CLI identifi
 - [2. Data and exact answers](#2-data-and-exact-answers)
 - [3. Three ways to supply a program](#3-three-ways-to-supply-a-program)
 - [4. From a response to a checked answer](#4-from-a-response-to-a-checked-answer)
-- [5. Correctness and executable files](#5-correctness-and-executable-files)
+- [5. Correctness across tasks](#5-correctness-across-tasks)
 - [6. Token usage and cost](#6-token-usage-and-cost)
-- [7. Error analysis and boundary cases](#7-error-analysis-and-boundary-cases)
+- [7. Boundary cases and errors](#7-boundary-cases-and-errors)
 - [8. What this result supports](#8-what-this-result-supports)
 - [9. Reproduction and saved evidence](#9-reproduction-and-saved-evidence)
 - [10. Future work and further reading](#10-future-work-and-further-reading)
 
 ```mermaid
 flowchart TD
-    spec["2 task specifications<br/>affine arithmetic and GCD"] --> prompts["6 frozen requests<br/>2 tasks x 3 formats"]
-    inputs["128 hidden input pairs per task<br/>256 labelled task cases"] --> gold["Exact Python answers<br/>256 expected integers"]
-    prompts --> calls["GPT-6.1 Sol via codex exec<br/>6 independent first attempts"]
-    calls --> cache["6 immutable cached responses<br/>raw events and usage"]
-    cache --> raw["2 raw hex responses<br/>decode bytes only"]
-    cache --> elf["2 complete ELF hex responses<br/>decode bytes only"]
-    cache --> asm["2 assembly responses<br/>Keystone encodes instructions"]
-    raw --> emu["Unicorn CPU emulator<br/>4 functions x 128 inputs"]
-    asm --> emu
-    elf --> linux["Linux loader in Docker<br/>2 executables x 128 inputs"]
-    emu --> score["768 exact comparisons<br/>plus format and execution checks"]
-    linux --> score
+    specs["5 task specifications"] --> requests["15 frozen requests<br/>one first attempt per slot"]
+    inputs["640 labelled hidden cases<br/>128 per task"] --> gold["Exact Python answers<br/>integers or output bytes + exit"]
+    requests --> model["GPT-6.1 Sol via codex exec<br/>high effort, no observed tools"]
+    model --> cache["15 cached responses<br/>raw events and usage"]
+    cache --> direct["5 whole ELF byte responses<br/>hex decoding only"]
+    cache --> fn["4 numerical functions<br/>2 raw + 2 assembled"]
+    cache --> nasm["3 complete NASM programs<br/>assemble + link"]
+    cache --> c["3 complete C programs<br/>compile + link"]
+    direct --> native["11 executable attempts<br/>Linux loader in Docker"]
+    nasm --> native
+    c --> native
+    fn --> emu["4 functions<br/>CPU emulator"]
+    native --> score["1920 planned case comparisons<br/>format, build, load and task checks"]
+    emu --> score
     gold --> score
-    score --> report["6 program scores<br/>token and cost tables, figures"]
+    score --> report["Scores, boundary examples<br/>usage, cost and limitations"]
 ```
 
-One measured example is `affine-004`, with inputs 6 and 9. Its specification goes to the model, but its input values stay with the evaluator. The returned raw bytes execute with those numbers in the specified registers. The evaluator compares the resulting 344 with its independently computed 344. The same pair is also tested through the complete file's standard input and the assembled control, so those three observations concern the same calculation. The 768 comparisons are repeated tests of six programs, not 768 independently generated programs.
+For `sorter-002`, the evaluator keeps the input `3 -1 3 0` out of the model request. Each generated program receives that file only when it runs. The evaluator expects four output lines, `-1`, `0`, `3`, `3`, and exit zero. Assembly and C go through their declared build tools; direct bytes receive no added code. This gives three observations of the same file-processing contract. An artifact rejected before execution still fails its 128 planned comparisons and is reported in its own failure category.
 
 <a id="1-setup-and-scope"></a>
 
 ## 1. Setup and scope
 
-This experiment tests one model in three output formats. Choosing one model keeps the initial collection small enough to measure usage before designing a broader study. It also means there is no evidence here about which provider or model is better at this task. High reasoning effort is fixed across all six requests; there is no effort sweep or instruction tuning.
+This experiment tests one model on five tasks and distinguishes callable functions from complete executable programs. Choosing one model keeps the initial collection small enough to measure usage before designing a broader study. It also means there is no evidence here about which provider or model is better at this task. High reasoning effort is fixed across all fifteen requests; there is no effort sweep or instruction tuning.
 
 | Model | Pinned identifier and revision visibility | Provider and call route | Published size and precision | Output settings | Why included |
 |---|---|---|---|---|---|
-| GPT-6.1 Sol | `gpt-6.1-sol`; CLI 0.160.1; an immutable dated weight snapshot is not exposed by this route | OpenAI, `codex exec`, fresh ephemeral session per request | Not published | High reasoning effort; explicit default service tier; supported default sampling; neutral base instruction; tools disabled and observed events audited | One current coding model for an initial existence and usage test |
+| GPT-6.1 Sol | `gpt-6.1-sol`; CLI 0.160.1; an immutable dated weight snapshot is not exposed by this route | OpenAI, `codex exec`, fresh ephemeral session per request | Not published | High reasoning effort; explicit default service tier; supported default sampling; neutral base instruction; tools disabled and observed events audited | One current coding model for an existence, complexity and usage test |
 
 The model identifier is fixed, but that is weaker than pinning an immutable weight revision. A future fresh run could receive different model weights under the same identifier. Saved responses preserve the actual evidence for this run. The official model page gives a knowledge cutoff of April 30, 2026; the evaluation inputs were generated on November 3, 2026. [Model documentation](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
-The simpler alternative would ask for a familiar source language and run its compiler. That would test source generation and the compiler together. Assembly is a closer control because the model already chooses processor instructions while the assembler handles encodings and label offsets. It is still a different workflow from a model writing all file bytes itself. This pilot measures whether each workflow can succeed, rather than claiming that the three require the same work.
-
-Before collection, the request list, task rules, inputs, primary score and parsing policy were fixed in [the protocol](data/PROTOCOL.md). One first attempt occupies each slot. There is no feedback, correction conversation or selection of the best of several candidates. A fresh session does not see another artifact, the hidden cases, the expected answers or a test result. The following setup defines every helper inside the notebook and defaults to replay without model calls.
+Each task group had its requests, input cases, primary score and parsing policy fixed before its calls. The three file tasks were selected after the numerical tasks reached a ceiling; [the protocol history](data/PROTOCOL.md) records that decision. One first attempt occupies each slot. There is no feedback, correction conversation or selection of the best of several candidates. A fresh session does not see another artifact, the hidden cases, the expected answers or a test result. The following setup defines every helper inside the notebook and defaults to replay without model calls.
 
 <a id="2-data-and-exact-answers"></a>
 
 ## 2. Data and exact answers
 
-The tasks use integers so correctness has an exact meaning. There is no model judge and no subjective assessment of style. For affine arithmetic, Python computes `37*x + 11*y + 23` and keeps the low 64 bits. For greatest common divisor, Python's `math.gcd` supplies the expected answer, including the explicitly stated zero cases. The model receives the same mathematical rule and one small example, rather than implementation source or answers for the hidden inputs.
+The tasks have exact answers, so no language-model judge grades their behaviour. Python computes the requested numerical results or exact expected stdout bytes and exit status. The model receives a mathematical or file-format specification and a small example, never the hidden case list or reference implementation. All evaluation instances were generated in Python after the documented model cutoff. Familiar algorithms and file-processing patterns may still have appeared in training.
 
-Greatest common divisor, shortened to GCD below, means the largest positive integer that divides both inputs without a remainder. For 48 and 18, both are divisible by 6 and no larger integer divides both, so the answer is 6. A useful program must also cope with one input being zero and with numbers above the largest signed 64-bit value. Unsigned means that every bit contributes to a non-negative value; treating its top bit as a minus sign changes the task.
+| Task | Contract | Hidden cases |
+|---|---|---|
+| Affine arithmetic | Return `(37*x + 11*y + 23) mod 2^64` for two unsigned integers | 128 |
+| Greatest common divisor | Return the largest common divisor, with `gcd(0,0)=0` | 128 |
+| Integer sorter | Read up to 128 signed 32-bit decimal numbers; print ascending canonical values | 128 |
+| Run-length compressor | Read up to 4096 arbitrary bytes; emit binary count/value pairs | 128 |
+| Transaction totals | Read restricted integer CSV; print account totals in numeric ID order | 128 |
 
-| Task | Input domain | Requested result | Hidden cases |
-|---|---|---|---:|
-| Affine arithmetic | Two unsigned 64-bit integers | `(37*x + 11*y + 23) mod 2^64` | 128 |
-| GCD | Two unsigned 64-bit integers | Greatest common divisor, with `gcd(0,0)=0` | 128 |
 
-The two tasks deliberately cover different instruction patterns. Affine arithmetic can be a short straight sequence. GCD normally includes a repeated remainder operation, a conditional branch and an exit case. Passing both is more informative than returning a constant or printing a fixed greeting, because the answer changes with hidden input. It remains a tiny sample of software: neither task allocates objects, parses variable-length text, uses a library or maintains state between invocations.
+The numerical tasks use 16 boundary pairs, 96 random pairs and 16 pairs with constructed common factors. Greatest common divisor, shortened to GCD, means the largest positive integer dividing both inputs without a remainder. For 48 and 18 it is 6. Unsigned 64-bit values include numbers larger than the largest positive signed value, so the cases also check full-width handling and explicit zero conventions. These two tasks share input pairs but have different expected answers.
 
-Each task receives the same 128 input pairs. Sixteen explicit boundary pairs include zero, equal values, the largest unsigned number, powers of two, ordinary examples and values on opposite sides of the signed boundary. Ninety-six pairs are generated across the unsigned 64-bit range with a fixed Python seed. Sixteen further pairs share a generated factor. These last pairs help prevent a GCD test consisting almost entirely of random coprime inputs whose expected answer is one.
+The sorter accepts only space, tab and LF as separators. Tokens can have a minus sign and leading zeroes, but cannot have a plus sign or stray characters. Every value must fit a signed 32-bit integer. Empty or whitespace-only input produces empty output. Valid output has one canonical decimal value per line, with duplicates retained. Invalid input must produce exactly `ERR` followed by LF and exit 2, with no partial sorted output. This makes parsing and error handling part of correctness alongside the ordering algorithm.
 
-| Input group | Pairs per task | Why it is present |
-|---|---:|---|
-| Explicit boundaries | 16 | Exercise zero, overflow, full-width values and ordinary arithmetic |
-| Uniform random bit patterns | 96 | Check different unseen numerical inputs without hand-selecting outcomes |
-| Constructed common factors | 16 | Make the GCD return values larger than one on a planned group |
+The compressor uses run-length encoding. It replaces consecutive equal bytes with a count and that byte. For ASCII `AAAABB`, the exact output is hex `04 41 02 42`: four A bytes and two B bytes. Counts occupy one byte and run from 1 to 255. A run of 256 A bytes therefore becomes `ff 41 01 41`, not a zero count or a truncated 255. Input is binary, so zero, 255 and LF are ordinary byte values. Empty input produces empty output. No decoder, file header or output length prefix is requested.
 
-These counts describe test coverage, not a representative probability distribution of real programs. The common-factor group is also used for affine arithmetic to keep pairing simple, although its special mathematical structure is relevant mainly to GCD. The exact pairs, group labels, item IDs, creation date, generator seed, ground truth and provenance are in [tasks.json](data/tasks.json). The next step loads that frozen file and verifies its counts; it does not ask another model to create evaluation data.
+Transaction input begins with exactly `account,amount_cents` followed by LF. Each subsequent row contains an account from 0 through 63 and an integer amount between minus and plus one billion cents. There are at most 128 rows. The last row's LF is optional. Amounts are added per account and output is sorted by account ID, with one line for each account that appeared, including a total of zero. This is a restricted integer CSV task: quotes, blank records, CR and extra fields are invalid. It does not claim support for general CSV dialects or floating-point money.
 
-The inputs are fresh code-generated instances, but multiplication, wraparound and the Euclidean algorithm are familiar concepts that may have appeared in training. Fresh vectors prevent a literal lookup of this saved test set. They do not prove that the model invented an algorithm or can solve an unfamiliar programming problem.
+| File task | Valid files | Malformed files | Boundary coverage |
+|---|---|---|---|
+| Sorter | 112 | 16 | Signed limits, duplicate values, leading zeroes, empty input, excess count |
+| Compressor | 128 | 0 | Binary byte values, 254/255/256 and 510/511 runs, 4096-byte inputs |
+| Transactions | 112 | 16 | Header-only input, repeated IDs, zero totals, 128 rows, malformed fields |
+
+
+There are 16 planned boundary inputs per file task. The sorter and transactions then have 16 malformed inputs and 96 generated valid files; the compressor has 112 further generated binary inputs. These groups deliberately probe specific contracts rather than approximate the distribution of production files. The compressor has no malformed cases because every byte string within the length bound is valid. The exact inputs, expected outputs, exit statuses, group labels and stable IDs are saved in [numerical tasks](data/tasks.json) and [file cases](data/streams_v2/cases.json).
+
+The byte oracles validate entire output streams. Correct numbers with extra spaces, missing newlines, wrong record order, a missing zero-total account, unexpected stderr or the wrong exit status fail the contract. This prevents an evaluator from silently rescuing a near match using a permissive parser. It also means the study can identify formatting mistakes without calling them failures of the underlying sorting or summation algorithm.
 
 <a id="3-three-ways-to-supply-a-program"></a>
 
 ## 3. Three ways to supply a program
 
-The raw-function condition asks for hexadecimal characters representing machine-code bytes. Two hex digits specify one byte: `c3`, for example, is the return instruction used at the end of the saved raw functions. Hexadecimal is a readable transport encoding; converting two digits to a byte performs no instruction selection, compilation, linking or offset repair. Spaces and newlines can be discarded without changing the bytes.
+All three file-processing routes receive the same task contract and must produce a complete executable with the same observable behaviour. Their external assistance differs explicitly. The model does not run tools while generating any response; the evaluator runs build tools only after the assembly and C responses have been saved.
 
-The function interface tells the model where the two inputs arrive and where to leave the answer. RDI and RSI are processor registers, small named storage locations inside the processor. RAX is the return-value register. A calling convention is the agreement about those locations and which other registers a function must preserve. This study supplies the System V AMD64 convention and a fixed function start address. It is not asking the model to infer an unspecified interface. [ABI project](https://gitlab.com/x86-psABIs/x86-64-ABI).
-
-The assembly control has the same interface and byte-size limit, but asks for instruction names and labels. Keystone encodes those instructions after the model finishes. This is the only condition that uses an assembler. It tells us whether the model can select a correct processor-level algorithm when it can delegate the byte encodings. It is not a high-level language or an optimising C compiler baseline. [Keystone's Python example](https://github.com/keystone-engine/keystone/blob/master/bindings/python/sample.py).
-
-The complete-file condition adds startup and input/output work. The model must supply an ELF header identifying the executable, a program header telling Linux what to load, instructions for obtaining two inputs, the calculation, output instructions and an exit. The evaluator converts hex to bytes, marks the file executable inside the test container and launches it. No ELF bytes are generated by the evaluator for this condition. The ELF specifications explain how file headers and loadable segments tell a loader where program content belongs. [ELF headers](https://gabi.xinuos.com/elf/02-eheader.html), [program loading](https://gabi.xinuos.com/elf/07-pheader.html).
-
-| Condition | Model supplies | Evaluator supplies before execution | Where correctness is checked |
+| Route | Model supplies | Evaluator supplies | Interface |
 |---|---|---|---|
-| Raw bytes | Entire function as hex | Hex decoding, registers, stack and a return address | x86-64 CPU emulator |
-| Complete ELF | Entire executable as hex | Hex decoding, executable permission and input bytes | Actual Linux loader and process |
-| Assembly control | Function instructions and labels | Keystone assembly, registers, stack and a return address | Same x86-64 CPU emulator |
+| Direct ELF | Every file byte as hexadecimal | Whitespace-only hex decoding and executable permission | Whole program |
+| NASM + linker | Instructions, labels, sections and startup source | NASM encodes instructions; GNU ld builds ELF | Whole program |
+| C + compiler | Complete C11 source with main | GCC at -O2 and normal linking; libc available | Whole program |
+| Raw numerical function | Actual instruction bytes as hexadecimal | Argument registers, stack and return address | Callable function |
+| Assembly numerical function | Instruction names and labels | Keystone encoding plus the same function harness | Callable function |
 
-The complete-file requests therefore face a larger interface. Their token counts cannot be interpreted as the isolated cost of “writing binary rather than assembly.” They include headers and file input/output that function requests do not perform. Keeping that distinction visible is essential to understanding both the success and the generation-cost comparison.
 
-The full model-call graph has no chained reasoning agent, retry or hidden repair stage. Every request is an independent terminal call. Calls run sequentially, and the evaluator waits for one response before starting the next; later prompts do not change when earlier responses arrive.
+Hexadecimal is a transport encoding: two digits specify a byte. Converting `c3` into a byte does not select an instruction, calculate a branch target or fill in a missing header. Direct file responses must contain the whole ELF header, program headers, machine code and any initialised data. Linux uses those headers to locate loadable regions and an entry point. [ELF program-loading specification](https://gabi.xinuos.com/elf/07-pheader.html).
+
+The assembly-file route uses `nasm -f elf64`, then `ld -m elf_x86_64 -e _start`. The model supplies `_start` and its input/output code. NASM resolves instruction encodings and labels, and the linker constructs the executable. The C route uses `gcc -std=c11 -O2 -fno-pie -no-pie`. C may use libc, while direct and NASM programs use read, write and exit system calls. The saved C sorter calls qsort, so its workflow delegates sorting to a library as well as delegating compilation. Both differences are part of the practical workflows being compared. [NASM output formats](https://www.nasm.us/doc/nasm09.html), [GCC optimisation options](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html).
 
 ```mermaid
 flowchart LR
-    req["One frozen task + format request"] --> call["GPT-6.1 Sol<br/>codex exec, high effort<br/>returns artifact text and usage"]
-    call --> cache["Save one response<br/>no feedback or retry"]
-    cache --> next["Wait complete<br/>start next independent request"]
-    cache --> test["After collection<br/>decode or assemble, then test"]
+    request["One task + output route"] --> call["GPT-6.1 Sol<br/>codex exec, high effort<br/>returns artifact + usage"]
+    call --> cache["Save original response<br/>no feedback or repair"]
+    cache --> wait["Wait for completion<br/>next independent request"]
+    cache --> evaluate["After collection<br/>decode/build and execute"]
 ```
 
-The exact raw-function affine request is reproduced below. The other five full requests, including all ELF interface requirements, are in [requests.json](data/requests.json). This excerpt is the actual task text, not a rewritten explanation.
+Fresh sessions run sequentially. No later request sees a previous answer or score. Supported switches disable optional tools; preflight excludes repository instructions, while mandatory CLI context remains. The event audit checks actual tool use rather than claiming a provably empty advertised catalogue. Exact requests and raw events are retained in the numerical and file-task cache directories.
+
+### How the study got here
+
+The numerical tasks produced six correct artifacts and a ceiling, motivating three file tools with parsing, buffers and state. The file routes use matching executable contracts. Each group was fixed before its calls; the complexity progression was chosen after the numerical results. [Dated protocol history](data/PROTOCOL.md).
+
+
+### An exact file-program request and raw response
+
+This is the complete task request for the direct compressor. It contains the same example and route constraints the model received; none of the 128 hidden files is included.
+
+<details>
+<summary>Exact compressor request</summary>
 
 ```text
-Produce a correct x86-64 implementation of this task.
-Given unsigned 64-bit integers x and y, return (37*x + 11*y + 23) modulo 2^64. Overflow wraps. Example: x=2, y=3 returns 130.
-No tools, execution, compiler, assembler, external lookup, or testing. Work out the answer yourself. One final artifact only.
-Interface: System V AMD64 leaf function. x is in RDI, y in RSI; return the unsigned 64-bit answer in RAX using RET. Preserve RBX, RBP and R12-R15 if used. Function starts at address 0x100000. No syscalls, external calls, absolute addresses, or data outside its code and ordinary stack. Use baseline integer x86-64 instructions.
-Return only a hexadecimal string encoding the actual function machine-code bytes, at most 512 bytes. Whitespace is allowed. No prefixes, fences, assembly, comments, explanations or placeholders.
+Implement this complete Linux x86-64 command-line program.
+Read stdin as arbitrary binary bytes, length 0 through 4096 inclusive. Run-length encode it as binary pairs [count,value]. Count is one unsigned byte 1 through 255. Each maximal run of equal bytes must be emitted as zero or more [255,value] pairs followed by one [remaining,value] pair if a remainder exists. Do not emit zero-count pairs. Empty input produces empty output. Write ONLY these pairs, no header or length prefix, and exit 0. All byte values 0 through 255 are ordinary input data. Example ASCII 'AAAABB' produces hex 04 41 02 42. A run of 256 'A' bytes produces ff 41 01 41. The maximum possible output length is 8192 bytes. All inputs in the stated length range are valid.
+The test uses a regular stdin file and EOF; each process handles one file. Stderr must always be empty. No files, network, external commands, testing, compiler, assembler or other tool use during generation. One final artifact only; no Markdown fences, explanations or placeholders.
+Return the ENTIRE executable file as a plain hexadecimal string, whitespace allowed, at most 8192 bytes after decoding. Supply every ELF64 header, program header, instruction and any initialised data byte yourself. No wrapper, linker, assembler, fixup or added header will be provided. Use ET_EXEC, baseline integer x86-64, no interpreter or dynamic libraries. Linux read=0, write=1, exit=60; use only these syscalls. Use the stack or your own loadable writable segment for working buffers. A normal base such as 0x400000 and omitted section headers are allowed. All process-entry registers except RSP are unspecified. Return actual hex bytes only, including all zeroes.
 ```
 
-The model also receives the neutral instruction “Solve the supplied programming task. Return only the requested artifact. Do not call tools.” Supported CLI feature switches disable shell execution, search, agents, plugins and other optional facilities. A no-generation preflight confirms that repository instructions do not enter the isolated working directory. The CLI still injects mandatory runtime context, and its JSON event stream does not prove an empty advertised tool catalogue. The defensible observation is narrower: all six saved responses contain zero observed tool calls, and none of the returned artifacts was repaired after generation.
+</details>
+
+The response excerpt below is copied from the saved final response. It shows the beginning of the returned file; the complete unchanged text is in its request-hash cache row under `data/streams_v2/cache/`.
+
+```text
+7f454c46020101000000000000000000
+02003e00010000007800400000000000
+40000000000000000000000000000000
+00000000400038000100000000000000
+01000000050000000000000000000000
+00004000000000000000400000000000
+28010000000000002801000000000000
+001000000
+```
+
+Whitespace-only decoding produces 296 bytes. The first four bytes are `7f 45 4c 46`; the ELF identification and header fields can be inspected before execution. The Linux loader and hidden-output checks below determine whether those bytes form a usable program. The excerpt is an input to validation, while the measured case scores supply its behavioural evidence.
 
 <a id="4-from-a-response-to-a-checked-answer"></a>
 
 ## 4. From a response to a checked answer
 
-The scorer separates the ability to deliver a readable artifact from the ability to compute the answer. A hex response is readable only if it contains hex digits and whitespace, has an even number of digits, and fits the byte limit. Assembly must be accepted by the designated assembler without explanations or fenced code. A failed parser would be reported as unreadable. All six replies passed their original parser, so no parser change or response repair was needed.
-
-A readable artifact can still be wrong. The operating system may reject a malformed executable, a function may never return, or an apparently valid program may compute the wrong integer. The saved results distinguish execution failures from numerical mismatches. This avoids interpreting a header mistake as evidence of weak arithmetic, while still counting that executable as a failed program.
+The scorer first checks delivery: plain hex with an even digit count and the permitted length, or source accepted by the designated build tools. Fenced explanations or malformed artifacts are unreadable. Builds and loader failures remain separate from programs that run incorrectly. The original parser is used throughout; response bytes and source are never repaired.
 
 For a raw function, the evaluator maps its unchanged bytes and a stack in Unicorn, sets the two argument registers, and supplies a return address leading to a stopping point. A finite instruction allowance and timeout stop loops that do not finish. Replay also checks that the stack and required preserved registers are restored, and starts other scratch registers with nonzero values. This helps expose a program that accidentally assumes unrelated registers contain zero. Unicorn emulates CPU instructions; it does not supply a compiler or a Linux process to the function. [Unicorn tutorial](https://www.unicorn-engine.org/docs/tutorial.html).
 
-For a complete ELF, the evaluator writes the exact returned bytes inside an isolated Linux container and launches the file through Linux. The 16-byte input file contains two little-endian unsigned integers: the least significant byte comes first. Output must be exactly eight bytes in the same representation, and the process must exit successfully. Using a regular input file fixes the input delivery assumption stated in the prompt. This study does not test slow streaming input or general handling of operating-system errors.
+For a complete executable, the evaluator launches it through Linux in a local restricted container. The numerical programs read 16 bytes and return eight, while file programs receive their complete bounded stdin file and EOF. Expected stdout, exit status and empty stderr must all match. The file-task container mounts only the runner and a job with input cases and source/bytes; it never mounts expected answers or the repository. It has no network and uses an unprivileged account, a read-only root and explicit process, memory, output and time limits. Regular-file input does not establish correct handling of slow pipes or operating-system errors.
 
 ### A measured case from request to score
 
@@ -175,188 +206,327 @@ Here the address-calculation instruction `lea` is being used for arithmetic. It 
 
 If a program passed 127 of 128 inputs, its input accuracy would be about 99.2%, but its program-pass score would still be a failure. A launchable executable must satisfy the whole tested contract, not just usually return a plausible number. The primary score is the number of programs passing every input. The input counts are supporting evidence about coverage and failures, not independent samples of code generation.
 
-Trusted harness checks exercise an addition function, a deliberately wrong return, an infinite loop, a preserved-register violation, a hand-built valid addition ELF and a non-ELF file. These controls check that the evaluator can see correct execution and reject specific invalid behaviour. They are created by the evaluator, never sent to the model and never counted as model successes. The exact controls and their results are retained in the notebook and [harness_checks.json](data/harness_checks.json).
+The file-task evaluator first checks response syntax, then assembly/compilation or direct hex decoding, then actual loading and execution. An artifact rejected at one of these pre-execution stages is unreadable for the readable-only score. A loaded program that crashes, times out or emits the wrong stdout, stderr or exit code fails its cases. Valid-case and malformed-case counts are retained separately so ordinary input handling cannot conceal a missing error path. Evaluator-container failures raise an exception instead of counting against the model.
 
-<a id="5-correctness-and-executable-files"></a>
+The file harness was checked before generation using binary echo programs through GCC and NASM/ld, exact oracle examples and an invalid ELF file. These controls are evaluator code, excluded from model scores and never sent to the model. The fixed toolchain image, package versions, source commands and resource settings are in [toolchain.json](data/streams_v2/toolchain.json) and [the file-task protocol](data/streams_v2/PROTOCOL.md).
 
-## 5. Correctness and executable files
+The emulator keeps its 10,000-instruction limit and uses a 0.5-second wall allowance. Cache replay exposed a cold-start false timeout under the original 20 ms allowance; the wider timing margin changes no response or task rule. The native file tests use their separately fixed limits. [Timing amendment](data/PROTOCOL.md).
 
-Compare the three formats within each task before comparing the tasks. Every bar in the correctness panel counts hidden inputs answered exactly, out of 128. The six bars represent six generated programs. The adjacent panel shows reported output tokens for the same artifacts. Colours identify the formats, and the labels identify both task and format so the comparison does not depend on colour alone. There are no confidence intervals because these are the complete observed results of two selected task specifications, not a random sample of programming tasks.
+<a id="5-correctness-across-tasks"></a>
 
-![All six programs answered 128 of 128 hidden inputs correctly; complete ELF generation used more output tokens than either function format.](figures/pilot_results.png)
+## 5. Correctness across tasks
 
-All six programs passed all 128 inputs, so all six correctness bars reach 128. The two complete ELF files passed 256 native process invocations combined. The four raw or assembled functions passed 512 emulator invocations. These are 768 exact comparisons of six generated programs. They establish correctness on this frozen suite, not a 768-program success rate.
+Read the heatmap by row. Every filled cell represents one generated program tested on 128 cases, and its annotation gives the number of correct cases. Grey cells marked “not run” are deliberately absent conditions. Numerical functions and full programs have different columns, so the small function results cannot be mistaken for complete-file controls. Colour encodes the fraction correct; labels give the exact counts without relying on colour.
 
-| Task | Format | Bytes | Hidden inputs correct | Unreadable replies | Execution failures | Numerical errors |
-|---|---|---:|---:|---:|---:|---:|
-| affine | Raw bytes | 14 | 128/128 | 0 | 0 | 0 |
-| affine | Complete ELF | 192 | 128/128 | 0 | 0 | 0 |
-| affine | Assembly control | 14 | 128/128 | 0 | 0 | 0 |
-| gcd | Raw bytes | 28 | 128/128 | 0 | 0 | 0 |
-| gcd | Complete ELF | 224 | 128/128 | 0 | 0 | 0 |
-| gcd | Assembly control | 25 | 128/128 | 0 | 0 | 0 |
+![Exact hidden-case scores for fifteen programs across five tasks, with callable functions separated from complete executables.](figures/task_correctness.png)
 
-The all-attempt score is six passing programs out of six. Among readable replies it is also six out of six, because there were no unreadable replies. No item separates the formats: all three methods pass every one of the same 256 labelled task cases. The experiment is at a correctness ceiling and cannot distinguish their reliability. The byte lengths describe artifact size; they do not measure execution speed or prove that one instruction sequence is better.
+| Task | Route | Bytes | Cases correct | Artifact stage | Execution failures | Wrong outputs |
+|---|---|---|---|---|---|---|
+| Affine arithmetic | Raw function | 14 | 128/128 | readable | 0 | 0 |
+| Affine arithmetic | Direct ELF | 192 | 128/128 | readable | 0 | 0 |
+| Affine arithmetic | Assembly function | 14 | 128/128 | readable | 0 | 0 |
+| GCD | Raw function | 28 | 128/128 | readable | 0 | 0 |
+| GCD | Direct ELF | 224 | 128/128 | readable | 0 | 0 |
+| GCD | Assembly function | 25 | 128/128 | readable | 0 | 0 |
+| Integer sorter | Direct ELF | 1348 | 128/128 | readable | 0 | 0 |
+| Integer sorter | NASM + linker | 9920 | 128/128 | readable | 0 | 0 |
+| Integer sorter | C + compiler | 16016 | 128/128 | readable | 0 | 0 |
+| Run-length compressor | Direct ELF | 296 | 128/128 | readable | 0 | 0 |
+| Run-length compressor | NASM + linker | 5232 | 128/128 | readable | 0 | 0 |
+| Run-length compressor | C + compiler | 15888 | 128/128 | readable | 0 | 0 |
+| Transaction totals | Direct ELF | 1152 | 128/128 | readable | 0 | 0 |
+| Transaction totals | NASM + linker | 10144 | 128/128 | readable | 0 | 0 |
+| Transaction totals | C + compiler | 16048 | 128/128 | readable | 0 | 0 |
 
-The strongest evidence for direct binary generation is the complete-file condition. The arithmetic response is a 192-byte ELF and the GCD response is a 224-byte ELF. Both identify machine type 62, Linux's x86-64 ELF machine identifier, use one 56-byte program-header record after the 64-byte ELF header, and begin execution at `0x400078`. That address is 120 bytes after a load base of `0x400000`. Their returned file content, decoded from hex without any added bytes, is in [artifacts.json](data/artifacts.json).
 
-Those first 120 bytes are file and segment metadata. The rest includes program startup, input, calculation, output and exit. This explains why comparing a 192-byte complete file with a 14-byte raw function does not measure waste introduced by the model. They implement different interfaces. A raw function has an evaluator provide inputs and collect a return value. The ELF must arrange the equivalent work itself before Linux can observe an answer.
+Across all tasks, 15/15 programs passed all 128 cases. The matched file-processing comparison gives 9/9 passing programs. The original numerical conditions remain six of six, a ceiling on which no case separates the routes. A program that passes most files still fails the primary all-case score. This strict rule matters for a tool that could silently mishandle a malformed record or corrupt one unusually long run.
 
-The assembly control for arithmetic encodes to 14 bytes, the same length as the raw answer, but uses a different temporary register. The GCD control encodes to 25 bytes, compared with the 28-byte raw answer. The raw GCD copies its second argument into another register before looping; the control can loop using the argument register. This is an observed code-size difference on one pair, not an optimisation finding. The complete files also differ in input/output handling, so their lengths include more than the arithmetic algorithm.
+Integer sorter: Direct ELF answers 128/128 correctly and passes the whole task; NASM + linker answers 128/128 correctly and passes the whole task; C + compiler answers 128/128 correctly and passes the whole task.
+
+Run-length compressor: Direct ELF answers 128/128 correctly and passes the whole task; NASM + linker answers 128/128 correctly and passes the whole task; C + compiler answers 128/128 correctly and passes the whole task.
+
+Transaction totals: Direct ELF answers 128/128 correctly and passes the whole task; NASM + linker answers 128/128 correctly and passes the whole task; C + compiler answers 128/128 correctly and passes the whole task.
+
+Artifact stage distinguishes response, build and loader failures. Execution failures are crashes or timeouts. Wrong outputs include stdout, stderr or exit-status mismatches after a completed run. None occurred here; the categories remain in the saved scores so future failures can be interpreted correctly.
+
+The valid/malformed table makes a second distinction. Ordinary successful inputs and requested error handling both count in the complete program contract. RLE has no malformed inputs within the permitted size range; every byte value is allowed.
+
+| Task | Route | Valid files correct | Malformed files correct |
+|---|---|---|---|
+| Integer sorter | Direct ELF | 112/112 | 16/16 |
+| Integer sorter | NASM + linker | 112/112 | 16/16 |
+| Integer sorter | C + compiler | 112/112 | 16/16 |
+| Run-length compressor | Direct ELF | 128/128 | not applicable |
+| Run-length compressor | NASM + linker | 128/128 | not applicable |
+| Run-length compressor | C + compiler | 128/128 | not applicable |
+| Transaction totals | Direct ELF | 112/112 | 16/16 |
+| Transaction totals | NASM + linker | 112/112 | 16/16 |
+| Transaction totals | C + compiler | 112/112 | 16/16 |
+
+
+The table prevents a high aggregate score from hiding an error path. Each text program has 112 valid files and 16 malformed files, so a program that ignores every invalid case can still answer 87.5% of its files correctly. That would be inadequate for the specified tool. Conversely, a program that returns `ERR` for every input would pass those 16 error cases without doing the main task at all. The full-case score rejects both behaviours.
+
+File sizes are descriptive. C can include runtime startup and dynamic-library references that handwritten ELF files do not. NASM/ld chooses a normal linked layout rather than the compact single-segment layout used by a direct response. Neither smaller files nor lower generation time establishes faster execution. This study measures generation usage and correctness, with no benchmark of the programs' speed.
 
 <a id="6-token-usage-and-cost"></a>
 
 ## 6. Token usage and cost
 
-The original reason to keep the study this small was uncertainty about how much work direct encoding would require. The useful distinction is between the final artifact and the computation used to produce it. The CLI reports total output tokens and a reasoning subset. Subtracting that subset gives the final-artifact token count; adding it to total output again would double-count reasoning.
+Output usage has two parts: the returned artifact text and reported reasoning. The CLI exposes total output tokens and a reasoning subset. Subtracting that subset gives final-artifact tokens; adding it to output again would double-count it. The chart stacks these two parts for each response. Labels name the task and route, and the horizontal axis counts output tokens. A missing usage record is marked as unknown rather than treated as zero generated work.
 
-Before reading the chart, compare the total height with the smaller final-artifact segment. Each bar is one call, with output tokens on the vertical axis. Blue counts reported reasoning and gold counts the remaining output. These are usage records, not a transcript of hidden reasoning or a timing profile of the generated program.
+![Reported output tokens separated into reasoning and final-artifact tokens for each generated program.](figures/generation_usage.png)
 
-![Reasoning accounts for 4,311 of the pilot's 4,903 output tokens; full ELF GCD is the largest call at 2,639 tokens.](figures/reasoning_usage.png)
+| Task | Route | Input | Cached input | Output | Reasoning subset | Seconds | API equivalent USD |
+|---|---|---|---|---|---|---|---|
+| Affine arithmetic | Raw function | 7177 | 0 | 254 | 217 | 9.3 | 0.016894 |
+| Affine arithmetic | Direct ELF | 7277 | 0 | 1112 | 935 | 26.1 | 0.025674 |
+| Affine arithmetic | Assembly function | 7184 | 0 | 168 | 128 | 8.7 | 0.016048 |
+| GCD | Raw function | 7194 | 0 | 496 | 435 | 14.4 | 0.019348 |
+| GCD | Direct ELF | 7294 | 6016 | 2639 | 2430 | 56.3 | 0.029548 |
+| GCD | Assembly function | 7201 | 0 | 234 | 166 | 7.8 | 0.016742 |
+| Integer sorter | Direct ELF | 7394 | 0 | 16408 | 13704 | 333.9 | 0.178868 |
+| Integer sorter | NASM + linker | 7350 | 0 | 2829 | 1552 | 70.9 | 0.042990 |
+| Integer sorter | C + compiler | 7313 | 0 | 1613 | 700 | 36.0 | 0.030756 |
+| Run-length compressor | Direct ELF | 7355 | 0 | 3557 | 3218 | 79.7 | 0.050280 |
+| Run-length compressor | NASM + linker | 7311 | 0 | 903 | 456 | 25.3 | 0.023652 |
+| Run-length compressor | C + compiler | 7274 | 6016 | 520 | 194 | 14.2 | 0.008318 |
+| Transaction totals | Direct ELF | 7441 | 0 | 14592 | 12275 | 295.7 | 0.160802 |
+| Transaction totals | NASM + linker | 7397 | 0 | 3382 | 2039 | 71.2 | 0.048614 |
+| Transaction totals | C + compiler | 7360 | 0 | 1482 | 516 | 35.4 | 0.029540 |
 
-Reasoning accounts for 4,311 of 4,903 output tokens, or 87.9%. The final artifacts account for 592. The complete GCD file uses the most output: 2,639 tokens, including 2,430 reasoning tokens and 209 artifact tokens. The arithmetic assembly control uses the least: 168 total output tokens. These observed values replace the unmeasured assumption that a small request would necessarily need several thousand reasoning tokens.
 
-| Task | Format | Input tokens | Cached input | Output tokens | Reasoning subset | Final artifact tokens | Seconds | API equivalent, USD |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| affine | Raw bytes | 7,177 | 0 | 254 | 217 | 37 | 9.3 | 0.016894 |
-| affine | Complete ELF | 7,277 | 0 | 1,112 | 935 | 177 | 26.1 | 0.025674 |
-| affine | Assembly control | 7,184 | 0 | 168 | 128 | 40 | 8.7 | 0.016048 |
-| gcd | Raw bytes | 7,194 | 0 | 496 | 435 | 61 | 14.4 | 0.019348 |
-| gcd | Complete ELF | 7,294 | 6,016 | 2,639 | 2,430 | 209 | 56.3 | 0.029548 |
-| gcd | Assembly control | 7,201 | 0 | 234 | 166 | 68 | 7.8 | 0.016742 |
+The saved calls report 109,522 input tokens and 50,189 output tokens, of which 38,965 are reasoning. The standard API equivalent for reported usage is US$0.698073. Usage is available for every call. The API equivalent is calculated at US$2 per million uncached input tokens, US$0.10 per million cached input tokens and US$10 per million output tokens. It is not a subscription invoice. [Published model rates](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
 
-The six calls together used 43,327 input tokens, including 6,016 cached tokens, and 4,903 output tokens. Total generation wall time, summed across sequential calls, was 122.7 seconds. It includes service and CLI overhead; it is not the execution time of the generated binaries. There was one cache-reading request and no input cache-write tokens reported. The observations come from one request per slot, so neither a typical latency nor a stable token distribution can be estimated from them.
+The direct sorter alone used 16,408 output tokens, including 13,704 reasoning tokens, and took 333.9 seconds. Its NASM counterpart used 2,829 tokens and its C counterpart 1,613. Thus the tiny numerical programs did not forecast the encoding work of a parser and sorter. This is one observed generation per route, with the same sorter contract; it does not establish a fixed ratio or a per-byte cost law. Generation time includes service and CLI overhead and is unrelated to native execution speed.
 
-The two complete-file requests together use 3,751 output tokens. The two raw functions use 750, and the two assembly controls use 402. In this sample, producing the complete file is the largest generation burden. That comparison bundles the ELF headers, file input/output and direct byte encoding, while the assembly conditions return functions. It cannot identify how much of the difference comes from any one of those additions or predict how that difference scales with file size.
+The first numerical artifacts had only 4,903 total output tokens across six calls. Larger program layout can require more reasoning as well as more artifact text, so scaling a budget from returned byte count alone is unreliable. The larger-task measurements are useful evidence for planning another sample at similar complexity, while their one-attempt design cannot estimate a distribution of usage or a worst-case budget.
 
-The input chart separates uncached and cached input for the same six calls. The horizontal axis counts tokens reported by the CLI, not the number of characters in the visible user prompt. A light segment shows the cached portion of the complete GCD request. No claim about why that single cache hit occurred is needed to compute its price.
+Input usage includes mandatory CLI context beyond the short task specification. Supported feature disables reduce optional context and prevent tool use, but do not remove all platform instructions. Provider cache reads are reported separately and priced accordingly. Actual subscription quota conversion, electricity and local computing cost were not measured. Replay uses the saved responses and incurs no fresh model spend.
 
-![Each call reports about 7,200 input tokens; 6,016 cached tokens occur in the complete GCD request.](figures/input_usage.png)
+<a id="7-boundary-cases-and-errors"></a>
 
-Input usage runs from 7,177 to 7,294 tokens per call even though each task request is short. The no-generation preflight reports mandatory runtime context beyond the supplied task text. This supports treating CLI input overhead as part of a cost forecast, rather than estimating from the visible specification alone. The preflight counts characters by context block, not tokens, so it does not provide an exact token allocation to each source of that overhead.
+## 7. Boundary cases and errors
 
-At the documented standard rates of US$2 per million uncached input tokens, US$0.10 per million cached input tokens and US$10 per million output tokens, the calculation is `(37,311*2 + 6,016*0.10 + 4,903*10) / 1,000,000 = US$0.1242536`. Without the observed input cache read, the same counts would give US$0.135684. The rounded headline is about 12 US cents, and the saved unrounded figures remain in the results. [Published rates](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
+No failure or disagreement was observed on the 1,920 comparisons. Five named file cases below show planned contract boundaries rather than invented errors. Stable IDs connect them to the saved bytes. Each input and expected answer is shared across routes, observed outputs remain unedited, and excerpts are labelled.
 
-These are standard API equivalents for calls made through the CLI. No API billing route was used to generate the answers. The actual subscription invoice or quota conversion is not exposed, so a measured cash charge is unknown. A cached notebook replay makes zero fresh model calls and has zero additional model spend. Local compute time and electricity were not priced.
+### Sorting and duplicate retention
 
-<a id="7-error-analysis-and-boundary-cases"></a>
+Measured case `sorter-002` is in the `boundary` group. The input has a negative value, a zero and a repeated value. The correct output retains both copies of 3. This checks the actual ordering and file formatting together.
 
-## 7. Error analysis and boundary cases
+Input:
 
-No model failure or disagreement occurred on the frozen test set. An error section cannot manufacture one to illustrate a category. Instead, the cases below show boundaries a plausible but incorrect implementation could have missed, together with what all three saved artifacts actually returned. The ordinary case in section 4 and these boundary cases supply measured examples with stable IDs. They were selected for their mathematical role from the explicit boundary group; the complete per-input table remains available so these examples do not substitute for aggregate coverage.
+```text
+3 -1 3 0
 
-### Overflow in the affine calculation
+```
 
-Item `affine-008` has both inputs equal to the largest unsigned 64-bit value, 18,446,744,073,709,551,615. Before reducing to 64 bits, multiplying by 37 and 11 adds up to 48 times that value, then adds 23. Since `48*(2^64-1)+23 = 48*2^64-25`, the requested wrapped answer is `2^64-25`, or 18,446,744,073,709,551,591.
+Expected output (9 bytes), with exit 0 and empty stderr:
 
-| Case | Expected | Raw bytes observed | Complete ELF observed | Assembly control observed |
-|---|---:|---:|---:|---:|
-| `affine-008` | 18,446,744,073,709,551,591 | 18,446,744,073,709,551,591 | 18,446,744,073,709,551,591 | 18,446,744,073,709,551,591 |
+```text
+-1
+0
+3
+3
 
-All three return the required wrapped integer. An implementation that uses only 32-bit intermediate arithmetic could still pass the small request example but fail this case. The observed raw instructions use 64-bit destinations and keep the low 64 bits, which is consistent with the requested wrap. The example supports that particular implementation boundary; the full 128 cases provide broader numerical checks without proving equivalence for all possible pairs.
+```
 
-### A GCD loop with more than one remainder
+| Route | Observed stdout | Exit | Outcome |
+|---|---|---|---|
+| Direct ELF | -1\n0\n3\n3\n | 0 | correct |
+| NASM + linker | -1\n0\n3\n3\n | 0 | correct |
+| C + compiler | -1\n0\n3\n3\n | 0 | correct |
 
-Item `gcd-005` uses 48 and 18. Replacing a pair with the second number and the remainder leaves its common divisors unchanged: `(48,18)` becomes `(18,12)`, then `(12,6)`, then `(6,0)`. When the second number reaches zero, the first number is the answer, 6.
+This case passed in 3/3 routes.
 
-| Case | Expected | Raw bytes observed | Complete ELF observed | Assembly control observed |
-|---|---:|---:|---:|---:|
-| `gcd-005` | 6 | 6 | 6 | 6 |
+Within this planned input group, the correct-file counts are Direct ELF 16/16, NASM + linker 16/16, C + compiler 16/16.
 
-The raw answer contains a conditional jump around the loop for an initial zero and a backward conditional jump after each remainder. Its instruction bytes decode to unsigned division, followed by moving the divisor and remainder into the next pair. A wrong jump displacement could send execution into another instruction or a data region, even if every instruction encoding looked individually familiar. Actual execution succeeds for this case and all 127 other GCD pairs in each format, which tests the assembled branch layout as well as the chosen algorithm.
+### Signed integer limits
 
-### Both inputs zero
+Measured case `sorter-003` is in the `boundary` group. The smallest and largest signed 32-bit integers exercise both comparison and decimal output at the domain limits. The parser must accept these endpoints and reject values just outside them.
 
-Item `gcd-000` uses `(0,0)` and has a stipulated answer of zero. The usual remainder operation must not divide by zero. The raw artifact first moves the initial values into working registers, tests the second value, and branches straight to its return when that value is zero.
+Input:
 
-| Case | Expected | Raw bytes observed | Complete ELF observed | Assembly control observed |
-|---|---:|---:|---:|---:|
-| `gcd-000` | 0 | 0 | 0 | 0 |
+```text
+-2147483648 2147483647 0
 
-All three produce zero without an execution error. This illustrates why successful numeric output and successful execution are recorded separately. A division exception would fail the program even if a loose scorer happened to fill in a default numeric value of zero. The evaluator never converts an exception or missing output into a correct integer.
+```
 
-### A full-width value returned unchanged
+Expected output (25 bytes), with exit 0 and empty stderr:
 
-Item `gcd-015` uses the largest unsigned 64-bit value as its first input and zero as its second. Its expected answer is that same largest value. A function that truncates the return to 32 bits or treats it as a negative signed integer would violate the specified result.
+```text
+-2147483648
+0
+2147483647
 
-| Case | Expected | Raw bytes observed | Complete ELF observed | Assembly control observed |
-|---|---:|---:|---:|---:|
-| `gcd-015` | 18,446,744,073,709,551,615 | 18,446,744,073,709,551,615 | 18,446,744,073,709,551,615 | 18,446,744,073,709,551,615 |
+```
 
-The complete executable writes eight `ff` bytes for this input, which the evaluator reads as the requested unsigned value. The raw function returns the same bit pattern in its 64-bit return register. This joins the arithmetic contract to the file interface: checking a printed decimal string alone would have tested a different output format from the one requested.
+| Route | Observed stdout | Exit | Outcome |
+|---|---|---|---|
+| Direct ELF | -2147483648\n0\n2147483647\n | 0 | correct |
+| NASM + linker | -2147483648\n0\n2147483647\n | 0 | correct |
+| C + compiler | -2147483648\n0\n2147483647\n | 0 | correct |
 
-### Opposite sides of the signed boundary
+This case passed in 3/3 routes.
 
-Item `gcd-010` uses 9,223,372,036,854,775,807 and 9,223,372,036,854,775,809. Both numbers are odd and differ by two, so their greatest common divisor is one. The upper input exceeds the largest positive signed 64-bit number. The raw bytes use unsigned division, as the task requires.
+Within this planned input group, the correct-file counts are Direct ELF 16/16, NASM + linker 16/16, C + compiler 16/16.
 
-| Case | Expected | Raw bytes observed | Complete ELF observed | Assembly control observed |
-|---|---:|---:|---:|---:|
-| `gcd-010` | 1 | 1 | 1 | 1 |
+### A run crossing the count-byte limit
 
-This case passes in all formats. It was present in the 16-case boundary group before collection, rather than added after noticing which instructions the model chose. It is evidence for full-width handling within the specified domain. It does not test negative numbers, whose meaning is deliberately outside that domain.
+Measured case `rle-007` is in the `boundary` group. A single count byte holds at most 255, so a run of 256 A bytes must become two pairs, ff 41 and 01 41. A wrapped count of zero or a missing final byte would fail exact output and decompression.
 
-The useful missing failure is therefore itself a limitation: these tasks are too easy to expose the boundaries of direct byte generation. There is no basis for claiming that format errors are rare in general. The next experiment should add tasks with more branches, address calculations and data layouts before treating a six-of-six result as a dependable workflow.
+Input:
+
+```text
+256 copies of byte 41
+```
+
+Expected output (4 bytes), with exit 0 and empty stderr:
+
+```text
+ff 41 01 41
+```
+
+| Route | Observed stdout | Exit | Outcome |
+|---|---|---|---|
+| Direct ELF | ff 41 01 41 | 0 | correct |
+| NASM + linker | ff 41 01 41 | 0 | correct |
+| C + compiler | ff 41 01 41 | 0 | correct |
+
+This case passed in 3/3 routes.
+
+Within this planned input group, the correct-file counts are Direct ELF 16/16, NASM + linker 16/16, C + compiler 16/16.
+
+### Combining repeated accounts
+
+Measured case `transactions-001` is in the `boundary` group. Account 17 occurs twice and must total 1525 cents. Account 42 must still appear with minus 300 cents. The output is sorted by account ID, not by input order or amount.
+
+Input:
+
+```text
+account,amount_cents
+17,1250
+42,-300
+17,275
+
+```
+
+Expected output (16 bytes), with exit 0 and empty stderr:
+
+```text
+17,1525
+42,-300
+
+```
+
+| Route | Observed stdout | Exit | Outcome |
+|---|---|---|---|
+| Direct ELF | 17,1525\n42,-300\n | 0 | correct |
+| NASM + linker | 17,1525\n42,-300\n | 0 | correct |
+| C + compiler | 17,1525\n42,-300\n | 0 | correct |
+
+This case passed in 3/3 routes.
+
+Within this planned input group, the correct-file counts are Direct ELF 16/16, NASM + linker 16/16, C + compiler 16/16.
+
+### A valid row followed by a malformed row
+
+Measured case `transactions-031` is in the `malformed` group. The first record is valid, but a later amount is not an integer. The whole file must return ERR and exit 2 without leaking partial totals. This checks when the program commits output, not just whether it can add numbers.
+
+Input:
+
+```text
+account,amount_cents
+1,2
+2,bad
+
+```
+
+Expected output (4 bytes), with exit 2 and empty stderr:
+
+```text
+ERR
+
+```
+
+| Route | Observed stdout | Exit | Outcome |
+|---|---|---|---|
+| Direct ELF | ERR\n | 2 | correct |
+| NASM + linker | ERR\n | 2 | correct |
+| C + compiler | ERR\n | 2 | correct |
+
+This case passed in 3/3 routes.
+
+Within this planned input group, the correct-file counts are Direct ELF 16/16, NASM + linker 16/16, C + compiler 16/16.
+
+![Three direct executable successes showing the input, expected output and matching returned result.](figures/case_panels.png)
+
+The panels show three planned boundary cases because no failures occurred: duplicate retention in sorting, a run crossing 255 bytes, and repeated accounts in a totals file. Each gives the measured ID, direct-byte route, expected and observed outputs. The tables above give the corresponding controls and group counts.
+
+The numerical function example in section 4 remains an end-to-end success: `affine-004` returns 344 from inputs 6 and 9, with all 14 returned bytes shown beside their decoded instructions. The numerical GCD tests also include zero and full-width unsigned values. Those successes locate the simpler end of the tested capability. They do not explain a file-processing failure by themselves; any claim about a broken branch, parser state or address requires inspection of that particular artifact.
 
 <a id="8-what-this-result-supports"></a>
 
 ## 8. What this result supports
 
-The complete ELF artifacts establish that a model can already emit bytes that Linux loads and runs correctly for these two tasks. The raw functions separately establish working processor instruction encodings under a supplied interface. The successful control shows that the same model can also express the algorithms in assembly. Those are concrete capability observations, and the saved bytes make them inspectable without relying on an answer that merely claims to be executable.
+The evidence now covers five tasks with different demands. The numerical artifacts establish correct small instruction sequences and loadable complete files. The three file tools test parsing, arrays, variable output length and state across records under a matched external contract. The observed answer is 9/9 fully correct file-program candidates and 15/15 fully correct artifacts overall. These are claims about the saved programs, whose exact outputs can be reproduced from the caches.
 
-The result does not test production software. A 192-byte arithmetic program or a 224-byte number-theory program has no graphical interface, authentication system, dependency graph, persistent database or cross-platform build. There are no variable-length structures, heap allocations, floating-point operations or multi-threaded interactions. These omitted requirements are reasons to enlarge the task design, not evidence that the model would either pass or fail them.
+One first attempt per slot does not measure how often a route will work. There are only three selected file-processing tasks, and a model can vary between generations. Running 128 cases checks an individual candidate more thoroughly, but does not create 128 independent generation trials. The task set was chosen to add difficulties after the numerical ceiling, so it is exploratory evidence about those difficulties, not a random benchmark of software engineering.
 
-The study is an existence test rather than a reliability estimate. There are two chosen algorithms and one attempt per format. Running 128 inputs checks an individual program more thoroughly, but does not create 128 independent opportunities for the model to generate a new program. Repeated fresh generations are needed to measure how often a method succeeds. There is no statistically defensible way to extrapolate this task set into a general binary-writing success percentage.
+The three whole-program routes have the same permitted input and required output, but different assistance. C can call libc; assembly receives an encoder and linker; direct bytes receive neither. That comparison is relevant to someone choosing a workflow, while it does not isolate a single cognitive burden. A failure in direct output may concern algorithm choice, parsing, register use, instruction encoding or executable layout. Aggregate scores alone do not identify which one caused it.
 
-The direct-format prompts provide architecture, interface, syscall numbers and practical file-format guidance. That is an intentional definition of the task. They contain no reference implementation, header hex template or hidden answers. The experiment therefore asks whether a model can implement a precisely stated small program, not whether it can discover a processor or file format unaided. It also cannot determine whether the model internally pictured assembly or higher-level code before returning bytes; only external tool use and returned artifacts are observed.
+Every task is bounded. Inputs fit within 4096 bytes, arrays have at most 128 items, and account IDs fit a 64-entry table. The tools do not implement general CSV quoting, arbitrary-size files, streaming pipes, a persistent database, concurrency, a user interface or recovery from operating-system failures. Their contracts are useful probes, but these omissions limit how far any success can be carried into a production application.
 
-Generation was fixed before the answers arrived, and no model was asked to repair an output. Replay added checks for preserved registers and trusted native-loader controls after the initial successful scores were visible; these checks use exactly the same cached responses and leave all six program scores unchanged. The original parser and the numerical task definitions did not change. The dated record and exact scope are in [PROTOCOL.md](data/PROTOCOL.md).
+Direct requests provide an architecture, syscall identifiers and practical ELF guidance. They contain no completed header bytes, source implementation or hidden expected answers. The test therefore concerns implementing a precisely specified program with a known interface. It cannot determine whether the model internally imagined source or assembly before returning bytes; only external tool use and returned artifacts are observed.
 
-There is also no compiler performance finding. The control is an assembler, which translates chosen instructions. No optimising compiler is given an equivalent high-level source program, and the study does not benchmark native execution speed, memory use or instruction throughput. The slightly shorter assembly GCD function does not establish superiority of either generation path. Claims that AI-generated binaries are more efficient than compiler output remain untested here.
+The fixed model ID does not expose an immutable weight revision, so fresh generations may change; cached replay preserves the evidence. New input instances prevent lookup of this test set, while the familiar algorithms may occur in training.
 
-Token usage is useful for planning more pilots of similar size, with the same CLI and effort setting. It is not a per-byte pricing law. The smallest and largest calls differ in task and interface, their inputs include CLI context, and provider caching appears in only one slot. A bigger program could require much more reasoning or fail before it emits any useful bytes. Any larger budget should be based on measured samples at its own complexity level.
+There is no compiler-efficiency finding. Native running time, throughput and energy were not benchmarked. Complete-file byte counts include different startup, linking and runtime choices. A compact handwritten ELF and a dynamically linked C program do not have equivalent file-layout overhead. The study reports generation cost and correctness rather than interpreting smaller binaries as faster or better software.
 
-For someone deciding what to try next, this evidence supports keeping direct executable generation as a testable approach for small, precisely specified programs. The uncertainty now concerns the point where reliable encoding, file layout and program logic stop fitting into one correct first attempt. More elaborate tasks and repeated generations can locate that boundary; this ceiling cannot.
+The numerical scorer gained register and loader controls after its initial results; all six scores stayed unchanged. File contracts and controls were fixed before generation, and no response received repair feedback. [Protocol history](data/PROTOCOL.md), [file-task protocol](data/streams_v2/PROTOCOL.md).
 
 <a id="9-reproduction-and-saved-evidence"></a>
 
 ## 9. Reproduction and saved evidence
 
-Open [the executed notebook](43_direct_binary_pilot.ipynb) to see the complete narrative, exact requests, saved outputs, scorer and chart code. The notebook imports no code from another repository file. All helpers, including the native-runner source, model-call wrapper, parser, emulator and trace helper, are defined in its cells. A normal replay loads the six cached responses, reruns execution checks and redraws figures without any model calls.
+The [executed notebook](43_direct_binary_pilot.ipynb) contains all task generators, request builders, CLI isolation settings, parsers, native runners, CPU-emulation code, scoring and chart helpers. It imports no helper code from the repository. Every model response is saved with its full request, settings, raw CLI events, timestamps and usage. Default execution replays those responses without any fresh model calls.
 
-Install [requirements.txt](requirements.txt), and have a local Linux Docker engine with the recorded amd64 Python image available. The immutable local image ID is recorded in the notebook and protocol. If that exact image is unavailable on another computer, explicitly record the replacement image and platform before replaying; the original native environment is not promised by a moving image tag. CPU emulation does not require Docker, but complete executable verification does.
+Install [requirements.txt](requirements.txt) and have a local Linux Docker engine. The numerical executables use the original pinned Python image. The file tools use the compiler image recorded in [toolchain.json](data/streams_v2/toolchain.json), which contains GCC 14.2.0, NASM 2.16.03 and GNU ld 2.44. The recorded image ID pins the environment actually used. Its Dockerfile pins the base digest but does not use a historical package repository, so a later rebuild may differ and must be recorded explicitly.
 
 ```powershell
 cd notebooks/43-direct-binary-pilot
 python -m pip install -r requirements.txt
+docker build -t experiment43-toolchain:streams-v2 data/streams_v2/toolchain
 python -m nbconvert --to notebook --execute --inplace 43_direct_binary_pilot.ipynb
 ```
 
-Fresh generation is disabled by default. The size knobs at the top are `N_TASKS`, `MODELS`, `FORMATS` and `MAX_NEW_CALLS`. Setting `DIRECT_BINARY_FRESH=1` explicitly permits missing-cache requests, still capped at six new calls. An existing cache is always loaded rather than overwritten. Changing a prompt or model requires updating the frozen-request record and protocol for a distinct run; replay checks request identity. There is no automatic retry or expansion after a failure.
+The notebook checks that the recorded toolchain image is available. If a rebuild gives another image ID, an explicit environment override may be used for an execution-environment replication, with that change recorded in the protocol. Replaying the same response bytes on a different compiler, libc or kernel is a different environment check; it does not add a model generation.
 
-The primary saved files are [results.csv](data/results.csv), [results.json](data/results.json), [case_results.json](data/case_results.json), [artifacts.json](data/artifacts.json), [tasks.json](data/tasks.json), [requests.json](data/requests.json), [usage_summary.json](data/usage_summary.json) and [preflight.json](data/preflight.json). Individual cache filenames are the full-request hashes and contain request text, command settings, raw CLI events, final response, timing and the provider usage fields. Hex artifacts are also saved separately under `data/artifacts/`. None of those files contains API credentials.
+Fresh generation requires setting `DIRECT_BINARY_FRESH=1` and having missing request-cache slots. The size knobs are the numerical task count, file task count, model list, output-route list and maximum fresh calls per group. The original groups contain six and nine fixed requests respectively. Frozen request identity is checked, cache entries are reused, and no automatic retry or candidate selection occurs. Changing task prompts or models requires a new protocol entry and distinct frozen requests rather than editing an old result.
 
-Each fresh request was sent to the local Langfuse instance after the response was cached; all six trace submissions returned HTTP 200. Replay sends no new traces. The original trace helper recorded inclusive output usage as one total; the final helper separates the reported reasoning subset for future calls. The immutable raw cache is the accounting source for the split reported here. A dry-run inspection of the repository backfill path was performed without resending existing pilot traces.
+The current evidence tables are [results.json](data/results.json), [results.csv](data/results.csv), [case_results.json](data/case_results.json) and [usage_summary.json](data/usage_summary.json). Numerical requests and original artifacts remain in `data/requests.json`, `data/cache/` and `data/artifacts.json`. File inputs, requests, caches, build logs, output streams and compiled/direct hex artifacts are under [data/streams_v2](data/streams_v2/). `engine.py` is a readable snapshot of that run's evaluator; the notebook defines the same helpers internally and does not import the snapshot.
 
-The run contains six completed requests, zero blocked or timed-out requests, zero observed tool calls and zero repair requests. It used 43,327 input tokens, 6,016 of them cached, and 4,903 output tokens. The recorded standard API equivalent is US$0.1242536. Actual subscription charges are unknown. The notebook prints spend at the end and makes fresh replay spend explicit.
+Every fresh call is sent to local Langfuse after caching when its health check and environment credentials permit it. Replay sends nothing. Trace IDs are derived from notebook identity and request hashes to permit deduplication. The original six traces recorded inclusive output usage; the current helper reports the reasoning subset separately. The immutable CLI usage fields are the source for all accounting here, with no double-counting of reasoning.
+
+The combined collection contains fifteen unique request slots and no repair candidates. The recorded API equivalent is US$0.698073 for available usage. All fifteen calls have reported usage. Actual subscription billing is unavailable. Hash manifests normalise Windows CRLF to LF so frozen inputs and response records can be checked across Git platforms. Scratch native jobs and HTML reading copies are ignored. No generated executable is launched directly on the Windows host.
 
 <a id="10-future-work-and-further-reading"></a>
 
 ## 10. Future work and further reading
 
-The documentation links below were opened and checked on November 3, 2026 (America/Toronto). Sources identify the interfaces and tools; all measured program, byte and usage claims come from this pilot's saved artifacts.
+The links below were opened and checked on November 3, 2026 (America/Toronto). They document the interfaces and tools; measured correctness, bytes and token counts come from this study's saved responses.
 
 ### Future work
 
-- Add a planned complexity ladder: array sums, variable-length text parsing, a small checksum and a stateful parser. Keep the same input contract within each format and measure first-attempt program passes, parse failures and execution failures. The six-of-six ceiling motivates seeking the first complexity level that separates the methods.
-- Repeat each task-format pair at least ten times with fresh sessions and fixed settings. Measure the distribution of output tokens, launch success and full-input correctness. One candidate per slot cannot tell whether the observed success or the low output usage is repeatable.
-- Add a high-level source condition compiled with a pinned optimising compiler, with an identical program interface and equivalent validation. Only then measure code size and native runtime. The present assembler control and unequal function/file interfaces leave the compiler-efficiency claim unanswered.
-- Add an explicitly bounded repair condition that receives one execution diagnostic, alongside untouched first attempts. Measure extra tokens and recovered programs. This pilot used no feedback and observed no failures, so repair value requires harder cases where failures actually occur.
-- Run the same specifications on a second processor architecture and at a second reasoning effort. Measure correct encoding, platform-specific failures and usage. The present evidence concerns only x86-64 and one high-effort model configuration.
+- Generate at least ten fresh candidates for every file-task route using the same fixed contracts. Measure whole-program success and the distribution of token usage. The current one-attempt design and its 9/9 passing file programs cannot estimate repeatability.
+- Add a key-value command processor or a small expression evaluator with parentheses. Measure state transitions, parsing failures and exact error handling. The current bounded sorter, compressor and totals table cover only a few interacting components, while the numerical tasks already sit at a ceiling.
+- Compare untouched first attempts with a fixed one-diagnostic repair allowance, retaining both results and all costs. Measure how many build, loader and execution failures can be recovered. No present artifact received feedback, so this study cannot tell whether observed problems are cheap to repair.
+- Match runtime and linking choices across source and direct-byte routes, then benchmark only candidates proven correct. Measure code size and native throughput on a fixed platform. Current file lengths include different library and linker overhead and cannot answer compiler-efficiency claims.
+- Repeat selected tasks on another architecture and at another reasoning effort. Measure instruction/layout failures and complete-contract success per token. The direct sorter's 16,408 output tokens and the smaller compressor request show that one tiny arithmetic sample cannot forecast generation usage at another complexity.
 
 ### Further reading
 
-- [ELF header](https://gabi.xinuos.com/elf/02-eheader.html) (Xinuos, ELF Object File Format 4.3 draft, accessed 2026). Describes the file identification and entry-point fields the complete executable must supply.
-- [Program loading](https://gabi.xinuos.com/elf/07-pheader.html) (Xinuos, ELF Object File Format 4.3 draft, accessed 2026). Explains how segment records tell the loader which bytes become a process image.
-- [x86-64 psABI project](https://gitlab.com/x86-psABIs/x86-64-ABI) (x86 psABIs contributors, accessed 2026). Maintains the calling-convention specification behind the function interface used here.
-- [Unicorn programming tutorial](https://www.unicorn-engine.org/docs/tutorial.html) (Unicorn contributors, accessed 2026). Shows how raw instruction bytes can be mapped and executed independently of a native executable file.
-- [Linux x86-64 syscall table](https://github.com/torvalds/linux/blob/master/arch/x86/entry/syscalls/syscall_64.tbl) (Linux contributors, accessed 2026). Gives the operating-system call identifiers used for the complete files' input, output and exit.
+- [ELF program loading](https://gabi.xinuos.com/elf/07-pheader.html) (Xinuos, ELF Object File Format 4.3 draft, accessed 2026). Explains the segment and entry information a complete executable must supply.
+- [NASM output formats](https://www.nasm.us/doc/nasm09.html) (NASM contributors, accessed 2026). Describes assembler output formats used to turn the source control into ELF object code.
+- [GCC optimisation options](https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html) (GNU Project, accessed 2026). Documents the compiler optimisation setting used for the C workflow.
+- [GNU linker command-line options](https://sourceware.org/binutils/docs/ld/Options.html) (GNU Project, accessed 2026). Gives the linker interface used to construct the assembly executables.
+- [How SQLite is tested](https://sqlite.org/testing.html) (SQLite contributors, accessed 2026). Shows why boundary inputs, malformed data and independent test machinery matter beyond a few successful examples.
