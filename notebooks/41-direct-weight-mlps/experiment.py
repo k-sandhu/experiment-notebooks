@@ -25,7 +25,17 @@ MODELS = {
     'muse': {'backend':'muse', 'model':'muse-wonder-full-1.0', 'effort':'xhigh'},
     'nemotron': {'backend':'openrouter', 'model':'nvidia/nemotron-3.5-super-vl:free', 'canonical':'nvidia/nemotron-3.5-super-vl-20261015'},
     'gemini': {'backend':'batch', 'model':'google/gemini-4-argon:batch', 'canonical':'google/gemini-4-argon-20261013', 'effort':'high'},
+    # Claude family requests (data/claude_family/), collected by claude_family.py at high effort.
+    'sonnet': {'backend':'claude', 'model':'claude-sonnet-5-5', 'effort':'high'},
+    'haiku': {'backend':'claude', 'model':'claude-haiku-5-5', 'effort':'high'},
+    'fable': {'backend':'claude', 'model':'claude-fable-5-1', 'effort':'high'},
+    # Open-weight models asked for numbered entries from the start (data/open_models/), collected by open_models.py.
+    'deepseek': {'backend':'openrouter', 'model':'deepseek/deepseek-v4.1-flash-1017', 'canonical':'deepseek/deepseek-v4.1-flash-20261017', 'provider':'deepseek', 'effort':'medium'},
+    'glm': {'backend':'openrouter', 'model':'z-ai/glm-5.3', 'canonical':'z-ai/glm-5.3-20260816', 'provider':'z-ai', 'effort':'medium'},
+    'mimo': {'backend':'openrouter', 'model':'xiaomi/mimo-v2.6-pro', 'canonical':'xiaomi/mimo-v2.6-pro-20260921', 'provider':'xiaomi', 'effort':None},
 }
+FIRST_ROUND = ['astra', 'sol', 'opus', 'muse', 'nemotron', 'gemini']
+CLAUDE_FAMILY = ['opus', 'sonnet', 'haiku']
 N_VISIBLE = 2048
 MAX_NEW_CALLS = 1
 MAX_OUTPUT_TOKENS = 131072
