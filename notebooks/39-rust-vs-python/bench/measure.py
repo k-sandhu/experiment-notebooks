@@ -663,8 +663,8 @@ class Harness:
                 self.append("baseline", dict(key=key, variant=variant, repeat=repeat, started_utc=utc_now(), **result), fields)
 
 
-def archive_results():
-    destination = C.DATA / "results_2026-10-30"
+def archive_results(name="results_2026-10-30"):
+    destination = C.DATA / name
     if destination.exists():
         raise FileExistsError(f"Archive already exists: {destination}")
     sources = list(C.RESULTS.glob("*.csv"))
@@ -682,11 +682,12 @@ def main():
     parser.add_argument("--tasks", nargs="+", choices=C.TASKS, default=C.TASKS)
     parser.add_argument("--authors", nargs="+")
     parser.add_argument("--repeats", type=int)
+    parser.add_argument("--archive-name", default="results_2026-10-30", help="Folder under data/ that archive-results moves the current results into")
     args = parser.parse_args()
     if args.repeats is not None and args.repeats < 1:
         parser.error("--repeats must be positive")
     if args.command == "archive-results":
-        archive_results()
+        archive_results(args.archive_name)
         return
     if not args.selftest and args.command in ("machine", "baseline", "build", "loc", "correct", "bench", "sweep", "scaling", "all") and not (C.DATA / "results_2026-10-30").exists() and (list(C.RESULTS.glob("*.csv")) or (C.DATA / "machine.json").exists()):
         parser.error("Run archive-results before the first new measurement")

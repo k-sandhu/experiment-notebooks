@@ -61,23 +61,55 @@ TINY = {
     "walkers": {"s1a": dict(J=4, L=12, B=1), "s1b": dict(J=4, L=15, B=2)},
 }
 
+def claude_flags(model):
+    return ["-p", "--safe-mode", "--model", model, "--effort", "high",
+            "--permission-mode", "bypassPermissions", "--tools", "Bash,Read,Write,Edit,Glob,Grep",
+            "--output-format", "stream-json", "--verbose"]
+
+
+def claude_author(model, **route):
+    return dict(cli="claude", model=model, effort="high", flags=claude_flags(model), **route)
+
+
+def openrouter_author(model, provider, permaslug):
+    return claude_author(model, route="openrouter", provider=provider, permaslug=permaslug, reasoning_effort="high")
+
+
+def muse_author(model):
+    # --yolo turns off approvals and the sandbox (like bypassPermissions); web tools are off because no other author has them.
+    return dict(cli="muse", model=model, effort="high", flags=[
+        "exec", "--model", model, "--reasoning-effort", "high", "--workspace", "{session}", "--yolo",
+        "--disable-web-tools", "--no-foreign-personal-context", "--json", "--prompt-file", "{prompt}"])
+
+
 AUTHORS = {
-    "sonnet": dict(cli="claude", model="claude-sonnet-5-5", effort="high", flags=[
-        "-p", "--safe-mode", "--model", "claude-sonnet-5-5", "--effort", "high",
-        "--permission-mode", "bypassPermissions", "--tools", "Bash,Read,Write,Edit,Glob,Grep",
-        "--output-format", "stream-json", "--verbose"]),
+    "sonnet": claude_author("claude-sonnet-5-5"),
     "terra": dict(cli="codex", model="gpt-6.1-terra", effort="high", flags=[
         "exec", "-m", "gpt-6.1-terra", "-c", 'model_reasoning_effort="high"',
         # --ignore-user-config drops the user's approval policy and Windows sandbox, which commands need.
         "-c", 'approval_policy="never"', "-c", 'windows.sandbox="elevated"',
         "--ignore-user-config", "--ephemeral", "--sandbox", "workspace-write",
         "--skip-git-repo-check", "-C", "{session}", "--json", "-o", "{last}", "-"]),
+    "opus55": claude_author("claude-opus-5-5"),
+    "haiku": claude_author("claude-haiku-5-5"),
+    "deepseek": openrouter_author("deepseek/deepseek-v4.1-flash-1017", "DeepSeek", "deepseek/deepseek-v4.1-flash-20261017"),
+    "glm": openrouter_author("z-ai/glm-5.3-flash", "Z.AI", "z-ai/glm-5.3-flash-20260826"),
+    "nemotron": openrouter_author("nvidia/nemotron-3.5-super-vl:free", "Nvidia", "nvidia/nemotron-3.5-super-vl-20261015"),
+    "wonder": muse_author("muse-wonder-1.0"),
+    "wonder-full": muse_author("muse-wonder-full-1.0"),
 }
+# Models Claude Code may call through the local proxy (bench/openrouter_proxy.py); anything else is rejected there.
+OPENROUTER_ROUTES = {a["model"]: dict(author=name, provider=a["provider"], permaslug=a["permaslug"], reasoning_effort=a["reasoning_effort"])
+                     for name, a in AUTHORS.items() if a.get("route") == "openrouter"}
+OPENROUTER_PROXY_PORT = 8739
 # Heat-only pilot sessions by Claude Opus 5.5 and GPT-6.1 Sol, kept under data/programs/{opus,sol}/heat.
 PILOT_AUTHORS = ("opus", "sol")
 SOL_PRIVATE_CARGO_HOME = False  # Sandbox feasibility requires a model call; deliberately untested.
 SESSION_TIMEOUT = 75 * 60
+MUSE_EXPORT_TIMEOUT = 120
 SESSION_JOBS_PER_AUTHOR = 3
+SESSION_JOBS = {"nemotron": 2, "wonder": 2, "wonder-full": 2}
+SESSION_JOBS_TOTAL = 10  # 22 logical processors and 31 GB; sessions build and benchmark
 CORRECT_TIMEOUT = 900
 BUILD_TIMEOUT = 900
 MEASURE_TIMEOUT = 900
@@ -139,6 +171,6 @@ def environment():
 def session_environment():
     """Environment for model sessions: none of the launching agent's Claude Code or API settings."""
     env = {k: v for k, v in os.environ.items()
-           if not k.upper().startswith(("CLAUDE", "ANTHROPIC_", "OPENAI_", "CODEX_")) and k.upper() != "FORCE_COLOR"}
+           if not k.upper().startswith(("CLAUDE", "ANTHROPIC_", "OPENAI_", "OPENROUTER_", "CODEX_")) and k.upper() != "FORCE_COLOR"}
     env["NO_COLOR"] = "1"
     return env

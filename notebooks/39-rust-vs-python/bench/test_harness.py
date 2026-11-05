@@ -23,7 +23,7 @@ class LanguageTests(unittest.TestCase):
     def test_main_hashes(self):
         ledger = {(r["author"], r["task"]): r["request_hash"] for r in json.loads((C.DATA / "preparation_hashes.json").read_text())}
         self.assertEqual(len(ledger), 16)
-        for author in C.AUTHORS:
+        for author in sorted({a for a, _ in ledger}):  # authors added later have no ledger rows
             for task in C.TASKS:
                 with self.subTest(author=author, task=task):
                     self.assertEqual(request_hash(author, task), ledger[author, task])
