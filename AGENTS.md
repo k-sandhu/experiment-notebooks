@@ -394,6 +394,9 @@ no notebook and does not know the topic or tools:
 - Open-weight models that are not chat LLMs (time-series foundation models, embedding, image or audio models) may
   run locally. Pin the Hugging Face revision, and record the licence, release date, hardware and run time. Leave
   out any model whose licence forbids this use.
+- Notebook 41 has an owner-requested exception, authorized on 2026-11-03: Google's
+  `google/gemini-4-argon:batch` may be called through OpenRouter's Batch API for its direct-weight MLP
+  comparison. Pin the canonical dated slug and provider. This does not change other closed-model routes.
 - Anything that costs money has a size knob (`N_...`, `MODELS`) at the top of the notebook. Defaults stay
   small. Print the spend at the end.
 - Cache every model response on disk, keyed by the full request, and store the request (model, prompt or
