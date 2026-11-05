@@ -242,6 +242,19 @@ pictures of the draft, on decks that judge models compare head to head.
 |---|---|---|---|
 | 19 | [Which model and tools make a better deck?](notebooks/19-powerpoint-harness/) | A model asked to build a decision deck, then update it when the plan changes, has to carry every changed figure to each slide and lay it out readably, without ever seeing the slides it describes. Which of three models (GPT-6.1 Sol, Claude Opus 5.5, Muse Wonder Full) makes the decks that judge models prefer, and do ready-made layout blocks or pictures of its own draft help? 24 eight-slide decks on two tasks written for the study, judged from images: 72 individual scores and 288 head-to-head judgments of 48 deck pairs. | GPT-6.1 Sol's decks were preferred in every setup (81% to 96% win credit); Muse Wonder Full won none of its 96 head-to-head judgments. Most of GPT's lead over Claude came from one task, where all four Claude decks left a figure off the closing slide that only the judges' checklist asked for (GPT won 22 of 24 there; 12 to 9 with 3 ties on the other task). Pictures of the draft were preferred (61% win credit), layout blocks were not (38%), and neither passed the adoption rule set in advance. Two tasks, one deck per setup |
 
+## Drawing charts from data
+
+A chart for a meeting has to carry the few facts a decision depends on and nothing that competes with them. A pricing
+committee deciding whether to reverse a price rise needs the cancellation rate before and after it, and a warning that
+the last month is only half a month; it does not need the fastest-growing product or the month with the most support
+calls. People increasingly hand a table and their notes to an AI model and ask for the chart, and a common complaint
+is that the results label everything. This experiment gives models more than one chart should show and measures what
+they keep and what they leave out as the instructions grow.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 44 | [When a model is given more than one chart can show, what does it leave out?](notebooks/44-chart-overload/) | A chart for a quick decision should show the two or three facts the decision needs and leave the rest off. Given a data table and ten analyst notes of which only three matter, does a model choose them, and how does that change as the prompt grows from "make a chart from this" to the audience and decision, six general design rules, the named priorities, and one look at its own rendered chart? Twelve made-up briefs, three chart makers (Claude Opus 5.5, Muse Wonder Full, DeepSeek V4.1 Flash), 180 matplotlib charts, each scored from the figure's text, by a reader model that sees only the image, and by two judge models | With a bare request, Muse Wonder Full and Claude Opus 5.5 put 24 and 16 labels on an average chart; the reference charts drawn for the study carry 4. General design rules cut this to 5, but 32% of the critical numbers were then missing from the charts, and a reader read 57% of them correctly, against 84% with the bare request. Naming the three critical notes gave both: 96% read correctly at 7 labels per chart. Showing a model its own chart fixed overlapping text and dollar amounts garbled by matplotlib (40 of 180 charts) but did not restore missing numbers. The reader is a model that clutter does not slow down, and each setting has one chart |
+
 ## Editing long documents
 
 To change one number in a 40-page rule, a model can send back the whole document, which takes minutes and can quietly
@@ -404,6 +417,7 @@ here with their data and caches.
 | 38 | Nine US Federal Register rules and proposed rules converted to Markdown, with 36 edit requests and their exact answers generated in code | Fresh: published 19 to 29 October 2026 | [Federal Register API](https://www.federalregister.gov/developers/documentation/api/v1); US government works, public domain |
 | 39 | Eight programming tasks with inputs generated in code from fixed seeds and exact expected outputs | Fresh: written 30 October 2026 | This repository |
 | 40 | Twenty complete public AI news articles and 400 CLI-generated LinkedIn responses | Fresh: sources published 23-30 October 2026; main collection 1 November Toronto time | Publishers retain article rights; full source text git-ignored, public URLs and hashes retained; generated response caches in the experiment |
+| 44 | Twelve fictional business and public-sector briefs (data tables and analyst notes) generated in code with exact answers | Fresh: generated 5 November 2026 | This repository |
 
 ## For AI agents
 
