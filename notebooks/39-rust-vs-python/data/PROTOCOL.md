@@ -128,3 +128,65 @@ trust the result. All times are local (EDT, UTC-4) on 2026-10-30 unless marked U
   the main speed summary; memory as peak working set for every task including walkers (at one worker every
   walkers program ran as one process; job commit had counted the Java heap reservation, 645 MB against a 49 MB
   working set); code size in bytes rather than lines, because Terra often wrote several statements per line.
+
+## Seven more models (2026-11-05)
+
+- Requested after the seven-language extension (PR #115, not yet merged): the same programs in every language by Claude
+  Opus 5.5, Claude Haiku 5.5, DeepSeek V4.1 Flash (`deepseek/deepseek-v4.1-flash-1017`), GLM 5.3 Flash
+  (`z-ai/glm-5.3-flash`), Nemotron 3.5 Super VL (`nvidia/nemotron-3.5-super-vl:free`), Muse Wonder and Muse Wonder
+  Full. Branch `extend-39-models`, built on `extend-39-languages`. Both prompts, all templates and the existing
+  sessions are unchanged; the 32 Sonnet and Terra request hashes were checked to be identical after the change.
+- Harnesses. Opus and Haiku run through `claude -p` exactly as Sonnet does, with the model swapped. Muse models run
+  through `muse exec` (Muse Code 1.4.14) with `--reasoning-effort high --yolo --disable-web-tools
+  --no-foreign-personal-context` (`--yolo` turns off approvals and the sandbox, as `bypassPermissions` does for
+  Claude; no author has web tools). The three open-weight models run inside Claude Code (`claude -p`, same flags as
+  Sonnet) pointed at OpenRouter's Anthropic-compatible endpoint through a local proxy (`bench/openrouter_proxy.py`).
+  The proxy pins each model to its own lab's endpoint (DeepSeek, Z.AI, and Nvidia, the only free host), removes
+  Claude Code's `thinking` field (it turned GLM's reasoning off in a probe) and asks for `reasoning: {effort: high}`;
+  every request's provider, token use, reasoning tokens and cost is logged. How much each model reasons per request
+  is the model's choice. Background calls naming a Claude model would be rejected by the proxy; none occurred in the
+  canaries. The session environment gets a dummy token; the proxy holds the OpenRouter key. The key is still in the
+  Windows user environment, which a session with shell access could in principle read.
+- Probes before the runs (2026-11-05, scratch, not used in results): a direct `/v1/messages` call per model with and
+  without the reasoning fields, and short Claude Code tasks (write and run a small Python script) through a logging
+  proxy. All three models used tools correctly and reasoned when asked.
+- Implementation. GPT-6.1 Terra was given the change specification but stopped at once on the Codex usage limit
+  (reset 2026-11-06 07:24); Claude Sonnet 5.5 (`claude -p`, effort high) wrote the proxy, the runner changes and their
+  offline tests instead. Muse transcripts are exported after each session with `muse export` and kept as
+  `data/sessions/<model>/<task>[.langs].muse-export.json.gz`, because Muse's `--json` event stream omits tool inputs.
+- Canaries: heat, both session kinds, all seven models (14 sessions), then a build and correctness check: every
+  program built and was correct on all five heat inputs. At the first launch the proxy's port was still held by a
+  scratch probe proxy, so the six OpenRouter canaries stopped before any model call and were launched again.
+- Sessions that ended in a harness failure before the model finished were run again once, with the failed run's
+  records kept in `data/failed_sessions/`:
+  - GLM, heat main: Claude Code exited with Windows status 0xC0000409 after 3 requests, while GLM was streaming a long
+    reasoning block (about 8,000 tokens); no program had been written. The rerun completed (37 requests).
+  - Muse Wonder, ledger main: the Muse launcher script failed after 1.8 s with "Cannot create a file when that file
+    already exists" while updating its update-check file, because two Muse sessions started at the same moment; the
+    model was never called. The rerun completed.
+- Interruption: the Claude desktop app restarted at 14:38 EST, which ended the session runner, the proxy and the
+  sessions in progress. 38 sessions had finished. The others were started again from scratch at 14:43 (a session
+  only counts once its metadata is written).
+- Langfuse was not reachable during the runs (`localhost:3300` refused connections), so no traces were sent; they are
+  to be sent with the backfill script afterwards.
+- Nemotron's free tier allows 1,000 requests a day for the account (`free-models-per-day-high-balance`, resetting at
+  00:00 UTC). It was used up at 21:54 UTC on 2026-11-05, after about 915 requests from ten Nemotron sessions. From
+  then on every Nemotron request got HTTP 429; the proxy retried each for about 20 minutes, and Claude Code ended the
+  logscan language session with "Request timed out". Every Nemotron session whose proxy log contains this daily-limit
+  429 is run again from scratch after the reset; the failed runs are kept in `data/failed_sessions/nemotron/`.
+- GLM, ledger main, reached the 75-minute limit with all three files written. A time-out is the model's outcome under
+  the same limit as every other session, so it was not run again; its files are measured as written.
+- OpenRouter credits ran out at about 23:00 UTC (balance USD 0.03 of 320; this study had used about USD 7 of the
+  key's USD 15.70 that day). From then on DeepSeek and GLM requests got HTTP 402 ("would exceed your available
+  credits"); their align and walkers sessions failed and are run again once credits are added.
+- Long PATH after the app restart. The restarted desktop app passed a PATH of 7,921 characters to the runner.
+  Visual Studio's `vcvars64.bat`, which every C++ build script calls, then fails with "The input line is too long",
+  so in the 38 language sessions started after 19:38 UTC the models could not build C++ (the logs show the error 0
+  to 58 times per session). Sessions before the restart, and all main sessions (Rust builds do not use vcvars), were
+  unaffected. The runner and the measurement now set a short fixed PATH (`config.BASE_PATH`: Windows folders,
+  Python, Cargo, Git, Node, Java, the Visual Studio installer folder and the two CLIs; language sessions and builds
+  add their toolchains in front). All 38 sessions are run again with it; the affected runs are kept in
+  `data/failed_sessions/` (a second failed run of the same session gets a `.2` suffix). The first build and
+  correctness pass of the measurement hit the same error on every C++ build; those rows were deleted and rebuilt.
+- Transient provider errors that Claude Code retried within a session: two HTTP 520s from DeepSeek and two 404s from
+  Nvidia; those sessions finished normally.

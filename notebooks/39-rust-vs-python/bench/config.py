@@ -161,10 +161,22 @@ def input_path(task, name):
     return (DATA / "samples" if name.startswith("s") and not name.startswith("sweep") else INPUTS) / task / f"{name}.in"
 
 
+# A short, fixed PATH for author sessions and measurements. Visual Studio's vcvars64.bat fails with "The input line is
+# too long" when the inherited PATH nears cmd's 8,191-character limit, which happened after a desktop-app restart on
+# 2026-11-05 (the inherited PATH grew to 7,921 characters). Language sessions and builds add their toolchains in front.
+BASE_PATH = os.pathsep.join([
+    r"C:\Windows\system32", r"C:\Windows", r"C:\Windows\System32\Wbem", r"C:\Windows\System32\WindowsPowerShell\v1.0",
+    r"C:\Windows\System32\OpenSSH", str(PYTHON.parent), str(PYTHON.parent / "Scripts"), str(Path.home() / ".cargo" / "bin"),
+    r"C:\Program Files\Git\cmd", r"C:\Program Files\Git\usr\bin", r"C:\Program Files\nodejs", r"C:\Program Files\Java\jdk-23\bin",
+    r"C:\Program Files (x86)\Microsoft Visual Studio\Installer",
+    str(Path.home() / ".local" / "bin"), str(Path.home() / "AppData" / "Local" / "Programs" / "muse"),
+])
+
+
 def environment():
     env = os.environ.copy()
     env.pop("FORCE_COLOR", None)
-    env.update(THREAD_ENV)
+    env.update(THREAD_ENV, PATH=BASE_PATH)
     return env
 
 
@@ -173,4 +185,5 @@ def session_environment():
     env = {k: v for k, v in os.environ.items()
            if not k.upper().startswith(("CLAUDE", "ANTHROPIC_", "OPENAI_", "OPENROUTER_", "CODEX_")) and k.upper() != "FORCE_COLOR"}
     env["NO_COLOR"] = "1"
+    env["PATH"] = BASE_PATH
     return env
