@@ -36,16 +36,16 @@ A model receives a data table and analyst notes that hold more than one chart sh
 
 ## Study summary
 
-The study uses twelve made-up briefs like the meal-kit one, each a data table plus ten analyst notes: two critical facts, one critical caveat and seven true notes the decision does not need. Three models made one chart for every brief at each of five levels of instruction, 180 charts in all, each written as matplotlib code: Claude Opus 5.5, Muse Wonder Full and the open-weight DeepSeek V4.1 Flash. Every chart was measured three ways. The harness counted the labels and other text drawn on it. A reader model that saw only the image was asked for the main message, the caveat and the critical numbers. Two judge models that saw the brief rated the chart and marked which notes it called out.
+The study uses twelve made-up briefs like the meal-kit one, each a data table plus ten analyst notes: two critical facts, one critical caveat and seven true notes the decision does not need. Three models made one chart for every brief at each of five levels of instruction, 180 charts in all, each written as matplotlib code: Claude Opus 5.5, Muse Wonder Full and the open-weight DeepSeek V4.1 Flash. Every chart was measured three ways. The harness counted the labels and other text drawn on it. A reader model that saw only the image was asked for the main message, the caveat and the critical numbers. Three judge models that saw the brief rated the chart and marked which notes it called out: Claude Opus 5.5, Muse Wonder Full and GPT-6.1 Sol, whose maker has no chart in the study.
 
 - With only "make a chart from this", Muse Wonder Full put 24 labels on an average chart and Claude Opus 5.5 put 16. DeepSeek V4.1 Flash put 6, but used legends and extra panels instead. The reference charts drawn for this study carry 4. Saying who the chart is for and what they decide removed few labels: 12 on average, and DeepSeek rose to 10.
 - Six general design rules (title states the finding, one highlight colour, label only what carries the message, and so on) cut the labels to 5 per chart. They also cut the critical numbers. The reader could read only 57% of them, against 84% with the bare request, because 32% were no longer on the chart.
 - When the prompt also quoted the three critical notes and asked for the rest to be left off, the reader read 96% of the critical numbers and found the main message on every chart. These charts carried 7 labels, 2 more than with the general rules alone, and almost no secondary notes.
-- Shown the chart it had drawn, a model kept roughly the same content (5.6 labels, 60% of critical numbers) but cleaned up the drawing: overlapping text and garbled dollar amounts nearly disappeared, and the judges listed 0.4 errors per chart instead of 1.1.
+- Shown the chart it had drawn, a model kept roughly the same content (5.6 labels, 60% of critical numbers) but cleaned up the drawing: overlapping text and garbled dollar amounts nearly disappeared, and the judges listed 0.4 errors per chart instead of 0.9.
 
 Back in the meal-kit meeting: a bare request gives the committee a chart with everything on it, so the critical facts are there but have to be found among a dozen or more labels. General design advice gives a clean chart that often leaves off the number the committee needs, such as the cancellation rate before and after the rise. Clean and complete charts came only when the person asking said which notes mattered, which means the person still did the editing.
 
-The caveat that most affects this result is the reader. It is a model that reads every label however small, and it found the main message on all 36 charts made from bare requests, including one with 118 labels. A person glancing at a slide for ten seconds is likely to be hurt more by clutter than this reader was; the judges' clarity rating (3.6 out of 5 for bare requests, 4.6 with design rules) points the same way. Every code reply rendered (178 first time, 2 after one repair), so format failures play no part in the comparison.
+The caveat that most affects this result is the reader. It is a model that reads every label however small, and it found the main message on all 36 charts made from bare requests, including one with 118 labels. A person glancing at a slide for ten seconds is likely to be hurt more by clutter than this reader was; the judges' clarity rating (3.7 out of 5 for bare requests, 4.5 with design rules) points the same way. Every code reply rendered (178 first time, 2 after one repair), so format failures play no part in the comparison.
 
 ![Two line charts by level. Left: labels per chart fall from 24, 16 and 6 with a bare request to about 5 under design principles, rise to 6 to 8 with priorities, and stay at 5 to 6 after revising; references have 4. Right: the critical score is 0.86 to 0.95 with a bare request, 0.73 to 0.87 under design principles, 0.94 to 1.00 with priorities and 0.82 to 0.86 after revising; references score 1.00.](figures/headline.png)
 
@@ -134,7 +134,7 @@ The comparison between L2 and L3 separates two skills: at L2 the model has to de
 
 ## 3. The models
 
-Three models make the charts. They cover two closed model families that this repository calls through their command-line tools, and the strongest recent open-weight model that accepts images. A reader from a fourth vendor takes the quiz, and two judges rate every chart. The judges are also chart makers, so section 8 checks whether either favours its own charts.
+Three models make the charts. They cover two closed model families that this repository calls through their command-line tools, and the strongest recent open-weight model that accepts images. A reader from a fourth vendor takes the quiz, and three judges rate every chart. Two of the judges are also chart makers, so section 8 checks whether either favours its own charts, with GPT-6.1 Sol, whose vendor makes no charts here, as the neutral comparison.
 
 | Role | Model | Pinned version | How it was called | Size and precision | Settings | Why it is included |
 |---|---|---|---|---|---|---|
@@ -143,9 +143,10 @@ Three models make the charts. They cover two closed model families that this rep
 | Chart maker | DeepSeek V4.1 Flash | `deepseek/deepseek-v4.1-flash-1017`, permaslug `deepseek/deepseek-v4.1-flash-20261017` | OpenRouter, pinned to the DeepSeek first-party endpoint | 763B total parameters (mixture of experts), MIT licence | reasoning effort high | Joint top of large open-weight models on the Artificial Analysis Progress Index (checked 5 November 2026), and it accepts images, which L4 needs |
 | Reader | Kimi K3.1 Pro | `moonshotai/kimi-k3.1-pro`, permaslug `moonshotai/kimi-k3.1-pro-20261023` | OpenRouter, pinned to Moonshot AI (mxfp4) | 2.78T total parameters, custom licence | provider default reasoning | A strong vision model from a vendor that makes no charts here, so it has no stake in any chart |
 | Judge | Claude Opus 5.5 | `claude-opus-5-5` | `claude -p` | as above | effort medium | Top model; also a chart maker |
+| Judge | GPT-6.1 Sol | `gpt-6.1-sol` | `codex exec` (Codex CLI 0.160.1), read-only sandbox | Not published | reasoning effort medium | Top model from a vendor that makes no charts here |
 | Judge | Muse Wonder Full | `muse-wonder-full-1.0` | `muse exec` | as above | reasoning effort medium | Top model; also a chart maker |
 
-Every call runs in an empty temporary folder with no tools, so a model cannot inspect the study, and all three chart makers get the same system prompt ("You are a helpful assistant."). The briefs were generated for this study, so no model can have seen them in training.
+Every call runs in an empty temporary folder with no tools, so a model cannot inspect the study, and all three chart makers get the same system prompt ("You are a helpful assistant.").
 
 ## 4. How the experiment runs
 
@@ -159,14 +160,14 @@ flowchart LR
     D -->|"36 L2 charts"| E["L4: each model sees its<br/>own L2 chart and revises<br/>36 calls"]
     E --> D
     D --> F["Reader quiz, image only<br/>Kimi K3.1 Pro<br/>2 calls x 192 charts"]
-    D --> G["Two judges<br/>Claude Opus 5.5, Muse Wonder Full<br/>2 calls x 192 charts"]
+    D --> G["Three judges<br/>Claude Opus 5.5, GPT-6.1 Sol,<br/>Muse Wonder Full<br/>3 calls x 192 charts"]
     H["12 reference charts<br/>drawn by the study author"] --> F
     H --> G
     F --> S["Scores by model and level"]
     G --> S
 ```
 
-For each brief, model and level, the harness sends one prompt and takes the longest Python code block from the reply. It runs the code in a separate Python process inside a folder that holds only `data.csv`, saves the figure and counts what is on it. If the code raises an error or draws no figure, the model gets one repair call with its code and the error, which is what a person would do next. The L4 call goes to the same model after its L2 chart has rendered, with the L2 prompt, its L2 code and the chart as an image. The diagram below shows every model call made for one chart.
+For each brief, model and level, the harness sends one prompt and takes the longest Python code block from the reply. It runs the code in a separate Python process inside a folder that holds only `data.csv`, saves the figure and counts what is on it. If the code raises an error or draws no figure, the model gets one repair call with its code and the error, which is what a person would do next. The diagram below shows every model call made for one chart.
 
 ```mermaid
 flowchart TB
@@ -181,21 +182,21 @@ flowchart TB
     RV --> X
     PNG --> R1["Reader call 1, Kimi K3.1 Pro (OpenRouter)<br/>image only: main message and caveat"]
     PNG --> R2["Reader call 2, Kimi K3.1 Pro<br/>image only: two critical facts as numbers"]
-    PNG --> J["Two judge calls, run in parallel<br/>Claude Opus 5.5 (claude -p), Muse Wonder Full (muse exec)<br/>brief + notes with roles + image"]
+    PNG --> J["Three judge calls, run in parallel<br/>Claude Opus 5.5 (claude -p), GPT-6.1 Sol (codex exec),<br/>Muse Wonder Full (muse exec)<br/>brief + notes with roles + image"]
 ```
 
 ### Worked example: one chart from prompt to score
 
 This is brief B01 at level L2 (purpose plus design principles), drawn by Muse Wonder Full. It shows every part of the scoring at work: a chart that looks good, carries the main message and handles the caveat, but leaves off two of the four critical numbers.
 
-![Line chart titled "Family cancellations doubled after the April price rise and stayed high, other plans did not change". The Family plan's monthly cancellation rate is a thick red line, about 3.1% from October to March and about 6.5% from April to August, with labels "Before: 3.1% a month" and "Apr-Aug: 6.5% a month". Couple, Vegetarian and Single are thin grey lines near 2.5% to 3%. A dashed line marks 1 April, labelled "Family price 79→89 per week" with the dollar signs missing. A footnote says September is excluded because it covers 1 to 14 September only.](figures/worked_example.png)
+![Muse Wonder Full's L2 chart for B01: the Family cancellation rate as a thick red line, labelled 3.1% a month before the April price rise and 6.5% after; the other plans as thin grey lines; a dashed line at 1 April labelled "Family price 79→89 per week", dollar signs missing; a footnote saying September is excluded.](figures/worked_example.png)
 
 1. Muse Wonder Full replied with 77 lines of matplotlib code, and the harness rendered the chart above.
 2. The counts found 8 labels (the two averages, the price-change note, four line-end names and the footnote), no legend and one colour.
 3. The reader, seeing only the image, gave the main message as "Family cancellations doubled after the April price rise and stayed high, while cancellations for other plans did not change" and reported the September exclusion as the caveat. Both match the B01 patterns.
 4. It read the Family cancellation rate before and after the rise as 3.1% and 6.5% (true values 3.08% and 6.47%), but answered `null` for the subscriber counts in April and September, which the chart does not show: 2 of 4 numbers.
 5. The critical score is (1 + 1 + 0.5) / 3 = 0.83.
-6. The judges rated it 1.5 for overload, 5 for clarity and 7.5 out of 10. Both noted that the 19% fall in subscribers is missing and that two line-end labels overlap. Neither noticed that the price note reads "79→89": the code wrote "\$79→\$89", and matplotlib drew the text between the two dollar signs as a formula (section 9).
+6. The three judges rated it 1.3 for overload, 4.7 for clarity and 7.3 out of 10 on average. All three noted that the 19% fall in subscribers is missing; Claude Opus 5.5 and Muse Wonder Full also noted that two line-end labels overlap. None noticed that the price note reads "79→89": the code wrote "\$79→\$89", and matplotlib drew the text between the two dollar signs as a formula (section 9).
 
 ## 5. How a chart is measured
 
@@ -213,7 +214,7 @@ The main message is scored with a pattern written for each brief before any char
 
 ### What a careful reviewer sees: the judges
 
-Claude Opus 5.5 and Muse Wonder Full each see the brief, the data, all ten notes marked CRITICAL, CAVEAT or SECONDARY, and the chart image, without knowing which model or level made it. For every note, a judge says whether the chart calls it out (states it or draws attention to it), shows it without pointing to it, or leaves it out. The count of secondary notes called out measures content overload, as opposed to the visual clutter that the label count measures. The judge also rates overload (1 = nothing competes with the main message, 5 = the message is hard to find) and clarity (5 = the decision-critical message is obvious within ten seconds), lists errors such as wrong numbers or garbled text, and gives an overall rating from 1 to 10 for how ready the chart is to show.
+Claude Opus 5.5, GPT-6.1 Sol and Muse Wonder Full each see the brief, the data, all ten notes marked CRITICAL, CAVEAT or SECONDARY, and the chart image, without knowing which model or level made it. For every note, a judge says whether the chart calls it out (states it or draws attention to it), shows it without pointing to it, or leaves it out. The count of secondary notes called out measures content overload, as opposed to the visual clutter that the label count measures. The judge also rates overload (1 = nothing competes with the main message, 5 = the message is hard to find) and clarity (5 = the decision-critical message is obvious within ten seconds), lists errors such as wrong numbers or garbled text, and gives an overall rating from 1 to 10 for how ready the chart is to show.
 
 ### Reference charts
 
@@ -223,16 +224,16 @@ For each brief the study author drew one reference chart from the brief's priori
 
 ## 6. Results: labels on the chart
 
-This table gives the main measures for the 36 charts at each level (12 briefs by 3 models), with the reference charts for comparison. Every one of the 180 code replies rendered a chart, 178 on the first run and 2 after one repair, so no chart is missing from any level; the reader's 384 replies all parsed, and 383 of the 384 judge replies did.
+This table gives the main measures for the 36 charts at each level (12 briefs by 3 models), with the reference charts for comparison. Every one of the 180 code replies rendered a chart, 178 on the first run and 2 after one repair, so no chart is missing from any level; the reader's 384 replies all parsed, and 575 of the 576 judge replies did.
 
 | Level | Labels per chart | Words per chart | Secondary notes called out (of 7) | Main message found | Caveat handled | Critical numbers read correctly | Critical score | Judges' overall (1-10) |
 |---|---|---|---|---|---|---|---|---|
-| L0, bare request | 15.4 | 120 | 1.50 | 100% | 86% | 84% | 0.90 | 5.9 |
-| L1, purpose | 12.1 | 123 | 1.19 | 97% | 94% | 77% | 0.90 | 6.7 |
+| L0, bare request | 15.4 | 120 | 1.58 | 100% | 89% | 84% | 0.91 | 6.2 |
+| L1, purpose | 12.1 | 123 | 1.23 | 97% | 94% | 77% | 0.90 | 7.0 |
 | L2, design principles | 5.3 | 87 | 0.44 | 89% | 97% | 57% | 0.81 | 7.5 |
-| L3, priorities | 7.4 | 107 | 0.14 | 100% | 97% | 96% | 0.98 | 7.9 |
-| L4, look and revise | 5.6 | 88 | 0.50 | 94% | 97% | 60% | 0.84 | 8.1 |
-| Reference charts | 4.1 | 65 | 0.08 | 100% | 100% | 100% | 1.00 | 8.6 |
+| L3, priorities | 7.4 | 107 | 0.14 | 100% | 97% | 96% | 0.98 | 8.1 |
+| L4, look and revise | 5.6 | 88 | 0.50 | 94% | 97% | 60% | 0.84 | 8.0 |
+| Reference charts | 4.1 | 65 | 0.08 | 100% | 100% | 100% | 1.00 | 8.7 |
 
 With a bare request (L0), two of the three models crowd their charts. Muse Wonder Full averages 24 labels per chart (median 15.5, up to 118) and Claude Opus 5.5 averages 16 (median 13, up to 56), against 4 on the reference charts. Almost all of them are numbers, usually a value printed on every bar or point. These charts also have 2.1 panels on average (references: 1.0), legends with 3.6 entries and 3.0 non-grey colours. DeepSeek V4.1 Flash puts only 5.8 labels on its bare-request charts but uses legends (5.2 entries) and extra panels (2.4) instead, so its charts are labelled differently rather than sparse.
 
@@ -250,9 +251,9 @@ The figure below shows these levels for one brief, the city budget review (B04),
 
 A chart with few labels is only useful if the critical information is still on it. The left panel below shows how often the reader found the main message and how often the caveat was handled, by level. The right panel splits the 132 critical numbers asked about at each level (36 charts, three or four numbers each) into numbers the reader read correctly, numbers it read wrongly, and numbers that were not on the chart, where it answered `null`.
 
-![Left: main message found (89% to 100%) and caveat handled (86% to 97%) by level. Right: stacked bars of the 132 critical numbers per level; read correctly 84%, 77%, 57%, 96% and 60% at L0 to L4, not on the chart 9%, 13%, 32%, 3% and 31%.](figures/critical_parts.png)
+![Left: main message found (89% to 100%) and caveat handled (89% to 97%) by level. Right: stacked bars of the 132 critical numbers per level; read correctly 84%, 77%, 57%, 96% and 60% at L0 to L4, not on the chart 9%, 13%, 32%, 3% and 31%.](figures/critical_parts.png)
 
-The main message and the caveat come through almost everywhere, so they cannot rank the levels. The reader found the main message on all 36 bare-request charts and on 89% to 100% at the other levels; the caveat was handled on 86% of bare-request charts and 94% to 97% at the other levels. Both sit near the ceiling, and the few misses are individual cases discussed in section 9.
+The main message and the caveat come through almost everywhere, so they cannot rank the levels. The reader found the main message on all 36 bare-request charts and on 89% to 100% at the other levels; the caveat was handled on 89% of bare-request charts and 94% to 97% at the other levels. Both sit near the ceiling, and the few misses are individual cases discussed in section 9.
 
 The critical numbers are where the levels differ. With a bare request the reader read 84% of them correctly. Under the design rules (L2) it read 57%, and the drop is almost entirely numbers that were no longer on the chart: 32% of the L2 numbers drew a `null`, against 9% at L0. The rule "add a number label only where the number is part of the message" was taken as "print fewer numbers", and the numbers dropped were often the ones the decision needed, such as the cancellation rates before and after the price rise or the share of loan value that comes from brokers. The size of the drop differs by model. DeepSeek V4.1 Flash fell from 83% to 36% of numbers read, Muse Wonder Full from 94% to 61%, and Claude Opus 5.5 hardly changed (75% to 72%).
 
@@ -260,19 +261,29 @@ Naming the priorities (L3) restored the numbers: 96% read correctly, with only 4
 
 The look-and-revise pass did not bring the numbers back: 60% read correctly at L4 against 57% at L2. Looking at its own chart, a model judged it as a picture (spacing, overlaps, readability) and did not ask whether the committee could read the numbers it needs.
 
-One scoring rule changed after the results were seen: ten answers to one B12 question gave the range printed on the chart ("17-27"), which the first parser read as its first number and the fixed parser reads as its midpoint. Under the first parser the critical scores by level are 0.90, 0.89, 0.81, 0.97 and 0.84, against 0.90, 0.90, 0.81, 0.98 and 0.84 now.
+One scoring rule changed after the results were seen: ten answers to one B12 question gave the range printed on the chart ("17-27"), which the first parser read as its first number and the fixed parser reads as its midpoint. Under the first parser the critical scores by level are 0.91, 0.89, 0.81, 0.97 and 0.84, against 0.91, 0.90, 0.81, 0.98 and 0.84 now.
 
 ## 8. Results: what the judges saw
 
-The reader measures what can be taken from a chart; the judges measure what a careful reviewer who knows the brief thinks of it. The three panels show, by level and model, the secondary notes a chart called out (0 to 7), the judges' overload rating (1 = nothing competes with the main message, 5 = the message is buried) and their overall rating (1 to 10). Each value is the mean of the two judges; the dashed line is the reference charts.
+The reader measures what can be taken from a chart; the judges measure what a careful reviewer who knows the brief thinks of it. The three panels show, by level and model, the secondary notes a chart called out (0 to 7), the judges' overload rating (1 = nothing competes with the main message, 5 = the message is buried) and their overall rating (1 to 10). Each value is the mean of the three judges; the dashed line is the reference charts.
 
-![Three line charts by level and model: secondary notes called out fall to near zero at L3; the overload rating falls from 2.5 to 3.6 at L0 to 1.2 to 1.7 at L4; the overall rating rises from 5.3 to 7.1 at L0 to 7.8 to 8.5 at L4. Reference charts: 0.1, 1.4 and 8.6.](figures/judges.png)
+![Three line charts by level and model: secondary notes called out fall to near zero at L3; the overload rating falls from 2.4 to 3.5 at L0 to 1.2 to 1.7 at L4; the overall rating rises from 5.7 to 7.3 at L0 to 7.7 to 8.5 at L4. Reference charts: 0.1, 1.4 and 8.7.](figures/judges.png)
 
-The judges saw the same pattern as the counts. Bare-request charts called out 1.5 secondary notes on average, and Muse Wonder Full's called out 2.8 of the 7: the fastest-growing plan, the busiest hospital, the record day. The design rules cut this to 0.44, and naming the priorities cut it to 0.14, close to the references (0.08). So the extra labels at L3 are not secondary notes creeping back; they are the critical numbers.
+The judges saw the same pattern as the counts. Bare-request charts called out 1.6 secondary notes on average, and Muse Wonder Full's called out 2.9 of the 7: the fastest-growing plan, the busiest hospital, the record day. The design rules cut this to 0.44, and naming the priorities cut it to 0.14, close to the references (0.08). So the extra labels at L3 are not secondary notes creeping back; they are the critical numbers.
 
-The overload rating fell from 3.1 at L0 to 1.6 at L2 (difference 1.5, interval 1.2 to 1.7), rose slightly at L3 (1.9) and was lowest at L4 (1.4), equal to the references. The overall rating rose at every level: 5.9, 6.7, 7.5, 7.9 and 8.1, against 8.6 for the references. The judges rated the L4 charts slightly above the L3 charts, while the reader got far more from L3: the judges see a chart as someone who already knows the story, the reader as someone who does not.
+The overload rating fell from 3.0 at L0 to 1.6 at L2 (difference 1.4, interval 1.1 to 1.7), rose slightly at L3 (1.9) and was lowest at L4 (1.4), equal to the references; each judge alone shows this shape. The overall rating rose from 6.2 at L0 to 7.0, 7.5 and 8.1 at L3, and was 8.0 at L4, against 8.7 for the references.
 
-The label count and the judges' overload rating agree moderately (rank correlation 0.56 across the 180 charts). The two judges agree closely with each other: rank correlations of 0.81 on overload, 0.73 on clarity and 0.82 on the overall rating, and the same call on 96.5% of the 1,910 note-by-note decisions. Neither favours its own model's charts. Claude Opus 5.5 rated its own charts 7.75 and Muse Wonder Full rated them 7.97; Muse Wonder Full rated its own charts 6.57 and Claude Opus 5.5 rated them 6.67.
+The judges differ on L3 against L4. GPT-6.1 Sol rated the L3 charts 0.7 points above the L4 charts (8.5 against 7.8; interval 0.1 to 1.2), Claude Opus 5.5 rated them the same (7.8 and 7.9), and Muse Wonder Full put L4 ahead (8.3 against 8.1). The reader got far more from L3 (96% of critical numbers against 60%), and Sol's ratings follow the reader more closely in general: its overall rating has a rank correlation of 0.30 with the share of critical numbers read correctly, against 0.13 for Claude Opus 5.5 and 0.04 for Muse Wonder Full. The two chart-making judges rate a chart as someone who already knows the story; Sol's ratings depend more on whether the critical numbers are on it.
+
+The label count and the judges' overload rating agree moderately (rank correlation 0.57 across the 180 charts). Each pair of judges agrees closely on clutter (rank correlations of 0.75 to 0.81 on overload, and the same call on 95.1% to 96.5% of about 1,900 note-by-note decisions), less on clarity (0.57 to 0.73) and the overall rating (0.75 to 0.82).
+
+| Charts made by | Rated by Claude Opus 5.5 | Rated by Muse Wonder Full | Rated by GPT-6.1 Sol |
+|---|---|---|---|
+| Claude Opus 5.5 | 7.75 (own) | 7.97 | 8.18 |
+| Muse Wonder Full | 6.67 | 6.57 (own) | 7.23 |
+| DeepSeek V4.1 Flash | 7.24 | 7.30 | 7.47 |
+
+Neither chart-making judge favours its own model: GPT-6.1 Sol rated every model's charts higher than both of them did, and against Sol each is harder on its own model's charts, not softer. All three judges rank the makers in the same order: Claude Opus 5.5, then DeepSeek V4.1 Flash, then Muse Wonder Full.
 
 ## 9. Error analysis
 
@@ -282,21 +293,21 @@ The averages hide very different charts. The cases below were chosen to illustra
 
 ![Left: Muse Wonder Full's L0 staff-survey chart, two dense panels with 118 labels. Right: the reference chart, one dot plot with Customer Support highlighted and 3 labels.](figures/example_most_labels.png)
 
-Muse Wonder Full's bare-request chart for the staff survey (B09) has 118 labels and 225 words: the change on every question for every department, with the 2026 score in brackets, plus a panel of response rates. It is the extreme case of the habit seen across bare-request charts (print every value), applied to a table with 108 rows. The judges rated it 4.5 for overload and 3.5 overall. The reader found everything, for a critical score of 1.00. A model that reads every label at full resolution is not slowed down by 118 of them; a committee member looking at a slide for ten seconds would be. Here the judges' ratings are the better guide, and they are much worse than for the reference, which carries the same information with 3 labels (overload 4.5 against 1.0, clarity 2.5 against 5.0).
+Muse Wonder Full's bare-request chart for the staff survey (B09) has 118 labels and 225 words: the change on every question for every department, with the 2026 score in brackets, plus a panel of response rates. It is the bare-request habit (print every value) applied to a table with 108 rows. The judges rated it 4.7 for overload and 3.7 overall. The reader found everything, for a critical score of 1.00. A model that reads every label at full resolution is not slowed down by 118 of them; a committee member looking at a slide for ten seconds would be. Here the judges' ratings are the better guide, and they are much worse than for the reference, which carries the same information with 3 labels (overload 4.7 against 1.0, clarity 2.7 against 5.0).
 
 ### A clean chart that lost its numbers
 
 ![Left: Claude Opus 5.5's L2 returns chart, one line of "defect returns per 100 units" with footwear jumping from 0.9 to 8.8. Right: its L3 chart, return rate by category with footwear at 19.2%, and footwear's defect share at 46%.](figures/example_l2_vs_l3.png)
 
-Claude Opus 5.5's L2 chart for the returns brief (B07) follows every design rule, and the judges gave it 9 out of 10. But to sharpen the message the model plotted a measure that is not in the data: defect returns per 100 units sold, the return rate times the share of returns that report a defect. On that measure footwear went from 0.9 to 8.8. Asked for footwear's return rate, the reader read those two numbers and was wrong on both; the 19.2% and the 10.8% before it are not on the chart. At L3, told that the return rate and the defect share are what the audience needs, the same model drew two panels with 8 labels, and the reader got every number right. This is the usual way numbers went missing under the design rules: of the critical numbers on the 36 L2 charts, 32% were not shown and 11% were read wrongly, mostly because the chart showed a related measure (an index, a derived rate or a difference) instead of the values asked for.
+Claude Opus 5.5's L2 chart for the returns brief (B07) follows every design rule, and the judges gave it 8.7 out of 10 on average (GPT-6.1 Sol gave 8, noting that footwear's return rate is missing). But to sharpen the message the model plotted a measure that is not in the data: defect returns per 100 units sold, the return rate times the share of returns that report a defect. On that measure footwear went from 0.9 to 8.8. Asked for footwear's return rate, the reader read those two numbers and was wrong on both; the 19.2% and the 10.8% before it are not on the chart. At L3, told that the return rate and the defect share are what the audience needs, the same model drew two panels with 8 labels, and the reader got every number right. This is the usual way numbers went missing under the design rules: of the critical numbers on the 36 L2 charts, 32% were not shown and 11% were read wrongly, mostly because the chart showed a related measure (an index, a derived rate or a difference) instead of the values asked for.
 
 ### When the model does its own analysis
 
 ![Left: Claude Opus 5.5's L2 loan chart, cost per funded loan (broker highest, \$1,446) and cost per \$100 lent (broker \$2.50, branch \$4.10). Right: its L2 electricity chart, daily peak demand against capacity and capacity plus 40 MW, with the 14 January peak and the Unit 3 repair week marked.](figures/example_reframe.png)
 
-Two of the lowest critical scores belong to charts that answer the decision with an analysis the notes did not contain. For the loan brief (B11), Claude Opus 5.5 at L2 computed the cost per \$100 lent and found that broker loans, the most expensive per loan, are among the cheapest per dollar lent (\$2.50 against \$4.10 at branches). That is a useful point for a committee thinking of closing the broker channel, but it is not the message the brief marks as critical (broker brings a third of loan value from a sixth of applications), so the summary missed the pattern and the chart scored 0.58.
+Two of the lowest critical scores belong to charts that answer the decision with an analysis the notes did not contain. For the loan brief (B11), Claude Opus 5.5 at L2 computed the cost per \$100 lent and found that broker loans, the most expensive per loan, are among the cheapest per dollar lent (\$2.50 against \$4.10 at branches). That is a useful point, but it is not the message the brief marks as critical (broker brings a third of loan value from a sixth of applications), so the summary missed the pattern and the chart scored 0.58.
 
-For the electricity brief (B08), the same model built the chart around the decision itself: would an extra 40 MW have covered last winter's worst day? It marks the week Unit 3 was out for repair and works out that 14 January would still have been 12 MW short with the unit running. Both judges said it states the critical caveat and rated it 8 and 9. The quiz scored it 0.17, the lowest in the study: the reader's summary ("an extra 40 MW would not have covered last winter's worst day") did not match the pattern, it named a different caveat (the forecast's cold-day error), and it counted 1 day over capacity because the chart marks only 14 January. This chart answers the committee's question better than its score says.
+For the electricity brief (B08), the same model built the chart around the decision itself: would an extra 40 MW have covered last winter's worst day? It marks the week Unit 3 was out for repair and works out that 14 January would still have been 12 MW short with the unit running. All three judges said it states the critical caveat and rated it 8, 8 and 9. The quiz scored it 0.17, the lowest in the study: the reader's summary ("an extra 40 MW would not have covered last winter's worst day") did not match the pattern, it named a different caveat (the forecast's cold-day error), and it counted 1 day over capacity because the chart marks only 14 January. This chart answers the committee's question better than its score says.
 
 Of the seven summaries that missed the main-message pattern, a person would accept two (this one, and DeepSeek V4.1 Flash's L1 chart for B12, "Hillcrest is the clear enforcement priority"). The other five carry a different message, such as DeepSeek's two B03 charts that lead with the payment-bug fix rather than the fall in mobile orders. Six of the seven are at L2 or L4, where the model chose the message itself; every L3 chart matched.
 
@@ -304,11 +315,11 @@ Of the seven summaries that missed the main-message pattern, a person would acce
 
 ![Left: Claude Opus 5.5's L2 meal-kit chart, where the price note reads "Price 79→89" with the dollar signs missing. Right: its L4 revision, where it reads "Price \$79→\$89".](figures/example_revise.png)
 
-In matplotlib, text between two dollar signs is drawn as a formula: the signs disappear and the words turn italic, so "\$79 to \$89" is drawn as "79to89". The code runs without any error or warning, so a harness that only checks that the code runs cannot catch it. 40 of the 180 model charts (22%) contain such a label: 8 at L0, 12 at L1, 8 at L2, 9 at L3 and 3 at L4. Three briefs about money (B01 prices, B04 budgets, B11 loan costs) account for 33 of them, and no model avoided it reliably; the study author made the same mistake in three draft reference charts. Looking at the rendered chart catches it. The revision pass fixed 5 of the 8 garbled L2 charts, including all 3 of Claude Opus 5.5's, and also cut overlapping text from 0.47 to 0.08 pairs per chart and the judges' listed errors from 1.07 to 0.42. The judges noticed the garbling on 26 of the 40 charts.
+In matplotlib, text between two dollar signs is drawn as a formula: the signs disappear and the words turn italic, so "\$79 to \$89" is drawn as "79to89". The code runs without any error or warning, so a check that the code runs cannot catch it. 40 of the 180 model charts (22%) contain such a label: 8 at L0, 12 at L1, 8 at L2, 9 at L3 and 3 at L4. Three briefs about money (B01 prices, B04 budgets, B11 loan costs) account for 33 of them, and no model avoided it reliably; the study author made the same mistake in three draft reference charts. Looking at the rendered chart catches it. The revision pass fixed 5 of the 8 garbled L2 charts, including all 3 of Claude Opus 5.5's, and also cut overlapping text from 0.47 to 0.08 pairs per chart and the judges' listed errors from 0.89 to 0.39. At least one judge noticed the garbling on 26 of the 40 charts: Claude Opus 5.5 in 60% of its judgements of those charts, Muse Wonder Full in 42% and GPT-6.1 Sol in 28%.
 
 ### Caveats: where the reader and the judges differ
 
-The quiz asks the reader for one caveat, and when a chart states both the critical caveat and a harmless one from the secondary notes, the reader sometimes names the harmless one. That happened on 5 charts where both judges say the critical caveat is shown. Scoring caveats by the judges instead gives 92%, 94%, 100%, 100% and 100% at L0 to L4 and moves the critical score by at most 0.02; the quiz's definition, fixed before the run, is used throughout. Five misses are agreed by both measures, all at L0 or L1: DeepSeek V4.1 Flash's charts for B04 and B07 state no caveat, and Claude Opus 5.5's bare-request chart for B11 names the partner-app launch instead of the projected default rates.
+The quiz asks the reader for one caveat, and when a chart states both the critical caveat and a harmless one from the secondary notes, the reader sometimes names the harmless one. That happened on 5 charts where all three judges say the critical caveat is shown. Scoring caveats by the judges instead gives 94%, 94%, 100%, 100% and 100% at L0 to L4 and moves the critical score by at most 0.02; the quiz's definition, fixed before the run, is used throughout. Four misses are agreed by both measures: DeepSeek V4.1 Flash's charts for B04 and B07, at L0 and L1, state no caveat. Claude Opus 5.5's bare-request chart for B11 is split: the reader named the partner-app launch instead of the projected default rates, but the chart shows no default rates, so two of the three judges say the caveat does not apply and it counts as handled.
 
 ## 10. What the evidence supports
 
@@ -326,7 +337,7 @@ Do not rely on a model reader to tell you whether a chart is too busy. Kimi K3.1
 
 The reader is a model, not a person in a meeting. It reads every label at full resolution and found the main message on all 36 bare-request charts, so the critical score probably flatters the bare-request and purpose levels. The judges' overload and clarity ratings capture some of this, but no person read these charts under time pressure. The comparison between L2 and L3 is less exposed to this problem, because both levels produce charts with few labels.
 
-The judges are also chart makers. Claude Opus 5.5 and Muse Wonder Full each judged their own charts along with the others'. Section 8 shows no sign that either favoured its own, and the two agree closely, but a third judge from a vendor that makes no charts, GPT-6.1 Sol, was planned and could not run because its command-line quota ran out during the study.
+Claude Opus 5.5 and Muse Wonder Full judged their own charts along with the others'. Section 8 shows no sign that either favoured its own, against GPT-6.1 Sol as a neutral judge. The judges agree on clutter but not on whether a clean drawing makes up for missing numbers (L4 against L3), so a judge-based verdict on that point depends on the judge.
 
 Each brief, model and level got one chart, so a single chart per cell mixes the effect of the level with run-to-run variation; the intervals resample briefs and do not cover it.
 
@@ -340,14 +351,14 @@ Apart from that rule and the range parser in section 7, both reported with the o
 
 ## 12. Spend, data and how to run
 
-The study made 954 model calls, including 21 while testing the harness on B01 (17 were identical to calls in the run and reused; 4 scored a draft reference chart that was later corrected). Claude Opus 5.5 made 60 charts and 193 judgements for a list-price equivalent of \$18.28 on a subscription. Through OpenRouter, DeepSeek V4.1 Flash cost \$0.39 for 61 calls and Kimi K3.1 Pro \$4.16 for 386 reader calls. Muse Wonder Full's 254 calls ran on a subscription that reports no price. The total reported cost is \$22.82.
+The study made 1,146 model calls, including 21 while testing the harness on B01 (17 were identical to calls in the run and reused; 4 scored a draft reference chart that was later corrected). Claude Opus 5.5 made 60 charts and 193 judgements for a list-price equivalent of \$18.28 on a subscription. Through OpenRouter, DeepSeek V4.1 Flash cost \$0.39 for 61 calls and Kimi K3.1 Pro \$4.16 for 386 reader calls. Muse Wonder Full's 254 calls and GPT-6.1 Sol's 192 judgements ran on subscriptions through command-line tools that report no price. The total reported cost is \$22.82.
 
-- [`44_chart_overload.ipynb`](44_chart_overload.ipynb) is the notebook, committed with its outputs. Its code was written by Claude Opus 5.5.
-- [`data/briefs/`](data/briefs/) holds each brief's `data.csv` and `brief.json` (notes with roles, quiz questions and answers).
-- [`data/charts/`](data/charts/) holds every chart's final `code.py`, `chart.png` and `metrics.json` (each drawn text item with its role and position), plus `first_attempt.py` where a repair was needed; reference chart code is in [`data/reference/`](data/reference/).
-- [`data/cache/calls.jsonl`](data/cache/calls.jsonl) holds every model call: the full request (model, settings, prompt, SHA-256 of each image) and the reply.
-- [`data/results/`](data/results/) holds one row per chart (`charts.csv`), per generation job, per reader quiz and per judgement, and the level comparisons with their intervals (`level_contrasts.csv`).
-- [`data/PROTOCOL.md`](data/PROTOCOL.md) records the run history.
+- [`44_chart_overload.ipynb`](44_chart_overload.ipynb): the notebook with its outputs; its code was written by Claude Opus 5.5.
+- [`data/briefs/`](data/briefs/): each brief's `data.csv` and `brief.json` (notes with roles, quiz answers).
+- [`data/charts/`](data/charts/): every chart's `code.py`, `chart.png` and `metrics.json` (each drawn text item with its role); reference chart code is in [`data/reference/`](data/reference/).
+- [`data/cache/calls.jsonl`](data/cache/calls.jsonl): every model call, request and reply.
+- [`data/results/`](data/results/): one row per chart, generation job, reader quiz and judgement, and the level comparisons (`level_contrasts.csv`).
+- [`data/PROTOCOL.md`](data/PROTOCOL.md): the run history.
 
 Running the notebook replays every reply from the cache and makes no calls:
 
@@ -355,17 +366,17 @@ Running the notebook replays every reply from the cache and makes no calls:
 python -m nbconvert --to notebook --execute --inplace 44_chart_overload.ipynb
 ```
 
-To collect fresh replies, set `NB44_LIVE=1` before starting Jupyter. That needs the `claude` and `muse` command-line tools signed in (and `codex` to add GPT-6.1 Sol as a judge) and `OPENROUTER_API_KEY`. The size knobs at the top of the notebook (`N_BRIEFS`, `MAKERS_USED`, `JUDGES_USED`) shrink a fresh run, and `NB44_MAX_CALLS` caps it.
+To collect fresh replies, set `NB44_LIVE=1` before starting Jupyter. That needs the `claude`, `codex` and `muse` command-line tools signed in and `OPENROUTER_API_KEY`. The size knobs at the top of the notebook (`N_BRIEFS`, `MAKERS_USED`, `JUDGES_USED`) shrink a fresh run, and `NB44_MAX_CALLS` caps it.
 
 ## 13. Future work and further reading
 
 ### Future work
 
 - Reword the number rule. Change one L2 sentence to "print the numbers the decision depends on, and no others" and measure again, to see whether the drop from 84% to 57% of critical numbers comes from that rule.
-- Let the model name its own priorities. Ask it to list the facts and caveat the audience needs before drawing, then compare its list with the brief's roles and its chart with the L3 charts. This tests whether the model can do the editing step that L3 does for it.
+- Let the model name its own priorities: list the facts and caveat the audience needs before drawing, then compare the list with the brief's roles and the chart with the L3 charts. This tests whether the model can do the editing that L3 does for it.
 - Put the reader in the revise loop. At L4 the model fixed the drawing but not the content. Give it the reader's answers ("a reader could not find the cancellation rate before the rise") and measure whether the numbers come back.
-- Test a ten-second human glance, or a reader given a small, low-resolution image. The model reader found the main message on every bare-request chart, including one with 118 labels; this would show what clutter costs a person.
-- Repeat each cell three times, add GPT-6.1 Sol as a judge that makes no charts, and use recent public data with no analyst notes, where the model must find the critical facts itself.
+- Test a ten-second human glance, or a reader given a small, low-resolution image. The model reader found the main message on every bare-request chart, including one with 118 labels.
+- Repeat each cell three times, to separate the effect of the level from run-to-run variation, and use recent public data with no analyst notes, where the model must find the critical facts itself.
 
 ### Further reading
 
