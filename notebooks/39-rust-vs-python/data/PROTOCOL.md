@@ -190,3 +190,30 @@ trust the result. All times are local (EDT, UTC-4) on 2026-10-30 unless marked U
   correctness pass of the measurement hit the same error on every C++ build; those rows were deleted and rebuilt.
 - Transient provider errors that Claude Code retried within a session: two HTTP 520s from DeepSeek and two 404s from
   Nvidia; those sessions finished normally.
+- A stale correctness row (2026-11-06): the build and correctness pass was running while Muse Wonder Full's ledger
+  language session was rerun. The C# check on the benchmark input started 8 seconds after the new source was written,
+  before it was built, and was stored as `build_failed` under the new source hash. That one row was deleted and the
+  check rerun (correct). For C# the executable hash in the cache key is that of .NET's launcher stub, identical for
+  every C# program, so for C# the key depends on the source hash alone; every run also requires a successful build of
+  the current source, so no result was affected.
+- Timing on battery (2026-11-06). Springs and heat, whose programs were all final, were timed from 09:22 to 13:30 EST
+  while the other sessions waited. The Windows event log shows the laptop had been unplugged at 23:14 the evening
+  before, slept with its lid closed from 09:34 to 12:55, and went back on mains power at 13:29. Every program ran 1.6
+  to 2.5 times slower than on 2026-11-03 (power plan "Balanced" on battery against "Silent" on mains), and one
+  simple-Python springs run spanned the sleep and was recorded as 12,092 s. Rerun on mains power at 13:40, three heat
+  programs matched their 2026-11-03 times within 15%. These timings are not used; the files are kept in
+  `data/results_battery_2026-11-06/`, and all eight tasks are timed again in one sitting on mains power.
+- Power guard. Before the new timing, `bench/measure.py` gained a guard (written by Claude Sonnet 5.5): timed runs wait
+  for mains power, and a run is discarded and repeated if the computer slept during it (tick count against unbiased
+  interrupt time), if a heartbeat thread in the harness saw a gap of more than 5 s (the process was suspended, as in
+  Modern Standby), or, for timed runs, if mains power was lost. Every wait and discarded run is logged in
+  `data/results/power_events.csv`. The guard keeps no row it would otherwise have changed, so `HARNESS_VERSION` and the
+  cache keys are unchanged.
+- Session token counts. A Claude Code session can end with more than one `result` event when the model continues
+  briefly after its answer (for example when a background command it started finishes). Each later event reports
+  turns and tokens for its own continuation only, while the cost is cumulative, and the runner kept only the last
+  event. Six session records undercounted: Opus align (main) and heat (languages), Haiku springs (languages), Nemotron
+  walkers (both), and a failed Haiku routes language run (for example Opus heat, languages: 2 turns and 385 output
+  tokens recorded, 69 and 69,191 in fact). `bench/sessions.py` now sums turns and tokens over all result events, and
+  `python -m bench.sessions refresh-metadata` rewrote those fields from the saved logs (other records gained only a
+  `result_events` count). Costs were already right. Fix by Claude Sonnet 5.5, 2026-11-06.

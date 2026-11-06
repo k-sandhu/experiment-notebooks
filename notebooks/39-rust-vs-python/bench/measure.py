@@ -23,7 +23,7 @@ import psutil
 from bench import config as C
 from bench.common import append_csv, manifest, read_csv, read_json, remove_tree, sha256, utc_now, vendor_config, write_json, write_text
 from bench.compare import compare
-from bench.winjob import cpu_sets, run
+from bench.winjob import Heartbeat, cpu_sets, on_mains, run, sleep_clock, slept_seconds
 from bench.sessions import verify_vendor, render_template, harvest_files
 from bench.common import shim_command
 
@@ -35,6 +35,19 @@ RUN_FIELDS = ["key", "author", "task", "variant", "input", "workers", "repeat", 
 BUILD_FIELDS = ["key", "author", "task", "variant", "status", "compiler_errors", "clean_seconds", "incremental_seconds", "binary_bytes",
                 "binary_sha256", "crates_kept", "pruned_crates", "unpruned_fallback", "source_sha256"]
 LOC_FIELDS = ["key", "author", "task", "variant", "file", "total_lines", "code_lines", "bytes", "unsafe_blocks", "detail"]
+POWER_FIELDS = ["logged_utc", "event", "table", "author", "task", "variant", "input", "workers", "repeat", "reason", "slept_seconds",
+                "mains_before", "mains_after", "wall_seconds", "max_heartbeat_gap"]
+# Power guard: this machine is a laptop. Timing on battery runs 1.6 to 2.5 times slower, and a sleep in the middle of a run
+# is recorded as hours of wall time. Timed tables therefore wait for mains power, and any run during which the computer
+# slept (or, for timed tables, mains power was lost) is logged and repeated instead of kept. The guard only withholds rows
+# that would have been wrong; every kept row is measured exactly as before. Modern Standby may not stop the unbiased
+# interrupt clock, so a heartbeat thread in the harness process is a second detector: a gap of more than
+# SUSPEND_TOLERANCE_SECONDS between its 0.5 s wake-ups means the process was suspended.
+TIMED_TABLES = {"runs", "sweep", "scaling", "baseline"} | {t + "_warmups" for t in ("runs", "sweep", "scaling")}
+POWER_POLL_SECONDS = 30
+SLEEP_TOLERANCE_SECONDS = 2
+SUSPEND_TOLERANCE_SECONDS = 5
+MAX_DISCARDS = 5
 
 
 def fingerprint(folder):
@@ -487,6 +500,39 @@ class Harness:
         path = self.binary(author, task) if variant == "rust" else self.artifact(author, task, variant) if variant in C.LANG_VARIANTS else None
         return sha256(path) if path and path.exists() else ""
 
+    def power_event(self, event, table, job, **fields):
+        row = dict.fromkeys(POWER_FIELDS, "")
+        row.update(job, logged_utc=utc_now(), event=event, table=table, **fields)
+        append_csv(self.results / "power_events.csv", row, POWER_FIELDS)
+
+    def guarded_run(self, table, job, launch):
+        """Run launch() on mains power without sleep; return (result, start time if a wait or retry made the row's start stale)."""
+        timed, disturbed = table in TIMED_TABLES, False
+        for _ in range(MAX_DISCARDS):
+            if timed and on_mains() is False:
+                disturbed = True
+                self.power_event("wait_start", table, job)
+                print("waiting for mains power:", table, *job.values(), flush=True)
+                began = time.perf_counter()
+                while on_mains() is False:
+                    time.sleep(POWER_POLL_SECONDS)
+                self.power_event("wait_end", table, job, wall_seconds=time.perf_counter() - began)
+                print("mains power is back", flush=True)
+            clock, mains_before = sleep_clock(), on_mains()
+            started = utc_now()
+            with Heartbeat() as heartbeat:
+                result = launch()
+            slept, mains_after = slept_seconds(clock, sleep_clock()), on_mains()
+            reason = ("slept" if slept > SLEEP_TOLERANCE_SECONDS else "suspended" if heartbeat.max_gap > SUSPEND_TOLERANCE_SECONDS
+                      else "mains_lost" if timed and False in (mains_before, mains_after) else "")
+            if not reason:
+                return result, started if disturbed else None
+            disturbed = True
+            self.power_event("discarded", table, job, reason=reason, slept_seconds=slept, mains_before=mains_before,
+                             mains_after=mains_after, wall_seconds=result["wall_seconds"], max_heartbeat_gap=heartbeat.max_gap)
+            print("discarded run:", reason, table, *job.values(), flush=True)
+        raise RuntimeError(f"{MAX_DISCARDS} runs discarded for sleep or lost mains power: {table} {job}")
+
     def run_one(self, table, author, task, variant, name, workers, repeat, timeout):
         entry = self.entry(task, name)
         source = self.source(author, task)
@@ -524,8 +570,12 @@ class Harness:
             command.append(str(C.input_path(task, name)))
             if task == "walkers":
                 command.append(str(workers))
-            result = run(command, scratch, stdout, stderr, timeout, processors=None if task == "walkers" else self.single_processors)
+            job = dict(author=author, task=task, variant=variant, input=name, workers=workers, repeat=repeat)
+            result, restarted = self.guarded_run(table, job, lambda: run(command, scratch, stdout, stderr, timeout,
+                                                                         processors=None if task == "walkers" else self.single_processors))
             row.update(result, stdout_path=str(stdout), stderr_path=str(stderr))
+            if restarted:
+                row["started_utc"] = restarted
             # Decode strictly: invalid UTF-8 is an unreadable reply, not a silent replacement.
             try:
                 if stdout.stat().st_size > C.OUTPUT_LIMIT_BYTES:
@@ -658,9 +708,10 @@ class Harness:
                 if self.has("baseline", key):
                     continue
                 scratch = self.run_root / "baseline" / variant / str(repeat)
-                result = run(command, scratch, scratch / "stdout.txt", scratch / "stderr.txt", C.MEASURE_TIMEOUT,
-                             processors=self.single_processors)
-                self.append("baseline", dict(key=key, variant=variant, repeat=repeat, started_utc=utc_now(), **result), fields)
+                started = utc_now()
+                result, restarted = self.guarded_run("baseline", dict(variant=variant, repeat=repeat), lambda: run(
+                    command, scratch, scratch / "stdout.txt", scratch / "stderr.txt", C.MEASURE_TIMEOUT, processors=self.single_processors))
+                self.append("baseline", dict(key=key, variant=variant, repeat=repeat, started_utc=restarted or started, **result), fields)
 
 
 def archive_results(name="results_2026-10-30"):

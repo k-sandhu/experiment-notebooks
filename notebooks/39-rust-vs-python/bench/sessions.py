@@ -246,6 +246,23 @@ def muse_event(event, result, state):
         result["final_message"] = payload.get("text", "")
 
 
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def add_usage(total, usage):
+    """Add a usage report into `total`: numbers are summed (nested dicts key by key), anything else keeps the last value."""
+    for key, value in usage.items():
+        old = total.get(key)
+        if isinstance(value, dict):
+            total[key] = add_usage(old if isinstance(old, dict) else {}, value)
+        elif is_number(value) and is_number(old):
+            total[key] = old + value
+        else:
+            total[key] = value
+    return total
+
+
 def event_metadata(path):
     result = dict(reported_model=None, cost_usd=None, usage={}, turns=0, tool_calls=0, final_message="")
     muse = dict(seen=set(), usage={}, allowance=None)
@@ -272,9 +289,14 @@ def event_metadata(path):
                 if texts:
                     result["final_message"] = "\n".join(texts)
             if kind == "result":
+                # A session can emit several results (e.g. a continuation after a background command). Turns and usage
+                # are per result and add up; the cost is cumulative, so the last one stands.
+                result["result_events"] = result.get("result_events", 0) + 1
                 result["cost_usd"] = event.get("total_cost_usd")
-                result["usage"] = event.get("usage", {})
-                result["turns"] = event.get("num_turns", result["turns"])
+                if isinstance(event.get("usage"), dict):
+                    add_usage(result["usage"], event["usage"])
+                if isinstance(event.get("num_turns"), (int, float)):
+                    result["turns"] += event["num_turns"]
                 result["final_message"] = event.get("result", result["final_message"])
             if kind == "turn.completed":
                 result["turns"] += 1
@@ -436,6 +458,44 @@ def table(kind="main"):
         append_csv(path, row, fields)
 
 
+def session_metadata_files(data):
+    """(metadata file, session log) pairs: programs/<author>/<task>/meta*.json and the kept failed runs."""
+    pairs = []
+    for kind in C.SESSION_KINDS.values():
+        for meta_path in sorted((data / "programs").glob("*/*/" + kind["meta"])):
+            log = data / "sessions" / meta_path.parent.parent.name / f"{meta_path.parent.name}{kind['suffix']}.jsonl.gz"
+            pairs.append((meta_path, log))
+    for meta_path in sorted((data / "failed_sessions").glob("*/*.meta.json")):
+        pairs.append((meta_path, meta_path.with_name(meta_path.name[:-len(".meta.json")] + ".jsonl.gz")))
+    return pairs
+
+
+def refresh_metadata(data=C.DATA, dry_run=False):
+    """Re-read each session log with event_metadata and update only turns, usage, tool_calls, result_events and cost_usd."""
+    changed = []
+    for meta_path, log in session_metadata_files(Path(data)):
+        label = meta_path.relative_to(data).as_posix()
+        if meta_path.parent.parent.name == "reference":
+            continue  # the "reference" pseudo-author has no session
+        if not log.is_file():
+            print("no log, skipped:", label, flush=True)
+            continue
+        meta, fresh = read_json(meta_path), event_metadata(log)
+        update = {key: fresh[key] for key in ("turns", "usage", "tool_calls", "result_events") if key in fresh}
+        if meta.get("openrouter") is None:  # otherwise cost_usd is the OpenRouter charge
+            update["cost_usd"] = fresh["cost_usd"]
+        update = {key: value for key, value in update.items() if meta.get(key) != value or key not in meta}
+        if not update:
+            continue
+        old_tokens, new_tokens = (m.get("usage", {}).get("output_tokens") for m in (meta, dict(meta, **update)))
+        print(f"{label}: turns {meta.get('turns')} -> {update.get('turns', meta.get('turns'))}, "
+              f"output_tokens {old_tokens} -> {new_tokens}, changed: {', '.join(sorted(update))}", flush=True)
+        if not dry_run:
+            write_json(meta_path, dict(meta, **update))
+        changed.append(meta_path)
+    return changed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -455,6 +515,7 @@ def main():
         sub.add_parser(name).add_argument("--kind", choices=C.SESSION_KINDS, default="main")
     sub.add_parser("backfill-requests")
     sub.add_parser("trace")
+    sub.add_parser("refresh-metadata").add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     if args.command == "prepare":
         prepare(args.author, args.task, args.kind)
@@ -498,6 +559,9 @@ def main():
         table(args.kind)
     elif args.command == "trace":
         trace()
+    elif args.command == "refresh-metadata":
+        changed = refresh_metadata(dry_run=args.dry_run)
+        print(f"{len(changed)} file(s) {'would change' if args.dry_run else 'rewritten'}")
     else:
         backfill_requests()
 
