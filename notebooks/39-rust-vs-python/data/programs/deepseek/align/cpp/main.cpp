@@ -1,113 +1,159 @@
 #include <cstdio>
 #include <cstdint>
-#include <io.h>
-#include <fcntl.h>
 #include <cstring>
 #include <vector>
 #include <string>
+#include <charconv>
+#include <io.h>
+#include <fcntl.h>
 
-using namespace std;
+namespace {
 
-static int mapc[256];
-static int insC[32], delC[32];
-static int subC[32 * 32];
-static int A;
+struct Parser {
+    const unsigned char* p;
+    const unsigned char* end;
 
-static inline int readInt(const char*& p) {
-    while (*p && (unsigned char)*p <= ' ') ++p;
-    int x = 0;
-    while (*p >= '0' && *p <= '9') {
-        x = x * 10 + (*p - '0');
-        ++p;
+    void skipWs() {
+        while (p < end && *p <= ' ') ++p;
     }
-    return x;
+
+    // Parse a non-negative integer.
+    int nextInt() {
+        skipWs();
+        int v = 0;
+        while (p < end && *p >= '0' && *p <= '9') {
+            v = v * 10 + (*p - '0');
+            ++p;
+        }
+        return v;
+    }
+};
+
+inline void appendInt(std::string& out, long long v) {
+    char buf[24];
+    char* e = buf + sizeof(buf);
+    char* b = e;
+    if (v == 0) {
+        out.push_back('0');
+        return;
+    }
+    bool neg = v < 0;
+    unsigned long long u = neg ? (unsigned long long)(-(v + 1)) + 1ULL : (unsigned long long)v;
+    while (u) {
+        *--b = char('0' + (u % 10));
+        u /= 10;
+    }
+    if (neg) *--b = '-';
+    out.append(b, e);
 }
+
+} // namespace
 
 int main(int argc, char** argv) {
     if (argc < 2) return 1;
     _setmode(_fileno(stdout), _O_BINARY);
-    FILE* f = fopen(argv[1], "rb");
+
+    FILE* f = std::fopen(argv[1], "rb");
     if (!f) return 1;
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    vector<char> data((size_t)sz + 1);
-    size_t rd = fread(data.data(), 1, (size_t)sz, f);
-    fclose(f);
-    data[rd] = 0;
+    std::fseek(f, 0, SEEK_END);
+    long sz = std::ftell(f);
+    std::fseek(f, 0, SEEK_SET);
+    std::vector<unsigned char> data((size_t)(sz > 0 ? sz : 0) + 1);
+    size_t got = std::fread(data.data(), 1, (size_t)(sz > 0 ? sz : 0), f);
+    std::fclose(f);
+    data[got] = 0;
 
-    const char* p = data.data();
+    Parser ps{data.data(), data.data() + got};
 
-    for (int i = 0; i < 256; ++i) mapc[i] = -1;
-    while (*p && (unsigned char)*p <= ' ') ++p;
-    const char* astart = p;
-    while (*p > ' ') ++p;
-    A = (int)(p - astart);
-    for (int i = 0; i < A; ++i) mapc[(unsigned char)astart[i]] = i;
+    // Alphabet line: letters in alphabet order.
+    ps.skipWs();
+    const unsigned char* ab = ps.p;
+    while (ps.p < ps.end && *ps.p > ' ') ++ps.p;
+    int A = (int)(ps.p - ab);
+    int mp[256];
+    for (int i = 0; i < 256; ++i) mp[i] = 0;
+    for (int i = 0; i < A; ++i) mp[ab[i]] = i;
 
-    for (int i = 0; i < A; ++i) insC[i] = readInt(p);
-    for (int i = 0; i < A; ++i) delC[i] = readInt(p);
-    for (int i = 0; i < A; ++i)
-        for (int j = 0; j < A; ++j)
-            subC[i * A + j] = readInt(p);
+    std::vector<int> ins(A), delc(A), sub((size_t)A * A);
+    for (int i = 0; i < A; ++i) ins[i] = ps.nextInt();
+    for (int i = 0; i < A; ++i) delc[i] = ps.nextInt();
+    for (int i = 0; i < A * A; ++i) sub[i] = ps.nextInt();
 
-    int P = readInt(p);
-    vector<uint8_t> si, ti;
-    si.reserve(4096);
-    ti.reserve(4096);
-    vector<int> insT;
-    vector<int> prev, cur;
-    string out;
-    out.reserve((size_t)P * 8 + 16);
+    int P = ps.nextInt();
 
-    int64_t total = 0;
+    std::vector<unsigned char> s, t;
+    std::vector<int> tins;
+    std::vector<int> row;
+    std::string out;
+    out.reserve(8192);
+    long long total = 0;
 
     for (int q = 0; q < P; ++q) {
-        while (*p && (unsigned char)*p <= ' ') ++p;
-        si.clear();
-        while (*p > ' ') { si.push_back((uint8_t)mapc[(unsigned char)*p]); ++p; }
-        while (*p && (unsigned char)*p <= ' ') ++p;
-        ti.clear();
-        while (*p > ' ') { ti.push_back((uint8_t)mapc[(unsigned char)*p]); ++p; }
-
-        const int n = (int)si.size();
-        const int m = (int)ti.size();
-
-        insT.resize(m);
-        for (int j = 0; j < m; ++j) insT[j] = insC[ti[j]];
-
-        prev.resize(m + 1);
-        cur.resize(m + 1);
-        prev[0] = 0;
-        for (int j = 1; j <= m; ++j) prev[j] = prev[j - 1] + insT[j - 1];
-
-        for (int i = 1; i <= n; ++i) {
-            const int c = si[i - 1];
-            const int d = delC[c];
-            const int* sr = subC + c * A;
-            int v = prev[0] + d;
-            cur[0] = v;
-            for (int j = 1; j <= m; ++j) {
-                const int best0 = prev[j] + d;
-                int x = v + insT[j - 1];
-                int best = x < best0 ? x : best0;
-                x = prev[j - 1] + sr[ti[j - 1]];
-                if (x < best) best = x;
-                v = best;
-                cur[j] = best;
-            }
-            prev.swap(cur);
+        ps.skipWs();
+        s.clear();
+        while (ps.p < ps.end && *ps.p > ' ') {
+            s.push_back((unsigned char)mp[*ps.p]);
+            ++ps.p;
+        }
+        ps.skipWs();
+        t.clear();
+        while (ps.p < ps.end && *ps.p > ' ') {
+            t.push_back((unsigned char)mp[*ps.p]);
+            ++ps.p;
         }
 
-        int cost = prev[m];
+        const int n = (int)s.size();
+        const int m = (int)t.size();
+
+        if (n == m && (n == 0 || std::memcmp(s.data(), t.data(), (size_t)n) == 0)) {
+            out.push_back('0');
+            out.push_back('\n');
+            continue;
+        }
+
+        tins.resize(m);
+        for (int j = 0; j < m; ++j) tins[j] = ins[t[j]];
+
+        row.resize((size_t)m + 1);
+        row[0] = 0;
+        for (int j = 1; j <= m; ++j) row[j] = row[j - 1] + tins[j - 1];
+
+        const unsigned char* sp = s.data();
+        const unsigned char* tp = t.data();
+        const int* tinsP = tins.data();
+        int* r = row.data();
+
+        for (int i = 0; i < n; ++i) {
+            const int si = sp[i];
+            const int dc = delc[si];
+            const int* srow = sub.data() + (size_t)si * A;
+
+            int diag = r[0];
+            int left = diag + dc;
+            r[0] = left;
+
+            for (int j = 1; j <= m; ++j) {
+                const int up = r[j];
+                const int a = up + dc;
+                const int b = diag + srow[tp[j - 1]];
+                const int mn = a < b ? a : b;
+                const int x = left + tinsP[j - 1];
+                left = x < mn ? x : mn;
+                diag = up;
+                r[j] = left;
+            }
+        }
+
+        const long long cost = r[m];
         total += cost;
-        out += to_string(cost);
-        out += '\n';
+        appendInt(out, cost);
+        out.push_back('\n');
     }
 
-    out += "total ";
-    out += to_string(total);
-    out += '\n';
-    fwrite(out.data(), 1, out.size(), stdout);
+    out.append("total ");
+    appendInt(out, total);
+    out.push_back('\n');
+
+    std::fwrite(out.data(), 1, out.size(), stdout);
     return 0;
 }

@@ -1,109 +1,104 @@
 #include <cstdio>
-#include <cstdint>
 #include <vector>
-#include <string>
-#include <utility>
-#include <io.h>
-#include <fcntl.h>
+#include <cstdint>
+#include <algorithm>
 
-using namespace std;
+// Weighted edit distance for many string pairs.
+// D[i][j] = min(D[i-1][j] + del[s_i], D[i][j-1] + ins[t_j],
+//               D[i-1][j-1] + sub[s_i][t_j])
+// Only two rows are needed. All costs are small (0..1000) and strings are at
+// most 1000 letters, so every table cell fits in a 32-bit int; the total is a
+// 64-bit integer.
+
+static inline int readInt(const char*& p) {
+    while (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t') ++p;
+    int x = 0;
+    while (*p >= '0' && *p <= '9') { x = x * 10 + (*p - '0'); ++p; }
+    return x;
+}
+
+// Read one whitespace-separated token as letter indices into out (reused).
+static void readToken(const char*& p, const int* idx, std::vector<int>& out) {
+    while (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t') ++p;
+    const char* start = p;
+    while (*p > 32) ++p;
+    out.clear();
+    out.reserve(p - start);
+    for (const char* q = start; q < p; ++q) out.push_back(idx[(unsigned char)*q]);
+}
 
 int main(int argc, char** argv) {
     if (argc < 2) return 1;
-    _setmode(_fileno(stdout), _O_BINARY);
-
     FILE* f = fopen(argv[1], "rb");
     if (!f) return 1;
     fseek(f, 0, SEEK_END);
-    long size = ftell(f);
+    long len = ftell(f);
     fseek(f, 0, SEEK_SET);
-    string data;
-    data.resize(size + 1);
-    fread(&data[0], 1, size, f);
+    std::vector<char> buf(len + 1);
+    size_t got = fread(buf.data(), 1, len, f);
     fclose(f);
-    data[size] = '\0';
-    const char* p = data.data();
+    buf[got] = '\0';
+    const char* p = buf.data();
 
-    auto isSpace = [](char c) {
-        return c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '\f' || c == '\v';
-    };
-    auto skip = [&]() { while (isSpace(*p)) ++p; };
+    // Alphabet: A distinct upper-case letters.
+    while (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t') ++p;
+    const char* alphaStart = p;
+    while (*p > 32) ++p;
+    int A = (int)(p - alphaStart);
+    int idx[256];
+    for (int i = 0; i < 256; ++i) idx[i] = -1;
+    for (int i = 0; i < A; ++i) idx[(unsigned char)alphaStart[i]] = i;
 
-    auto readInt = [&]() -> long long {
-        skip();
-        bool neg = false;
-        if (*p == '-') { neg = true; ++p; }
-        long long v = 0;
-        while (*p >= '0' && *p <= '9') { v = v * 10 + (*p - '0'); ++p; }
-        return neg ? -v : v;
-    };
+    std::vector<int> ins(A), del(A), sub(A * A);
+    for (int i = 0; i < A; ++i) ins[i] = readInt(p);
+    for (int i = 0; i < A; ++i) del[i] = readInt(p);
+    for (int i = 0; i < A * A; ++i) sub[i] = readInt(p);
 
-    auto readToken = [&]() -> string {
-        skip();
-        const char* start = p;
-        while (*p && !isSpace(*p)) ++p;
-        return string(start, (size_t)(p - start));
-    };
+    int P = readInt(p);
 
-    string alphabet = readToken();
-    int A = (int)alphabet.size();
-
-    int charIndex[26];
-    for (int i = 0; i < 26; ++i) charIndex[i] = -1;
-    for (int i = 0; i < A; ++i) charIndex[alphabet[i] - 'A'] = i;
-
-    vector<long long> ins(A), del(A);
-    for (int i = 0; i < A; ++i) ins[i] = readInt();
-    for (int i = 0; i < A; ++i) del[i] = readInt();
-    vector<vector<long long>> sub(A, vector<long long>(A));
-    for (int i = 0; i < A; ++i)
-        for (int j = 0; j < A; ++j)
-            sub[i][j] = readInt();
-
-    long long P = readInt();
-
-    vector<long long> prev, cur;
-    vector<int> sIdx, tIdx, insT;
+    std::vector<int> s, t;
+    std::vector<int> prevRow, curRow;
 
     long long total = 0;
-    for (long long pair = 0; pair < P; ++pair) {
-        string s = readToken();
-        string t = readToken();
-        int n = (int)s.size(), m = (int)t.size();
+    for (int pair = 0; pair < P; ++pair) {
+        readToken(p, idx, s);
+        readToken(p, idx, t);
+        int n = (int)s.size();
+        int m = (int)t.size();
 
-        sIdx.resize(n);
-        for (int i = 0; i < n; ++i) sIdx[i] = charIndex[s[i] - 'A'];
-        tIdx.resize(m);
-        insT.resize(m);
-        for (int j = 0; j < m; ++j) { tIdx[j] = charIndex[t[j] - 'A']; insT[j] = ins[tIdx[j]]; }
+        prevRow.resize(m + 1);
+        curRow.resize(m + 1);
 
-        if ((int)prev.size() < m + 1) { prev.resize(m + 1); cur.resize(m + 1); }
+        int* pv = prevRow.data();
+        int* cv = curRow.data();
+        const int* sr = s.data();
+        const int* tr = t.data();
 
-        prev[0] = 0;
-        for (int j = 1; j <= m; ++j) prev[j] = prev[j - 1] + insT[j - 1];
+        pv[0] = 0;
+        for (int j = 1; j <= m; ++j) pv[j] = pv[j - 1] + ins[tr[j - 1]];
 
-        for (int i = 1; i <= n; ++i) {
-            int si = sIdx[i - 1];
-            long long delSi = del[si];
-            const long long* subRow = sub[si].data();
-            long long* prevPtr = prev.data();
-            long long* curPtr = cur.data();
-            curPtr[0] = prevPtr[0] + delSi;
+        for (int i = 0; i < n; ++i) {
+            int d = del[sr[i]];
+            const int* subrow = &sub[sr[i] * A];
+            cv[0] = pv[0] + d;
+            int diag = pv[0];
             for (int j = 1; j <= m; ++j) {
-                int tj = tIdx[j - 1];
-                long long up = prevPtr[j] + delSi;
-                long long left = curPtr[j - 1] + insT[j - 1];
-                long long diag = prevPtr[j - 1] + subRow[tj];
-                long long best = up < left ? up : left;
-                curPtr[j] = diag < best ? diag : best;
+                int tj = tr[j - 1];
+                int best = pv[j] + d;
+                int v = cv[j - 1] + ins[tj];
+                if (v < best) best = v;
+                v = diag + subrow[tj];
+                if (v < best) best = v;
+                cv[j] = best;
+                diag = pv[j];
             }
-            swap(prev, cur);
+            int* tmp = pv; pv = cv; cv = tmp;
         }
 
-        long long cost = prev[m];
+        long long cost = pv[m];
         total += cost;
-        printf("%lld\n", cost);
+        std::printf("%lld\n", cost);
     }
-    printf("total %lld\n", total);
+    std::printf("total %lld\n", total);
     return 0;
 }

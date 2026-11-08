@@ -1,125 +1,134 @@
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 public class Main {
-    static byte[] buf;
-    static int pos;
-    static int len;
+    private byte[] data;
+    private int pos;
+    private int len;
 
-    static int readInt() {
-        byte[] b = buf;
-        int p = pos;
-        int n = len;
-        while (p < n && b[p] <= ' ') p++;
-        int x = 0;
-        while (p < n && b[p] >= '0' && b[p] <= '9') {
-            x = x * 10 + (b[p] - '0');
-            p++;
-        }
+    private void skipWs() {
+        byte[] d = data;
+        int p = pos, n = len;
+        while (p < n && d[p] <= ' ') ++p;
         pos = p;
-        return x;
     }
 
-    public static void main(String[] args) throws IOException {
-        buf = Files.readAllBytes(Path.of(args[0]));
-        len = buf.length;
+    private int nextInt() {
+        byte[] d = data;
+        int p = pos, n = len;
+        while (p < n && d[p] <= ' ') ++p;
+        int v = 0;
+        while (p < n) {
+            int c = d[p];
+            if (c < '0' || c > '9') break;
+            v = v * 10 + (c - '0');
+            ++p;
+        }
+        pos = p;
+        return v;
+    }
+
+    public static void main(String[] args) throws Exception {
+        Main m = new Main();
+        m.run(args[0]);
+    }
+
+    private void run(String path) throws Exception {
+        data = Files.readAllBytes(Path.of(path));
+        len = data.length;
         pos = 0;
 
-        int[] map = new int[256];
-        for (int i = 0; i < 256; i++) map[i] = -1;
+        skipWs();
+        int abStart = pos;
+        while (pos < len && data[pos] > ' ') ++pos;
+        int A = pos - abStart;
+        int[] mp = new int[256];
+        for (int i = 0; i < A; ++i) mp[data[abStart + i] & 0xFF] = i;
 
-        int p = pos;
-        while (p < len && buf[p] <= ' ') p++;
-        int astart = p;
-        while (p < len && buf[p] > ' ') p++;
-        int A = p - astart;
-        for (int i = 0; i < A; i++) map[buf[astart + i] & 0xff] = i;
-        pos = p;
+        int[] ins = new int[A];
+        int[] delc = new int[A];
+        int[] sub = new int[A * A];
+        for (int i = 0; i < A; ++i) ins[i] = nextInt();
+        for (int i = 0; i < A; ++i) delc[i] = nextInt();
+        for (int i = 0; i < A * A; ++i) sub[i] = nextInt();
 
-        int[] insC = new int[A];
-        int[] delC = new int[A];
-        int[] subC = new int[A * A];
-        for (int i = 0; i < A; i++) insC[i] = readInt();
-        for (int i = 0; i < A; i++) delC[i] = readInt();
-        for (int i = 0; i < A * A; i++) subC[i] = readInt();
+        int P = nextInt();
 
-        int P = readInt();
-        p = pos;
+        int[] s = new int[1024];
+        int[] t = new int[1024];
+        int[] tins = new int[1024];
+        int[] row = new int[1024];
 
-        int[] sIdx = new int[4096];
-        int[] tIdx = new int[4096];
-        int[] insT = new int[4096];
-        int[] prev = new int[4097];
-        int[] cur = new int[4097];
-
-        StringBuilder sb = new StringBuilder(P * 8 + 16);
+        StringBuilder out = new StringBuilder(P * 8 + 16);
         long total = 0;
 
-        for (int q = 0; q < P; q++) {
-            while (p < len && buf[p] <= ' ') p++;
-            int s0 = p;
-            while (p < len && buf[p] > ' ') p++;
-            int n = p - s0;
-            if (n > sIdx.length) {
-                sIdx = new int[n];
-                tIdx = new int[n];
-                insT = new int[n];
-                prev = new int[n + 1];
-                cur = new int[n + 1];
+        for (int q = 0; q < P; ++q) {
+            skipWs();
+            int sl = 0;
+            while (pos < len && data[pos] > ' ') {
+                if (sl == s.length) s = Arrays.copyOf(s, s.length * 2);
+                s[sl++] = mp[data[pos] & 0xFF];
+                ++pos;
             }
-            for (int i = 0; i < n; i++) sIdx[i] = map[buf[s0 + i] & 0xff];
-
-            while (p < len && buf[p] <= ' ') p++;
-            int t0 = p;
-            while (p < len && buf[p] > ' ') p++;
-            int m = p - t0;
-            if (m > tIdx.length) {
-                tIdx = new int[m];
-                insT = new int[m];
-                prev = new int[m + 1];
-                cur = new int[m + 1];
-            }
-            for (int j = 0; j < m; j++) {
-                int c = map[buf[t0 + j] & 0xff];
-                tIdx[j] = c;
-                insT[j] = insC[c];
+            skipWs();
+            int tl = 0;
+            while (pos < len && data[pos] > ' ') {
+                if (tl == t.length) t = Arrays.copyOf(t, t.length * 2);
+                t[tl++] = mp[data[pos] & 0xFF];
+                ++pos;
             }
 
-            prev[0] = 0;
-            for (int j = 1; j <= m; j++) prev[j] = prev[j - 1] + insT[j - 1];
+            final int n = sl;
+            final int M = tl;
 
-            int[] pr = prev;
-            int[] cu = cur;
-
-            for (int i = 1; i <= n; i++) {
-                int c = sIdx[i - 1];
-                int d = delC[c];
-                int sr = c * A;
-                int v = pr[0] + d;
-                cu[0] = v;
-                for (int j = 1; j <= m; j++) {
-                    int best0 = pr[j] + d;
-                    int x = v + insT[j - 1];
-                    int best = x < best0 ? x : best0;
-                    x = pr[j - 1] + subC[sr + tIdx[j - 1]];
-                    if (x < best) best = x;
-                    v = best;
-                    cu[j] = best;
+            boolean same = n == M;
+            if (same) {
+                for (int i = 0; i < n; ++i) {
+                    if (s[i] != t[i]) { same = false; break; }
                 }
-                int[] tmp = pr;
-                pr = cu;
-                cu = tmp;
+            }
+            if (same) {
+                out.append('0').append('\n');
+                continue;
             }
 
-            prev = pr;
-            cur = cu;
-            int cost = pr[m];
+            if (tins.length < M) tins = new int[Math.max(M, tins.length * 2)];
+            for (int j = 0; j < M; ++j) tins[j] = ins[t[j]];
+            if (row.length < M + 1) row = new int[Math.max(M + 1, row.length * 2)];
+
+            final int[] r = row;
+            r[0] = 0;
+            for (int j = 1; j <= M; ++j) r[j] = r[j - 1] + tins[j - 1];
+
+            for (int i = 0; i < n; ++i) {
+                final int si = s[i];
+                final int dc = delc[si];
+                final int sbase = si * A;
+
+                int diag = r[0];
+                int left = diag + dc;
+                r[0] = left;
+
+                for (int j = 1; j <= M; ++j) {
+                    final int up = r[j];
+                    final int a = up + dc;
+                    final int b = diag + sub[sbase + t[j - 1]];
+                    final int mn = a < b ? a : b;
+                    final int x = left + tins[j - 1];
+                    left = x < mn ? x : mn;
+                    diag = up;
+                    r[j] = left;
+                }
+            }
+
+            final int cost = r[M];
             total += cost;
-            sb.append(cost).append('\n');
+            out.append(cost).append('\n');
         }
 
-        sb.append("total ").append(total).append('\n');
-        System.out.print(sb);
+        out.append("total ").append(total).append('\n');
+        System.out.write(out.toString().getBytes());
+        System.out.flush();
     }
 }

@@ -1,118 +1,124 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strings"
 )
 
+var (
+	data []byte
+	pos  int
+	lenD int
+)
+
+func skipWs() {
+	for pos < lenD && data[pos] <= 32 {
+		pos++
+	}
+}
+
+func nextInt() int {
+	skipWs()
+	x := 0
+	for pos < lenD && data[pos] > 32 {
+		x = x*10 + int(data[pos]-'0')
+		pos++
+	}
+	return x
+}
+
+func readTokenIdx(idx *[256]int) []int {
+	skipWs()
+	start := pos
+	for pos < lenD && data[pos] > 32 {
+		pos++
+	}
+	a := make([]int, pos-start)
+	for i := start; i < pos; i++ {
+		a[i-start] = idx[data[i]]
+	}
+	return a
+}
+
 func main() {
-	if len(os.Args) < 2 {
-		return
-	}
-	data, err := os.ReadFile(os.Args[1])
-	if err != nil {
-		return
-	}
-	fields := strings.Fields(string(data))
-	pos := 0
+	data, _ = os.ReadFile(os.Args[1])
+	lenD = len(data)
 
-	next := func() string {
-		s := fields[pos]
+	skipWs()
+	alphaStart := pos
+	for pos < lenD && data[pos] > 32 {
 		pos++
-		return s
 	}
-	nextInt := func() int {
-		s := fields[pos]
-		pos++
-		v := 0
-		neg := false
-		for i := 0; i < len(s); i++ {
-			if s[i] == '-' { neg = true; continue }
-			v = v*10 + int(s[i]-'0')
-		}
-		if neg { v = -v }
-		return v
+	A := pos - alphaStart
+
+	var idx [256]int
+	for i := range idx {
+		idx[i] = -1
 	}
-
-	alphabet := next()
-	A := len(alphabet)
-
-	charIndex := [26]int{}
-	for i := range charIndex { charIndex[i] = -1 }
-	for i := 0; i < A; i++ { charIndex[alphabet[i]-'A'] = i }
+	for i := 0; i < A; i++ {
+		idx[data[alphaStart+i]] = i
+	}
 
 	ins := make([]int, A)
 	del := make([]int, A)
-	for i := 0; i < A; i++ { ins[i] = nextInt() }
-	for i := 0; i < A; i++ { del[i] = nextInt() }
-	sub := make([][]int, A)
+	sub := make([]int, A*A)
 	for i := 0; i < A; i++ {
-		sub[i] = make([]int, A)
-		for j := 0; j < A; j++ { sub[i][j] = nextInt() }
+		ins[i] = nextInt()
+	}
+	for i := 0; i < A; i++ {
+		del[i] = nextInt()
+	}
+	for i := 0; i < A*A; i++ {
+		sub[i] = nextInt()
 	}
 
 	P := nextInt()
 
 	var prev, cur []int
-	sIdx := make([]int, 0)
-	tIdx := make([]int, 0)
-	insT := make([]int, 0)
-
-	total := 0
-	out := bufio.NewWriter(os.Stdout)
+	var total int64
 
 	for pair := 0; pair < P; pair++ {
-		s := next()
-		t := next()
+		s := readTokenIdx(&idx)
+		t := readTokenIdx(&idx)
 		n := len(s)
 		m := len(t)
-
-		if cap(sIdx) < n { sIdx = make([]int, n) }
-		sIdx = sIdx[:n]
-		for i := 0; i < n; i++ { sIdx[i] = charIndex[s[i]-'A'] }
-		if cap(tIdx) < m { tIdx = make([]int, m) }
-		tIdx = tIdx[:m]
-		if cap(insT) < m { insT = make([]int, m) }
-		insT = insT[:m]
-		for j := 0; j < m; j++ {
-			tIdx[j] = charIndex[t[j]-'A']
-			insT[j] = ins[tIdx[j]]
-		}
 
 		if len(prev) < m+1 {
 			prev = make([]int, m+1)
 			cur = make([]int, m+1)
 		}
-		prev = prev[:m+1]
-		cur = cur[:m+1]
 
 		prev[0] = 0
-		for j := 1; j <= m; j++ { prev[j] = prev[j-1] + insT[j-1] }
+		for j := 1; j <= m; j++ {
+			prev[j] = prev[j-1] + ins[t[j-1]]
+		}
 
-		for i := 1; i <= n; i++ {
-			si := sIdx[i-1]
-			delSi := del[si]
-			subRow := sub[si]
-			cur[0] = prev[0] + delSi
+		for i := 0; i < n; i++ {
+			si := s[i]
+			d := del[si]
+			base := si * A
+			cur[0] = prev[0] + d
+			diag := prev[0]
 			for j := 1; j <= m; j++ {
-				tj := tIdx[j-1]
-				up := prev[j] + delSi
-				left := cur[j-1] + insT[j-1]
-				diag := prev[j-1] + subRow[tj]
-				best := up
-				if left < best { best = left }
-				if diag < best { best = diag }
+				tj := t[j-1]
+				best := prev[j] + d
+				v := cur[j-1] + ins[tj]
+				if v < best {
+					best = v
+				}
+				v = diag + sub[base+tj]
+				if v < best {
+					best = v
+				}
 				cur[j] = best
+				diag = prev[j]
 			}
 			prev, cur = cur, prev
 		}
 
-		cost := prev[m]
+		cost := int64(prev[m])
 		total += cost
-		fmt.Fprintln(out, cost)
+		fmt.Println(cost)
 	}
-	fmt.Fprintln(out, "total", total)
-	out.Flush()
+	fmt.Println("total", total)
 }

@@ -1,94 +1,134 @@
 using System;
 using System.IO;
 using System.Text;
-using System.Runtime.InteropServices;
+using System.Collections.Generic;
 
-unsafe static class Program
+static class Solution
 {
-    static byte* P;
-    static byte* E;
+    static byte[] B;
+    static int LEN, P;
 
-    // last scanned string
-    static byte* sBeg;
-    static int sLen;
-    static bool sEsc;
+    // -----------------------------------------------------------------------
+    // Open addressing hash map keyed by spans of the input buffer.
+    // -----------------------------------------------------------------------
+    sealed class SpanMap
+    {
+        public int[] off;
+        public int[] klen;
+        public long[] v1;
+        public long[] v2;
+        public int cap;
+        public int cnt;
 
-    // resolved string
-    static byte* rPtr;
-    static int rLen;
+        public SpanMap(int c) { Init(c); }
 
-    static byte* scratch;
-    static int scratchCap;
+        public void Init(int c)
+        {
+            cap = c; cnt = 0;
+            off = new int[c];
+            klen = new int[c];
+            v1 = new long[c];
+            v2 = new long[c];
+            for (int i = 0; i < c; i++) klen[i] = -1;
+        }
 
-    static readonly byte[] K_ACCOUNT = Ascii("account");
-    static readonly byte[] K_AMOUNT = Ascii("amount");
-    static readonly byte[] K_TYPE = Ascii("type");
-    static readonly byte[] K_TAGS = Ascii("tags");
-    static readonly byte[] K_META = Ascii("meta");
-    static readonly byte[] K_CHANNEL = Ascii("channel");
-    static readonly byte[] K_CURRENCY = Ascii("currency");
-    static readonly byte[] K_RATES = Ascii("rates");
-    static readonly byte[] K_TEST = Ascii("test");
-    static readonly byte[] K_VOID = Ascii("void");
-    static readonly byte[] K_DEBIT = Ascii("debit");
+        static ulong Hash(int s, int n)
+        {
+            ulong h = 1469598103934665603UL;
+            for (int i = 0; i < n; i++)
+            {
+                h ^= B[s + i];
+                h *= 1099511628211UL;
+            }
+            return h;
+        }
 
-    static byte[] Ascii(string s) => Encoding.ASCII.GetBytes(s);
+        void Grow()
+        {
+            int nc = cap * 2;
+            var no = new int[nc];
+            var nl = new int[nc];
+            var n1 = new long[nc];
+            var n2 = new long[nc];
+            for (int i = 0; i < nc; i++) nl[i] = -1;
+            int mask = nc - 1;
+            for (int j = 0; j < cap; j++)
+            {
+                if (klen[j] < 0) continue;
+                int i = (int)(Hash(off[j], klen[j]) & (ulong)mask);
+                while (nl[i] >= 0) i = (i + 1) & mask;
+                no[i] = off[j];
+                nl[i] = klen[j];
+                n1[i] = v1[j];
+                n2[i] = v2[j];
+            }
+            off = no; klen = nl; v1 = n1; v2 = n2; cap = nc;
+        }
+
+        public int Find(int s, int n)
+        {
+            int mask = cap - 1;
+            int i = (int)(Hash(s, n) & (ulong)mask);
+            while (klen[i] >= 0)
+            {
+                if (klen[i] == n && SpanEq(off[i], off[i] + n, s, s + n)) return i;
+                i = (i + 1) & mask;
+            }
+            return -1;
+        }
+
+        public int GetOrInsert(int s, int n)
+        {
+            if ((cnt + 1) * 10 > cap * 7) Grow();
+            int mask = cap - 1;
+            int i = (int)(Hash(s, n) & (ulong)mask);
+            while (klen[i] >= 0)
+            {
+                if (klen[i] == n && SpanEq(off[i], off[i] + n, s, s + n)) return i;
+                i = (i + 1) & mask;
+            }
+            off[i] = s;
+            klen[i] = n;
+            v1[i] = 0;
+            v2[i] = 0;
+            cnt++;
+            return i;
+        }
+    }
+
+    static SpanMap rates, channels, accounts;
 
     static void SkipWs()
     {
-        byte* p = P;
-        while (p < E)
+        while (P < LEN)
         {
-            byte c = *p;
-            if (c == ' ' || c == '\t' || c == '\r' || c == '\n') p++;
+            byte c = B[P];
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r') P++;
             else break;
         }
-        P = p;
     }
 
-    static void ScanString()
-    {
-        byte* p = P + 1;
-        byte* st = p;
-        bool esc = false;
-        while (*p != '"')
-        {
-            if (*p == '\\')
-            {
-                esc = true;
-                p++;
-                if (*p == 'u') p += 5; else p++;
-            }
-            else p++;
-        }
-        sBeg = st;
-        sLen = (int)(p - st);
-        P = p + 1;
-        sEsc = esc;
-    }
-
-    static void SkipString()
+    static void ParseString(out int s, out int e, out bool esc)
     {
         P++;
-        while (*P != '"')
+        s = P;
+        esc = false;
+        while (true)
         {
-            if (*P == '\\')
-            {
-                P++;
-                if (*P == 'u') P += 5; else P++;
-            }
+            byte c = B[P];
+            if (c == (byte)'"') { e = P; P++; return; }
+            if (c == (byte)'\\') { esc = true; P += 2; }
             else P++;
         }
-        P++;
     }
 
-    static int Hex4(byte* q)
+    static uint Hex4(int p)
     {
-        int v = 0;
+        uint v = 0;
         for (int i = 0; i < 4; i++)
         {
-            byte c = q[i];
-            int d;
+            uint c = B[p + i];
+            uint d;
             if (c >= '0' && c <= '9') d = c - '0';
             else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
             else d = c - 'A' + 10;
@@ -97,615 +137,406 @@ unsafe static class Program
         return v;
     }
 
-    static void EnsureScratch(int need)
+    static int Decode(int s, int e)
     {
-        if (need <= scratchCap) return;
-        int cap = scratchCap == 0 ? 256 : scratchCap;
-        while (cap < need) cap *= 2;
-        scratch = (byte*)NativeMemory.Realloc(scratch, (nuint)cap);
-        scratchCap = cap;
-    }
-
-    static void Unescape()
-    {
-        EnsureScratch(sLen + 1);
-        int n = 0;
-        byte* q = sBeg;
-        byte* e = sBeg + sLen;
-        while (q < e)
+        int w = s, r = s;
+        while (r < e)
         {
-            int c = *q++;
-            if (c != '\\') { scratch[n++] = (byte)c; continue; }
-            int esc = *q++;
-            switch (esc)
+            byte c = B[r++];
+            if (c != (byte)'\\') { B[w++] = c; continue; }
+            byte x = B[r++];
+            switch (x)
             {
-                case '"': scratch[n++] = (byte)'"'; break;
-                case '\\': scratch[n++] = (byte)'\\'; break;
-                case '/': scratch[n++] = (byte)'/'; break;
-                case 'b': scratch[n++] = (byte)'\b'; break;
-                case 'f': scratch[n++] = (byte)'\f'; break;
-                case 'n': scratch[n++] = (byte)'\n'; break;
-                case 'r': scratch[n++] = (byte)'\r'; break;
-                case 't': scratch[n++] = (byte)'\t'; break;
-                case 'u':
+                case (byte)'"': B[w++] = (byte)'"'; break;
+                case (byte)'\\': B[w++] = (byte)'\\'; break;
+                case (byte)'/': B[w++] = (byte)'/'; break;
+                case (byte)'b': B[w++] = 8; break;
+                case (byte)'f': B[w++] = 12; break;
+                case (byte)'n': B[w++] = (byte)'\n'; break;
+                case (byte)'r': B[w++] = (byte)'\r'; break;
+                case (byte)'t': B[w++] = (byte)'\t'; break;
+                case (byte)'u':
                 {
-                    int cp = Hex4(q); q += 4;
-                    if (cp >= 0xD800 && cp <= 0xDBFF && q + 6 <= e && q[0] == '\\' && q[1] == 'u')
+                    uint cp = Hex4(r);
+                    r += 4;
+                    if (cp >= 0xD800 && cp <= 0xDBFF && r + 6 <= e &&
+                        B[r] == (byte)'\\' && B[r + 1] == (byte)'u')
                     {
-                        int lo = Hex4(q + 2);
+                        uint lo = Hex4(r + 2);
                         if (lo >= 0xDC00 && lo <= 0xDFFF)
                         {
                             cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-                            q += 6;
+                            r += 6;
                         }
                     }
-                    if (cp < 0x80) scratch[n++] = (byte)cp;
+                    if (cp < 0x80) B[w++] = (byte)cp;
                     else if (cp < 0x800)
                     {
-                        scratch[n++] = (byte)(0xC0 | (cp >> 6));
-                        scratch[n++] = (byte)(0x80 | (cp & 0x3F));
+                        B[w++] = (byte)(0xC0 | (cp >> 6));
+                        B[w++] = (byte)(0x80 | (cp & 0x3F));
                     }
                     else if (cp < 0x10000)
                     {
-                        scratch[n++] = (byte)(0xE0 | (cp >> 12));
-                        scratch[n++] = (byte)(0x80 | ((cp >> 6) & 0x3F));
-                        scratch[n++] = (byte)(0x80 | (cp & 0x3F));
+                        B[w++] = (byte)(0xE0 | (cp >> 12));
+                        B[w++] = (byte)(0x80 | ((cp >> 6) & 0x3F));
+                        B[w++] = (byte)(0x80 | (cp & 0x3F));
                     }
                     else
                     {
-                        scratch[n++] = (byte)(0xF0 | (cp >> 18));
-                        scratch[n++] = (byte)(0x80 | ((cp >> 12) & 0x3F));
-                        scratch[n++] = (byte)(0x80 | ((cp >> 6) & 0x3F));
-                        scratch[n++] = (byte)(0x80 | (cp & 0x3F));
+                        B[w++] = (byte)(0xF0 | (cp >> 18));
+                        B[w++] = (byte)(0x80 | ((cp >> 12) & 0x3F));
+                        B[w++] = (byte)(0x80 | ((cp >> 6) & 0x3F));
+                        B[w++] = (byte)(0x80 | (cp & 0x3F));
                     }
                     break;
                 }
-                default: scratch[n++] = (byte)esc; break;
+                default: B[w++] = x; break;
             }
         }
-        rPtr = scratch;
-        rLen = n;
+        return w;
     }
 
-    static void Resolve()
+    static void ParseStringValue(out int s, out int e)
     {
-        if (sEsc)
-        {
-            Unescape();
-        }
-        else
-        {
-            rPtr = sBeg;
-            rLen = sLen;
-        }
+        ParseString(out s, out e, out bool esc);
+        if (esc) e = Decode(s, e);
     }
 
-    static bool Eq(byte[] lit)
+    static bool SpanEq(int s, int e, string lit)
     {
-        if (rLen != lit.Length) return false;
-        byte* p = rPtr;
-        int n = lit.Length;
+        int n = e - s;
+        if (n != lit.Length) return false;
         for (int i = 0; i < n; i++)
-            if (p[i] != lit[i]) return false;
+            if (B[s + i] != (byte)lit[i]) return false;
         return true;
+    }
+
+    static bool SpanEq(int s1, int e1, int s2, int e2)
+    {
+        int n = e1 - s1;
+        if (n != e2 - s2) return false;
+        for (int i = 0; i < n; i++)
+            if (B[s1 + i] != B[s2 + i]) return false;
+        return true;
+    }
+
+    static int SpanCompare(int o1, int l1, int o2, int l2)
+    {
+        int n = l1 < l2 ? l1 : l2;
+        for (int i = 0; i < n; i++)
+        {
+            int d = B[o1 + i] - B[o2 + i];
+            if (d != 0) return d;
+        }
+        return l1 - l2;
     }
 
     static void SkipValue()
     {
         SkipWs();
-        byte* p = P;
-        byte c = *p;
-        if (c == '"')
+        byte c = B[P];
+        if (c == (byte)'"')
         {
-            p++;
-            while (*p != '"')
-            {
-                if (*p == '\\') { p++; if (*p == 'u') p += 5; else p++; }
-                else p++;
-            }
-            P = p + 1;
+            ParseString(out _, out _, out _);
             return;
         }
-        if (c == '{' || c == '[')
+        if (c == (byte)'{' || c == (byte)'[')
         {
             int depth = 0;
             while (true)
             {
-                byte d = *p;
-                if (d == '"')
+                c = B[P];
+                if (c == (byte)'"')
                 {
-                    p++;
-                    while (*p != '"')
+                    ParseString(out _, out _, out _);
+                }
+                else
+                {
+                    P++;
+                    if (c == (byte)'{' || c == (byte)'[') depth++;
+                    else if (c == (byte)'}' || c == (byte)']')
                     {
-                        if (*p == '\\') { p++; if (*p == 'u') p += 5; else p++; }
-                        else p++;
+                        if (--depth == 0) return;
                     }
-                    p++;
                 }
-                else if (d == '{' || d == '[') { depth++; p++; }
-                else if (d == '}' || d == ']') { p++; if (--depth == 0) { P = p; return; } }
-                else p++;
             }
         }
-        while (p < E)
+        while (P < LEN)
         {
-            byte d = *p;
-            if (d == ',' || d == '}' || d == ']' || d == ' ' || d == '\t' || d == '\r' || d == '\n') break;
-            p++;
+            c = B[P];
+            if (c == (byte)',' || c == (byte)'}' || c == (byte)']' ||
+                c == (byte)' ' || c == (byte)'\t' || c == (byte)'\n' || c == (byte)'\r')
+                return;
+            P++;
         }
-        P = p;
     }
 
-    // ---------------- rates
-    static byte[][] rateKeys = new byte[16][];
-    static long[] rateVals = new long[16];
-    static int rateN;
-
-    static long LookupRate()
+    static long ParseAmount(int s, int e)
     {
-        for (int i = 0; i < rateN; i++)
+        long ip = 0;
+        int i = s;
+        while (i < e && B[i] != (byte)'.')
         {
-            byte[] k = rateKeys[i];
-            if (k.Length != rLen) continue;
-            byte* p = rPtr;
-            bool same = true;
-            for (int j = 0; j < rLen; j++)
-                if (p[j] != k[j]) { same = false; break; }
-            if (same) return rateVals[i];
+            ip = ip * 10 + (B[i] - '0');
+            i++;
         }
-        return 0;
-    }
-
-    // ---------------- accounts
-    static int[] accSlots = new int[1 << 14];
-    static int[] accStart = new int[1 << 13];
-    static int[] accLen = new int[1 << 13];
-    static long[] accSum = new long[1 << 13];
-    static int[] accCnt = new int[1 << 13];
-    static int accN;
-    static byte[] arena = new byte[1 << 16];
-    static int arenaLen;
-
-    static int Hash(byte* a, int len)
-    {
-        int h = unchecked((int)0x811c9dc5);
-        for (int i = 0; i < len; i++)
+        long frac = 0;
+        if (i < e)
         {
-            h ^= a[i];
-            h *= 0x01000193;
-        }
-        return h & 0x7fffffff;
-    }
-
-    static int HashArray(byte[] a, int off, int len)
-    {
-        int h = unchecked((int)0x811c9dc5);
-        for (int i = 0; i < len; i++)
-        {
-            h ^= a[off + i];
-            h *= 0x01000193;
-        }
-        return h & 0x7fffffff;
-    }
-
-    static void GrowAccounts()
-    {
-        int cap = accStart.Length * 2;
-        Array.Resize(ref accStart, cap);
-        Array.Resize(ref accLen, cap);
-        Array.Resize(ref accSum, cap);
-        Array.Resize(ref accCnt, cap);
-    }
-
-    static void Rehash()
-    {
-        int[] ns = new int[accSlots.Length * 2];
-        int mask = ns.Length - 1;
-        for (int i = 0; i < accN; i++)
-        {
-            int slot = HashArray(arena, accStart[i], accLen[i]) & mask;
-            while (ns[slot] != 0) slot = (slot + 1) & mask;
-            ns[slot] = i + 1;
-        }
-        accSlots = ns;
-    }
-
-    static int InternAccount()
-    {
-        int mask = accSlots.Length - 1;
-        int slot = Hash(rPtr, rLen) & mask;
-        while (true)
-        {
-            int e = accSlots[slot];
-            if (e == 0) break;
-            int i = e - 1;
-            if (accLen[i] == rLen)
+            i++;
+            int digits = 0;
+            while (i < e)
             {
-                int st = accStart[i];
-                byte* p = rPtr;
-                bool same = true;
-                for (int j = 0; j < rLen; j++)
-                    if (arena[st + j] != p[j]) { same = false; break; }
-                if (same) return i;
+                frac = frac * 10 + (B[i] - '0');
+                i++;
+                digits++;
             }
-            slot = (slot + 1) & mask;
+            if (digits == 1) frac *= 10;
         }
-        if (accN == accStart.Length) GrowAccounts();
-        int idx = accN++;
-        if (arenaLen + rLen > arena.Length)
-        {
-            int cap = arena.Length;
-            while (cap < arenaLen + rLen) cap *= 2;
-            Array.Resize(ref arena, cap);
-        }
-        int start = arenaLen;
-        byte* src = rPtr;
-        for (int j = 0; j < rLen; j++) arena[start + j] = src[j];
-        accStart[idx] = start;
-        accLen[idx] = rLen;
-        arenaLen += rLen;
-        accSum[idx] = 0;
-        accCnt[idx] = 0;
-        accSlots[slot] = idx + 1;
-        if (accN * 2 > accSlots.Length) Rehash();
-        return idx;
+        return ip * 100 + frac;
     }
 
-    // ---------------- channels
-    static byte[][] chName = new byte[64][];
-    static long[] chCnt = new long[64];
-    static long[] chNet = new long[64];
-    static int chN;
-
-    static int InternChannel()
+    static int TypeKind(int s, int e)
     {
-        for (int i = 0; i < chN; i++)
+        int n = e - s;
+        if (n == 6)
         {
-            byte[] n = chName[i];
-            if (n.Length != rLen) continue;
-            byte* p = rPtr;
-            bool same = true;
-            for (int j = 0; j < rLen; j++)
-                if (n[j] != p[j]) { same = false; break; }
-            if (same) return i;
+            if (SpanEq(s, e, "credit")) return 0;
+            if (SpanEq(s, e, "refund")) return 2;
         }
-        if (chN == chName.Length)
+        else if (n == 5)
         {
-            int cap = chN * 2;
-            Array.Resize(ref chName, cap);
-            Array.Resize(ref chCnt, cap);
-            Array.Resize(ref chNet, cap);
+            if (SpanEq(s, e, "debit")) return 1;
         }
-        byte[] name = new byte[rLen];
-        byte* q = rPtr;
-        for (int j = 0; j < rLen; j++) name[j] = q[j];
-        chName[chN] = name;
-        chCnt[chN] = 0;
-        chNet[chN] = 0;
-        return chN++;
+        else if (n == 4)
+        {
+            if (SpanEq(s, e, "void")) return 3;
+        }
+        return -1;
     }
 
-    static long ParseAmount()
+    static bool ParseTags()
     {
-        byte* a = rPtr;
-        int i = 0;
-        long whole = 0;
-        while (i < rLen)
-        {
-            byte c = a[i];
-            if (c < '0' || c > '9') break;
-            whole = whole * 10 + (c - '0');
-            i++;
-        }
-        int f1 = 0, f2 = 0;
-        if (i < rLen && a[i] == '.')
-        {
-            i++;
-            if (i < rLen) { f1 = a[i] - '0'; i++; }
-            if (i < rLen) { f2 = a[i] - '0'; }
-        }
-        return whole * 100 + f1 * 10 + f2;
-    }
-
-    // ---------------- transactions
-    static long totalCount, totalNet;
-    static bool curHasTest;
-
-    static void ParseTags()
-    {
-        P++; SkipWs();
-        if (*P == ']') { P++; return; }
+        P++;
+        bool hasTest = false;
         while (true)
         {
             SkipWs();
-            if (*P == '"')
+            if (B[P] == (byte)']') { P++; return hasTest; }
+            ParseStringValue(out int s, out int e);
+            if (e - s == 4 && SpanEq(s, e, "test")) hasTest = true;
+            SkipWs();
+            if (B[P] == (byte)',') { P++; continue; }
+            if (B[P] == (byte)']') { P++; return hasTest; }
+        }
+    }
+
+    static void ParseMeta(out int chS, out int chE, out bool chSet)
+    {
+        P++;
+        chS = 0; chE = 0; chSet = false;
+        while (true)
+        {
+            SkipWs();
+            if (B[P] == (byte)'}') { P++; return; }
+            ParseString(out int ks, out int ke, out bool esc);
+            if (esc) ke = Decode(ks, ke);
+            SkipWs();
+            P++;
+            SkipWs();
+            if (SpanEq(ks, ke, "channel"))
             {
-                ScanString();
-                if (!curHasTest)
-                {
-                    Resolve();
-                    if (Eq(K_TEST)) curHasTest = true;
-                }
+                ParseStringValue(out chS, out chE);
+                chSet = true;
             }
             else SkipValue();
             SkipWs();
-            if (*P == ',') { P++; continue; }
-            P++;
-            return;
+            if (B[P] == (byte)',') { P++; continue; }
+            if (B[P] == (byte)'}') { P++; return; }
         }
     }
 
-    static int ParseMeta()
+    static void ParseRatesObject()
     {
-        int chIdx = -1;
-        P++; SkipWs();
-        if (*P == '}') { P++; return chIdx; }
+        P++;
         while (true)
         {
             SkipWs();
-            ScanString();
-            Resolve();
-            bool isChannel = Eq(K_CHANNEL);
+            if (B[P] == (byte)'}') { P++; return; }
+            ParseString(out int ks, out int ke, out bool esc);
+            if (esc) ke = Decode(ks, ke);
             SkipWs();
             P++;
             SkipWs();
-            if (isChannel)
+            long v = 0;
+            bool neg = false;
+            if (B[P] == (byte)'-') { neg = true; P++; }
+            while (P < LEN)
             {
-                ScanString();
-                Resolve();
-                chIdx = InternChannel();
+                byte c = B[P];
+                if (c < '0' || c > '9') break;
+                v = v * 10 + (c - '0');
+                P++;
             }
-            else SkipValue();
+            if (neg) v = -v;
+            int idx = rates.GetOrInsert(ks, ke - ks);
+            rates.v1[idx] = v;
             SkipWs();
-            if (*P == ',') { P++; continue; }
-            P++;
-            return chIdx;
+            if (B[P] == (byte)',') { P++; continue; }
+            if (B[P] == (byte)'}') { P++; return; }
         }
     }
+
+    static long totalNet;
+    static long totalCount;
 
     static void ParseTransaction()
     {
-        int acctIdx = -1;
-        int chIdx = -1;
-        int sign = 1;
-        curHasTest = false;
+        P++;
+        int accS = 0, accE = 0;
+        int chS = 0, chE = 0;
         long hundredths = 0;
         long rate = 0;
+        int type = -1;
+        bool hasTest = false;
 
-        P++;
-        SkipWs();
-        if (*P == '}') { P++; return; }
         while (true)
         {
             SkipWs();
-            ScanString();
-            Resolve();
-            int first = rLen > 0 ? rPtr[0] : 0;
+            if (B[P] == (byte)'}') { P++; break; }
+            ParseString(out int ks, out int ke, out bool esc);
+            if (esc) ke = Decode(ks, ke);
             SkipWs();
             P++;
             SkipWs();
-            switch (first)
+
+            if (SpanEq(ks, ke, "account"))
             {
-                case 'a':
-                    if (Eq(K_ACCOUNT)) { ScanString(); Resolve(); acctIdx = InternAccount(); }
-                    else if (Eq(K_AMOUNT)) { ScanString(); Resolve(); hundredths = ParseAmount(); }
-                    else SkipValue();
-                    break;
-                case 't':
-                    if (Eq(K_TYPE))
-                    {
-                        ScanString(); Resolve();
-                        if (Eq(K_VOID)) sign = 0;
-                        else if (Eq(K_DEBIT)) sign = -1;
-                        else sign = 1;
-                    }
-                    else if (Eq(K_TAGS)) ParseTags();
-                    else SkipValue();
-                    break;
-                case 'm':
-                    if (Eq(K_META)) chIdx = ParseMeta();
-                    else SkipValue();
-                    break;
-                case 'c':
-                    if (Eq(K_CURRENCY)) { ScanString(); Resolve(); rate = LookupRate(); }
-                    else SkipValue();
-                    break;
-                default:
-                    SkipValue();
-                    break;
+                ParseStringValue(out accS, out accE);
             }
+            else if (SpanEq(ks, ke, "type"))
+            {
+                ParseStringValue(out int s, out int e);
+                type = TypeKind(s, e);
+            }
+            else if (SpanEq(ks, ke, "amount"))
+            {
+                ParseStringValue(out int s, out int e);
+                hundredths = ParseAmount(s, e);
+            }
+            else if (SpanEq(ks, ke, "currency"))
+            {
+                ParseStringValue(out int s, out int e);
+                int ri = rates.Find(s, e - s);
+                rate = ri >= 0 ? rates.v1[ri] : 0;
+            }
+            else if (SpanEq(ks, ke, "tags"))
+            {
+                hasTest = ParseTags();
+            }
+            else if (SpanEq(ks, ke, "meta"))
+            {
+                ParseMeta(out chS, out chE, out _);
+            }
+            else
+            {
+                SkipValue();
+            }
+
             SkipWs();
-            if (*P == ',') { P++; continue; }
-            P++;
-            break;
+            if (B[P] == (byte)',') { P++; continue; }
+            if (B[P] == (byte)'}') { P++; break; }
         }
 
-        if (sign == 0 || curHasTest) return;
+        if (type == 3 || type == -1 || hasTest) return;
 
         long usd = (hundredths * rate) / 1000000L;
-        long val = sign > 0 ? usd : -usd;
-
+        long signed = type == 1 ? -usd : usd;
+        totalNet += signed;
         totalCount++;
-        totalNet += val;
-        if (acctIdx >= 0)
-        {
-            accSum[acctIdx] += val;
-            accCnt[acctIdx]++;
-        }
-        if (chIdx >= 0)
-        {
-            chCnt[chIdx]++;
-            chNet[chIdx] += val;
-        }
+
+        int ci = channels.GetOrInsert(chS, chE - chS);
+        channels.v1[ci]++;
+        channels.v2[ci] += signed;
+
+        int ai = accounts.GetOrInsert(accS, accE - accS);
+        accounts.v1[ai] += signed;
     }
 
-    static int CmpBytes(byte[] a, byte[] b)
+    static void Main(string[] args)
     {
-        int n = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < n; i++)
+        if (args.Length < 1) return;
+        B = File.ReadAllBytes(args[0]);
+        LEN = B.Length;
+
+        rates = new SpanMap(64);
+        channels = new SpanMap(64);
+        accounts = new SpanMap(1 << 14);
+
+        P = 0;
+        SkipWs();
+        P++;
+        while (true)
         {
-            int x = a[i], y = b[i];
-            if (x != y) return x - y;
-        }
-        return a.Length - b.Length;
-    }
-
-    static int CmpArena(int i, int j)
-    {
-        int ni = accLen[i], nj = accLen[j];
-        int si = accStart[i], sj = accStart[j];
-        int n = Math.Min(ni, nj);
-        for (int k = 0; k < n; k++)
-        {
-            int x = arena[si + k], y = arena[sj + k];
-            if (x != y) return x - y;
-        }
-        return ni - nj;
-    }
-
-    static int Main(string[] args)
-    {
-        if (args.Length < 1) return 1;
-
-        byte[] data = File.ReadAllBytes(args[0]);
-
-        fixed (byte* basePtr = data)
-        {
-            P = basePtr;
-            E = basePtr + data.Length;
-
-            // {"rates": {...}}
+            SkipWs();
+            if (B[P] == (byte)'}') { P++; break; }
+            ParseString(out int ks, out int ke, out bool esc);
+            if (esc) ke = Decode(ks, ke);
             SkipWs();
             P++;
             SkipWs();
-            if (*P != '}')
-            {
-                while (true)
-                {
-                    SkipWs();
-                    ScanString();
-                    Resolve();
-                    bool isRates = Eq(K_RATES);
-                    SkipWs();
-                    P++;
-                    SkipWs();
-                    if (isRates && *P == '{')
-                    {
-                        P++;
-                        SkipWs();
-                        if (*P != '}')
-                        {
-                            while (true)
-                            {
-                                SkipWs();
-                                ScanString();
-                                Resolve();
-                                byte[] cur = new byte[rLen];
-                                byte* cp = rPtr;
-                                for (int j = 0; j < rLen; j++) cur[j] = cp[j];
-                                SkipWs();
-                                P++;
-                                SkipWs();
-                                bool neg = false;
-                                if (*P == '-') { neg = true; P++; }
-                                long v = 0;
-                                while (*P >= '0' && *P <= '9')
-                                {
-                                    v = v * 10 + (*P - '0');
-                                    P++;
-                                }
-                                if (neg) v = -v;
-                                if (rateN == rateKeys.Length)
-                                {
-                                    Array.Resize(ref rateKeys, rateN * 2);
-                                    Array.Resize(ref rateVals, rateN * 2);
-                                }
-                                rateKeys[rateN] = cur;
-                                rateVals[rateN] = v;
-                                rateN++;
-                                SkipWs();
-                                if (*P == ',') { P++; continue; }
-                                P++;
-                                break;
-                            }
-                        }
-                        else P++;
-                    }
-                    else SkipValue();
-                    SkipWs();
-                    if (*P == ',') { P++; continue; }
-                    P++;
-                    break;
-                }
-            }
-            else P++;
-
-            while (true)
-            {
-                SkipWs();
-                if (P >= E) break;
-                if (*P != '{') { P++; continue; }
-                ParseTransaction();
-            }
+            if (SpanEq(ks, ke, "rates")) ParseRatesObject();
+            else SkipValue();
+            SkipWs();
+            if (B[P] == (byte)',') { P++; continue; }
+            if (B[P] == (byte)'}') { P++; break; }
         }
 
-        // channels sorted by bytes
-        int[] ci = new int[chN];
-        for (int i = 0; i < chN; i++) ci[i] = i;
-        for (int i = 1; i < chN; i++)
+        while (true)
         {
-            int v = ci[i];
-            int j = i - 1;
-            while (j >= 0 && CmpBytes(chName[ci[j]], chName[v]) > 0)
-            {
-                ci[j + 1] = ci[j];
-                j--;
-            }
-            ci[j + 1] = v;
+            SkipWs();
+            if (P >= LEN) break;
+            ParseTransaction();
         }
 
-        // top ten accounts
-        int[] best = new int[10];
-        int bn = 0;
-        for (int i = 0; i < accN; i++)
+        var chIdx = new List<int>(channels.cnt);
+        for (int i = 0; i < channels.cap; i++)
+            if (channels.klen[i] >= 0) chIdx.Add(i);
+        chIdx.Sort((a, b) => SpanCompare(channels.off[a], channels.klen[a],
+                                          channels.off[b], channels.klen[b]));
+
+        var accIdx = new List<int>(accounts.cnt);
+        for (int i = 0; i < accounts.cap; i++)
+            if (accounts.klen[i] >= 0) accIdx.Add(i);
+        accIdx.Sort((a, b) =>
         {
-            if (accCnt[i] == 0) continue;
-            long s = accSum[i];
-            int p = bn;
-            while (p > 0)
-            {
-                int o = best[p - 1];
-                bool better;
-                if (s != accSum[o]) better = s > accSum[o];
-                else better = CmpArena(i, o) < 0;
-                if (!better) break;
-                p--;
-            }
-            if (p >= 10) continue;
-            if (bn < 10) bn++;
-            for (int j = bn - 1; j > p; j--) best[j] = best[j - 1];
-            best[p] = i;
-        }
+            if (accounts.v1[a] != accounts.v1[b])
+                return accounts.v1[b].CompareTo(accounts.v1[a]);
+            return SpanCompare(accounts.off[a], accounts.klen[a],
+                               accounts.off[b], accounts.klen[b]);
+        });
+        int k = accIdx.Count < 10 ? accIdx.Count : 10;
 
-        var sb = new StringBuilder(4096);
+        var sb = new StringBuilder(8192);
         sb.Append("counted ").Append(totalCount).Append('\n');
         sb.Append("net ").Append(totalNet).Append('\n');
-        for (int i = 0; i < chN; i++)
+        for (int j = 0; j < chIdx.Count; j++)
         {
-            int c = ci[i];
-            if (chCnt[c] == 0) continue;
-            sb.Append("channel ").Append(Encoding.UTF8.GetString(chName[c]))
-              .Append(' ').Append(chCnt[c]).Append(' ').Append(chNet[c]).Append('\n');
+            int idx = chIdx[j];
+            sb.Append("channel ");
+            sb.Append(Encoding.UTF8.GetString(B, channels.off[idx], channels.klen[idx]));
+            sb.Append(' ').Append(channels.v1[idx]).Append(' ').Append(channels.v2[idx]).Append('\n');
         }
-        for (int i = 0; i < bn; i++)
+        for (int j = 0; j < k; j++)
         {
-            int a = best[i];
-            sb.Append("account ").Append(Encoding.UTF8.GetString(arena, accStart[a], accLen[a]))
-              .Append(' ').Append(accSum[a]).Append('\n');
+            int idx = accIdx[j];
+            sb.Append("account ");
+            sb.Append(Encoding.UTF8.GetString(B, accounts.off[idx], accounts.klen[idx]));
+            sb.Append(' ').Append(accounts.v1[idx]).Append('\n');
         }
+
         byte[] outBytes = Encoding.UTF8.GetBytes(sb.ToString());
         using var stdout = Console.OpenStandardOutput();
         stdout.Write(outBytes, 0, outBytes.Length);
-        return 0;
     }
 }

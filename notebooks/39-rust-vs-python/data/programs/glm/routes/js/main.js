@@ -1,112 +1,92 @@
-"use strict";
+'use strict';
+const fs = require('fs');
 
-const fs = require("fs");
+const buf = fs.readFileSync(process.argv[2]);
+let pos = 0;
 
-const data = fs.readFileSync(process.argv[2]);
-let ppos = 0;
-
-function next() {
-  const n = data.length;
-  let i = ppos;
-  while (i < n && (data[i] < 48 || data[i] > 57)) i++;
-  let v = 0;
-  while (i < n && data[i] >= 48 && data[i] <= 57) {
-    v = v * 10 + (data[i] - 48);
-    i++;
+function readInt() {
+  while (pos < buf.length && (buf[pos] < 48 || buf[pos] > 57)) pos++;
+  let x = 0;
+  while (pos < buf.length && buf[pos] >= 48 && buf[pos] <= 57) {
+    x = x * 10 + buf[pos++] - 48;
   }
-  ppos = i;
-  return v;
+  return x;
 }
 
-const N = next(), M = next(), Q = next();
+const n = readInt(), m = readInt(), q = readInt();
 
-const eu = new Int32Array(M), ev = new Int32Array(M), ew = new Int32Array(M);
-for (let i = 0; i < M; i++) {
-  eu[i] = next(); ev[i] = next(); ew[i] = next();
+const eu = new Int32Array(m), ev = new Int32Array(m), ew = new Int32Array(m);
+const start = new Int32Array(n + 1);
+for (let i = 0; i < m; i++) {
+  const u = readInt(), v = readInt(), w = readInt();
+  eu[i] = u; ev[i] = v; ew[i] = w;
+  start[u + 1]++; start[v + 1]++;
 }
-const src = new Int32Array(Q);
-for (let i = 0; i < Q; i++) src[i] = next();
-
-// CSR adjacency (skip self-loops)
-const off = new Int32Array(N + 1);
-for (let i = 0; i < M; i++) {
-  if (eu[i] !== ev[i]) { off[eu[i]]++; off[ev[i]]++; }
-}
-let run = 0;
-for (let v = 0; v < N; v++) { const d = off[v]; off[v] = run; run += d; }
-off[N] = run;
-const adj = new Int32Array(run), wt = new Int32Array(run);
-const pos = new Int32Array(N);
-pos.set(off.subarray(0, N));
-for (let i = 0; i < M; i++) {
+for (let i = 0; i < n; i++) start[i + 1] += start[i];
+const e2 = start[n];
+const adjV = new Int32Array(e2), adjW = new Int32Array(e2);
+const posArr = new Int32Array(n);
+posArr.set(start.subarray(0, n));
+for (let i = 0; i < m; i++) {
   const u = eu[i], v = ev[i], w = ew[i];
-  if (u === v) continue;
-  adj[pos[u]] = v; wt[pos[u]] = w; pos[u]++;
-  adj[pos[v]] = u; wt[pos[v]] = w; pos[v]++;
+  adjV[posArr[u]] = v; adjW[posArr[u]] = w; posArr[u]++;
+  adjV[posArr[v]] = u; adjW[posArr[v]] = w; posArr[v]++;
 }
 
-const INF = Infinity;
-const dist = new Float64Array(N);
-const hcap = 2 * M + 16;
-const hd = new Float64Array(hcap);
-const hn = new Int32Array(hcap);
+// Dial's bucket queue: weights are 1..1000, so a circular array of 1001
+// buckets (singly linked lists through the arena array) holds all pending
+// distances. Stale entries are skipped via the dist check.
+const NB = 1001;
+const arena = new Int32Array(2 * m + 2);
+const nextIn = new Int32Array(2 * m + 2);
+const head = new Int32Array(NB);
 
-const outChunks = [];
+const dist = new Int32Array(n);
+const settled = new Uint8Array(n);
+const lines = new Array(q);
 
-for (let qi = 0; qi < Q; qi++) {
-  const s = src[qi];
-  dist.fill(INF);
-  let hsize = 0;
+for (let qi = 0; qi < q; qi++) {
+  const s = readInt();
+  dist.fill(-1);
+  settled.fill(0);
+  head.fill(-1);
+  let cnt = 0;
   dist[s] = 0;
-  hd[0] = 0; hn[0] = s; hsize = 1;
-  let total = 0, far = -1, cnt = 0, farNode = s;
-
-  while (hsize > 0) {
-    const d = hd[0];
-    const v = hn[0];
-    hsize--;
-    hd[0] = hd[hsize]; hn[0] = hn[hsize];
-    // sift down (hole method, 4-ary); reinsert moved last element
-    const d0 = hd[hsize], v0 = hn[hsize];
-    let i = 0;
-    while (hsize > 0) {
-      const c = 4 * i + 1;
-      let m = i, mv = d0;
-      let e = c + 4;
-      if (e > hsize) e = hsize;
-      for (let j = c; j < e; j++) {
-        if (hd[j] < mv) { mv = hd[j]; m = j; }
-      }
-      if (m === i) break;
-      hd[i] = mv; hn[i] = hn[m];
-      i = m;
-    }
-    if (hsize > 0) { hd[i] = d0; hn[i] = v0; }
-    if (d !== dist[v]) continue;
-    cnt++;
-    total += d;
-    if (d > far || (d === far && v < farNode)) { far = d; farNode = v; }
-    const e1 = off[v + 1];
-    for (let e = off[v]; e < e1; e++) {
-      const to = adj[e];
-      const nd = d + wt[e];
-      if (nd < dist[to]) {
-        dist[to] = nd;
-        // push
-        let j = hsize;
-        hd[j] = nd; hn[j] = to; hsize++;
-        while (j > 0) {
-          const par = (j - 1) >> 2;
-          if (hd[par] <= nd) break;
-          hd[j] = hd[par]; hn[j] = hn[par];
-          j = par;
-        }
-        hd[j] = nd; hn[j] = to;
+  arena[cnt] = s; nextIn[cnt] = -1; head[0] = cnt; cnt++;
+  let remaining = 1;
+  let idx = 0;
+  let d = 0;
+  while (remaining > 0) {
+    let e = head[idx];
+    if (e < 0) { idx = idx + 1 === NB ? 0 : idx + 1; d++; continue; }
+    head[idx] = nextIn[e];
+    remaining--;
+    const v = arena[e];
+    if (settled[v] || dist[v] !== d) continue;
+    settled[v] = 1;
+    const end = start[v + 1];
+    for (let i = start[v]; i < end; i++) {
+      const u = adjV[i];
+      if (settled[u]) continue;
+      const nd = d + adjW[i];
+      const du = dist[u];
+      if (du < 0 || nd < du) {
+        dist[u] = nd;
+        const b = nd % NB;
+        arena[cnt] = u; nextIn[cnt] = head[b]; head[b] = cnt; cnt++;
+        remaining++;
       }
     }
   }
-
-  outChunks.push(`${s} ${cnt} ${total} ${far} ${farNode}\n`);
+  let total = 0, far = 0, farNode = s, r = 0;
+  for (let v = 0; v < n; v++) {
+    const dd = dist[v];
+    if (dd >= 0) {
+      r++;
+      total += dd;
+      if (dd > far || (dd === far && v < farNode)) { far = dd; farNode = v; }
+    }
+  }
+  lines[qi] = `${s} ${r} ${total} ${far} ${farNode}`;
 }
-
-process.stdout.write(outChunks.join(""));
+process.stdout.write(lines.join('\n') + '\n');

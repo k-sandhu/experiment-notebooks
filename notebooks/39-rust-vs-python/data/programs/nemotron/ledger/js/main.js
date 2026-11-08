@@ -2,89 +2,101 @@
 
 const fs = require('fs');
 
-const buf = fs.readFileSync(process.argv[2], 'utf8');
-const lines = buf.split('\n');
-
-const rates = Object.create(null);
-let totalCount = 0;
-let totalNet = 0;
-const channels = Object.create(null);
-const accounts = Object.create(null);
-
+// Convert amount string "12", "12.5", "12.05" to integer hundredths.
 function parseAmount(s) {
-    let j = 0, dollars = 0, n = s.length;
-    while (j < n) {
-        const c = s.charCodeAt(j);
-        if (c < 48 || c > 57) break;
-        dollars = dollars * 10 + (c - 48);
-        j++;
+    const dot = s.indexOf('.');
+    if (dot === -1) {
+        return parseInt(s, 10) * 100;
     }
-    let cents = 0;
-    if (j < n && s.charCodeAt(j) === 46) {
-        j++;
-        let nd = 0;
-        while (j < n) {
-            const c = s.charCodeAt(j);
-            if (c < 48 || c > 57 || nd >= 2) break;
-            cents = cents * 10 + (c - 48);
-            j++;
-            nd++;
-        }
-        while (nd < 2) { cents *= 10; nd++; }
+    let h = 0;
+    for (let i = 0; i < dot; i++) {
+        h = h * 10 + (s.charCodeAt(i) - 48);
     }
-    return dollars * 100 + cents;
+    let f = 0;
+    let fd = 0;
+    for (let i = dot + 1; i < s.length; i++) {
+        f = f * 10 + (s.charCodeAt(i) - 48);
+        fd++;
+    }
+    if (fd === 1) return h * 100 + f * 10;
+    return h * 100 + f;
 }
 
-for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.length === 0) continue;
-    let o;
-    try { o = JSON.parse(line); } catch (e) { continue; }
-    if (o.rates !== undefined) {
-        const r = o.rates;
-        for (const k in r) rates[k] = r[k];
-        continue;
-    }
-    const typ = o.type;
-    if (typ === 'void') continue;
-    let skipped = false;
-    const tags = o.tags;
-    if (tags) {
+function main() {
+    const path = process.argv[2];
+    const buf = fs.readFileSync(path, 'utf8');
+    const lines = buf.split('\n');
+
+    // First line: rates.
+    const rates = JSON.parse(lines[0]).rates;
+
+    const accounts = new Map(); // string -> bigint
+    const channels = new Map(); // string -> {count:number, net:bigint}
+    let counted = 0;
+    let net = 0n;
+
+    const HUNDRED = 1000000n;
+
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.length === 0) continue;
+        const o = JSON.parse(line);
+        if (o.type === 'void') continue;
+
+        const tags = o.tags;
+        let testTag = false;
         for (let t = 0; t < tags.length; t++) {
-            if (tags[t] === 'test') { skipped = true; break; }
+            if (tags[t] === 'test') {
+                testTag = true;
+                break;
+            }
         }
+        if (testTag) continue;
+
+        const hundred = parseAmount(o.amount);
+        const rate = rates[o.currency];
+        // Exact integer arithmetic, rounding down (floor for non-negative values).
+        const usd = (BigInt(hundred) * BigInt(rate)) / HUNDRED;
+        const val = (o.type === 'credit' || o.type === 'refund') ? usd : -usd;
+
+        counted++;
+        net += val;
+
+        const ch = o.meta.channel;
+        let c = channels.get(ch);
+        if (c === undefined) {
+            c = { count: 0, net: 0n };
+            channels.set(ch, c);
+        }
+        c.count++;
+        c.net += val;
+
+        accounts.set(o.account, (accounts.get(o.account) || 0n) + val);
     }
-    if (skipped) continue;
-    const hundredths = parseAmount(o.amount);
-    const rate = rates[o.currency];
-    if (rate === undefined) continue;
-    let usd = (hundredths * rate / 1000000) | 0;
-    if (typ === 'debit') usd = -usd;
-    totalCount++;
-    totalNet += usd;
-    const ch = o.meta && o.meta.channel;
-    let c = channels[ch];
-    if (!c) { c = [0, 0]; channels[ch] = c; }
-    c[0]++;
-    c[1] += usd;
-    accounts[o.account] = (accounts[o.account] || 0) + usd;
+
+    const out = [];
+    out.push('counted ' + counted);
+    out.push('net ' + net.toString());
+
+    const chNames = [...channels.keys()].sort();
+    for (const name of chNames) {
+        const c = channels.get(name);
+        out.push('channel ' + name + ' ' + c.count + ' ' + c.net.toString());
+    }
+
+    const acs = [...accounts.entries()].sort((a, b) => {
+        if (a[1] > b[1]) return -1;
+        if (a[1] < b[1]) return 1;
+        if (a[0] < b[0]) return -1;
+        if (a[0] > b[0]) return 1;
+        return 0;
+    });
+    const m = acs.length < 10 ? acs.length : 10;
+    for (let i = 0; i < m; i++) {
+        out.push('account ' + acs[i][0] + ' ' + acs[i][1].toString());
+    }
+
+    process.stdout.write(out.join('\n') + '\n');
 }
 
-let out = 'counted ' + totalCount + '\n' + 'net ' + totalNet + '\n';
-
-const chNames = Object.keys(channels);
-chNames.sort();
-for (let k = 0; k < chNames.length; k++) {
-    const name = chNames[k];
-    const c = channels[name];
-    out += 'channel ' + name + ' ' + c[0] + ' ' + c[1] + '\n';
-}
-
-const accts = Object.keys(accounts).map(k => ({ k: k, v: accounts[k] }));
-accts.sort((a, b) => b.v - a.v || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
-const lim = Math.min(10, accts.length);
-for (let k = 0; k < lim; k++) {
-    out += 'account ' + accts[k].k + ' ' + accts[k].v + '\n';
-}
-
-process.stdout.write(out);
+main();

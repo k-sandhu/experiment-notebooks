@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"os"
 	"slices"
@@ -9,298 +8,275 @@ import (
 	"strconv"
 )
 
-type stat struct {
-	tmpl  string
-	count int64
-	lat   []int32
-}
-
-func isd(c byte) bool { return c >= '0' && c <= '9' }
-
 var (
-	tbuf   = make([]byte, 512)
-	tlen   int
-	tenths int32
-	cls    byte
-	ps, pe int
+	mGET    = []byte("GET ")
+	mPOST   = []byte("POST ")
+	mPUT    = []byte("PUT ")
+	mDELETE = []byte("DELETE ")
+	mPATCH  = []byte("PATCH ")
 )
 
-// parse validates the line d[base:base+n] and fills ps, pe, tenths, cls, tbuf/tlen.
-func parse(d []byte, base, n int) bool {
-	if n < 50 {
-		return false
-	}
-	i := base
-	end := base + n
-	// timestamp: dddd-dd-ddTdd:dd:dd.dddZ
-	ts := d[i : i+24]
-	for _, j := range [17]int{0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 20, 21, 22} {
-		if !isd(ts[j]) {
-			return false
-		}
-	}
-	if ts[4] != '-' || ts[7] != '-' || ts[10] != 'T' || ts[13] != ':' || ts[16] != ':' || ts[19] != '.' || ts[23] != 'Z' {
-		return false
-	}
-	i += 24
-	if d[i] != ' ' {
-		return false
-	}
-	i++
-	// host [a-z]+-\d+
-	st := i
-	for i < end && d[i] >= 'a' && d[i] <= 'z' {
-		i++
-	}
-	if i == st || i >= end || d[i] != '-' {
-		return false
-	}
-	i++
-	st = i
-	for i < end && isd(d[i]) {
-		i++
-	}
-	if i == st || i >= end || d[i] != ' ' {
-		return false
-	}
-	i++
-	// method
-	rem := end - i
-	if rem >= 4 && string(d[i:i+4]) == "GET " {
-		i += 4
-	} else if rem >= 4 && string(d[i:i+4]) == "PUT " {
-		i += 4
-	} else if rem >= 5 && string(d[i:i+5]) == "POST " {
-		i += 5
-	} else if rem >= 6 && string(d[i:i+6]) == "PATCH " {
-		i += 6
-	} else if rem >= 7 && string(d[i:i+7]) == "DELETE " {
-		i += 7
-	} else {
-		return false
-	}
-	if end-i < 17 {
-		return false
-	}
-	if d[i] != '/' {
-		return false
-	}
-	ps = i
-	i++
-	for i < end {
-		c := d[i]
-		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || isd(c) || c == '_' || c == '-' || c == '/' {
-			i++
-		} else {
-			break
-		}
-	}
-	pe = i
-	if i < end && d[i] == '?' {
-		i++
-		for i < end && d[i] != ' ' {
-			i++
-		}
-	}
-	if i >= end || d[i] != ' ' {
-		return false
-	}
-	i++
-	if end-i < 15 {
-		return false
-	}
-	if !isd(d[i]) || !isd(d[i+1]) || !isd(d[i+2]) {
-		return false
-	}
-	cls = d[i] - '0'
-	i += 3
-	if d[i] != ' ' {
-		return false
-	}
-	i++
-	if end-i < 11 {
-		return false
-	}
-	st = i
-	for i < end && isd(d[i]) {
-		i++
-	}
-	if i == st || d[i] != 'B' {
-		return false
-	}
-	i++
-	if d[i] != ' ' {
-		return false
-	}
-	i++
-	st = i
-	var v int64
-	nd := 0
-	for i < end && isd(d[i]) {
-		if nd < 15 {
-			v = v*10 + int64(d[i]-'0')
-		}
-		i++
-		nd++
-	}
-	if i == st || d[i] != '.' {
-		return false
-	}
-	i++
-	if !isd(d[i]) {
-		return false
-	}
-	v = v*10 + int64(d[i]-'0')
-	i++
-	if d[i] != 'm' || d[i+1] != 's' || d[i+2] != ' ' {
-		return false
-	}
-	if v > 0xFFFFFFFF {
-		v = 0xFFFFFFFF
-	}
-	tenths = int32(v)
-	i += 3
-	if d[i] != '"' {
-		return false
-	}
-	i++
-	for i < end && d[i] != '"' {
-		i++
-	}
-	if i+1 != end {
-		return false
-	}
+type agg struct {
+	count int64
+	lats  []int64
+}
 
-	// build template
-	need := (pe - ps) * 5 + 8
-	if len(tbuf) < need {
-		tbuf = make([]byte, need*2)
+var (
+	scratch []byte
+	tsMask  = [25]byte{
+		'D', 'D', 'D', 'D', '-', 'D', 'D', '-', 'D', 'D', 'T', 'D', 'D',
+		':', 'D', 'D', ':', 'D', 'D', '.', 'D', 'D', 'D', 'Z', ' ',
 	}
-	t := 0
-	k := ps
-	for k < pe {
-		tbuf[t] = '/'
-		t++
-		k++
-		s0 := k
-		for k < pe && d[k] != '/' {
-			k++
-		}
-		slen := k - s0
-		dig := slen > 0
-		for z := 0; dig && z < slen; z++ {
-			if !isd(d[s0+z]) {
-				dig = false
-				break
+)
+
+func isDig(c byte) bool { return c >= '0' && c <= '9' }
+
+func isSeg(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-'
+}
+
+// parseLine returns (class, latencyTenths, ok).
+func parseLine(line []byte) (int, int64, bool) {
+	p := 0
+	e := len(line)
+	if e < 26 {
+		return 0, 0, false
+	}
+	for i := 0; i < 25; i++ {
+		c := line[p+i]
+		m := tsMask[i]
+		if m == 'D' {
+			if !isDig(c) {
+				return 0, 0, false
 			}
-		}
-		if dig {
-			tbuf[t] = '{'
-			tbuf[t+1] = 'i'
-			tbuf[t+2] = 'd'
-			tbuf[t+3] = '}'
-			t += 4
-		} else {
-			copy(tbuf[t:], d[s0:k])
-			t += slen
+		} else if c != m {
+			return 0, 0, false
 		}
 	}
-	tlen = t
-	return true
+	p += 25
+	s0 := p
+	for p < e && line[p] >= 'a' && line[p] <= 'z' {
+		p++
+	}
+	if p == s0 || p+1 >= e || line[p] != '-' {
+		return 0, 0, false
+	}
+	p++
+	d0 := p
+	for p < e && isDig(line[p]) {
+		p++
+	}
+	if p == d0 || p+1 >= e || line[p] != ' ' {
+		return 0, 0, false
+	}
+	p++
+	// method
+	if e-p >= 4 && bytes.HasPrefix(line[p:], mGET) {
+		p += 4
+	} else if e-p >= 5 && bytes.HasPrefix(line[p:], mPOST) {
+		p += 5
+	} else if e-p >= 4 && bytes.HasPrefix(line[p:], mPUT) {
+		p += 4
+	} else if e-p >= 7 && bytes.HasPrefix(line[p:], mDELETE) {
+		p += 7
+	} else if e-p >= 6 && bytes.HasPrefix(line[p:], mPATCH) {
+		p += 6
+	} else {
+		return 0, 0, false
+	}
+	// path
+	if line[p] != '/' {
+		return 0, 0, false
+	}
+	if cap(scratch) < ((e-p)<<2)+16 {
+		scratch = make([]byte, 0, 1024)
+	}
+	sc := scratch[:0]
+	for {
+		segStart := len(sc)
+		for p < e && isSeg(line[p]) {
+			sc = append(sc, line[p])
+			p++
+		}
+		allDig := len(sc) > segStart
+		for q := segStart; allDig && q < len(sc); q++ {
+			allDig = isDig(sc[q])
+		}
+		if allDig {
+			sc = sc[:segStart]
+			sc = append(sc, '{', 'i', 'd', '}')
+		}
+		if p < e && line[p] == '/' {
+			sc = append(sc, '/')
+			p++
+			continue
+		}
+		break
+	}
+	if p < e && line[p] == '?' {
+		p++
+		for p < e && line[p] != ' ' {
+			p++
+		}
+	}
+	if p+1 >= e || line[p] != ' ' {
+		return 0, 0, false
+	}
+	p++
+	// status
+	if e-p < 4 || !isDig(line[p]) || !isDig(line[p+1]) || !isDig(line[p+2]) {
+		return 0, 0, false
+	}
+	cls := int(line[p] - '0')
+	p += 3
+	if p+1 >= e || line[p] != ' ' {
+		return 0, 0, false
+	}
+	p++
+	// size
+	b0 := p
+	for p < e && isDig(line[p]) {
+		p++
+	}
+	if p == b0 || e-p < 2 || line[p] != 'B' || line[p+1] != ' ' {
+		return 0, 0, false
+	}
+	p += 2
+	// latency
+	l0 := p
+	for p < e && isDig(line[p]) {
+		p++
+	}
+	if p == l0 || e-p < 5 || line[p] != '.' || !isDig(line[p+1]) || line[p+2] != 'm' || line[p+3] != 's' || line[p+4] != ' ' {
+		return 0, 0, false
+	}
+	var v int64
+	if p-l0 > 18 {
+		v = 1_000_000_000_000_000 // saturate absurdly large latencies
+	} else {
+		for l0 < p {
+			v = v*10 + int64(line[l0]-'0')
+			l0++
+		}
+		v = v*10 + int64(line[p+1]-'0')
+		if v > 1_000_000_000_000_000 {
+			v = 1_000_000_000_000_000
+		}
+	}
+	p += 5
+	// user agent
+	if line[p] != '"' {
+		return 0, 0, false
+	}
+	p++
+	for p < e && line[p] != '"' {
+		p++
+	}
+	if p != e-1 {
+		return 0, 0, false
+	}
+	scratch = sc
+	return cls, v, true
+}
+
+func appendNum(out []byte, v uint64) []byte {
+	return strconv.AppendUint(out, v, 10)
+}
+
+func appendTenths(out []byte, v int64) []byte {
+	out = strconv.AppendInt(out, v/10, 10)
+	out = append(out, '.')
+	return append(out, byte('0'+v%10))
 }
 
 func main() {
-	d, err := os.ReadFile(os.Args[1])
+	if len(os.Args) < 2 {
+		os.Exit(1)
+	}
+	data, err := os.ReadFile(os.Args[1])
 	if err != nil {
 		os.Exit(1)
 	}
-	n := len(d)
-
 	var lines, malformed int64
-	var clsCount [10]int64
-	stats := make(map[string]*stat, 256)
+	var statusCnt [10]int64
+	aggs := make(map[string]*agg, 256)
 
 	i := 0
+	n := len(data)
 	for i < n {
-		rel := bytes.IndexByte(d[i:], '\n') // SIMD-accelerated
+		j := bytes.IndexByte(data[i:], '\n')
 		var le int
-		if rel < 0 {
+		if j < 0 {
 			le = n
 		} else {
-			le = i + rel
+			le = i + j
 		}
 		lines++
-		if parse(d, i, le-i) {
-			// map lookup with string([]byte) avoids allocation; only new templates allocate
-			s, ok := stats[string(tbuf[:tlen])]
-			if !ok {
-				s = &stat{tmpl: string(tbuf[:tlen])}
-				stats[string(tbuf[:tlen])] = s
+		if cls, lat, ok := parseLine(data[i:le]); ok {
+			statusCnt[cls]++
+			a, found := aggs[string(scratch)]
+			if !found {
+				a = &agg{}
+				aggs[string(scratch)] = a
 			}
-			s.count++
-			s.lat = append(s.lat, tenths)
-			clsCount[cls]++
+			a.count++
+			a.lats = append(a.lats, lat)
 		} else {
 			malformed++
+		}
+		if j < 0 {
+			break
 		}
 		i = le + 1
 	}
 
-	entries := make([]*stat, 0, len(stats))
-	for _, s := range stats {
-		entries = append(entries, s)
-	}
-	sort.Slice(entries, func(a, b int) bool {
-		if entries[a].count != entries[b].count {
-			return entries[a].count > entries[b].count
+	out := make([]byte, 0, 4096)
+	out = append(out, "lines "...)
+	out = appendNum(out, uint64(lines))
+	out = append(out, "\nmalformed "...)
+	out = appendNum(out, uint64(malformed))
+	out = append(out, '\n')
+	for d := 0; d < 10; d++ {
+		if statusCnt[d] == 0 {
+			continue
 		}
-		return entries[a].tmpl < entries[b].tmpl
+		out = append(out, "status "...)
+		out = append(out, byte('0'+d), 'x', 'x', ' ')
+		out = appendNum(out, uint64(statusCnt[d]))
+		out = append(out, '\n')
+	}
+	type ranked struct {
+		tmpl string
+		a    *agg
+	}
+	rs := make([]ranked, 0, len(aggs))
+	for t, a := range aggs {
+		rs = append(rs, ranked{t, a})
+	}
+	sort.Slice(rs, func(x, y int) bool {
+		if rs[x].a.count != rs[y].a.count {
+			return rs[x].a.count > rs[y].a.count
+		}
+		return rs[x].tmpl < rs[y].tmpl
 	})
-
-	w := bufio.NewWriterSize(os.Stdout, 1<<16)
-	nb := strconv.AppendInt(make([]byte, 0, 24), lines, 10)
-	w.WriteString("lines ")
-	w.Write(nb)
-	w.WriteByte('\n')
-	nb = strconv.AppendInt(nb[:0], malformed, 10)
-	w.WriteString("malformed ")
-	w.Write(nb)
-	w.WriteByte('\n')
-	for dd := 0; dd < 10; dd++ {
-		if clsCount[dd] > 0 {
-			w.WriteString("status ")
-			w.WriteByte(byte('0' + dd))
-			w.WriteString("xx ")
-			nb = strconv.AppendInt(nb[:0], clsCount[dd], 10)
-			w.Write(nb)
-			w.WriteByte('\n')
-		}
+	if len(rs) > 10 {
+		rs = rs[:10]
 	}
-	top := len(entries)
-	if top > 10 {
-		top = 10
+	for _, r := range rs {
+		lats := r.a.lats
+		m := len(lats)
+		slices.Sort(lats)
+		out = append(out, "path "...)
+		out = append(out, r.tmpl...)
+		out = append(out, ' ')
+		out = appendNum(out, uint64(r.a.count))
+		out = append(out, ' ')
+		out = appendTenths(out, lats[(50*m+99)/100-1])
+		out = append(out, ' ')
+		out = appendTenths(out, lats[(95*m+99)/100-1])
+		out = append(out, ' ')
+		out = appendTenths(out, lats[m-1])
+		out = append(out, '\n')
 	}
-	for r := 0; r < top; r++ {
-		s := entries[r]
-		lat := s.lat
-		slices.Sort(lat)
-		nn := len(lat)
-		p50 := lat[(50*nn+99)/100-1]
-		p95 := lat[(95*nn+99)/100-1]
-		mx := lat[nn-1]
-		w.WriteString("path ")
-		w.WriteString(s.tmpl)
-		w.WriteByte(' ')
-		nb = strconv.AppendInt(nb[:0], s.count, 10)
-		w.Write(nb)
-		for _, v := range [3]int32{p50, p95, mx} {
-			w.WriteByte(' ')
-			nb = strconv.AppendInt(nb[:0], int64(v/10), 10)
-			w.Write(nb)
-			w.WriteByte('.')
-			w.WriteByte(byte('0' + v%10))
-		}
-		w.WriteByte('\n')
-	}
-	w.Flush()
+	os.Stdout.Write(out)
 }

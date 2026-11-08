@@ -1,208 +1,225 @@
+import java.io.BufferedWriter;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+// Word pairs benchmark - Java 23.
+// Single pass: lowercase words in place, intern them to ids, emit packed
+// (prevId, curId) pairs within sentences, sort the packed pairs, count runs,
+// keep the top 20 by (count desc, word1 asc, word2 asc).
 public class Main {
 
-    // Open-addressing map from lowercased word bytes to id.
-    static int[] wordSlots; // id + 1, 0 means empty
-    static int wordMask;
-    static int wordCount;
-    static ArrayList<byte[]> words; // id -> lowercase word bytes
-
-    static int wordHash(byte[] buf, int len) {
-        int h = 0x811c9dc5;
-        for (int i = 0; i < len; ++i) {
-            h ^= (buf[i] & 0xff);
-            h *= 0x01000193;
-        }
-        return h;
+    static boolean isLetter(int c) {
+        c |= 0x20;
+        return c >= 'a' && c <= 'z';
     }
 
-    static void growWords() {
-        int[] old = wordSlots;
-        int n = old.length * 2;
-        wordSlots = new int[n];
-        wordMask = n - 1;
-        wordCount = 0;
-        for (int v : old) {
-            if (v == 0) continue;
-            int id = v - 1;
-            byte[] w = words.get(id);
-            int h = wordHash(w, w.length) & wordMask;
-            while (wordSlots[h] != 0) h = (h + 1) & wordMask;
-            wordSlots[h] = v;
-            ++wordCount;
-        }
-    }
+    // Open-addressing map from lowercase word to a dense id.
+    // Lookup compares against the input buffer region directly, so only
+    // distinct words are turned into String objects.
+    static final class WordMap {
+        String[] keys;
+        int[] hashes;
+        int[] ids;
+        int mask;
+        int occupied;
+        int growAt;
+        final ArrayList<String> words; // id -> word
 
-    static int intern(byte[] buf, int len) {
-        if (wordCount * 4 >= wordSlots.length * 3) growWords();
-        int h = wordHash(buf, len) & wordMask;
-        while (true) {
-            int v = wordSlots[h];
-            if (v == 0) {
-                int id = wordCount++;
-                words.add(Arrays.copyOf(buf, len));
-                wordSlots[h] = id + 1;
-                return id;
-            }
-            int id = v - 1;
-            byte[] w = words.get(id);
-            if (w.length == len) {
-                boolean eq = true;
-                for (int i = 0; i < len; ++i) {
-                    if (w[i] != buf[i]) { eq = false; break; }
+        WordMap(int cap) {
+            keys = new String[cap];
+            hashes = new int[cap];
+            ids = new int[cap];
+            mask = cap - 1;
+            growAt = (int) (cap * 0.75);
+            words = new ArrayList<>();
+        }
+
+        private void grow() {
+            String[] oldKeys = keys;
+            int[] oldHashes = hashes;
+            int[] oldIds = ids;
+            int newCap = oldKeys.length * 2;
+            keys = new String[newCap];
+            hashes = new int[newCap];
+            ids = new int[newCap];
+            mask = newCap - 1;
+            growAt = (int) (newCap * 0.75);
+            for (int i = 0; i < oldKeys.length; i++) {
+                String k = oldKeys[i];
+                if (k != null) {
+                    int h = oldHashes[i] & mask;
+                    int pos = h;
+                    while (keys[pos] != null) pos = (pos + 1) & mask;
+                    keys[pos] = k;
+                    hashes[pos] = oldHashes[i];
+                    ids[pos] = oldIds[i];
                 }
-                if (eq) return id;
             }
-            h = (h + 1) & wordMask;
+        }
+
+        static int hashBytes(byte[] data, int start, int len) {
+            int h = (int) 2166136261L;
+            for (int i = 0; i < len; i++) {
+                h = (h * 16777619) ^ (data[start + i] & 0xFF);
+            }
+            return h;
+        }
+
+        static boolean equalsBytes(String k, byte[] data, int start, int len) {
+            if (k.length() != len) return false;
+            for (int i = 0; i < len; i++) {
+                if (k.charAt(i) != (data[start + i] & 0xFF)) return false;
+            }
+            return true;
+        }
+
+        int getOrPut(byte[] data, int start, int len, int hash) {
+            int pos = hash & mask;
+            while (true) {
+                String k = keys[pos];
+                if (k == null) {
+                    String s = new String(data, start, len, StandardCharsets.US_ASCII);
+                    keys[pos] = s;
+                    hashes[pos] = hash;
+                    ids[pos] = occupied;
+                    words.add(s);
+                    int id = occupied++;
+                    if (occupied >= growAt) grow();
+                    return id;
+                }
+                if (hashes[pos] == hash && equalsBytes(k, data, start, len)) {
+                    return ids[pos];
+                }
+                pos = (pos + 1) & mask;
+            }
         }
     }
 
-    // Open-addressing map from packed (id1, id2) pair key to count.
-    static long[] pairKeys;   // -1L means empty (keys are always >= 0)
-    static int[] pairCounts;
-    static int pairMask;
-    static int pairCount;
+    // Top-N bookkeeping (N = 20), ordered best-first.
+    static long[] bestCount = new long[20];
+    static int[] bestW1 = new int[20];
+    static int[] bestW2 = new int[20];
+    static int bestn = 0;
+    static ArrayList<String> words;
 
-    static int pairHash(long k) {
-        k ^= k >>> 33;
-        k *= 0xff51afd7ed558ccdL;
-        k ^= k >>> 33;
-        k ^= k >>> 32;
-        return (int) k;
+    static boolean better(long c1, int a1, int b1, long c2, int a2, int b2) {
+        if (c1 != c2) return c1 > c2;
+        int cmp = words.get(a1).compareTo(words.get(a2));
+        if (cmp != 0) return cmp < 0;
+        return words.get(b1).compareTo(words.get(b2)) < 0;
     }
 
-    static void growPairs() {
-        long[] oldK = pairKeys;
-        int[] oldC = pairCounts;
-        int n = oldK.length * 2;
-        pairKeys = new long[n];
-        pairCounts = new int[n];
-        pairMask = n - 1;
-        Arrays.fill(pairKeys, -1L);
-        pairCount = 0;
-        for (int i = 0; i < oldK.length; ++i) {
-            long k = oldK[i];
-            if (k == -1L) continue;
-            int h = pairHash(k) & pairMask;
-            while (pairKeys[h] != -1L) h = (h + 1) & pairMask;
-            pairKeys[h] = k;
-            pairCounts[h] = oldC[i];
-            ++pairCount;
+    static void consider(long count, int w1, int w2) {
+        if (bestn < 20) {
+            int pos = bestn;
+            while (pos > 0 && better(count, w1, w2, bestCount[pos - 1], bestW1[pos - 1], bestW2[pos - 1])) {
+                bestCount[pos] = bestCount[pos - 1];
+                bestW1[pos] = bestW1[pos - 1];
+                bestW2[pos] = bestW2[pos - 1];
+                pos--;
+            }
+            bestCount[pos] = count;
+            bestW1[pos] = w1;
+            bestW2[pos] = w2;
+            bestn++;
+        } else if (better(count, w1, w2, bestCount[19], bestW1[19], bestW2[19])) {
+            long c = count;
+            int a = w1;
+            int b = w2;
+            int pos = 19;
+            while (pos > 0 && better(c, a, b, bestCount[pos - 1], bestW1[pos - 1], bestW2[pos - 1])) {
+                bestCount[pos] = bestCount[pos - 1];
+                bestW1[pos] = bestW1[pos - 1];
+                bestW2[pos] = bestW2[pos - 1];
+                pos--;
+            }
+            bestCount[pos] = c;
+            bestW1[pos] = a;
+            bestW2[pos] = b;
         }
-    }
-
-    static int pairInsert(long key) {
-        if ((pairCount + 1) * 4 >= pairKeys.length * 3) growPairs();
-        int h = pairHash(key) & pairMask;
-        while (pairKeys[h] != -1L) {
-            if (pairKeys[h] == key) return h;
-            h = (h + 1) & pairMask;
-        }
-        pairKeys[h] = key;
-        pairCounts[h] = 0;
-        ++pairCount;
-        return h;
-    }
-
-    static int wordCmp(byte[] x, byte[] y) {
-        int n = x.length < y.length ? x.length : y.length;
-        for (int i = 0; i < n; ++i) {
-            int cx = x[i] & 0xff;
-            int cy = y[i] & 0xff;
-            if (cx != cy) return cx - cy;
-        }
-        return x.length - y.length;
-    }
-
-    static long wordsCount;
-    static long pairsCount;
-    static int prevId = -1;
-
-    static void noteWord(int id) {
-        ++wordsCount;
-        if (prevId >= 0) {
-            ++pairsCount;
-            long key = ((long) prevId << 32) | (id & 0xFFFFFFFFL);
-            int idx = pairInsert(key);
-            pairCounts[idx]++;
-        }
-        prevId = id;
     }
 
     public static void main(String[] args) throws Exception {
         byte[] data = Files.readAllBytes(Path.of(args[0]));
-
-        wordSlots = new int[1 << 14];
-        wordMask = wordSlots.length - 1;
-        wordCount = 0;
-        words = new ArrayList<>(1024);
-        pairKeys = new long[1 << 16];
-        pairCounts = new int[1 << 16];
-        pairMask = pairKeys.length - 1;
-        pairCount = 0;
-        Arrays.fill(pairKeys, -1L);
-        wordsCount = 0;
-        pairsCount = 0;
-        prevId = -1;
-
-        byte[] buf = new byte[64];
-        int blen = 0;
         int n = data.length;
-        for (int i = 0; i < n; ++i) {
-            int c = data[i] & 0xff;
-            if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122)) {
-                if (blen == buf.length) buf = Arrays.copyOf(buf, buf.length * 2);
-                buf[blen++] = (byte) (c | 0x20);
-            } else {
-                if (blen > 0) {
-                    noteWord(intern(buf, blen));
-                    blen = 0;
+        WordMap map = new WordMap(1 << 14);
+        words = map.words;
+        long[] pairs = new long[1 << 20];
+        int pairCount = 0;
+        int prevId = 0;
+        boolean havePrev = false;
+        long wordTotal = 0, pairTotal = 0;
+
+        int i = 0;
+        while (i < n) {
+            while (i < n) {
+                int c = data[i] & 0xFF;
+                if (isLetter(c)) break;
+                if (c == '.' || c == '!' || c == '?') havePrev = false;
+                i++;
+            }
+            if (i >= n) break;
+            int start = i;
+            int h = (int) 2166136261L;
+            while (i < n) {
+                int c = data[i] & 0xFF;
+                if (!isLetter(c)) break;
+                if (c >= 'A' && c <= 'Z') c += 32;
+                data[i] = (byte) c;
+                h = (h * 16777619) ^ c;
+                i++;
+            }
+            int len = i - start;
+            int id = map.getOrPut(data, start, len, h);
+            wordTotal++;
+            if (havePrev) {
+                pairTotal++;
+                if (pairCount == pairs.length) {
+                    long[] nb = new long[pairs.length * 2];
+                    System.arraycopy(pairs, 0, nb, 0, pairCount);
+                    pairs = nb;
                 }
-                if (c == 46 || c == 33 || c == 63) prevId = -1;
+                pairs[pairCount++] = ((long) prevId << 32) | (id & 0xFFFFFFFFL);
             }
+            prevId = id;
+            havePrev = true;
         }
-        if (blen > 0) noteWord(intern(buf, blen));
 
-        int distinct = pairCount;
-        Entry[] ents = new Entry[distinct];
-        int t = 0;
-        for (int i = 0; i < pairKeys.length; ++i) {
-            long k = pairKeys[i];
-            if (k != -1L) {
-                ents[t] = new Entry();
-                ents[t].c = pairCounts[i];
-                ents[t].a = (int) (k >>> 32);
-                ents[t].b = (int) k;
-                ++t;
-            }
+        Arrays.sort(pairs, 0, pairCount);
+
+        int k = 0;
+        long distinct = 0;
+        while (k < pairCount) {
+            int j = k + 1;
+            while (j < pairCount && pairs[j] == pairs[k]) j++;
+            consider(j - k, (int) (pairs[k] >>> 32), (int) (pairs[k] & 0xFFFFFFFFL));
+            distinct++;
+            k = j;
         }
-        Arrays.sort(ents, (x, y) -> {
-            if (x.c != y.c) return y.c - x.c;
-            int cmp = wordCmp(words.get(x.a), words.get(y.a));
-            if (cmp != 0) return cmp;
-            return wordCmp(words.get(x.b), words.get(y.b));
-        });
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("words ").append(wordsCount).append('\n');
-        sb.append("pairs ").append(pairsCount).append('\n');
-        sb.append("distinct ").append(distinct).append('\n');
-        int limit = distinct < 20 ? distinct : 20;
-        for (int i = 0; i < limit; ++i) {
-            sb.append(ents[i].c).append(' ');
-            sb.append(new String(words.get(ents[i].a), java.nio.charset.StandardCharsets.US_ASCII));
-            sb.append(' ');
-            sb.append(new String(words.get(ents[i].b), java.nio.charset.StandardCharsets.US_ASCII));
-            sb.append('\n');
+        BufferedWriter out =
+            new BufferedWriter(new OutputStreamWriter(System.out, StandardCharsets.US_ASCII));
+        out.write("words ");
+        out.write(Long.toString(wordTotal));
+        out.write('\n');
+        out.write("pairs ");
+        out.write(Long.toString(pairTotal));
+        out.write('\n');
+        out.write("distinct ");
+        out.write(Long.toString(distinct));
+        out.write('\n');
+        for (int t = 0; t < bestn; t++) {
+            out.write(Long.toString(bestCount[t]));
+            out.write(' ');
+            out.write(words.get(bestW1[t]));
+            out.write(' ');
+            out.write(words.get(bestW2[t]));
+            out.write('\n');
         }
-        System.out.print(sb);
-    }
-
-    static class Entry {
-        int c, a, b;
+        out.flush();
     }
 }

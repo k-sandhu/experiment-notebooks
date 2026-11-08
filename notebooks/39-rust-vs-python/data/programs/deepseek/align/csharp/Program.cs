@@ -2,135 +2,154 @@ using System;
 using System.IO;
 using System.Text;
 
-class Program
+internal static class Program
 {
-    static byte[] buf;
-    static int pos;
-    static int len;
+    private static byte[] data = Array.Empty<byte>();
+    private static int pos;
+    private static int len;
 
-    static int ReadInt()
+    private static void SkipWs()
     {
-        byte[] b = buf;
-        int p = pos;
-        int n = len;
-        while (p < n && b[p] <= (byte)' ') p++;
-        int x = 0;
-        while (p < n && b[p] >= (byte)'0' && b[p] <= (byte)'9')
-        {
-            x = x * 10 + (b[p] - '0');
-            p++;
-        }
+        byte[] d = data;
+        int p = pos, n = len;
+        while (p < n && d[p] <= (byte)' ') ++p;
         pos = p;
-        return x;
     }
 
-    static void Main(string[] args)
+    private static int NextInt()
     {
-        buf = File.ReadAllBytes(args[0]);
-        len = buf.Length;
+        byte[] d = data;
+        int p = pos, n = len;
+        while (p < n && d[p] <= (byte)' ') ++p;
+        int v = 0;
+        while (p < n)
+        {
+            int c = d[p];
+            if (c < '0' || c > '9') break;
+            v = v * 10 + (c - '0');
+            ++p;
+        }
+        pos = p;
+        return v;
+    }
+
+    private static void Main(string[] args)
+    {
+        data = File.ReadAllBytes(args[0]);
+        len = data.Length;
         pos = 0;
 
-        int[] map = new int[256];
-        for (int i = 0; i < 256; i++) map[i] = -1;
+        SkipWs();
+        int abStart = pos;
+        while (pos < len && data[pos] > (byte)' ') ++pos;
+        int A = pos - abStart;
+        byte[] mp = new byte[256];
+        for (int i = 0; i < A; ++i) mp[data[abStart + i]] = (byte)i;
 
-        int p = pos;
-        while (p < len && buf[p] <= (byte)' ') p++;
-        int astart = p;
-        while (p < len && buf[p] > (byte)' ') p++;
-        int A = p - astart;
-        for (int i = 0; i < A; i++) map[buf[astart + i]] = i;
-        pos = p;
+        int[] ins = new int[A];
+        int[] delc = new int[A];
+        int[] sub = new int[A * A];
+        for (int i = 0; i < A; ++i) ins[i] = NextInt();
+        for (int i = 0; i < A; ++i) delc[i] = NextInt();
+        for (int i = 0; i < A * A; ++i) sub[i] = NextInt();
 
-        int[] insC = new int[A];
-        int[] delC = new int[A];
-        int[] subC = new int[A * A];
-        for (int i = 0; i < A; i++) insC[i] = ReadInt();
-        for (int i = 0; i < A; i++) delC[i] = ReadInt();
-        for (int i = 0; i < A * A; i++) subC[i] = ReadInt();
+        int P = NextInt();
 
-        int P = ReadInt();
-        p = pos;
+        byte[] s = new byte[1024];
+        byte[] t = new byte[1024];
+        int[] tins = new int[1024];
+        int[] row = new int[1024];
 
-        int[] sIdx = new int[4096];
-        int[] tIdx = new int[4096];
-        int[] insT = new int[4096];
-        int[] prev = new int[4097];
-        int[] cur = new int[4097];
-
-        var sb = new StringBuilder(P * 8 + 16);
+        var outSb = new StringBuilder(P * 8 + 16);
         long total = 0;
 
-        for (int q = 0; q < P; q++)
+        for (int q = 0; q < P; ++q)
         {
-            while (p < len && buf[p] <= (byte)' ') p++;
-            int s0 = p;
-            while (p < len && buf[p] > (byte)' ') p++;
-            int n = p - s0;
-            if (n > sIdx.Length)
+            SkipWs();
+            int sl = 0;
+            while (pos < len && data[pos] > (byte)' ')
             {
-                sIdx = new int[n];
-                tIdx = new int[n];
-                insT = new int[n];
-                prev = new int[n + 1];
-                cur = new int[n + 1];
+                if (sl == s.Length) Array.Resize(ref s, s.Length * 2);
+                s[sl++] = mp[data[pos]];
+                ++pos;
             }
-            for (int i = 0; i < n; i++) sIdx[i] = map[buf[s0 + i]];
-
-            while (p < len && buf[p] <= (byte)' ') p++;
-            int t0 = p;
-            while (p < len && buf[p] > (byte)' ') p++;
-            int m = p - t0;
-            if (m > tIdx.Length)
+            SkipWs();
+            int tl = 0;
+            while (pos < len && data[pos] > (byte)' ')
             {
-                tIdx = new int[m];
-                insT = new int[m];
-                if (m + 1 > prev.Length)
+                if (tl == t.Length) Array.Resize(ref t, t.Length * 2);
+                t[tl++] = mp[data[pos]];
+                ++pos;
+            }
+
+            int n = sl;
+            int M = tl;
+
+            bool same = n == M;
+            if (same)
+            {
+                for (int i = 0; i < n; ++i)
                 {
-                    prev = new int[m + 1];
-                    cur = new int[m + 1];
+                    if (s[i] != t[i]) { same = false; break; }
                 }
             }
-            for (int j = 0; j < m; j++)
+            if (same)
             {
-                int c = map[buf[t0 + j]];
-                tIdx[j] = c;
-                insT[j] = insC[c];
+                outSb.Append('0').Append('\n');
+                continue;
             }
 
-            prev[0] = 0;
-            for (int j = 1; j <= m; j++) prev[j] = prev[j - 1] + insT[j - 1];
+            if (tins.Length < M) tins = new int[Math.Max(M, tins.Length * 2)];
+            for (int j = 0; j < M; ++j) tins[j] = ins[t[j]];
+            if (row.Length < M + 1) row = new int[Math.Max(M + 1, row.Length * 2)];
 
-            int[] pr = prev;
-            int[] cu = cur;
+            int[] r = row;
+            r[0] = 0;
+            for (int j = 1; j <= M; ++j) r[j] = r[j - 1] + tins[j - 1];
 
-            for (int i = 1; i <= n; i++)
+            unsafe
             {
-                int c = sIdx[i - 1];
-                int d = delC[c];
-                int sr = c * A;
-                int v = pr[0] + d;
-                cu[0] = v;
-                for (int j = 1; j <= m; j++)
+                fixed (int* rp = r)
+                fixed (int* tip = tins)
+                fixed (byte* tp = t)
+                fixed (byte* sp2 = s)
+                fixed (int* subp = sub)
                 {
-                    int best0 = pr[j] + d;
-                    int x = v + insT[j - 1];
-                    int best = x < best0 ? x : best0;
-                    x = pr[j - 1] + subC[sr + tIdx[j - 1]];
-                    if (x < best) best = x;
-                    v = best;
-                    cu[j] = best;
+                    for (int i = 0; i < n; ++i)
+                    {
+                        int si = sp2[i];
+                        int dc = delc[si];
+                        int* srow = subp + si * A;
+
+                        int diag = rp[0];
+                        int left = diag + dc;
+                        rp[0] = left;
+
+                        for (int j = 1; j <= M; ++j)
+                        {
+                            int up = rp[j];
+                            int a = up + dc;
+                            int b = diag + srow[tp[j - 1]];
+                            int d = b - a;
+                            int mn = a + (d & (d >> 31));
+                            int x = left + tip[j - 1];
+                            d = x - mn;
+                            left = mn + (d & (d >> 31));
+                            diag = up;
+                            rp[j] = left;
+                        }
+                    }
                 }
-                int[] tmp = pr;
-                pr = cu;
-                cu = tmp;
             }
 
-            int cost = pr[m];
+            int cost = r[M];
             total += cost;
-            sb.Append(cost).Append('\n');
+            outSb.Append(cost).Append('\n');
         }
 
-        sb.Append("total ").Append(total).Append('\n');
-        Console.Out.Write(sb.ToString());
+        outSb.Append("total ").Append(total).Append('\n');
+        using Stream stdout = Console.OpenStandardOutput();
+        byte[] bytes = Encoding.UTF8.GetBytes(outSb.ToString());
+        stdout.Write(bytes, 0, bytes.Length);
     }
 }

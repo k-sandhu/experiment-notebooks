@@ -1,362 +1,426 @@
-// Log scan: summarise an access log by status class and path-template latency percentiles.
-// Go 1.27, stdlib only, CGO_ENABLED=0.
-
 package main
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"sort"
+	"strconv"
 )
+
+// Summarise a web server access log (see SPEC.md).
+// Single pass over the input: validate every line against the grammar, count
+// status classes, group latency tenths by path template, then report the top 10.
 
 type Stats struct {
 	count int
-	maxT  int // max latency in tenths of a ms
-	lats  []int
+	lat   []int // latency in tenths of a ms
 }
 
-func (s *Stats) add(t int) {
-	s.count++
-	if t > s.maxT {
-		s.maxT = t
-	}
-	s.lats = append(s.lats, t)
+// Open-addressing map from path template -> *Stats. Keys are interned strings;
+// lookups compare raw bytes against stored strings, so only unique templates
+// are ever allocated as strings.
+type TMap struct {
+	keys []string
+	vals []*Stats
+	mask int
+	size int
 }
 
-func isDigit(c byte) bool { return c >= '0' && c <= '9' }
-func isUpper(c byte) bool { return c >= 'A' && c <= 'Z' }
-func isLower(c byte) bool { return c >= 'a' && c <= 'z' }
+func newTMap(cap int) *TMap {
+	return &TMap{keys: make([]string, cap), vals: make([]*Stats, cap), mask: cap - 1}
+}
 
-// parseLine strictly validates one line (content without the trailing \n) and,
-// if well-formed, returns status class, latency in tenths of a ms, path
-// template, and true. Otherwise returns false.
-func parseLine(line []byte) (int, int, string, bool) {
-	i := 0
-	n := len(line)
-
-	// 1. timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z<space>
-	if n-i < 25 {
-		return 0, 0, "", false
-	}
-	if !isDigit(line[i]) || !isDigit(line[i+1]) || !isDigit(line[i+2]) || !isDigit(line[i+3]) {
-		return 0, 0, "", false
-	}
-	if line[i+4] != '-' {
-		return 0, 0, "", false
-	}
-	if !isDigit(line[i+5]) || !isDigit(line[i+6]) {
-		return 0, 0, "", false
-	}
-	if line[i+7] != '-' {
-		return 0, 0, "", false
-	}
-	if !isDigit(line[i+8]) || !isDigit(line[i+9]) {
-		return 0, 0, "", false
-	}
-	if line[i+10] != 'T' {
-		return 0, 0, "", false
-	}
-	if !isDigit(line[i+11]) || !isDigit(line[i+12]) {
-		return 0, 0, "", false
-	}
-	if line[i+13] != ':' {
-		return 0, 0, "", false
-	}
-	if !isDigit(line[i+14]) || !isDigit(line[i+15]) {
-		return 0, 0, "", false
-	}
-	if line[i+16] != ':' {
-		return 0, 0, "", false
-	}
-	if !isDigit(line[i+17]) || !isDigit(line[i+18]) {
-		return 0, 0, "", false
-	}
-	if line[i+19] != '.' {
-		return 0, 0, "", false
-	}
-	if !isDigit(line[i+20]) || !isDigit(line[i+21]) || !isDigit(line[i+22]) {
-		return 0, 0, "", false
-	}
-	if line[i+23] != 'Z' || line[i+24] != ' ' {
-		return 0, 0, "", false
-	}
-	i += 25
-
-	// 2. host: [a-z]+-\d+<space>
-	if i >= n || !isLower(line[i]) {
-		return 0, 0, "", false
-	}
-	for i < n && isLower(line[i]) {
-		i++
-	}
-	if i >= n || line[i] != '-' {
-		return 0, 0, "", false
-	}
-	i++
-	if i >= n || !isDigit(line[i]) {
-		return 0, 0, "", false
-	}
-	for i < n && isDigit(line[i]) {
-		i++
-	}
-	if i >= n || line[i] != ' ' {
-		return 0, 0, "", false
-	}
-	i++
-
-	// 3. method
-	ok := false
-	if !ok && n-i > 3 && line[i] == 'G' && line[i+1] == 'E' && line[i+2] == 'T' && line[i+3] == ' ' {
-		i += 4; ok = true
-	}
-	if !ok && n-i > 4 && line[i] == 'P' && line[i+1] == 'O' && line[i+2] == 'S' && line[i+3] == 'T' && line[i+4] == ' ' {
-		i += 5; ok = true
-	}
-	if !ok && n-i > 3 && line[i] == 'P' && line[i+1] == 'U' && line[i+2] == 'T' && line[i+3] == ' ' {
-		i += 4; ok = true
-	}
-	if !ok && n-i > 6 && line[i] == 'D' && line[i+1] == 'E' && line[i+2] == 'L' && line[i+3] == 'E' && line[i+4] == 'T' && line[i+5] == 'E' && line[i+6] == ' ' {
-		i += 7; ok = true
-	}
-	if !ok && n-i > 5 && line[i] == 'P' && line[i+1] == 'A' && line[i+2] == 'T' && line[i+3] == 'C' && line[i+4] == 'H' && line[i+5] == ' ' {
-		i += 6; ok = true
-	}
-	if !ok {
-		return 0, 0, "", false
-	}
-
-	// 4. path + template
-	var tb bytes.Buffer
-	tb.WriteByte('/') // leading '/'
-	i++
-	segStart := tb.Len() // tb.Len() at start of current segment (right after a '/')
-	segDigits := true
-	segLen := 0
-	done := false
-	for {
-		if i >= n {
-			return 0, 0, "", false
+func (m *TMap) FindOrAdd(buf []byte, start, end int) *Stats {
+	h := hashBytes(buf[start:end])
+	mask := uint64(m.mask)
+	for slot := int(h & mask); ; slot = (slot + 1) & int(mask) {
+		k := m.keys[slot]
+		if k == "" {
+			m.keys[slot] = string(buf[start:end])
+			v := &Stats{}
+			m.vals[slot] = v
+			m.size++
+			if m.size*4 > len(m.keys)*3 {
+				m.grow()
+			}
+			return v
 		}
-		c := line[i]
-		if c == '/' {
-			if segLen > 0 && segDigits {
-				tb.Truncate(segStart)
-				tb.WriteString("{id}")
-			}
-			tb.WriteByte('/')
-			i++
-			segStart = tb.Len()
-			segDigits = true
-			segLen = 0
-		} else if c == ' ' {
-			if segLen > 0 && segDigits {
-				tb.Truncate(segStart)
-				tb.WriteString("{id}")
-			}
-			i++
-			done = true
-			break
-		} else if c == '?' {
-			if segLen > 0 && segDigits {
-				tb.Truncate(segStart)
-				tb.WriteString("{id}")
-			}
-			i++
-			for i < n && line[i] != ' ' {
-				i++
-			}
-			if i >= n {
-				return 0, 0, "", false
-			}
-			i++
-			done = true
-			break
-		} else {
-			if !isDigit(c) && !isUpper(c) && !isLower(c) && c != '_' && c != '-' {
-				return 0, 0, "", false
-			}
-			if segLen == 0 {
-				segDigits = isDigit(c)
-			} else if segDigits && !isDigit(c) {
-				segDigits = false
-			}
-			segLen++
-			tb.WriteByte(c)
-			i++
+		if len(k) == end-start && bytesEqStr(k, buf[start:end]) {
+			return m.vals[slot]
 		}
 	}
-	if !done {
-		return 0, 0, "", false
-	}
-
-	// 5. status: \d{3}<space>
-	if n-i < 4 {
-		return 0, 0, "", false
-	}
-	if !isDigit(line[i]) || !isDigit(line[i+1]) || !isDigit(line[i+2]) {
-		return 0, 0, "", false
-	}
-	if line[i+3] != ' ' {
-		return 0, 0, "", false
-	}
-	statusClass := int(line[i] - '0')
-	i += 4
-
-	// 6. size: \d+B<space>
-	if i >= n || !isDigit(line[i]) {
-		return 0, 0, "", false
-	}
-	for i < n && isDigit(line[i]) {
-		i++
-	}
-	if i >= n || line[i] != 'B' {
-		return 0, 0, "", false
-	}
-	i++
-	if i >= n || line[i] != ' ' {
-		return 0, 0, "", false
-	}
-	i++
-
-// 7. latency: \d+\.d ms<space>
-	ls := i
-	ip := 0
-	for i < n && isDigit(line[i]) {
-		ip = ip*10 + int(line[i]-'0')
-		i++
-	}
-	if i == ls || i >= n || line[i] != '.' {
-		return 0, 0, "", false
-	}
-	i++
-	if i >= n || !isDigit(line[i]) {
-		return 0, 0, "", false
-	}
-	frac := int(line[i] - '0')
-	i++
-	if n-i < 3 || line[i] != 'm' || line[i+1] != 's' || line[i+2] != ' ' {
-		return 0, 0, "", false
-	}
-	i += 3
-	latencyT := ip*10 + frac
-	if i >= n || line[i] != '"' {
-		return 0, 0, "", false
-	}
-	i++
-	for i < n && line[i] != '"' {
-		i++
-	}
-	if i >= n {
-		return 0, 0, "", false
-	}
-	i++
-	if i != n {
-		return 0, 0, "", false
-	}
-
-	return statusClass, latencyT, tb.String(), true
 }
 
-func pos(pct, nn int) int {
-	return (pct*nn+99)/100 - 1 // nearest-rank, 0-based index
+func (m *TMap) grow() {
+	oldK := m.keys
+	oldV := m.vals
+	cap := len(oldK) * 2
+	m.keys = make([]string, cap)
+	m.vals = make([]*Stats, cap)
+	m.mask = cap - 1
+	m.size = 0
+	for i, k := range oldK {
+		if k != "" {
+			m.put0(k, oldV[i])
+		}
+	}
+}
+
+func (m *TMap) put0(k string, v *Stats) {
+	h := hashStr(k)
+	mask := uint64(m.mask)
+	for slot := int(h & mask); ; slot = (slot + 1) & int(mask) {
+		if m.keys[slot] == "" {
+			m.keys[slot] = k
+			m.vals[slot] = v
+			m.size++
+			return
+		}
+	}
+}
+
+func hashBytes(b []byte) uint64 {
+	var h uint64 = 1469598103934665603
+	for _, c := range b {
+		h ^= uint64(c)
+		h *= 1099511628211
+	}
+	return h
+}
+
+func hashStr(s string) uint64 {
+	var h uint64 = 1469598103934665603
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= 1099511628211
+	}
+	return h
+}
+
+type item struct {
+	name string
+	st   *Stats
+}
+
+func isDig(c byte) bool { return c >= '0' && c <= '9' }
+func pathChar(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+		c == '_' || c == '/' || c == '-'
+}
+
+// Validates one line (without its newline) against the SPEC.md regex and
+// extracts status class, latency (tenths of a ms) and the path span.
+// ok is false for malformed lines.
+func parseLine(d []byte, start, end int, res *[4]int) bool {
+	// res: [0]=cls, [1]=lat, [2]=pathStart, [3]=pathEnd
+	length := end - start
+	if length < 49 {
+		return false // shortest possible well-formed line
+	}
+
+	// timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z<sp>
+	if d[start+4] != '-' || d[start+7] != '-' || d[start+10] != 'T' ||
+		d[start+13] != ':' || d[start+16] != ':' || d[start+19] != '.' ||
+		d[start+23] != 'Z' || d[start+24] != ' ' {
+		return false
+	}
+	for _, off := range []int{0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 20, 21, 22} {
+		if !isDig(d[start+off]) {
+			return false
+		}
+	}
+
+	// host: [a-z]+-\d+<sp>
+	h := start + 25
+	if h >= end || d[h] < 'a' || d[h] > 'z' {
+		return false
+	}
+	for h < end && d[h] >= 'a' && d[h] <= 'z' {
+		h++
+	}
+	if h >= end || d[h] != '-' {
+		return false
+	}
+	h++
+	if h >= end || !isDig(d[h]) {
+		return false
+	}
+	for h < end && isDig(d[h]) {
+		h++
+	}
+	if h >= end || d[h] != ' ' {
+		return false
+	}
+	h++ // method
+
+	var mlen int
+	rem := end - h
+	switch {
+	case rem >= 3 && (match(d, h, "GET") || match(d, h, "PUT")):
+		mlen = 3
+	case rem >= 4 && match(d, h, "POST"):
+		mlen = 4
+	case rem >= 6 && match(d, h, "DELETE"):
+		mlen = 6
+	case rem >= 5 && match(d, h, "PATCH"):
+		mlen = 5
+	}
+	if mlen == 0 {
+		return false
+	}
+	h += mlen
+	if h >= end || d[h] != ' ' {
+		return false
+	}
+	h++
+
+	// path: /[A-Za-z0-9_/-]* then optional \?[^ ]* then <sp>
+	if h >= end || d[h] != '/' {
+		return false
+	}
+	pathStart := h
+	h++
+	for h < end {
+		c := d[h]
+		if c == ' ' || c == '?' {
+			break
+		}
+		if !pathChar(c) {
+			return false
+		}
+		h++
+	}
+	pathEnd := h
+	if h < end && d[h] == '?' {
+		h++
+		for h < end && d[h] != ' ' {
+			h++
+		}
+	}
+	if h >= end || d[h] != ' ' {
+		return false
+	}
+	h++
+
+	// status: \d{3}<sp>
+	if end-h < 3 || !isDig(d[h]) || !isDig(d[h+1]) || !isDig(d[h+2]) {
+		return false
+	}
+	res[0] = int(d[h] - '0')
+	h += 3
+	if h >= end || d[h] != ' ' {
+		return false
+	}
+	h++
+
+	// size: \d+B<sp>
+	if h >= end || !isDig(d[h]) {
+		return false
+	}
+	for h < end && isDig(d[h]) {
+		h++
+	}
+	if h >= end || d[h] != 'B' {
+		return false
+	}
+	h++
+	if h >= end || d[h] != ' ' {
+		return false
+	}
+	h++
+
+	// latency: \d+.\dms "<ua>"<end>
+	var lat int
+	if h >= end || !isDig(d[h]) {
+		return false
+	}
+	for h < end && isDig(d[h]) {
+		lat = lat*10 + int(d[h]-'0')
+		h++
+	}
+	if h >= end || d[h] != '.' {
+		return false
+	}
+	h++
+	if h >= end || !isDig(d[h]) {
+		return false
+	}
+	lat = lat*10 + int(d[h]-'0')
+	h++
+	if end-h < 4 || d[h] != 'm' || d[h+1] != 's' || d[h+2] != ' ' || d[h+3] != '"' {
+		return false
+	}
+	h += 4
+	for h < end && d[h] != '"' {
+		h++
+	}
+	if h >= end || d[h] != '"' {
+		return false
+	}
+	h++
+	if h != end {
+		return false
+	}
+
+	res[1] = lat
+	res[2] = pathStart
+	res[3] = pathEnd
+	return true
+}
+
+func bytesEqStr(s string, b []byte) bool {
+	if len(s) != len(b) {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func match(d []byte, pos int, lit string) bool {
+	for i := 0; i < len(lit); i++ {
+		if d[pos+i] != lit[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func main() {
 	if len(os.Args) < 2 {
 		os.Exit(1)
 	}
-	b, err := os.ReadFile(os.Args[1])
+	data, err := os.ReadFile(os.Args[1])
 	if err != nil {
 		os.Exit(1)
 	}
-	n := len(b)
+	n := len(data)
 	p := 0
-	var lines, malformed int64
-	statusCount := [10]int64{}
-	m := make(map[string]*Stats)
-
-	var out bytes.Buffer
+	var nLines, nMalformed int64
+	statusCount := [10]int{}
+	tmap := newTMap(1 << 14)
+	tmpl := make([]byte, 0, 128)
+	res := [4]int{}
 
 	for p < n {
-		nl := p
-		for nl < n && b[nl] != '\n' {
-			nl++
+		nLines++
+		lineStart := p
+		e := bytes.IndexByte(data[p:], '\n')
+		var lineEnd int
+		if e < 0 {
+			lineEnd = n
+		} else {
+			lineEnd = p + e
 		}
-		line := b[p:nl]
-		p = nl + 1
-		lines++
-		sc, lat, tmpl, ok := parseLine(line)
-		if !ok {
-			malformed++
-			continue
+		// line is [lineStart, lineEnd)
+		p = lineEnd + 1
+
+		if parseLine(data, lineStart, lineEnd, &res) {
+			statusCount[res[0]]++
+
+			// path template: split on '/', replace all-digit segments with {id}
+			tmpl = tmpl[:0]
+			tmpl = append(tmpl, '/')
+			segStart := res[2] + 1
+			i := segStart
+			for {
+				if i == res[3] || data[i] == '/' {
+					seglen := i - segStart
+					if seglen > 0 {
+						allDig := true
+						for j := segStart; j < i; j++ {
+							if !isDig(data[j]) {
+								allDig = false
+								break
+							}
+						}
+						if allDig {
+							tmpl = append(tmpl, '{', 'i', 'd', '}')
+						} else {
+							tmpl = append(tmpl, data[segStart:i]...)
+						}
+					}
+					if i < res[3] {
+						tmpl = append(tmpl, '/')
+					}
+					segStart = i + 1
+				}
+				if i == res[3] {
+					break
+				}
+				i++
+			}
+
+			st := tmap.FindOrAdd(tmpl, 0, len(tmpl))
+			st.count++
+			st.lat = append(st.lat, res[1])
+		} else {
+			nMalformed++
 		}
-		statusCount[sc]++
-		s := m[tmpl]
-		if s == nil {
-			s = &Stats{}
-			m[tmpl] = s
-		}
-		s.add(lat)
 	}
 
+	// collect items and sort: count descending, then template ascending (byte order)
+	var items []item
+	for slot, k := range tmap.keys {
+		if k != "" {
+			items = append(items, item{name: k, st: tmap.vals[slot]})
+		}
+	}
+	sort.Slice(items, func(a, b int) bool {
+		if items[a].st.count != items[b].st.count {
+			return items[a].st.count > items[b].st.count
+		}
+		return items[a].name < items[b].name // byte order
+	})
+
+	var out bytes.Buffer
 	out.WriteString("lines ")
-	fmt.Fprint(&out, lines)
+	out.WriteString(strconv.FormatInt(nLines, 10))
 	out.WriteByte('\n')
 	out.WriteString("malformed ")
-	fmt.Fprint(&out, malformed)
+	out.WriteString(strconv.FormatInt(nMalformed, 10))
 	out.WriteByte('\n')
-	for d := 0; d < 10; d++ {
-		if statusCount[d] != 0 {
+	for c := 0; c < 10; c++ {
+		if statusCount[c] != 0 {
 			out.WriteString("status ")
-			out.WriteByte(byte('0' + d))
+			out.WriteByte(byte('0' + c))
 			out.WriteString("xx ")
-			fmt.Fprint(&out, statusCount[d])
+			out.WriteString(strconv.Itoa(statusCount[c]))
 			out.WriteByte('\n')
 		}
 	}
-
-	type pathEntry struct {
-		key   string
-		stats *Stats
+	top := len(items)
+	if top > 10 {
+		top = 10
 	}
-	paths := make([]pathEntry, 0, len(m))
-	for k, v := range m {
-		paths = append(paths, pathEntry{k, v})
-	}
-	sort.Slice(paths, func(a, b int) bool {
-		if paths[a].stats.count != paths[b].stats.count {
-			return paths[a].stats.count > paths[b].stats.count
+	for i := 0; i < top; i++ {
+		st := items[i].st
+		sort.Ints(st.lat)
+		nn := len(st.lat)
+		kth := func(pct int) int {
+			return st.lat[((int64(pct)*int64(nn)+99)/100)-1]
 		}
-		return paths[a].key < paths[b].key
-	})
-	limit := 10
-	if len(paths) < limit {
-		limit = len(paths)
-	}
-	for i := 0; i < limit; i++ {
-		pe := paths[i]
-		s := pe.stats
-		sort.Ints(s.lats)
-		nn := len(s.lats)
 		out.WriteString("path ")
-		out.WriteString(pe.key)
+		out.WriteString(items[i].name)
 		out.WriteByte(' ')
-		fmt.Fprint(&out, s.count)
+		out.WriteString(strconv.Itoa(st.count))
 		out.WriteByte(' ')
-		fmt.Fprint(&out, s.lats[pos(50,nn)]/10)
-		out.WriteByte('.')
-		out.WriteByte(byte('0' + s.lats[pos(50,nn)]%10))
+		fmtLat(&out, kth(50))
 		out.WriteByte(' ')
-		fmt.Fprint(&out, s.lats[pos(95,nn)]/10)
-		out.WriteByte('.')
-		out.WriteByte(byte('0' + s.lats[pos(95,nn)]%10))
+		fmtLat(&out, kth(95))
 		out.WriteByte(' ')
-		fmt.Fprint(&out, s.maxT/10)
-		out.WriteByte('.')
-		out.WriteByte(byte('0' + s.maxT%10))
+		fmtLat(&out, st.lat[nn-1])
 		out.WriteByte('\n')
 	}
 
-	os.Stdout.Write(out.Bytes())
+	_, _ = os.Stdout.Write(out.Bytes())
+}
+
+func fmtLat(out *bytes.Buffer, t int) {
+	out.WriteString(strconv.Itoa(t / 10))
+	out.WriteByte('.')
+	out.WriteString(strconv.Itoa(t % 10))
 }

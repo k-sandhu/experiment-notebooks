@@ -1,261 +1,332 @@
-import java.io.BufferedOutputStream;
-import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-// Log scan: summarise an access log by status class and path-template latency percentiles.
-// Java 23, SE classes only (Jackson provided but not needed).
 
 public class Main {
+    // Latencies for one path template (tenths of a ms).
     static final class Stats {
         int count;
-        int maxT; // max latency in tenths of a ms
-        int[] lats = new int[16];
+        int[] lat = new int[16];
         int len;
 
-        void add(int t) {
-            count++;
-            if (t > maxT) maxT = t;
-            if (len == lats.length) {
-                int[] n = new int[lats.length * 2];
-                System.arraycopy(lats, 0, n, 0, len);
-                lats = n;
+        void add(int v) {
+            if (len == lat.length) {
+                int[] nw = new int[lat.length * 2];
+                System.arraycopy(lat, 0, nw, 0, len);
+                lat = nw;
             }
-            lats[len++] = t;
+            lat[len++] = v;
         }
     }
 
-    static final class Res {
-        int statusClass;
-        int latencyT;
-        int tlen;
+    // Open-addressing map from path template -> Stats.
+    // Keys are interned: lookup compares the raw char buffer against stored
+    // strings, so only unique templates are ever allocated as String objects.
+    static final class TMap {
+        String[] keys;
+        Stats[] vals;
+        int mask;
+        int size;
+
+        TMap(int cap) {
+            keys = new String[cap];
+            vals = new Stats[cap];
+            mask = cap - 1;
+        }
+
+        Stats findOrAdd(char[] buf, int start, int len) {
+            int h = 0;
+            for (int i = 0; i < len; i++) h = 31 * h + buf[start + i];
+            h &= 0x7fffffff;
+            for (int slot = h & mask; ; slot = (slot + 1) & mask) {
+                String k = keys[slot];
+                if (k == null) {
+                    keys[slot] = new String(buf, start, len);
+                    Stats v = new Stats();
+                    vals[slot] = v;
+                    if (++size * 4 > keys.length * 3) grow();
+                    return v;
+                }
+                if (k.length() == len && same(k, buf, start, len)) return vals[slot];
+            }
+        }
+
+        private static boolean same(String k, char[] buf, int start, int len) {
+            for (int i = 0; i < len; i++) {
+                if (k.charAt(i) != buf[start + i]) return false;
+            }
+            return true;
+        }
+
+        @SuppressWarnings("unused")
+        private static int hashString(String s) {
+            int h = 0;
+            for (int i = 0; i < s.length(); i++) h = 31 * h + s.charAt(i);
+            return h;
+        }
+
+        private void grow() {
+            String[] oldK = keys;
+            Stats[] oldV = vals;
+            int cap = oldK.length * 2;
+            keys = new String[cap];
+            vals = new Stats[cap];
+            mask = cap - 1;
+            size = 0;
+            for (int i = 0; i < oldK.length; i++) {
+                String k = oldK[i];
+                if (k != null) put0(k, oldV[i]);
+            }
+        }
+
+        private void put0(String k, Stats v) {
+            int h = 0;
+            for (int i = 0; i < k.length(); i++) h = 31 * h + k.charAt(i);
+            h &= 0x7fffffff;
+            for (int slot = h & mask; ; slot = (slot + 1) & mask) {
+                if (keys[slot] == null) {
+                    keys[slot] = k;
+                    vals[slot] = v;
+                    ++size;
+                    return;
+                }
+            }
+        }
     }
 
-    private static boolean isDigit(int c) {
+    // Result of parsing one line.
+    static final class Res {
+        int cls;
+        int lat; // tenths of a ms
+        int pathStart;
+        int pathEnd;
+    }
+
+    static final char[] DIGITS = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+
+    static boolean isDig(char c) {
         return c >= '0' && c <= '9';
     }
 
-    private static boolean isUpper(int c) {
-        return c >= 'A' && c <= 'Z';
-    }
+    // Validates one line (without its newline) against the SPEC.md regex.
+    static boolean parseLine(String s, int start, int end, Res r) {
+        int len = end - start;
+        if (len < 49) return false; // shortest possible well-formed line
 
-    private static boolean isLower(int c) {
-        return c >= 'a' && c <= 'z';
-    }
+        // timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z<sp>
+        if (s.charAt(start + 4) != '-' || s.charAt(start + 7) != '-' ||
+            s.charAt(start + 10) != 'T' || s.charAt(start + 13) != ':' ||
+            s.charAt(start + 16) != ':' || s.charAt(start + 19) != '.' ||
+            s.charAt(start + 23) != 'Z' || s.charAt(start + 24) != ' ')
+            return false;
+        if (!isDig(s.charAt(start)) || !isDig(s.charAt(start + 1)) ||
+            !isDig(s.charAt(start + 2)) || !isDig(s.charAt(start + 3)) ||
+            !isDig(s.charAt(start + 5)) || !isDig(s.charAt(start + 6)) ||
+            !isDig(s.charAt(start + 8)) || !isDig(s.charAt(start + 9)) ||
+            !isDig(s.charAt(start + 11)) || !isDig(s.charAt(start + 12)) ||
+            !isDig(s.charAt(start + 14)) || !isDig(s.charAt(start + 15)) ||
+            !isDig(s.charAt(start + 17)) || !isDig(s.charAt(start + 18)) ||
+            !isDig(s.charAt(start + 20)) || !isDig(s.charAt(start + 21)) ||
+            !isDig(s.charAt(start + 22)))
+            return false;
 
-    // Strictly validates one line and, if well-formed, extracts the status class,
-    // the latency in tenths of a ms, and the path template into tb[0..tlen).
-    // Returns the (possibly grown) template buffer.
-    static char[] parseLine(byte[] b, int p, int end, char[] tb, Res r) {
-        // 1. timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z<space>
-        if (end - p < 25) return null;
-        if (!isDigit(b[p]) || !isDigit(b[p + 1]) || !isDigit(b[p + 2]) || !isDigit(b[p + 3])) return null;
-        if (b[p + 4] != '-') return null;
-        if (!isDigit(b[p + 5]) || !isDigit(b[p + 6])) return null;
-        if (b[p + 7] != '-') return null;
-        if (!isDigit(b[p + 8]) || !isDigit(b[p + 9])) return null;
-        if (b[p + 10] != 'T') return null;
-        if (!isDigit(b[p + 11]) || !isDigit(b[p + 12])) return null;
-        if (b[p + 13] != ':') return null;
-        if (!isDigit(b[p + 14]) || !isDigit(b[p + 15])) return null;
-        if (b[p + 16] != ':') return null;
-        if (!isDigit(b[p + 17]) || !isDigit(b[p + 18])) return null;
-        if (b[p + 19] != '.') return null;
-        if (!isDigit(b[p + 20]) || !isDigit(b[p + 21]) || !isDigit(b[p + 22])) return null;
-        if (b[p + 23] != 'Z' || b[p + 24] != ' ') return null;
-        p += 25;
+        // host: [a-z]+-\d+<sp>
+        int h = start + 25;
+        if (h >= end || s.charAt(h) < 'a' || s.charAt(h) > 'z') return false;
+        do { ++h; } while (h < end && s.charAt(h) >= 'a' && s.charAt(h) <= 'z');
+        if (h >= end || s.charAt(h) != '-') return false;
+        ++h;
+        if (h >= end || !isDig(s.charAt(h))) return false;
+        do { ++h; } while (h < end && isDig(s.charAt(h)));
+        if (h >= end || s.charAt(h) != ' ') return false;
+        ++h; // method
 
-        // 2. host: [a-z]+-\d+<space>
-        if (p >= end || !isLower(b[p])) return null;
-        do { p++; } while (p < end && isLower(b[p]));
-        if (p >= end || b[p] != '-') return null;
-        p++;
-        if (p >= end || !isDigit(b[p])) return null;
-        do { p++; } while (p < end && isDigit(b[p]));
-        if (p >= end || b[p] != ' ') return null;
-        p++;
+        int mlen = 0;
+        int rem = end - h;
+        if (rem >= 3 && (region(s, h, "GET") || region(s, h, "PUT"))) mlen = 3;
+        else if (rem >= 4 && region(s, h, "POST")) mlen = 4;
+        else if (rem >= 6 && region(s, h, "DELETE")) mlen = 6;
+        else if (rem >= 5 && region(s, h, "PATCH")) mlen = 5;
+        if (mlen == 0) return false;
+        h += mlen;
+        if (h >= end || s.charAt(h) != ' ') return false;
+        ++h;
 
-        // 3. method: GET/POST/PUT/DELETE/PATCH followed by <space>
-        boolean ok = false;
-        if (!ok && end - p > 3 && b[p] == 'G' && b[p + 1] == 'E' && b[p + 2] == 'T' && b[p + 3] == ' ') { p += 4; ok = true; }
-        if (!ok && end - p > 4 && b[p] == 'P' && b[p + 1] == 'O' && b[p + 2] == 'S' && b[p + 3] == 'T' && b[p + 4] == ' ') { p += 5; ok = true; }
-        if (!ok && end - p > 3 && b[p] == 'P' && b[p + 1] == 'U' && b[p + 2] == 'T' && b[p + 3] == ' ') { p += 4; ok = true; }
-        if (!ok && end - p > 6 && b[p] == 'D' && b[p + 1] == 'E' && b[p + 2] == 'L' && b[p + 3] == 'E' && b[p + 4] == 'T' && b[p + 5] == 'E' && b[p + 6] == ' ') { p += 7; ok = true; }
-        if (!ok && end - p > 5 && b[p] == 'P' && b[p + 1] == 'A' && b[p + 2] == 'T' && b[p + 3] == 'C' && b[p + 4] == 'H' && b[p + 5] == ' ') { p += 6; ok = true; }
-        if (!ok) return null;
-
-        // 4. path: '/' [A-Za-z0-9_/-]* [ '?' [^ ]* ] <space> ; build template
-        r.tlen = 0;
-        if (p >= end || b[p] != '/') return null;
-        int segStart = 0;
-        boolean segDigits = true;
-        int segLen = 0;
-        for (;;) {
-            if (p >= end) return null; // path must end with space
-            int c = b[p] & 0xFF;
-            if (c == '/') {
-                if (segLen > 0 && segDigits) {
-                    if (r.tlen == tb.length) tb = grow(tb);
-                    r.tlen = segStart;
-                    tb[r.tlen++] = '{';
-                    tb[r.tlen++] = 'i';
-                    tb[r.tlen++] = 'd';
-                    tb[r.tlen++] = '}';
-                }
-                if (r.tlen == tb.length) tb = grow(tb);
-                tb[r.tlen++] = '/';
-                segStart = r.tlen;
-                segDigits = true;
-                segLen = 0;
-                p++;
-            } else if (c == ' ') {
-                if (segLen > 0 && segDigits) {
-                    if (r.tlen == tb.length) tb = grow(tb);
-                    r.tlen = segStart;
-                    tb[r.tlen++] = '{';
-                    tb[r.tlen++] = 'i';
-                    tb[r.tlen++] = 'd';
-                    tb[r.tlen++] = '}';
-                }
-                p++;
-                break;
-            } else if (c == '?') {
-                if (segLen > 0 && segDigits) {
-                    if (r.tlen == tb.length) tb = grow(tb);
-                    r.tlen = segStart;
-                    tb[r.tlen++] = '{';
-                    tb[r.tlen++] = 'i';
-                    tb[r.tlen++] = 'd';
-                    tb[r.tlen++] = '}';
-                }
-                p++;
-                while (p < end && b[p] != ' ') p++;
-                if (p >= end) return null;
-                p++;
-                break;
-            } else {
-                if (!isDigit(c) && !isUpper(c) && !isLower(c) && c != '_' && c != '-') return null;
-                if (segLen == 0) segDigits = isDigit(c);
-                else if (segDigits && !isDigit(c)) segDigits = false;
-                segLen++;
-                if (r.tlen == tb.length) tb = grow(tb);
-                tb[r.tlen++] = (char) c;
-                p++;
-            }
+        // path: /[A-Za-z0-9_/-]* then optional \?[^ ]* then <sp>
+        if (h >= end || s.charAt(h) != '/') return false;
+        int pathStart = h;
+        ++h;
+        while (h < end) {
+            char c = s.charAt(h);
+            if (c == ' ' || c == '?') break;
+            if (!pathChar(c)) return false;
+            ++h;
         }
+        int pathEnd = h;
+        if (h < end && s.charAt(h) == '?') {
+            ++h;
+            while (h < end && s.charAt(h) != ' ') ++h;
+        }
+        if (h >= end || s.charAt(h) != ' ') return false;
+        ++h;
 
-        // 5. status: \d{3}<space>
-        if (end - p < 4) return null;
-        if (!isDigit(b[p]) || !isDigit(b[p + 1]) || !isDigit(b[p + 2])) return null;
-        if (b[p + 3] != ' ') return null;
-        r.statusClass = b[p] - '0';
-        p += 4;
+        // status: \d{3}<sp>
+        if (end - h < 3 || !isDig(s.charAt(h)) || !isDig(s.charAt(h + 1)) || !isDig(s.charAt(h + 2)))
+            return false;
+        r.cls = s.charAt(h) - '0';
+        h += 3;
+        if (h >= end || s.charAt(h) != ' ') return false;
+        ++h;
 
-        // 6. size: \d+B<space>
-        if (p >= end || !isDigit(b[p])) return null;
-        do { p++; } while (p < end && isDigit(b[p]));
-        if (p >= end || b[p] != 'B') return null;
-        p++;
-        if (p >= end || b[p] != ' ') return null;
-        p++;
+        // size: \d+B<sp>
+        if (h >= end || !isDig(s.charAt(h))) return false;
+        do { ++h; } while (h < end && isDig(s.charAt(h)));
+        if (h >= end || s.charAt(h) != 'B') return false;
+        ++h;
+        if (h >= end || s.charAt(h) != ' ') return false;
+        ++h;
 
-        // 7. latency: \d+.\d ms<space>
-        int ls = p;
-        long ip = 0;
-        while (p < end && isDigit(b[p])) { ip = ip * 10 + (b[p] - '0'); p++; }
-        if (p == ls || p >= end || b[p] != '.') return null;
-        p++;
-        if (p >= end || !isDigit(b[p])) return null;
-        int frac = b[p] - '0';
-        p++;
-        if (end - p < 3 || b[p] != 'm' || b[p + 1] != 's' || b[p + 2] != ' ') return null;
-        p += 3;
-        r.latencyT = (int) (ip * 10 + frac);
+        // latency: \d+.\dms "<ua>"<end>
+        long lat = 0;
+        if (h >= end || !isDig(s.charAt(h))) return false;
+        do { lat = lat * 10 + (s.charAt(h) - '0'); ++h; } while (h < end && isDig(s.charAt(h)));
+        if (h >= end || s.charAt(h) != '.') return false;
+        ++h;
+        if (h >= end || !isDig(s.charAt(h))) return false;
+        lat = lat * 10 + (s.charAt(h) - '0');
+        ++h;
+        if (end - h < 4 || s.charAt(h) != 'm' || s.charAt(h + 1) != 's' || s.charAt(h + 2) != ' ' ||
+            s.charAt(h + 3) != '"')
+            return false;
+        h += 4;
+        while (h < end && s.charAt(h) != '"') ++h;
+        if (h >= end || s.charAt(h) != '"') return false;
+        ++h;
+        if (h != end) return false;
 
-        // 8. "..." then end of line
-        if (p >= end || b[p] != '"') return null;
-        p++;
-        while (p < end && b[p] != '"') p++;
-        if (p >= end) return null;
-        p++;
-        if (p != end) return null;
-        return tb;
+        r.pathStart = pathStart;
+        r.pathEnd = pathEnd;
+        r.lat = (int) lat;
+        return true;
     }
 
-    private static char[] grow(char[] tb) {
-        char[] n = new char[tb.length * 2];
-        System.arraycopy(tb, 0, n, 0, tb.length);
-        return n;
+    static boolean region(String s, int pos, String lit) {
+        for (int i = 0; i < lit.length(); i++) {
+            if (s.charAt(pos + i) != lit.charAt(i)) return false;
+        }
+        return true;
     }
 
-    private static int pos(int pct, int nn) {
-        return (pct * nn + 99) / 100 - 1; // nearest-rank, 0-based index
+    static boolean pathChar(char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+               c == '_' || c == '/' || c == '-';
     }
 
     public static void main(String[] args) throws Exception {
-        byte[] b = Files.readAllBytes(Path.of(args[0]));
-        int n = b.length;
+        String data = Files.readString(Path.of(args[0]), StandardCharsets.US_ASCII);
+        int n = data.length();
         int p = 0;
-        long lines = 0, malformed = 0;
-        long[] statusCount = new long[10];
-        Map<String, Stats> map = new HashMap<>();
-        char[] tb = new char[1024];
-        Res r = new Res();
+        long nLines = 0, nMalformed = 0;
+        int[] statusCount = new int[10];
+        TMap map = new TMap(1 << 14);
+        char[] tmpl = new char[128];
+        Res res = new Res();
 
         while (p < n) {
-            int nl = p;
-            while (nl < n && b[nl] != '\n') nl++;
-            int lineEnd = nl;
-            ++lines;
-            char[] nt = parseLine(b, p, lineEnd, tb, r);
-            if (nt != null) {
-                tb = nt;
-                statusCount[r.statusClass]++;
-                String key = new String(tb, 0, r.tlen);
-                Stats s = map.get(key);
-                if (s == null) {
-                    s = new Stats();
-                    map.put(key, s);
+            ++nLines;
+            int lineStart = p;
+            int e = p;
+            while (e < n && data.charAt(e) != '\n') ++e;
+            // line is [lineStart, e)
+            if (parseLine(data, lineStart, e, res)) {
+                ++statusCount[res.cls];
+
+                // path template
+                int tlen = 1;
+                tmpl[0] = '/';
+                int segStart = res.pathStart + 1;
+                int i = segStart;
+                for (;;) {
+                    if (i == res.pathEnd || data.charAt(i) == '/') {
+                        int seglen = i - segStart;
+                        if (seglen > 0) {
+                            boolean allDig = true;
+                            for (int j = segStart; j < i; j++) {
+                                if (!isDig(data.charAt(j))) { allDig = false; break; }
+                            }
+                            if (allDig) {
+                                tmpl[tlen++] = '{';
+                                tmpl[tlen++] = 'i';
+                                tmpl[tlen++] = 'd';
+                                tmpl[tlen++] = '}';
+                            } else {
+                                for (int j = segStart; j < i; j++) tmpl[tlen++] = data.charAt(j);
+                            }
+                        }
+                        if (i < res.pathEnd) tmpl[tlen++] = '/';
+                        segStart = i + 1;
+                    }
+                    if (i == res.pathEnd) break;
+                    ++i;
                 }
-                s.add(r.latencyT);
+
+                Stats st = map.findOrAdd(tmpl, 0, tlen);
+                ++st.count;
+                st.add(res.lat);
             } else {
-                ++malformed;
+                ++nMalformed;
             }
-            p = lineEnd + 1;
+            p = e + 1;
         }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("lines ").append(lines).append('\n');
-        sb.append("malformed ").append(malformed).append('\n');
-        for (int d = 0; d < 10; d++) {
-            if (statusCount[d] != 0) {
-                sb.append("status ").append((char) ('0' + d)).append("xx ").append(statusCount[d]).append('\n');
+        // collect items
+        int m = 0;
+        for (int slot = 0; slot < map.keys.length; slot++) {
+            if (map.keys[slot] != null) m++;
+        }
+        String[] names = new String[m];
+        Stats[] stats = new Stats[m];
+        int k = 0;
+        for (int slot = 0; slot < map.keys.length; slot++) {
+            if (map.keys[slot] != null) { names[k] = map.keys[slot]; stats[k] = map.vals[slot]; k++; }
+        }
+        Integer[] order = new Integer[m];
+        for (int i = 0; i < m; i++) order[i] = i;
+        Arrays.sort(order, (a, b) -> {
+            int ca = stats[a].count, cb = stats[b].count;
+            if (ca != cb) return cb - ca;
+            return names[a].compareTo(names[b]); // byte order (ASCII)
+        });
+
+        StringBuilder sb = new StringBuilder(8192);
+        sb.append("lines ").append(nLines).append('\n');
+        sb.append("malformed ").append(nMalformed).append('\n');
+        for (int c = 0; c < 10; c++) {
+            if (statusCount[c] != 0) {
+                sb.append("status ").append((char) ('0' + c)).append("xx ").append(statusCount[c]).append('\n');
             }
         }
-        List<Map.Entry<String, Stats>> paths = new ArrayList<>(map.entrySet());
-        paths.sort((x, y) -> {
-            int c = Long.compare(y.getValue().count, x.getValue().count);
-            if (c != 0) return c;
-            return x.getKey().compareTo(y.getKey());
-        });
-        int lim = Math.min(paths.size(), 10);
-        for (int i = 0; i < lim; i++) {
-            Map.Entry<String, Stats> pe = paths.get(i);
-            Stats s = pe.getValue();
-            Arrays.sort(s.lats, 0, s.len);
-            int nn = s.len;
-            sb.append("path ").append(pe.getKey()).append(' ').append(s.count).append(' ');
-            sb.append(s.lats[pos(50, nn)] / 10).append('.').append(s.lats[pos(50, nn)] % 10).append(' ');
-            sb.append(s.lats[pos(95, nn)] / 10).append('.').append(s.lats[pos(95, nn)] % 10).append(' ');
-            sb.append(s.maxT / 10).append('.').append(s.maxT % 10).append('\n');
+        int top = m < 10 ? m : 10;
+        for (int i = 0; i < top; i++) {
+            Stats st = stats[order[i]];
+            int[] lat = st.lat;
+            Arrays.sort(lat, 0, st.len);
+            int nn = st.len;
+            java.util.function.IntUnaryOperator kth = pct -> lat[(int) (((long) pct * nn + 99) / 100 - 1)];
+            sb.append("path ").append(names[order[i]]).append(' ').append(st.count).append(' ');
+            appendLat(sb, kth.applyAsInt(50));
+            sb.append(' ');
+            appendLat(sb, kth.applyAsInt(95));
+            sb.append(' ');
+            appendLat(sb, lat[nn - 1]);
+            sb.append('\n');
         }
-        OutputStream out = new BufferedOutputStream(System.out);
-        out.write(sb.toString().getBytes("US-ASCII"));
-        out.flush();
+
+        System.out.write(sb.toString().getBytes(StandardCharsets.US_ASCII));
+    }
+
+    static void appendLat(StringBuilder sb, int t) {
+        sb.append(t / 10).append('.').append(t % 10);
     }
 }

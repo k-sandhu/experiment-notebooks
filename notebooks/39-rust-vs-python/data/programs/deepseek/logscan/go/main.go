@@ -1,361 +1,332 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"fmt"
 	"os"
 	"slices"
-	"strconv"
 )
-
-var data []byte
-var scratch = make([]byte, 1024)
-
-type entry struct {
-	tmpl  []byte
-	count int
-	lat   []int64
-}
-
-var entries []entry
-var table []int32
 
 func isDig(c byte) bool { return c >= '0' && c <= '9' }
 
-func hashBytes(b []byte) uint32 {
-	h := uint32(2166136261)
-	for _, c := range b {
-		h = (h ^ uint32(c)) * 16777619
-	}
-	h ^= h >> 16
-	return h
+func isPathCh(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+		(c >= '0' && c <= '9') || c == '_' || c == '-' || c == '/'
 }
 
-func findEntry(l int) int {
-	mask := len(table) - 1
-	idx := int(hashBytes(scratch[:l]) & uint32(mask))
-	for {
-		s := table[idx]
-		if s == 0 {
-			return -1
-		}
-		e := int(s - 1)
-		if len(entries[e].tmpl) == l && bytes.Equal(entries[e].tmpl, scratch[:l]) {
-			return e
-		}
-		idx = (idx + 1) & mask
-	}
-}
-
-func addEntry(l int) int {
-	e := len(entries)
-	t := make([]byte, l)
-	copy(t, scratch[:l])
-	entries = append(entries, entry{tmpl: t, lat: make([]int64, 0, 16)})
-	if (len(entries))*2 >= len(table) {
-		tbl := make([]int32, len(table)*2)
-		mask := len(tbl) - 1
-		for i := range entries {
-			idx := int(hashBytes(entries[i].tmpl) & uint32(mask))
-			for tbl[idx] != 0 {
-				idx = (idx + 1) & mask
-			}
-			tbl[idx] = int32(i + 1)
-		}
-		table = tbl
-	} else {
-		mask := len(table) - 1
-		idx := int(hashBytes(t) & uint32(mask))
-		for table[idx] != 0 {
-			idx = (idx + 1) & mask
-		}
-		table[idx] = int32(e + 1)
-	}
-	return e
-}
-
-func ensureScratch(need int) {
-	if need > len(scratch) {
-		scratch = make([]byte, need)
-	}
-}
-
-// parseLine returns ok, status class digit, latency in tenths, template length.
-func parseLine(p, le int) (bool, int, int64, int) {
-	d := data
-	if le-p < 25 {
-		return false, 0, 0, 0
-	}
-	if !(isDig(d[p]) && isDig(d[p+1]) && isDig(d[p+2]) && isDig(d[p+3]) && d[p+4] == '-' &&
-		isDig(d[p+5]) && isDig(d[p+6]) && d[p+7] == '-' && isDig(d[p+8]) && isDig(d[p+9]) &&
-		d[p+10] == 'T' && isDig(d[p+11]) && isDig(d[p+12]) && d[p+13] == ':' &&
-		isDig(d[p+14]) && isDig(d[p+15]) && d[p+16] == ':' && isDig(d[p+17]) && isDig(d[p+18]) &&
-		d[p+19] == '.' && isDig(d[p+20]) && isDig(d[p+21]) && isDig(d[p+22]) &&
-		d[p+23] == 'Z' && d[p+24] == ' ') {
-		return false, 0, 0, 0
-	}
-
-	i := p + 25
-	j := i
-	for j < le && d[j] >= 'a' && d[j] <= 'z' {
-		j++
-	}
-	if j == i || j >= le || d[j] != '-' {
-		return false, 0, 0, 0
-	}
-	j++
-	ds := j
-	for j < le && isDig(d[j]) {
-		j++
-	}
-	if j == ds || j >= le || d[j] != ' ' {
-		return false, 0, 0, 0
-	}
-	j++
-
-	if j+4 <= le && d[j] == 'G' && d[j+1] == 'E' && d[j+2] == 'T' && d[j+3] == ' ' {
-		j += 4
-	} else if j+5 <= le && d[j] == 'P' && d[j+1] == 'O' && d[j+2] == 'S' && d[j+3] == 'T' && d[j+4] == ' ' {
-		j += 5
-	} else if j+4 <= le && d[j] == 'P' && d[j+1] == 'U' && d[j+2] == 'T' && d[j+3] == ' ' {
-		j += 4
-	} else if j+7 <= le && d[j] == 'D' && d[j+1] == 'E' && d[j+2] == 'L' && d[j+3] == 'E' && d[j+4] == 'T' && d[j+5] == 'E' && d[j+6] == ' ' {
-		j += 7
-	} else if j+6 <= le && d[j] == 'P' && d[j+1] == 'A' && d[j+2] == 'T' && d[j+3] == 'C' && d[j+4] == 'H' && d[j+5] == ' ' {
-		j += 6
-	} else {
-		return false, 0, 0, 0
-	}
-
-	if j >= le || d[j] != '/' {
-		return false, 0, 0, 0
-	}
-	q := j + 1
-	for q < le {
-		c := d[q]
-		if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-			c == '_' || c == '/' || c == '-' {
-			q++
-		} else {
-			break
-		}
-	}
-
-	var fieldEnd int
-	if q < le && d[q] == '?' {
-		r := q + 1
-		for r < le && d[r] != ' ' {
-			r++
-		}
-		if r >= le {
-			return false, 0, 0, 0
-		}
-		fieldEnd = r
-	} else if q < le && d[q] == ' ' {
-		fieldEnd = q
-	} else {
-		return false, 0, 0, 0
-	}
-
-	ensureScratch((q-j)*4 + 16)
-	sc := scratch
-	t := 0
-	s := j
-	for s < q {
-		if d[s] == '/' {
-			sc[t] = '/'
-			t++
-			s++
-			continue
-		}
-		e := s
-		allDig := true
-		for e < q && d[e] != '/' {
-			if !isDig(d[e]) {
-				allDig = false
-			}
-			e++
-		}
-		if allDig {
-			sc[t] = '{'
-			sc[t+1] = 'i'
-			sc[t+2] = 'd'
-			sc[t+3] = '}'
-			t += 4
-		} else {
-			t += copy(sc[t:], d[s:e])
-		}
-		s = e
-	}
-
-	k := fieldEnd
-	if k+4 >= le {
-		return false, 0, 0, 0
-	}
-	if !isDig(d[k+1]) || !isDig(d[k+2]) || !isDig(d[k+3]) || d[k+4] != ' ' {
-		return false, 0, 0, 0
-	}
-	status := int(d[k+1] - '0')
-	k += 5
-
-	e := k
-	for e < le && isDig(d[e]) {
-		e++
-	}
-	if e == k || e >= le || d[e] != 'B' {
-		return false, 0, 0, 0
-	}
-	e++
-	if e >= le || d[e] != ' ' {
-		return false, 0, 0, 0
-	}
-	e++
-
-	ls := e
-	var v int64
-	for e < le && isDig(d[e]) {
-		v = v*10 + int64(d[e]-'0')
-		e++
-	}
-	if e == ls || e >= le || d[e] != '.' {
-		return false, 0, 0, 0
-	}
-	e++
-	if e >= le || !isDig(d[e]) {
-		return false, 0, 0, 0
-	}
-	v = v*10 + int64(d[e]-'0')
-	e++
-	if e+3 >= le || d[e] != 'm' || d[e+1] != 's' || d[e+2] != ' ' {
-		return false, 0, 0, 0
-	}
-	e += 3
-	if d[e] != '"' {
-		return false, 0, 0, 0
-	}
-	e++
-	r := e
-	for r < le && d[r] != '"' {
-		r++
-	}
-	if r != le-1 {
-		return false, 0, 0, 0
-	}
-
-	return true, status, v, t
-}
-
-func better(a, b int) bool {
-	if entries[a].count != entries[b].count {
-		return entries[a].count > entries[b].count
-	}
-	return bytes.Compare(entries[a].tmpl, entries[b].tmpl) < 0
-}
-
-func appendTenths(out []byte, v int64) []byte {
-	out = strconv.AppendInt(out, int64(v/10), 10)
-	out = append(out, '.')
-	out = append(out, byte('0'+v%10))
-	return out
+func tsOk(b []byte, p int) bool {
+	return isDig(b[p]) && isDig(b[p+1]) && isDig(b[p+2]) && isDig(b[p+3]) && b[p+4] == '-' &&
+		isDig(b[p+5]) && isDig(b[p+6]) && b[p+7] == '-' &&
+		isDig(b[p+8]) && isDig(b[p+9]) && b[p+10] == 'T' &&
+		isDig(b[p+11]) && isDig(b[p+12]) && b[p+13] == ':' &&
+		isDig(b[p+14]) && isDig(b[p+15]) && b[p+16] == ':' &&
+		isDig(b[p+17]) && isDig(b[p+18]) && b[p+19] == '.' &&
+		isDig(b[p+20]) && isDig(b[p+21]) && isDig(b[p+22]) && b[p+23] == 'Z'
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		return
-	}
-	var err error
-	data, err = os.ReadFile(os.Args[1])
+	f, err := os.Open(os.Args[1])
 	if err != nil {
 		return
 	}
-	n := len(data)
+	defer f.Close()
 
-	table = make([]int32, 2048)
-	entries = make([]entry, 0, 1024)
+	m := make(map[string]int32, 1024)
+	names := make([]string, 0, 1024)
+	lists := make([][]int32, 0, 1024)
+	maxes := make([]int32, 0, 1024)
+	scratch := make([]byte, 2048)
 
-	lines := 0
-	malformed := 0
-	var statusCount [10]int64
-	p := 0
-	for p < n {
-		rel := bytes.IndexByte(data[p:], '\n')
-		var le int
-		if rel < 0 {
-			le = n
-		} else {
-			le = p + rel
+	var lines, malformed uint64
+	var statusCount [10]uint64
+
+	buf := make([]byte, 1<<22)
+	used := 0
+	eof := false
+
+	for !eof {
+		if used == len(buf) {
+			nb := make([]byte, used<<1)
+			copy(nb, buf)
+			buf = nb
 		}
-		lines++
-		ok, status, lat, tlen := parseLine(p, le)
-		if ok {
-			statusCount[status]++
-			e := findEntry(tlen)
-			if e < 0 {
-				e = addEntry(tlen)
+		nread, rerr := f.Read(buf[used:])
+		if nread > 0 {
+			used += nread
+		}
+		if rerr != nil {
+			if used > 0 && buf[used-1] != '\n' {
+				if used == len(buf) {
+					nb := make([]byte, used<<1)
+					copy(nb, buf)
+					buf = nb
+				}
+				buf[used] = '\n'
+				used++
 			}
-			entries[e].count++
-			entries[e].lat = append(entries[e].lat, lat)
-			if rel < 0 {
-				p = n
+			eof = true
+		}
+
+		start := 0
+		for {
+			idx := bytes.IndexByte(buf[start:used], '\n')
+			if idx < 0 {
+				break
+			}
+			e := start + idx
+			lines++
+
+			ok := true
+			statusClass := 0
+			var lat int32
+			pathStart, pathEnd := 0, 0
+
+			{
+				q := start
+				end := e
+
+				for {
+					if end-q < 25 || !tsOk(buf, q) {
+						ok = false
+						break
+					}
+					q += 24
+					if buf[q] != ' ' {
+						ok = false
+						break
+					}
+					q++
+					if q >= end || buf[q] < 'a' || buf[q] > 'z' {
+						ok = false
+						break
+					}
+					q++
+					for q < end && buf[q] >= 'a' && buf[q] <= 'z' {
+						q++
+					}
+					if q >= end || buf[q] != '-' {
+						ok = false
+						break
+					}
+					q++
+					if q >= end || !isDig(buf[q]) {
+						ok = false
+						break
+					}
+					for q < end && isDig(buf[q]) {
+						q++
+					}
+					if q >= end || buf[q] != ' ' {
+						ok = false
+						break
+					}
+					q++
+
+					rem := end - q
+					if rem >= 4 && buf[q] == 'G' && buf[q+1] == 'E' && buf[q+2] == 'T' && buf[q+3] == ' ' {
+						q += 4
+					} else if rem >= 5 && buf[q] == 'P' && buf[q+1] == 'O' && buf[q+2] == 'S' && buf[q+3] == 'T' && buf[q+4] == ' ' {
+						q += 5
+					} else if rem >= 4 && buf[q] == 'P' && buf[q+1] == 'U' && buf[q+2] == 'T' && buf[q+3] == ' ' {
+						q += 4
+					} else if rem >= 7 && buf[q] == 'D' && buf[q+1] == 'E' && buf[q+2] == 'L' && buf[q+3] == 'E' && buf[q+4] == 'T' && buf[q+5] == 'E' && buf[q+6] == ' ' {
+						q += 7
+					} else if rem >= 6 && buf[q] == 'P' && buf[q+1] == 'A' && buf[q+2] == 'T' && buf[q+3] == 'C' && buf[q+4] == 'H' && buf[q+5] == ' ' {
+						q += 6
+					} else {
+						ok = false
+						break
+					}
+
+					if q >= end || buf[q] != '/' {
+						ok = false
+						break
+					}
+					pathStart = q
+					for q < end && isPathCh(buf[q]) {
+						q++
+					}
+					pathEnd = q
+					if q < end && buf[q] == '?' {
+						q++
+						for q < end && buf[q] != ' ' {
+							q++
+						}
+					}
+					if q >= end || buf[q] != ' ' {
+						ok = false
+						break
+					}
+					q++
+					if end-q < 4 || !isDig(buf[q]) || !isDig(buf[q+1]) || !isDig(buf[q+2]) || buf[q+3] != ' ' {
+						ok = false
+						break
+					}
+					statusClass = int(buf[q] - '0')
+					q += 4
+					if q >= end || !isDig(buf[q]) {
+						ok = false
+						break
+					}
+					for q < end && isDig(buf[q]) {
+						q++
+					}
+					if q >= end || buf[q] != 'B' {
+						ok = false
+						break
+					}
+					q++
+					if q >= end || buf[q] != ' ' {
+						ok = false
+						break
+					}
+					q++
+					if q >= end || !isDig(buf[q]) {
+						ok = false
+						break
+					}
+					v := int32(0)
+					for q < end && isDig(buf[q]) {
+						v = v*10 + int32(buf[q]-'0')
+						q++
+					}
+					if q >= end || buf[q] != '.' {
+						ok = false
+						break
+					}
+					q++
+					if q >= end || !isDig(buf[q]) {
+						ok = false
+						break
+					}
+					v = v*10 + int32(buf[q]-'0')
+					q++
+					if end-q < 3 || buf[q] != 'm' || buf[q+1] != 's' || buf[q+2] != ' ' {
+						ok = false
+						break
+					}
+					q += 3
+					if q >= end || buf[q] != '"' {
+						ok = false
+						break
+					}
+					q++
+					for q < end && buf[q] != '"' {
+						q++
+					}
+					if q >= end {
+						ok = false
+						break
+					}
+					q++
+					if q != end {
+						ok = false
+						break
+					}
+					lat = v
+					break
+				}
+			}
+
+			if !ok {
+				malformed++
 			} else {
-				p = le + 1
+				statusCount[statusClass]++
+				need := (pathEnd-pathStart)*4 + 4
+				if need > len(scratch) {
+					scratch = make([]byte, need)
+				}
+				tlen := 0
+				t := pathStart
+				for t < pathEnd {
+					scratch[tlen] = '/'
+					tlen++
+					t++
+					s := t
+					digits := true
+					nonempty := false
+					for t < pathEnd && buf[t] != '/' {
+						if !isDig(buf[t]) {
+							digits = false
+						}
+						nonempty = true
+						t++
+					}
+					if nonempty && digits {
+						scratch[tlen] = '{'
+						scratch[tlen+1] = 'i'
+						scratch[tlen+2] = 'd'
+						scratch[tlen+3] = '}'
+						tlen += 4
+					} else {
+						tlen += copy(scratch[tlen:], buf[s:t])
+					}
+				}
+				id, found := m[string(scratch[:tlen])]
+				if !found {
+					id = int32(len(names))
+					key := string(scratch[:tlen])
+					m[key] = id
+					names = append(names, key)
+					lists = append(lists, nil)
+					maxes = append(maxes, 0)
+				}
+				lists[id] = append(lists[id], lat)
+				if lat > maxes[id] {
+					maxes[id] = lat
+				}
 			}
-		} else {
-			malformed++
-			if rel < 0 {
-				p = n
-			} else {
-				p = le + 1
-			}
+
+			start = e + 1
+		}
+		if start > 0 {
+			copy(buf, buf[start:used])
+			used -= start
 		}
 	}
 
-	best := make([]int, 0, 10)
-	for e := range entries {
-		pos := 0
-		for pos < len(best) && better(best[pos], e) {
-			pos++
-		}
-		if pos < 10 {
-			if len(best) < 10 {
-				best = append(best, 0)
-			}
-			copy(best[pos+1:], best[pos:])
-			best[pos] = e
+	out := bufio.NewWriterSize(os.Stdout, 4096)
+	fmt.Fprintf(out, "lines %d\n", lines)
+	fmt.Fprintf(out, "malformed %d\n", malformed)
+	for d := 0; d < 10; d++ {
+		if statusCount[d] != 0 {
+			fmt.Fprintf(out, "status %dxx %d\n", d, statusCount[d])
 		}
 	}
 
-	out := make([]byte, 0, 4096)
-	out = append(out, "lines "...)
-	out = strconv.AppendInt(out, int64(lines), 10)
-	out = append(out, "\nmalformed "...)
-	out = strconv.AppendInt(out, int64(malformed), 10)
-	out = append(out, '\n')
-	for c := 0; c < 10; c++ {
-		if statusCount[c] != 0 {
-			out = append(out, "status "...)
-			out = append(out, byte('0'+c), 'x', 'x', ' ')
-			out = strconv.AppendInt(out, statusCount[c], 10)
-			out = append(out, '\n')
+	order := make([]int, len(names))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortFunc(order, func(a, b int) int {
+		ca, cb := len(lists[a]), len(lists[b])
+		if ca != cb {
+			return cb - ca
 		}
+		if names[a] < names[b] {
+			return -1
+		}
+		if names[a] > names[b] {
+			return 1
+		}
+		return 0
+	})
+
+	top := len(order)
+	if top > 10 {
+		top = 10
 	}
-	for bi := 0; bi < len(best); bi++ {
-		e := best[bi]
-		lv := entries[e].lat
-		slices.Sort(lv)
-		l := len(lv)
-		i50 := (50*l+99)/100 - 1
-		i95 := (95*l+99)/100 - 1
-		out = append(out, "path "...)
-		out = append(out, entries[e].tmpl...)
-		out = append(out, ' ')
-		out = strconv.AppendInt(out, int64(entries[e].count), 10)
-		out = append(out, ' ')
-		out = appendTenths(out, lv[i50])
-		out = append(out, ' ')
-		out = appendTenths(out, lv[i95])
-		out = append(out, ' ')
-		out = appendTenths(out, lv[l-1])
-		out = append(out, '\n')
+	for k := 0; k < top; k++ {
+		idx := order[k]
+		v := lists[idx]
+		slices.Sort(v)
+		cnt := uint64(len(v))
+		i50 := int((50*cnt+99)/100) - 1
+		i95 := int((95*cnt+99)/100) - 1
+		p50, p95, mx := v[i50], v[i95], v[len(v)-1]
+		fmt.Fprintf(out, "path %s %d %d.%d %d.%d %d.%d\n",
+			names[idx], cnt, p50/10, p50%10, p95/10, p95%10, mx/10, mx%10)
 	}
-	os.Stdout.Write(out)
+	out.Flush()
 }

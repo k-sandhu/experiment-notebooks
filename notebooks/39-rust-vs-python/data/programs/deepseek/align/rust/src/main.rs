@@ -1,176 +1,164 @@
-use std::fmt::Write as FmtWrite;
-use std::io::Write as IoWrite;
+use std::fmt::Write as _;
+use std::io::Write as _;
 
-struct Scanner<'a> {
-    data: &'a [u8],
-    pos: usize,
+struct Parser<'a> {
+    d: &'a [u8],
+    i: usize,
 }
 
-impl<'a> Scanner<'a> {
-    #[inline]
-    fn token(&mut self) -> &'a [u8] {
-        let d = self.data;
-        let n = d.len();
-        let mut p = self.pos;
-        while p < n && d[p] <= b' ' {
-            p += 1;
-        }
-        let start = p;
-        while p < n && d[p] > b' ' {
-            p += 1;
-        }
-        self.pos = p;
-        &d[start..p]
+impl<'a> Parser<'a> {
+    fn new(d: &'a [u8]) -> Self {
+        Parser { d, i: 0 }
     }
 
     #[inline]
-    fn int(&mut self) -> i32 {
-        let d = self.data;
-        let n = d.len();
-        let mut p = self.pos;
-        while p < n && d[p] <= b' ' {
-            p += 1;
+    fn skip_ws(&mut self) {
+        let d = self.d;
+        let mut i = self.i;
+        while i < d.len() && d[i] <= b' ' {
+            i += 1;
         }
-        let mut v: i32 = 0;
-        while p < n && d[p] > b' ' {
-            v = v * 10 + (d[p] - b'0') as i32;
-            p += 1;
+        self.i = i;
+    }
+
+    #[inline]
+    fn token(&mut self) -> &'a [u8] {
+        self.skip_ws();
+        let d = self.d;
+        let start = self.i;
+        let mut i = start;
+        while i < d.len() && d[i] > b' ' {
+            i += 1;
         }
-        self.pos = p;
-        v
+        self.i = i;
+        &d[start..i]
+    }
+
+    #[inline]
+    fn int(&mut self) -> i64 {
+        self.skip_ws();
+        let d = self.d;
+        let mut i = self.i;
+        let mut neg = false;
+        if i < d.len() && d[i] == b'-' {
+            neg = true;
+            i += 1;
+        }
+        let mut v: i64 = 0;
+        while i < d.len() {
+            let c = d[i];
+            if c < b'0' || c > b'9' {
+                break;
+            }
+            v = v * 10 + (c - b'0') as i64;
+            i += 1;
+        }
+        self.i = i;
+        if neg { -v } else { v }
     }
 }
 
 fn main() {
-    let path = std::env::args_os().nth(1).expect("usage: solution INPUT_PATH");
-    let data = std::fs::read(path).expect("cannot read input");
-    let mut sc = Scanner { data: &data, pos: 0 };
+    let path = std::env::args().nth(1).expect("input path");
+    let data = std::fs::read(&path).expect("read input");
+    let mut ps = Parser::new(&data);
 
-    let alpha = sc.token().to_vec();
-    let ac = alpha.len();
+    let alpha = ps.token();
+    let a = alpha.len();
+
     let mut map = [0u8; 256];
-    for (i, &c) in alpha.iter().enumerate() {
-        map[c as usize] = i as u8;
+    for (k, &ch) in alpha.iter().enumerate() {
+        map[ch as usize] = k as u8;
     }
 
     let mut ins = [0i32; 26];
     let mut del = [0i32; 26];
-    let mut sub = [[0i32; 26]; 26];
-    for i in 0..ac {
-        ins[i] = sc.int();
+    for k in 0..a {
+        ins[k] = ps.int() as i32;
     }
-    for i in 0..ac {
-        del[i] = sc.int();
+    for k in 0..a {
+        del[k] = ps.int() as i32;
     }
-    for i in 0..ac {
-        for j in 0..ac {
-            sub[i][j] = sc.int();
+    let mut sub = [0i32; 26 * 26];
+    for r in 0..a {
+        for c in 0..a {
+            sub[r * 26 + c] = ps.int() as i32;
         }
     }
-    let pairs = sc.int() as usize;
 
-    let mut colidx: Vec<u8> = Vec::new();
-    let mut wbuf: Vec<i32> = Vec::new();
-    let mut qbuf: Vec<i32> = Vec::new();
-    let mut insv: Vec<i32> = Vec::new();
-    let mut ins_e = [0i32; 26];
-    let mut del_e = [0i32; 26];
-    let mut sub_e = [[0i32; 26]; 26];
+    let npairs = ps.int() as usize;
 
-    let mut out = String::with_capacity(pairs * 8 + 32);
+    let mut s_buf: Vec<u8> = Vec::with_capacity(1024);
+    let mut t_buf: Vec<u8> = Vec::with_capacity(1024);
+    let mut inc: Vec<i32> = Vec::with_capacity(1024);
+    let mut prev: Vec<i32> = Vec::with_capacity(1024);
+    let mut cur: Vec<i32> = Vec::with_capacity(1024);
+
+    let mut out = String::with_capacity(npairs * 12 + 32);
     let mut total: i64 = 0;
 
-    for _ in 0..pairs {
-        let a = sc.token();
-        let b = sc.token();
-        // Use the shorter string as the row dimension so the row loop
-        // (which is inherently serial) runs fewer times.
-        let swapped = a.len() > b.len();
-        let (rows, cols) = if swapped { (b, a) } else { (a, b) };
+    for _ in 0..npairs {
+        s_buf.clear();
+        t_buf.clear();
+        {
+            let st = ps.token();
+            s_buf.extend(st.iter().map(|&ch| map[ch as usize]));
+        }
+        {
+            let tt = ps.token();
+            t_buf.extend(tt.iter().map(|&ch| map[ch as usize]));
+        }
+        let n = s_buf.len();
+        let m = t_buf.len();
 
-        if swapped {
-            ins_e[..ac].copy_from_slice(&del[..ac]);
-            del_e[..ac].copy_from_slice(&ins[..ac]);
-            for i in 0..ac {
-                for j in 0..ac {
-                    sub_e[i][j] = sub[j][i];
-                }
-            }
-        } else {
-            ins_e[..ac].copy_from_slice(&ins[..ac]);
-            del_e[..ac].copy_from_slice(&del[..ac]);
-            for i in 0..ac {
-                sub_e[i][..ac].copy_from_slice(&sub[i][..ac]);
-            }
+        inc.clear();
+        for &tj in t_buf.iter() {
+            inc.push(ins[tj as usize]);
         }
 
-        let m = cols.len();
-        let stride = m + 1;
-
-        colidx.clear();
-        colidx.extend(cols.iter().map(|&c| map[c as usize]));
-
-        insv.clear();
-        insv.resize(stride, 0);
-        let mut ins_total: i32 = 0;
+        prev.clear();
+        prev.resize(m + 1, 0);
+        cur.clear();
+        cur.resize(m + 1, 0);
+        let mut acc: i32 = 0;
         for j in 0..m {
-            let v = ins_e[colidx[j] as usize];
-            ins_total += v;
-            insv[j + 1] = v;
+            acc += inc[j];
+            prev[j + 1] = acc;
         }
 
-        // Work in "R space": R[i][j] = D[i][j] - I[j] - J[i], where I is the
-        // prefix sum of insertion costs of t and J the prefix sum of deletion
-        // costs of s.  Both cancel out of the recurrence, giving
-        //   R'[j] = min(R'[j-1], R[j], R[j-1] + sub[s_i][t_j] - ins[t_j] - del[s_i])
-        // with R[i][0] = 0 for every row.  The answer is R[n][m] + I[m] + J[n].
-        wbuf.clear();
-        wbuf.resize(ac * stride, 0);
-        for ai in 0..ac {
-            let row = &sub_e[ai];
-            let dv = del_e[ai];
-            let base = ai * stride;
-            let w = &mut wbuf[base + 1..base + stride];
-            for j in 0..m {
-                w[j] = row[colidx[j] as usize] - insv[j + 1] - dv;
-            }
-        }
-
-        qbuf.clear();
-        qbuf.resize(stride, 0);
-
-        let mut last: i32 = 0;
-        let mut del_total: i32 = 0;
-        for &rc in rows.iter() {
-            let ai = map[rc as usize] as usize;
-            let w = &wbuf[ai * stride..(ai + 1) * stride];
-            del_total += del_e[ai];
-            let mut left: i32 = 0;
-            let mut qp: i32 = 0;
-            for (qi, &wj) in qbuf[1..].iter_mut().zip(w[1..].iter()) {
-                let qj = *qi;
-                let mut c = qj;
-                if left < c {
-                    c = left;
+        for i in 0..n {
+            let si = s_buf[i] as usize;
+            let d = del[si];
+            let srow = &sub[si * 26..si * 26 + 26];
+            let mut left = prev[0] + d;
+            cur[0] = left;
+            let mut diag = prev[0];
+            for j in 1..=m {
+                let up = prev[j];
+                let mut v = up + d;
+                let x = diag + srow[t_buf[j - 1] as usize];
+                if x < v {
+                    v = x;
                 }
-                let x = qp + wj;
-                if x < c {
-                    c = x;
+                let y = left + inc[j - 1];
+                if y < v {
+                    v = y;
                 }
-                *qi = c;
-                left = c;
-                qp = qj;
+                cur[j] = v;
+                left = v;
+                diag = up;
             }
-            last = left;
+            std::mem::swap(&mut prev, &mut cur);
         }
 
-        let ans = (last + ins_total + del_total) as i64;
-        total += ans;
-        let _ = writeln!(out, "{}", ans);
+        let cost = prev[m] as i64;
+        total += cost;
+        let _ = writeln!(out, "{}", cost);
     }
+
     let _ = writeln!(out, "total {}", total);
 
     let stdout = std::io::stdout();
     let mut lock = stdout.lock();
-    let _ = lock.write_all(out.as_bytes());
+    lock.write_all(out.as_bytes()).unwrap();
 }

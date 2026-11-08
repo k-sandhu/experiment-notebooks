@@ -1,79 +1,104 @@
-"use strict";
+'use strict';
 
-const fs = require("fs");
+const fs = require('fs');
 
-const text = fs.readFileSync(process.argv[2], "utf8");
-const tokens = text.split(/\s+/);
-let pos = 0;
+// Weighted edit distance for many string pairs (exact DP recurrence from SPEC.md).
+// Two rolling rows as plain JS arrays (V8 stores them as packed smis); all cell
+// values fit in a 32-bit integer, the grand total stays exact as a JS number.
 
-function next() { return tokens[pos++]; }
-function nextInt() { return parseInt(tokens[pos++], 10); }
+function main() {
+    const buf = fs.readFileSync(process.argv[2]);
+    const len = buf.length;
+    let p = 0;
 
-const alphabet = next();
-const A = alphabet.length;
-
-const charIndex = new Int32Array(26);
-for (let i = 0; i < 26; i++) charIndex[i] = -1;
-for (let i = 0; i < A; i++) charIndex[alphabet.charCodeAt(i) - 65] = i;
-
-const ins = new Int32Array(A);
-const del = new Int32Array(A);
-for (let i = 0; i < A; i++) ins[i] = nextInt();
-for (let i = 0; i < A; i++) del[i] = nextInt();
-const sub = new Array(A);
-for (let i = 0; i < A; i++) {
-    sub[i] = new Int32Array(A);
-    for (let j = 0; j < A; j++) sub[i][j] = nextInt();
-}
-
-const P = nextInt();
-
-let prev = [];
-let cur = [];
-let sIdx = [];
-let tIdx = [];
-let insT = [];
-
-const total = [0]; // use number directly below
-let totalVal = 0;
-const out = [];
-
-for (let pair = 0; pair < P; pair++) {
-    const s = next();
-    const t = next();
-    const n = s.length;
-    const m = t.length;
-
-    sIdx.length = n;
-    for (let i = 0; i < n; i++) sIdx[i] = charIndex[s.charCodeAt(i) - 65];
-    tIdx.length = m;
-    insT.length = m;
-    for (let j = 0; j < m; j++) { tIdx[j] = charIndex[t.charCodeAt(j) - 65]; insT[j] = ins[tIdx[j]]; }
-
-    if (prev.length < m + 1) { prev = new Array(m + 1); cur = new Array(m + 1); }
-
-    prev[0] = 0;
-    for (let j = 1; j <= m; j++) prev[j] = prev[j - 1] + insT[j - 1];
-
-    for (let i = 1; i <= n; i++) {
-        const si = sIdx[i - 1];
-        const delSi = del[si];
-        const subRow = sub[si];
-        cur[0] = prev[0] + delSi;
-        for (let j = 1; j <= m; j++) {
-            const tj = tIdx[j - 1];
-            let up = prev[j] + delSi;
-            let left = cur[j - 1] + insT[j - 1];
-            let diag = prev[j - 1] + subRow[tj];
-            let best = up < left ? up : left;
-            cur[j] = diag < best ? diag : best;
-        }
-        const tmp = prev; prev = cur; cur = tmp;
+    function skipWs() {
+        while (p < len && buf[p] <= 32) p++;
     }
 
-    const cost = prev[m];
-    totalVal += cost;
-    out.push(cost);
+    function nextInt() {
+        skipWs();
+        let x = 0;
+        while (p < len && buf[p] > 32) {
+            x = x * 10 + (buf[p] - 48);
+            p++;
+        }
+        return x;
+    }
+
+    function readTokenIdx(idx) {
+        skipWs();
+        const start = p;
+        while (p < len && buf[p] > 32) p++;
+        const n = p - start;
+        const a = new Array(n);
+        for (let i = 0; i < n; i++) a[i] = idx[buf[start + i]];
+        return a;
+    }
+
+    skipWs();
+    const alphaStart = p;
+    while (p < len && buf[p] > 32) p++;
+    const A = p - alphaStart;
+
+    const idx = new Array(256);
+    for (let i = 0; i < 256; i++) idx[i] = -1;
+    for (let i = 0; i < A; i++) idx[buf[alphaStart + i]] = i;
+
+    const ins = new Array(A);
+    const del = new Array(A);
+    const sub = new Array(A * A);
+    for (let i = 0; i < A; i++) ins[i] = nextInt();
+    for (let i = 0; i < A; i++) del[i] = nextInt();
+    for (let i = 0; i < A * A; i++) sub[i] = nextInt();
+
+    const P = nextInt();
+
+    let prev = null;
+    let cur = null;
+    let total = 0;
+    const lines = [];
+
+    for (let pair = 0; pair < P; pair++) {
+        const s = readTokenIdx(idx);
+        const t = readTokenIdx(idx);
+        const n = s.length;
+        const m = t.length;
+
+        if (prev == null || prev.length < m + 1) {
+            prev = new Int32Array(m + 1);
+            cur = new Int32Array(m + 1);
+        }
+
+        prev[0] = 0;
+        for (let j = 1; j <= m; j++) prev[j] = prev[j - 1] + ins[t[j - 1]];
+
+        for (let i = 0; i < n; i++) {
+            const si = s[i];
+            const d = del[si];
+            const base = si * A;
+            cur[0] = prev[0] + d;
+            let diag = prev[0];
+            for (let j = 1; j <= m; j++) {
+                const tj = t[j - 1];
+                let best = prev[j] + d;
+                let v = cur[j - 1] + ins[tj];
+                if (v < best) best = v;
+                v = diag + sub[base + tj];
+                if (v < best) best = v;
+                cur[j] = best;
+                diag = prev[j];
+            }
+            const tmp = prev;
+            prev = cur;
+            cur = tmp;
+        }
+
+        total += prev[m];
+        lines.push(String(prev[m]));
+    }
+
+    lines.push('total ' + String(total));
+    process.stdout.write(lines.join('\n') + '\n');
 }
-out.push("total " + totalVal);
-process.stdout.write(out.join("\n") + "\n");
+
+main();

@@ -1,161 +1,187 @@
+// Word pairs benchmark - Go 1.27, standard library only.
+// Single pass: lowercase words in place, intern them to ids, emit packed
+// (prevId, curId) pairs within sentences, radix-sort the packed pairs, count
+// runs, keep the top 20 by (count desc, word1 asc, word2 asc).
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"math"
 	"os"
-	"sort"
 )
 
-// Open-addressing map from lowercased word bytes to id.
-var wordSlots []int // id + 1, 0 means empty
-var wordMask int
-var wordCount int
-var words [][]byte // id -> lowercase word bytes
+func isLetter(c byte) bool {
+	c |= 0x20
+	return c >= 'a' && c <= 'z'
+}
 
-func wordHash(buf []byte, n int) uint64 {
-	h := uint64(2166136261)
-	for i := 0; i < n; i++ {
-		h ^= uint64(buf[i])
-		h *= 16777619
+// Open-addressing map from lowercase word to a dense id.
+// Lookup compares against the input buffer directly, so only distinct words
+// become Go strings.
+type wordMap struct {
+	keys    []string
+	hashes  []uint32
+	ids     []int
+	mask    int
+	occupied int
+	growAt  int
+	words   []string // id -> word
+}
+
+func newWordMap(cap int) *wordMap {
+	return &wordMap{
+		keys:    make([]string, cap),
+		hashes:  make([]uint32, cap),
+		ids:     make([]int, cap),
+		mask:    cap - 1,
+		growAt:  int(float64(cap) * 0.75),
+		words:   make([]string, 0, cap),
+	}
+}
+
+func (m *wordMap) grow() {
+	oldKeys, oldHashes, oldIds := m.keys, m.hashes, m.ids
+	newCap := len(oldKeys) * 2
+	m.keys = make([]string, newCap)
+	m.hashes = make([]uint32, newCap)
+	m.ids = make([]int, newCap)
+	m.mask = newCap - 1
+	m.growAt = int(float64(newCap) * 0.75)
+	for i := 0; i < len(oldKeys); i++ {
+		k := oldKeys[i]
+		if k != "" {
+			h := oldHashes[i] & uint32(m.mask)
+			pos := int(h)
+			for m.keys[pos] != "" {
+				pos = (pos + 1) & m.mask
+			}
+			m.keys[pos] = k
+			m.hashes[pos] = oldHashes[i]
+			m.ids[pos] = oldIds[i]
+		}
+	}
+}
+
+func hashBytes(data []byte, start, len int) uint32 {
+	h := uint32(2166136261)
+	for i := 0; i < len; i++ {
+		h = h*16777619 ^ uint32(data[start+i])
 	}
 	return h
 }
 
-func growWords() {
-	old := wordSlots
-	n := len(old) * 2
-	wordSlots = make([]int, n)
-	wordMask = n - 1
-	wordCount = 0
-	for _, v := range old {
-		if v == 0 {
-			continue
-		}
-		w := words[v-1]
-		h := int(wordHash(w, len(w)) & uint64(wordMask))
-		for wordSlots[h] != 0 {
-			h = (h + 1) & wordMask
-		}
-		wordSlots[h] = v
-		wordCount++
+func equalsBytes(k string, data []byte, start, length int) bool {
+	if len(k) != length {
+		return false
 	}
+	for i := 0; i < length; i++ {
+		if k[i] != data[start+i] {
+			return false
+		}
+	}
+	return true
 }
 
-func intern(buf []byte, n int) int {
-	if wordCount*4 >= len(wordSlots)*3 {
-		growWords()
-	}
-	h := int(wordHash(buf, n) & uint64(wordMask))
+func (m *wordMap) getOrPut(data []byte, start, length int, hash uint32) int {
+	pos := int(hash & uint32(m.mask))
 	for {
-		v := wordSlots[h]
-		if v == 0 {
-			id := wordCount
-			wordCount++
-			copy := append([]byte(nil), buf[:n]...)
-			words = append(words, copy)
-			wordSlots[h] = id + 1
+		k := m.keys[pos]
+		if k == "" {
+			s := string(data[start : start+length])
+			m.keys[pos] = s
+			m.hashes[pos] = hash
+			id := m.occupied
+			m.ids[pos] = id
+			m.words = append(m.words, s)
+			m.occupied++
+			if m.occupied >= m.growAt {
+				m.grow()
+			}
 			return id
 		}
-		w := words[v-1]
-		if len(w) == n {
-			eq := true
-			for i := 0; i < n; i++ {
-				if w[i] != buf[i] {
-					eq = false
-					break
-				}
-			}
-			if eq {
-				return v - 1
-			}
+		if m.hashes[pos] == hash && equalsBytes(k, data, start, length) {
+			return m.ids[pos]
 		}
-		h = (h + 1) & wordMask
+		pos = (pos + 1) & m.mask
 	}
 }
 
-// Open-addressing map from packed (id1, id2) pair key to count.
-var pairKeys []uint64 // math.MaxUint64 means empty (keys are always < 2^63)
-var pairCounts []uint32
-var pairMask int
-var pairCount int
-
-func pairHash(k uint64) uint64 {
-	k ^= k >> 33
-	k *= 0xff51afd7ed558ccd
-	k ^= k >> 33
-	k ^= k >> 32
-	return k
-}
-
-func growPairs() {
-	oldK := pairKeys
-	oldC := pairCounts
-	n := len(oldK) * 2
-	pairKeys = make([]uint64, n)
-	pairCounts = make([]uint32, n)
-	pairMask = n - 1
-	for i := range pairKeys {
-		pairKeys[i] = math.MaxUint64
+// LSD radix sort over 4 x 8-bit passes. Because there is an even number of
+// passes, the sorted data ends up in the caller's slice.
+func radixSort(a []uint64) {
+	n := len(a)
+	if n < 2 {
+		return
 	}
-	pairCount = 0
-	for i, k := range oldK {
-		if k == math.MaxUint64 {
-			continue
+	tmp := make([]uint64, n)
+	var count [256]int
+	src, dst := a, tmp
+	for shift := uint(0); shift < 64; shift += 8 {
+		for i := range count {
+			count[i] = 0
 		}
-		h := int(pairHash(k) & uint64(pairMask))
-		for pairKeys[h] != math.MaxUint64 {
-			h = (h + 1) & pairMask
+		for _, v := range src {
+			count[(v>>shift)&0xFF]++
 		}
-		pairKeys[h] = k
-		pairCounts[h] = oldC[i]
-		pairCount++
+		total := 0
+		for i := 0; i < 256; i++ {
+			c := count[i]
+			count[i] = total
+			total += c
+		}
+		for _, v := range src {
+			b := int((v >> shift) & 0xFF)
+			dst[count[b]] = v
+			count[b]++
+		}
+		src, dst = dst, src
 	}
 }
 
-func pairInsert(key uint64) int {
-	if (pairCount+1)*4 >= len(pairKeys)*3 {
-		growPairs()
+// Top-20 bookkeeping, ordered best-first.
+var bestCount [20]uint64
+var bestW1 [20]int
+var bestW2 [20]int
+var bestn int
+var wordsRef *[]string // points at wordMap.words so appends stay visible
+
+func better(c1 uint64, a1, b1 int, c2 uint64, a2, b2 int) bool {
+	words := *wordsRef
+	if c1 != c2 {
+		return c1 > c2
 	}
-	h := int(pairHash(key) & uint64(pairMask))
-	for pairKeys[h] != math.MaxUint64 {
-		if pairKeys[h] == key {
-			return h
-		}
-		h = (h + 1) & pairMask
+	if words[a1] != words[a2] {
+		return words[a1] < words[a2]
 	}
-	pairKeys[h] = key
-	pairCounts[h] = 0
-	pairCount++
-	return h
+	return words[b1] < words[b2]
 }
 
-func wordCmp(x, y []byte) int {
-	n := len(x)
-	if len(y) < n {
-		n = len(y)
-	}
-	for i := 0; i < n; i++ {
-		if x[i] != y[i] {
-			return int(x[i]) - int(y[i])
+func consider(count uint64, w1, w2 int) {
+	if bestn < 20 {
+		pos := bestn
+		for pos > 0 && better(count, w1, w2, bestCount[pos-1], bestW1[pos-1], bestW2[pos-1]) {
+			bestCount[pos] = bestCount[pos-1]
+			bestW1[pos] = bestW1[pos-1]
+			bestW2[pos] = bestW2[pos-1]
+			pos--
 		}
+		bestCount[pos] = count
+		bestW1[pos] = w1
+		bestW2[pos] = w2
+		bestn++
+	} else if better(count, w1, w2, bestCount[19], bestW1[19], bestW2[19]) {
+		c, a, b := count, w1, w2
+		pos := 19
+		for pos > 0 && better(c, a, b, bestCount[pos-1], bestW1[pos-1], bestW2[pos-1]) {
+			bestCount[pos] = bestCount[pos-1]
+			bestW1[pos] = bestW1[pos-1]
+			bestW2[pos] = bestW2[pos-1]
+			pos--
+		}
+		bestCount[pos] = c
+		bestW1[pos] = a
+		bestW2[pos] = b
 	}
-	return len(x) - len(y)
-}
-
-var wordsCount uint64
-var pairsCount uint64
-var prevId = -1
-
-func noteWord(buf []byte, n int) {
-	id := intern(buf, n)
-	wordsCount++
-	if prevId >= 0 {
-		pairsCount++
-		key := uint64(prevId)<<32 | uint64(id)
-		pairCounts[pairInsert(key)]++
-	}
-	prevId = id
 }
 
 func main() {
@@ -166,62 +192,73 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
+	n := len(data)
+	m := newWordMap(1 << 14)
+	wordsRef = &m.words
+	pairs := make([]uint64, 0, 1<<20)
+	prevId := 0
+	havePrev := false
+	var wordTotal, pairTotal uint64
 
-	wordSlots = make([]int, 1<<14)
-	wordMask = len(wordSlots) - 1
-	words = make([][]byte, 0, 1024)
-	pairKeys = make([]uint64, 1<<16)
-	pairCounts = make([]uint32, 1<<16)
-	pairMask = len(pairKeys) - 1
-	for i := range pairKeys {
-		pairKeys[i] = math.MaxUint64
-	}
-
-	buf := make([]byte, 0, 64)
-	for _, c := range data {
-		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
-			buf = append(buf, c|0x20)
-		} else {
-			if len(buf) > 0 {
-				noteWord(buf, len(buf))
-				buf = buf[:0]
+	i := 0
+	for i < n {
+		for i < n {
+			c := data[i]
+			if isLetter(c) {
+				break
 			}
 			if c == '.' || c == '!' || c == '?' {
-				prevId = -1
+				havePrev = false
 			}
+			i++
 		}
-	}
-	if len(buf) > 0 {
-		noteWord(buf, len(buf))
+		if i >= n {
+			break
+		}
+		start := i
+		h := uint32(2166136261)
+		for i < n {
+			c := data[i]
+			if !isLetter(c) {
+				break
+			}
+			if c >= 'A' && c <= 'Z' {
+				c += 0x20 // lowercase in place
+				data[i] = c
+			}
+			h = h*16777619 ^ uint32(c)
+			i++
+		}
+		length := i - start
+		id := m.getOrPut(data, start, length, h)
+		wordTotal++
+		if havePrev {
+			pairTotal++
+			pairs = append(pairs, uint64(prevId)<<32|uint64(id))
+		}
+		prevId = id
+		havePrev = true
 	}
 
-	distinct := pairCount
-	type entry struct {
-		c, a, b uint32
-	}
-	ents := make([]entry, 0, distinct)
-	for i, k := range pairKeys {
-		if k != math.MaxUint64 {
-			ents = append(ents, entry{uint32(pairCounts[i]), uint32(k >> 32), uint32(k)})
-		}
-	}
-	sort.Slice(ents, func(i, j int) bool {
-		if ents[i].c != ents[j].c {
-			return ents[i].c > ents[j].c
-		}
-		cmp := wordCmp(words[ents[i].a], words[ents[j].a])
-		if cmp != 0 {
-			return cmp < 0
-		}
-		return wordCmp(words[ents[i].b], words[ents[j].b]) < 0
-	})
+	radixSort(pairs)
 
-	fmt.Printf("words %d\npairs %d\ndistinct %d\n", wordsCount, pairsCount, distinct)
-	limit := 20
-	if int64(distinct) < int64(limit) {
-		limit = int(distinct)
+	k := 0
+	var distinct uint64
+	for k < len(pairs) {
+		j := k + 1
+		for j < len(pairs) && pairs[j] == pairs[k] {
+			j++
+		}
+		consider(uint64(j-k), int(pairs[k]>>32), int(pairs[k]&0xFFFFFFFF))
+		distinct++
+		k = j
 	}
-	for i := 0; i < limit; i++ {
-		fmt.Printf("%d %s %s\n", ents[i].c, words[ents[i].a], words[ents[i].b])
+
+	out := bufio.NewWriter(os.Stdout)
+	defer out.Flush()
+	fmt.Fprintf(out, "words %d\npairs %d\ndistinct %d\n", wordTotal, pairTotal, distinct)
+	words := *wordsRef
+	for t := 0; t < bestn; t++ {
+		fmt.Fprintf(out, "%d %s %s\n", bestCount[t], words[bestW1[t]], words[bestW2[t]])
 	}
 }

@@ -1,501 +1,538 @@
-// Ledger: sum JSON-lines transactions with exact integer currency conversion.
-// Single pass over the raw bytes; only the needed fields are extracted.
 package main
 
+// Ledger: fast single-pass JSON Lines aggregator.
+// Hand-rolled byte scanner over the whole input (no DOM), plain maps with
+// string keys created only for the few fields we need.
+
 import (
-	"bytes"
+	"bufio"
 	"os"
 	"sort"
 	"strconv"
-	"unsafe"
 )
 
-const micro = 1000000
+var data []byte
+var i, n int
 
-type channelAgg struct {
-	count int64
-	net   int64
+var sStart, sEnd int
+var sEsc bool
+
+type chAgg struct {
+	count, net int64
 }
 
-var (
-	data      []byte
-	rates     = make(map[string]int64, 16)
-	channels  = make(map[string]*channelAgg, 16)
-	accounts  = make(map[string]int64, 4096)
-	arena     []byte // backing store for decoded (escaped) keys
-	arenaOff  int
-	scratch   = make([]byte, 0, 256) // reused decode buffer
-)
+func main() {
+	data, _ = os.ReadFile(os.Args[1])
+	n = len(data)
 
-// intern copies a decoded key into stable storage (fixed chunks, never moves).
-func intern(b []byte) string {
-	if len(arena)-arenaOff < len(b) {
-		n := len(b)
-		if n < 4096 {
-			n = 4096
-		}
-		arena = append(arena, make([]byte, n)...)
-	}
-	dst := arena[arenaOff : arenaOff+len(b)]
-	copy(dst, b)
-	arenaOff += len(b)
-	return unsafe.String(&dst[0], len(dst))
-}
+	rates := make(map[string]int64)
+	channels := make(map[string]*chAgg)
+	accounts := make(map[string]int64)
 
-func isWS(c byte) bool {
-	return c == ' ' || c == '\t' || c == '\r' || c == '\n'
-}
-
-func skipWS(i int) int {
-	for i < len(data) && isWS(data[i]) {
-		i++
-	}
-	return i
-}
-
-// parseString starts at '"'; returns content [s,e) and index after '"'.
-func parseString(i int) (s, e, next int, esc bool) {
-	i++
-	s = i
-	for i < len(data) {
-		c := data[i]
-		if c == '"' {
-			return s, i, i + 1, esc
-		}
-		if c == '\\' {
-			esc = true
-			i++
-			if i < len(data) && data[i] == 'u' {
-				i += 4
-			}
-		}
-		i++
-	}
-	return s, i, i, esc
-}
-
-func skipValue(i int) int {
-	if i < len(data) && data[i] == '"' {
-		_, _, next, _ := parseString(i)
-		return next
-	}
-	if i < len(data) && (data[i] == '{' || data[i] == '[') {
-		depth := 0
-		for i < len(data) {
-			c := data[i]
-			if c == '"' {
-				_, _, next, _ := parseString(i)
-				i = next
-				continue
-			}
-			if c == '{' || c == '[' {
-				depth++
-			} else if c == '}' || c == ']' {
-				depth--
-				if depth == 0 {
-					return i + 1
+	// ---- first line: rates ----
+	skipWs()
+	i++ // '{'
+	for {
+		skipWs()
+		scanString()
+		ks, ke, kesc := sStart, sEnd, sEsc
+		skipWs()
+		i++ // ':'
+		skipWs()
+		if !kesc && ke-ks == 5 && eqBytes(ks, ke, "rates") {
+			i++ // '{'
+			for {
+				skipWs()
+				if data[i] == '}' {
+					i++
+					break
+				}
+				scanString()
+				cur := strValue()
+				skipWs()
+				i++ // ':'
+				skipWs()
+				var r int64
+				for data[i] >= '0' && data[i] <= '9' {
+					r = r*10 + int64(data[i]-'0')
+					i++
+				}
+				rates[cur] = r
+				skipWs()
+				if data[i] == ',' {
+					i++
 				}
 			}
+		} else {
+			skipValue()
+		}
+		skipWs()
+		if data[i] == ',' {
 			i++
-		}
-		return i
-	}
-	for i < len(data) {
-		c := data[i]
-		if c == ',' || c == '}' || c == ']' {
-			break
-		}
-		i++
-	}
-	return i
-}
-
-func decodeString(s, e int) []byte {
-	scratch = scratch[:0]
-	for i := s; i < e; i++ {
-		c := data[i]
-		if c != '\\' {
-			scratch = append(scratch, c)
 			continue
 		}
 		i++
-		switch data[i] {
-		case '"':
-			scratch = append(scratch, '"')
-		case '\\':
-			scratch = append(scratch, '\\')
-		case '/':
-			scratch = append(scratch, '/')
-		case 'b':
-			scratch = append(scratch, '\b')
-		case 'f':
-			scratch = append(scratch, '\f')
-		case 'n':
-			scratch = append(scratch, '\n')
-		case 'r':
-			scratch = append(scratch, '\r')
-		case 't':
-			scratch = append(scratch, '\t')
-		case 'u':
-			cp := hex4(i + 1)
-			i += 4
-			if cp >= 0xD800 && cp <= 0xDBFF && i+2 < e && data[i+1] == '\\' && data[i+2] == 'u' {
-				lo := hex4(i + 3)
-				if lo >= 0xDC00 && lo <= 0xDFFF {
-					cp = 0x10000 + (cp-0xD800)<<10 + (lo - 0xDC00)
-					i += 6
+		break
+	}
+
+	// ---- transactions ----
+	var totalCount, totalNet int64
+
+	for {
+		skipWs()
+		if i >= n {
+			break
+		}
+		i++ // '{'
+
+		var typeCode int // 1 credit, 2 debit, 3 refund, 4 void
+		testTag := false
+		var hund int64
+		var currency, account, channel string
+
+	inner:
+		for {
+			skipWs()
+			scanString()
+			ks, ke, kesc := sStart, sEnd, sEsc
+			klen := ke - ks
+			skipWs()
+			i++ // ':'
+			skipWs()
+			if !kesc {
+				c0 := byte(0)
+				if klen > 0 {
+					c0 = data[ks]
+				}
+				switch {
+				case klen == 4 && c0 == 't' && eqBytes(ks, ke, "type"):
+					scanString()
+					typeCode = typeCodeVal()
+				case klen == 6 && eqBytes(ks, ke, "amount"):
+					scanString()
+					hund = parseAmount(sStart, sEnd, sEsc)
+				case klen == 8 && eqBytes(ks, ke, "currency"):
+					scanString()
+					currency = strValue()
+				case klen == 7 && eqBytes(ks, ke, "account"):
+					scanString()
+					account = strValue()
+				case klen == 4 && c0 == 't' && eqBytes(ks, ke, "tags"):
+					testTag = parseTags()
+				case klen == 4 && c0 == 'm' && eqBytes(ks, ke, "meta"):
+					channel = parseMeta()
+				default:
+					skipValue()
+				}
+			} else {
+				// escaped key: decode and compare (rare)
+				switch string(decodeInto(ks, ke)) {
+				case "type":
+					scanString()
+					typeCode = typeCodeVal()
+				case "amount":
+					scanString()
+					hund = parseAmount(sStart, sEnd, sEsc)
+				case "currency":
+					scanString()
+					currency = strValue()
+				case "account":
+					scanString()
+					account = strValue()
+				case "tags":
+					testTag = parseTags()
+				case "meta":
+					channel = parseMeta()
+				default:
+					skipValue()
 				}
 			}
-			scratch = appendRune(scratch, cp)
-		default:
-			scratch = append(scratch, data[i])
+			skipWs()
+			if data[i] == ',' {
+				i++
+				continue inner
+			}
+			i++ // '}'
+			break inner
 		}
+
+		if typeCode == 4 || testTag {
+			continue
+		}
+		rate, ok := rates[currency]
+		if !ok {
+			continue
+		}
+		usd := (hund * rate) / 1000000
+		v := usd
+		if typeCode == 2 {
+			v = -usd
+		}
+
+		totalCount++
+		totalNet += v
+
+		if c, ok := channels[channel]; ok {
+			c.count++
+			c.net += v
+		} else {
+			channels[channel] = &chAgg{count: 1, net: v}
+		}
+		accounts[account] += v
 	}
-	return scratch
+
+	// ---- output ----
+	w := bufio.NewWriterSize(os.Stdout, 1<<20)
+	buf := make([]byte, 0, 256)
+
+	buf = append(buf, "counted "...)
+	buf = strconv.AppendInt(buf, totalCount, 10)
+	buf = append(buf, '\n')
+	buf = append(buf, "net "...)
+	buf = strconv.AppendInt(buf, totalNet, 10)
+	buf = append(buf, '\n')
+
+	type chRow struct {
+		name string
+		a    *chAgg
+	}
+	chRows := make([]chRow, 0, len(channels))
+	for k, v := range channels {
+		chRows = append(chRows, chRow{k, v})
+	}
+	sort.Slice(chRows, func(a, b int) bool { return chRows[a].name < chRows[b].name })
+	for _, r := range chRows {
+		buf = append(buf, "channel "...)
+		buf = append(buf, r.name...)
+		buf = append(buf, ' ')
+		buf = strconv.AppendInt(buf, r.a.count, 10)
+		buf = append(buf, ' ')
+		buf = strconv.AppendInt(buf, r.a.net, 10)
+		buf = append(buf, '\n')
+		w.Write(buf)
+		buf = buf[:0]
+	}
+
+	type accRow struct {
+		name string
+		net  int64
+	}
+	accRows := make([]accRow, 0, len(accounts))
+	for k, v := range accounts {
+		accRows = append(accRows, accRow{k, v})
+	}
+	sort.Slice(accRows, func(a, b int) bool {
+		if accRows[a].net != accRows[b].net {
+			return accRows[a].net > accRows[b].net
+		}
+		return accRows[a].name < accRows[b].name
+	})
+	lim := len(accRows)
+	if lim > 10 {
+		lim = 10
+	}
+	for k := 0; k < lim; k++ {
+		buf = append(buf, "account "...)
+		buf = append(buf, accRows[k].name...)
+		buf = append(buf, ' ')
+		buf = strconv.AppendInt(buf, accRows[k].net, 10)
+		buf = append(buf, '\n')
+		w.Write(buf)
+		buf = buf[:0]
+	}
+	w.Flush()
 }
 
-func hex4(i int) uint32 {
-	var v uint32
+// ---- scanner helpers ----
+
+func skipWs() {
+	for i < n {
+		c := data[i]
+		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
+			i++
+		} else {
+			break
+		}
+	}
+}
+
+func skipString() { // i at opening quote; leaves i past closing quote
+	i++
+	for {
+		c := data[i]
+		if c == '\\' {
+			i += 2 // hex digits after \u contain no '"' or '\\'
+			continue
+		}
+		if c == '"' {
+			i++
+			return
+		}
+		i++
+	}
+}
+
+func scanString() { // i at opening quote; leaves i past closing quote
+	i++
+	sStart = i
+	sEsc = false
+	for {
+		c := data[i]
+		if c == '\\' {
+			sEsc = true
+			i += 2
+			continue
+		}
+		if c == '"' {
+			sEnd = i
+			i++
+			return
+		}
+		i++
+	}
+}
+
+func skipValue() {
+	c := data[i]
+	if c == '"' {
+		skipString()
+		return
+	}
+	if c == '{' || c == '[' {
+		depth := 0
+		for i < n {
+			d := data[i]
+			if d == '"' {
+				skipString()
+				continue
+			}
+			if d == '{' || d == '[' {
+				depth++
+			} else if d == '}' || d == ']' {
+				depth--
+				if depth == 0 {
+					i++
+					return
+				}
+			}
+			i++
+		}
+		return
+	}
+	for i < n {
+		d := data[i]
+		if d == ',' || d == '}' || d == ']' || d == ' ' || d == '\t' || d == '\r' || d == '\n' {
+			return
+		}
+		i++
+	}
+}
+
+func eqBytes(a, b int, lit string) bool {
+	if b-a != len(lit) {
+		return false
+	}
+	for j := 0; j < len(lit); j++ {
+		if data[a+j] != lit[j] {
+			return false
+		}
+	}
+	return true
+}
+
+// value string at sStart..sEnd (sEsc set) as a Go string
+func strValue() string {
+	if !sEsc {
+		return string(data[sStart:sEnd])
+	}
+	return string(decodeInto(sStart, sEnd))
+}
+
+func hex4(at int) int {
+	v := 0
 	for k := 0; k < 4; k++ {
-		c := data[i+k]
+		c := data[at+k]
 		v <<= 4
-		switch {
-		case c >= '0' && c <= '9':
-			v |= uint32(c - '0')
-		case c >= 'a' && c <= 'f':
-			v |= uint32(c-'a') + 10
-		case c >= 'A' && c <= 'F':
-			v |= uint32(c-'A') + 10
+		if c <= '9' {
+			v += int(c - '0')
+		} else if c <= 'F' {
+			v += int(c-'A') + 10
+		} else {
+			v += int(c-'a') + 10
 		}
 	}
 	return v
 }
 
-func appendRune(b []byte, cp uint32) []byte {
-	switch {
-	case cp < 0x80:
-		return append(b, byte(cp))
-	case cp < 0x800:
-		return append(b, byte(0xC0|cp>>6), byte(0x80|cp&0x3F))
-	case cp < 0x10000:
-		return append(b, byte(0xE0|cp>>12), byte(0x80|(cp>>6)&0x3F), byte(0x80|cp&0x3F))
-	default:
-		return append(b, byte(0xF0|cp>>18), byte(0x80|(cp>>12)&0x3F), byte(0x80|(cp>>6)&0x3F), byte(0x80|cp&0x3F))
+func decodeInto(from, to int) []byte {
+	out := make([]byte, 0, to-from)
+	j := from
+	for j < to {
+		c := data[j]
+		if c != '\\' {
+			out = append(out, c)
+			j++
+			continue
+		}
+		e := data[j+1]
+		j += 2
+		switch e {
+		case '"':
+			out = append(out, '"')
+		case '\\':
+			out = append(out, '\\')
+		case '/':
+			out = append(out, '/')
+		case 'b':
+			out = append(out, '\b')
+		case 'f':
+			out = append(out, '\f')
+		case 'n':
+			out = append(out, '\n')
+		case 'r':
+			out = append(out, '\r')
+		case 't':
+			out = append(out, '\t')
+		case 'u':
+			cp := hex4(j)
+			j += 4
+			if cp >= 0xD800 && cp <= 0xDBFF && j+1 < to && data[j] == '\\' && data[j+1] == 'u' {
+				lo := hex4(j + 2)
+				if lo >= 0xDC00 && lo <= 0xDFFF {
+					cp = 0x10000 + (cp-0xD800)<<10 + (lo - 0xDC00)
+					j += 6
+				}
+			}
+			switch {
+			case cp < 0x80:
+				out = append(out, byte(cp))
+			case cp < 0x800:
+				out = append(out, byte(0xC0|cp>>6), byte(0x80|cp&0x3F))
+			case cp < 0x10000:
+				out = append(out, byte(0xE0|cp>>12), byte(0x80|(cp>>6)&0x3F), byte(0x80|cp&0x3F))
+			default:
+				out = append(out, byte(0xF0|cp>>18), byte(0x80|(cp>>12)&0x3F), byte(0x80|(cp>>6)&0x3F), byte(0x80|cp&0x3F))
+			}
+		default:
+			out = append(out, e)
+		}
 	}
+	return out
 }
 
-// strEq compares a string value (raw slice, maybe escaped) to an ASCII literal.
-func strEq(s, e int, esc bool, lit string) bool {
-	if !esc {
-		return e-s == len(lit) && string(data[s:e]) == lit
-	}
-	d := decodeString(s, e)
-	return string(d) == lit
+func decodedEq(lit string) bool {
+	return string(decodeInto(sStart, sEnd)) == lit
 }
 
-// parseAmount converts "12", "12.5" or "12.05" to integer hundredths.
-func parseAmount(s, e int) int64 {
-	var whole int64
-	i := s
-	for i < e && data[i] >= '0' && data[i] <= '9' {
-		whole = whole*10 + int64(data[i]-'0')
-		i++
+func parseAmount(from, to int, esc bool) int64 {
+	if esc {
+		b := decodeInto(from, to)
+		return parseAmountDigits(b, 0, len(b))
+	}
+	return parseAmountDigits(data, from, to)
+}
+
+func parseAmountDigits(b []byte, from, to int) int64 {
+	var ip int64
+	j := from
+	for j < to && b[j] >= '0' && b[j] <= '9' {
+		ip = ip*10 + int64(b[j]-'0')
+		j++
 	}
 	var frac int64
-	if i < e && data[i] == '.' {
-		i++
-		frac = int64(data[i]-'0') * 10
-		i++
-		if i < e {
-			frac += int64(data[i] - '0')
+	fd := 0
+	if j < to && b[j] == '.' {
+		j++
+		for j < to && fd < 2 && b[j] >= '0' && b[j] <= '9' {
+			frac = frac*10 + int64(b[j]-'0')
+			fd++
+			j++
 		}
 	}
-	return whole*100 + frac
+	for fd < 2 {
+		frac *= 10
+		fd++
+	}
+	return ip*100 + frac
 }
 
-func asKey(s, e int, esc bool) string {
-	if !esc {
-		return unsafe.String(&data[s], e-s)
-	}
-	return intern(decodeString(s, e))
-}
-
-func loadRates(i int) {
-	i = skipWS(i)
-	if i >= len(data) || data[i] != '{' {
-		return
-	}
-	i++
+func parseTags() bool {
+	i++ // '['
+	test := false
 	for {
-		i = skipWS(i)
-		if i >= len(data) || data[i] == '}' {
-			break
+		skipWs()
+		if data[i] == ']' {
+			i++
+			return test
 		}
+		if data[i] == '"' {
+			scanString()
+			if !test {
+				test = sEsc && decodedEq("test") || !sEsc && sEnd-sStart == 4 && eqBytes(sStart, sEnd, "test")
+			}
+		} else {
+			skipValue()
+		}
+		skipWs()
 		if data[i] == ',' {
 			i++
-			continue
 		}
-		ks, ke, knext, kesc := parseString(i)
-		i = skipWS(knext)
+	}
+}
+
+func parseMeta() string {
+	i++ // '{'
+	var channel string
+	for {
+		skipWs()
+		if data[i] == '}' {
+			i++
+			return channel
+		}
+		scanString()
+		ks, ke, kesc := sStart, sEnd, sEsc
+		skipWs()
 		i++ // ':'
-		i = skipWS(i)
-		if strEq(ks, ke, kesc, "rates") {
-			i = skipWS(i)
-			i++ // '{'
-			for {
-				i = skipWS(i)
-				if i >= len(data) || data[i] == '}' {
-					break
-				}
-				if data[i] == ',' {
-					i++
-					continue
-				}
-				cs, ce, cnext, cesc := parseString(i)
-				i = skipWS(cnext)
-				i++ // ':'
-				i = skipWS(i)
-				neg := false
-				if data[i] == '-' {
-					neg = true
-					i++
-				}
-				var rate int64
-				for i < len(data) && data[i] >= '0' && data[i] <= '9' {
-					rate = rate*10 + int64(data[i]-'0')
-					i++
-				}
-				if neg {
-					rate = -rate
-				}
-				rates[asKey(cs, ce, cesc)] = rate
-			}
-			i++ // '}'
+		skipWs()
+		isChannel := kesc && string(decodeInto(ks, ke)) == "channel" ||
+			!kesc && ke-ks == 7 && eqBytes(ks, ke, "channel")
+		if isChannel {
+			scanString()
+			channel = strValue()
 		} else {
-			i = skipValue(i)
+			skipValue()
+		}
+		skipWs()
+		if data[i] == ',' {
+			i++
 		}
 	}
 }
 
-type accAgg struct {
-	name string
-	net  int64
-}
-
-// better reports whether a ranks ahead of b (net desc, then name asc).
-func better(a, b accAgg) bool {
-	if a.net != b.net {
-		return a.net > b.net
-	}
-	return a.name < b.name
-}
-
-func main() {
-	var err error
-	data, err = os.ReadFile(os.Args[1])
-	if err != nil {
-		os.Exit(1)
-	}
-
-	// First line: rates.
-	i := skipWS(0)
-	if eol := indexByte(i, '\n'); eol >= 0 {
-		loadRates(i)
-		i = eol + 1
-	}
-
-	var totalCount, totalNet int64
-	for i < len(data) {
-		q := skipWS(i)
-		eol := indexByte(i, '\n')
-		if eol < 0 {
-			eol = len(data)
+func typeCodeVal() int {
+	if !sEsc {
+		l := sEnd - sStart
+		switch {
+		case l == 6 && eqBytes(sStart, sEnd, "credit"):
+			return 1
+		case l == 5 && eqBytes(sStart, sEnd, "debit"):
+			return 2
+		case l == 6 && eqBytes(sStart, sEnd, "refund"):
+			return 3
+		case l == 4 && eqBytes(sStart, sEnd, "void"):
+			return 4
 		}
-		if q < eol && data[q] == '{' {
-			q++
-			var sign int64
-			var rate int64
-			hasRate := false
-			var amount int64
-			accS, accE, accEsc := -1, 0, false
-			chanS, chanE, chanEsc := -1, 0, false
-			isTest := false
-			for {
-				q = skipWS(q)
-				if q >= len(data) || data[q] == '}' {
-					q++
-					break
-				}
-				if data[q] == ',' {
-					q++
-					continue
-				}
-				ks, ke, knext, kesc := parseString(q)
-				q = skipWS(knext)
-				q++ // ':'
-				q = skipWS(q)
-				if !kesc {
-					kl := ke - ks
-					k0 := byte(0)
-					if kl > 0 {
-						k0 = data[ks]
-					}
-					switch {
-					case k0 == 't' && kl == 4 && string(data[ks:ke]) == "type":
-						vs, ve, vnext, vesc := parseString(q)
-						q = vnext
-						if strEq(vs, ve, vesc, "credit") || strEq(vs, ve, vesc, "refund") {
-							sign = 1
-						} else if strEq(vs, ve, vesc, "debit") {
-							sign = -1
-						}
-						continue
-					case k0 == 'a' && kl == 6 && string(data[ks:ke]) == "amount":
-						vs, ve, vnext, _ := parseString(q)
-						q = vnext
-						amount = parseAmount(vs, ve)
-						continue
-					case k0 == 'c' && kl == 8 && string(data[ks:ke]) == "currency":
-						vs, ve, vnext, vesc := parseString(q)
-						q = vnext
-						rate, hasRate = rates[asKey(vs, ve, vesc)]
-						continue
-					case k0 == 'a' && kl == 7 && string(data[ks:ke]) == "account":
-						vs, ve, vnext, vesc := parseString(q)
-						q = vnext
-						accS, accE, accEsc = vs, ve, vesc
-						continue
-					case k0 == 't' && kl == 4 && string(data[ks:ke]) == "tags":
-						q++ // '['
-						for {
-							q = skipWS(q)
-							if q >= len(data) || data[q] == ']' {
-								q++
-								break
-							}
-							if data[q] == ',' {
-								q++
-								continue
-							}
-							if data[q] == '"' {
-								vs, ve, vnext, vesc := parseString(q)
-								q = vnext
-								if !isTest && strEq(vs, ve, vesc, "test") {
-									isTest = true
-								}
-							} else {
-								q = skipValue(q)
-							}
-						}
-						continue
-					case k0 == 'm' && kl == 4 && string(data[ks:ke]) == "meta":
-						q++ // '{'
-						for {
-							q = skipWS(q)
-							if q >= len(data) || data[q] == '}' {
-								q++
-								break
-							}
-							if data[q] == ',' {
-								q++
-								continue
-							}
-							mks, mke, mknext, mkesc := parseString(q)
-							q = skipWS(mknext)
-							q++ // ':'
-							q = skipWS(q)
-							if strEq(mks, mke, mkesc, "channel") {
-								vs, ve, vnext, vesc := parseString(q)
-								q = vnext
-								chanS, chanE, chanEsc = vs, ve, vesc
-							} else {
-								q = skipValue(q)
-							}
-						}
-						continue
-					}
-				}
-				q = skipValue(q)
-			}
-			if sign != 0 && !isTest && hasRate && accS >= 0 && chanS >= 0 {
-				val := sign * ((amount * rate) / micro)
-				totalCount++
-				totalNet += val
-				ck := asKey(chanS, chanE, chanEsc)
-				if ca, ok := channels[ck]; ok {
-					ca.count++
-					ca.net += val
-				} else {
-					channels[ck] = &channelAgg{1, val}
-				}
-				ak := asKey(accS, accE, accEsc)
-				accounts[ak] += val
-			}
-		}
-		i = eol + 1
+		return 0
 	}
-
-	out := make([]byte, 0, 4096)
-	out = append(out, "counted "...)
-	out = strconv.AppendInt(out, totalCount, 10)
-	out = append(out, "\nnet "...)
-	out = strconv.AppendInt(out, totalNet, 10)
-	out = append(out, '\n')
-
-	// Channel lines sorted by name ascending (byte order).
-	type chanRow struct {
-		name string
-		agg  *channelAgg
+	switch string(decodeInto(sStart, sEnd)) {
+	case "credit":
+		return 1
+	case "debit":
+		return 2
+	case "refund":
+		return 3
+	case "void":
+		return 4
 	}
-	rows := make([]chanRow, 0, len(channels))
-	for k, v := range channels {
-		rows = append(rows, chanRow{k, v})
-	}
-	sort.Slice(rows, func(a, b int) bool { return rows[a].name < rows[b].name })
-	for _, r := range rows {
-		out = append(out, "channel "...)
-		out = append(out, r.name...)
-		out = append(out, ' ')
-		out = strconv.AppendInt(out, r.agg.count, 10)
-		out = append(out, ' ')
-		out = strconv.AppendInt(out, r.agg.net, 10)
-		out = append(out, '\n')
-	}
-
-	// Top 10 accounts by net desc, then id asc: keep the 10 best while scanning.
-	best := make([]accAgg, 0, 10)
-	for k, v := range accounts {
-		cand := accAgg{k, v}
-		if len(best) < 10 {
-			best = append(best, cand)
-			continue
-		}
-		// find the worst entry
-		worst := 0
-		for j := 1; j < len(best); j++ {
-			if better(best[worst], best[j]) { // best[j] ranks below best[worst]
-				worst = j
-			}
-		}
-		if better(cand, best[worst]) {
-			best[worst] = cand
-		}
-	}
-	sort.Slice(best, func(a, b int) bool { return better(best[a], best[b]) })
-	for _, a := range best {
-		out = append(out, "account "...)
-		out = append(out, a.name...)
-		out = append(out, ' ')
-		out = strconv.AppendInt(out, a.net, 10)
-		out = append(out, '\n')
-	}
-
-	os.Stdout.Write(out)
-}
-
-func indexByte(from int, c byte) int {
-	if r := bytes.IndexByte(data[from:], c); r >= 0 {
-		return from + r
-	}
-	return -1
+	return 0
 }

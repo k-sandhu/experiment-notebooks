@@ -1,123 +1,118 @@
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+/**
+ * Weighted edit distance for many string pairs (exact DP recurrence from SPEC.md).
+ * Two rolling rows; all table cells fit in 32 bits, the grand total in 64 bits.
+ * Jackson libraries are unused: the input is plain whitespace-separated text.
+ */
 public class Main {
-    static final class Tokens {
-        private final String s;
-        private int pos;
-        private final int len;
 
-        Tokens(String s) {
-            this.s = s;
-            this.len = s.length();
-        }
+    static byte[] b;
+    static int pos;
+    static int len;
 
-        private static boolean isSpace(int c) {
-            return c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '\f';
-        }
-
-        void skip() {
-            while (pos < len && isSpace(s.charAt(pos))) pos++;
-        }
-
-        String next() {
-            skip();
-            int start = pos;
-            while (pos < len && !isSpace(s.charAt(pos))) pos++;
-            return s.substring(start, pos);
-        }
-
-        int nextInt() {
-            skip();
-            boolean neg = false;
-            if (pos < len && s.charAt(pos) == '-') { neg = true; pos++; }
-            int v = 0;
-            while (pos < len && s.charAt(pos) >= '0' && s.charAt(pos) <= '9') {
-                v = v * 10 + (s.charAt(pos) - '0');
-                pos++;
-            }
-            return neg ? -v : v;
-        }
+    static void skipWs() {
+        while (pos < len && b[pos] <= 32) pos++;
     }
 
-    public static void main(String[] args) throws Exception {
-        String content = Files.readString(Path.of(args[0]));
-        Tokens tok = new Tokens(content);
+    static int nextInt() {
+        skipWs();
+        int x = 0;
+        while (pos < len && b[pos] > 32) {
+            x = x * 10 + (b[pos] - '0');
+            pos++;
+        }
+        return x;
+    }
 
-        String alphabet = tok.next();
-        int A = alphabet.length();
+    // Read one whitespace-separated token as letter indices.
+    static int[] readTokenIdx(int[] idx) {
+        skipWs();
+        int start = pos;
+        while (pos < len && b[pos] > 32) pos++;
+        int n = pos - start;
+        int[] a = new int[n];
+        for (int i = 0; i < n; i++) a[i] = idx[b[start + i]];
+        return a;
+    }
 
-        int[] charIndex = new int[26];
-        for (int i = 0; i < 26; i++) charIndex[i] = -1;
-        for (int i = 0; i < A; i++) charIndex[alphabet.charAt(i) - 'A'] = i;
+    public static void main(String[] args) throws IOException {
+        b = Files.readAllBytes(Path.of(args[0]));
+        len = b.length;
+
+        skipWs();
+        int alphaStart = pos;
+        while (pos < len && b[pos] > 32) pos++;
+        int A = pos - alphaStart;
+
+        int[] idx = new int[256];
+        for (int i = 0; i < 256; i++) idx[i] = -1;
+        for (int i = 0; i < A; i++) idx[b[alphaStart + i]] = i;
 
         int[] ins = new int[A];
         int[] del = new int[A];
-        for (int i = 0; i < A; i++) ins[i] = tok.nextInt();
-        for (int i = 0; i < A; i++) del[i] = tok.nextInt();
-        int[][] sub = new int[A][A];
-        for (int i = 0; i < A; i++)
-            for (int j = 0; j < A; j++)
-                sub[i][j] = tok.nextInt();
+        int[] sub = new int[A * A];
+        for (int i = 0; i < A; i++) ins[i] = nextInt();
+        for (int i = 0; i < A; i++) del[i] = nextInt();
+        for (int i = 0; i < A * A; i++) sub[i] = nextInt();
 
-        int P = tok.nextInt();
+        int P = nextInt();
 
-        int[] prev = new int[1];
-        int[] cur = new int[1];
-        int[] sIdx = new int[0];
-        int[] tIdx = new int[0];
-        int[] insT = new int[0];
+        int[] prev = null;
+        int[] cur = null;
+        int[] insT = null;
 
+        StringBuilder out = new StringBuilder();
         long total = 0;
-        BufferedWriter out = new BufferedWriter(new OutputStreamWriter(System.out, "UTF-8"));
 
         for (int pair = 0; pair < P; pair++) {
-            String s = tok.next();
-            String t = tok.next();
-            int n = s.length(), m = t.length();
+            int[] s = readTokenIdx(idx);
+            int[] t = readTokenIdx(idx);
+            int n = s.length;
+            int m = t.length;
 
-            if (sIdx.length < n) sIdx = new int[n];
-            for (int i = 0; i < n; i++) sIdx[i] = charIndex[s.charAt(i) - 'A'];
-            if (tIdx.length < m) tIdx = new int[m];
-            if (insT.length < m) insT = new int[m];
-            for (int j = 0; j < m; j++) {
-                tIdx[j] = charIndex[t.charAt(j) - 'A'];
-                insT[j] = ins[tIdx[j]];
+            if (prev == null || prev.length < m + 1) {
+                prev = new int[m + 1];
+                cur = new int[m + 1];
             }
+            if (insT == null || insT.length < m) insT = new int[m];
 
-            if (prev.length < m + 1) { prev = new int[m + 1]; cur = new int[m + 1]; }
+            for (int j = 0; j < m; j++) insT[j] = ins[t[j]];
 
             prev[0] = 0;
             for (int j = 1; j <= m; j++) prev[j] = prev[j - 1] + insT[j - 1];
 
-            for (int i = 1; i <= n; i++) {
-                int si = sIdx[i - 1];
-                int delSi = del[si];
-                int[] subRow = sub[si];
-                cur[0] = prev[0] + delSi;
+            for (int i = 0; i < n; i++) {
+                int si = s[i];
+                int d = del[si];
+                int base = si * A;
+                cur[0] = prev[0] + d;
+                int diag = prev[0];
                 for (int j = 1; j <= m; j++) {
-                    int tj = tIdx[j - 1];
-                    int up = prev[j] + delSi;
-                    int left = cur[j - 1] + insT[j - 1];
-                    int diag = prev[j - 1] + subRow[tj];
-                    int best = up < left ? up : left;
-                    cur[j] = diag < best ? diag : best;
+                    int tj = t[j - 1];
+                    int best = prev[j] + d;
+                    int v = cur[j - 1] + insT[j - 1];
+                    if (v < best) best = v;
+                    v = diag + sub[base + tj];
+                    if (v < best) best = v;
+                    cur[j] = best;
+                    diag = prev[j];
                 }
-                int[] tmp = prev; prev = cur; cur = tmp;
+                int[] tmp = prev;
+                prev = cur;
+                cur = tmp;
             }
 
-            int cost = prev[m];
-            total += cost;
-            out.write(Integer.toString(cost));
-            out.write("\n");
+            total += prev[m];
+            out.append(prev[m]);
+            out.append('\n');
         }
-        out.write("total ");
-        out.write(Long.toString(total));
-        out.write("\n");
-        out.flush();
+
+        out.append("total ");
+        out.append(total);
+        out.append('\n');
+        System.out.print(out);
     }
 }

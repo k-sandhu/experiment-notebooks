@@ -1,100 +1,204 @@
 using System;
 using System.IO;
-using System.Text;
 
 internal static class Program
 {
-    private static void Main(string[] args)
+    private static byte[] d;
+    private static int pos;
+    private static int end;
+    private static int tokStart;
+    private static int tokLen;
+
+    private static void SkipWs()
     {
-        byte[] buf = File.ReadAllBytes(args[0]);
-        int pos = 0;
-        int len = buf.Length;
-
-        static bool IsWs(byte b) => b == (byte)' ' || b == (byte)'\n' || b == (byte)'\r' || b == (byte)'\t' || b == (byte)'\f' || b == 11;
-
-        int ReadInt()
+        while (pos < end)
         {
-            while (pos < len && IsWs(buf[pos])) pos++;
-            int v = 0;
-            while (pos < len && !IsWs(buf[pos]))
+            int c = d[pos];
+            if (c == ' ' || c == '\n' || c == '\r' || c == '\t') pos++;
+            else break;
+        }
+    }
+
+    private static long NextInt()
+    {
+        SkipWs();
+        bool neg = false;
+        if (pos < end && (d[pos] == '-' || d[pos] == '+'))
+        {
+            neg = d[pos] == '-';
+            pos++;
+        }
+        long v = 0;
+        while (pos < end)
+        {
+            int c = d[pos];
+            if (c >= '0' && c <= '9')
             {
-                v = v * 10 + (buf[pos] - '0');
+                v = v * 10 + (c - '0');
                 pos++;
             }
-            return v;
+            else break;
+        }
+        return neg ? -v : v;
+    }
+
+    private static void NextToken()
+    {
+        SkipWs();
+        tokStart = pos;
+        while (pos < end)
+        {
+            int c = d[pos];
+            if (c == ' ' || c == '\n' || c == '\r' || c == '\t') break;
+            pos++;
+        }
+        tokLen = pos - tokStart;
+    }
+
+    private static int[] rowBuf = new int[64];
+    private static int[] tIdxBuf = new int[64];
+    private static int[] insTBuf = new int[64];
+
+    private static unsafe long Solve(int sStart, int sLen, int tStart, int tLen,
+                              int[] idx, int[] ins, int[] del, int[] sub)
+    {
+        int n = sLen, m = tLen;
+        int[] row = rowBuf;
+        if (row.Length < m + 1)
+        {
+            row = new int[Math.Max(m + 1, row.Length * 2)];
+            rowBuf = row;
+        }
+        int[] tIdx = tIdxBuf, insT = insTBuf;
+        if (tIdx.Length < m)
+        {
+            int cap = Math.Max(m, tIdx.Length * 2);
+            tIdx = new int[cap];
+            tIdxBuf = tIdx;
+            insT = new int[cap];
+            insTBuf = insT;
+        }
+        for (int j = 0; j < m; j++)
+        {
+            int c = idx[d[tStart + j]];
+            tIdx[j] = c;
+            insT[j] = ins[c];
         }
 
-        (int start, int end) Token()
+        long cost;
+        fixed (int* rp = row, tp = tIdx, ip = insT, sp = sub)
         {
-            while (pos < len && IsWs(buf[pos])) pos++;
-            int start = pos;
-            while (pos < len && !IsWs(buf[pos])) pos++;
-            return (start, pos);
-        }
+            int* r = rp;
+            int* ti = tp;
+            int* it = ip;
+            r[0] = 0;
+            for (int j = 0; j < m; j++) r[j + 1] = r[j] + it[j];
 
-        // Alphabet token
-        var (ts, te) = Token();
-        int a = te - ts;
-        Span<int> charId = stackalloc int[128];
-        charId.Fill(-1);
-        for (int i = 0; i < a; i++) charId[buf[ts + i]] = i;
-
-        int[] ins = new int[a];
-        int[] del = new int[a];
-        int[] sub = new int[a * a];
-        for (int i = 0; i < a; i++) ins[i] = ReadInt();
-        for (int i = 0; i < a; i++) del[i] = ReadInt();
-        for (int i = 0; i < a * a; i++) sub[i] = ReadInt();
-        int p = ReadInt();
-
-        var outSb = new StringBuilder(p * 9 + 16);
-        long total = 0;
-
-        int[] sIds = new int[1100];
-        int[] tIds = new int[1100];
-        int[] rowA = new int[1101];
-        int[] rowB = new int[1101];
-
-        for (int q = 0; q < p; q++)
-        {
-            (ts, te) = Token();
-            int n = te - ts;
-            for (int i = 0; i < n; i++) sIds[i] = charId[buf[ts + i]];
-            (ts, te) = Token();
-            int m = te - ts;
-            for (int j = 0; j < m; j++) tIds[j] = charId[buf[ts + j]];
-
-            int[] prev = rowA;
-            int[] cur = rowB;
-            prev[0] = 0;
-            for (int j = 1; j <= m; j++) prev[j] = prev[j - 1] + ins[tIds[j - 1]];
             for (int i = 0; i < n; i++)
             {
-                int si = sIds[i];
-                int dc = del[si];
-                int subBase = si * a;
-                int left = prev[0] + dc;
-                cur[0] = left;
-                int diag = prev[0];
-                for (int j = 1; j <= m; j++)
+                int si = idx[d[sStart + i]];
+                int dl = del[si];
+                int* subr = sp + (si << 5);
+                int diag = r[0];
+                r[0] = diag + dl;
+                for (int j = 0; j < m; j++)
                 {
-                    int tj = tIds[j - 1];
-                    int best = prev[j] + dc;
-                    int l = left + ins[tj];
-                    int d = diag + sub[subBase + tj];
-                    if (l < best) best = l;
-                    if (d < best) best = d;
-                    cur[j] = best;
-                    left = best;
-                    diag = prev[j];
+                    int up = r[j + 1];
+                    int v = up + dl;
+                    int x = r[j] + it[j];
+                    if (x < v) v = x;
+                    x = diag + subr[ti[j]];
+                    if (x < v) v = x;
+                    r[j + 1] = v;
+                    diag = up;
                 }
-                (prev, cur) = (cur, prev);
             }
-            long cost = prev[m];
-            total += cost;
-            outSb.Append(cost).Append('\n');
+            cost = r[m];
         }
-        outSb.Append("total ").Append(total).Append('\n');
-        Console.Out.Write(outSb.ToString());
+        return cost;
+    }
+
+    private static byte[] outBuf = new byte[1 << 16];
+    private static int outLen;
+    private static readonly byte[] scratch = new byte[20];
+
+    private static void AppendInt(long v)
+    {
+        if (outLen + 24 > outBuf.Length)
+        {
+            var nb = new byte[outBuf.Length * 2];
+            Buffer.BlockCopy(outBuf, 0, nb, 0, outLen);
+            outBuf = nb;
+        }
+        if (v == 0)
+        {
+            outBuf[outLen++] = (byte)'0';
+            return;
+        }
+        int k = 20;
+        while (v > 0)
+        {
+            scratch[--k] = (byte)('0' + v % 10);
+            v /= 10;
+        }
+        int cnt = 20 - k;
+        Buffer.BlockCopy(scratch, k, outBuf, outLen, cnt);
+        outLen += cnt;
+    }
+
+    private static int Main(string[] args)
+    {
+        d = File.ReadAllBytes(args[0]);
+        end = d.Length;
+        pos = 0;
+
+        NextToken();
+        int A = tokLen;
+        var idx = new int[256];
+        Array.Fill(idx, -1);
+        for (int i = 0; i < A; i++) idx[d[tokStart + i]] = i;
+
+        var ins = new int[A];
+        var del = new int[A];
+        var sub = new int[A << 5]; // stride 32 rows
+        for (int i = 0; i < A; i++) ins[i] = (int)NextInt();
+        for (int i = 0; i < A; i++) del[i] = (int)NextInt();
+        for (int i = 0; i < A; i++)
+            for (int j = 0; j < A; j++) sub[(i << 5) + j] = (int)NextInt();
+
+        int P = (int)NextInt();
+
+        outLen = 0;
+        long total = 0;
+        for (int q = 0; q < P; q++)
+        {
+            NextToken();
+            int sStart = tokStart, n = tokLen;
+            NextToken();
+            int tStart = tokStart, m = tokLen;
+            long cost = Solve(sStart, n, tStart, m, idx, ins, del, sub);
+            total += cost;
+            AppendInt(cost);
+            outBuf[outLen++] = (byte)'\n';
+        }
+        if (outLen + 32 > outBuf.Length)
+        {
+            var nb = new byte[outBuf.Length * 2];
+            Buffer.BlockCopy(outBuf, 0, nb, 0, outLen);
+            outBuf = nb;
+        }
+        outBuf[outLen++] = (byte)'t';
+        outBuf[outLen++] = (byte)'o';
+        outBuf[outLen++] = (byte)'t';
+        outBuf[outLen++] = (byte)'a';
+        outBuf[outLen++] = (byte)'l';
+        outBuf[outLen++] = (byte)' ';
+        AppendInt(total);
+        outBuf[outLen++] = (byte)'\n';
+
+        using Stream stdout = Console.OpenStandardOutput();
+        stdout.Write(outBuf, 0, outLen);
+        stdout.Flush();
+        return 0;
     }
 }

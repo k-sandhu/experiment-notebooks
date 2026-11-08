@@ -1,326 +1,360 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-class Program
+sealed class IntList
 {
-    static byte[] data;
-    static int n;
-
-    static byte[] scratch = new byte[1024];
-
-    static byte[][] tmpl = new byte[1024][];
-    static int[] tmplLen = new int[1024];
-    static int[] count = new int[1024];
-    static long[][] lat = new long[1024][];
-    static int[] latN = new int[1024];
-    static int nEntries;
-
-    static int[] table = new int[2048];
-
-    static int stStatus, stTlen;
-    static long stLat;
-
-    static bool IsDig(byte c) => (uint)(c - '0') < 10u;
-
-    static void EnsureScratch(int need)
+    public int[] a = new int[8];
+    public int n;
+    public void Add(int v)
     {
-        if (need > scratch.Length) scratch = new byte[need];
+        if (n == a.Length) Array.Resize(ref a, n << 1);
+        a[n++] = v;
+    }
+}
+
+sealed class Table
+{
+    public ulong[] hash;
+    public int[] id;
+    public byte[][] keys;
+    public int mask;
+    public int size;
+
+    public Table(int cap)
+    {
+        int c = 16;
+        while (c < cap) c <<= 1;
+        hash = new ulong[c];
+        id = new int[c];
+        keys = new byte[c][];
+        Array.Fill(id, -1);
+        mask = c - 1;
     }
 
-    static int Hash(byte[] b, int len)
+    void Resize()
     {
-        unchecked
+        int nc = id.Length << 1;
+        var nh = new ulong[nc];
+        var ni = new int[nc];
+        var nk = new byte[nc][];
+        Array.Fill(ni, -1);
+        int nm = nc - 1;
+        for (int i = 0; i < id.Length; i++)
         {
-            int h = (int)0x811c9dc5;
-            for (int i = 0; i < len; i++) h = (h ^ b[i]) * 16777619;
-            h ^= (int)((uint)h >> 16);
-            return h;
+            if (id[i] >= 0)
+            {
+                int p = (int)hash[i] & nm;
+                while (ni[p] >= 0) p = (p + 1) & nm;
+                ni[p] = id[i];
+                nh[p] = hash[i];
+                nk[p] = keys[i];
+            }
         }
+        hash = nh; id = ni; keys = nk; mask = nm;
     }
 
-    static int FindEntry(int len)
+    public int Find(byte[] s, int len, ulong h)
     {
-        int mask = table.Length - 1;
-        int idx = Hash(scratch, len) & mask;
+        int p = (int)h & mask;
         while (true)
         {
-            int s = table[idx];
-            if (s == 0) return -1;
-            int e = s - 1;
-            if (tmplLen[e] == len && tmpl[e].AsSpan().SequenceEqual(scratch.AsSpan(0, len)))
-                return e;
-            idx = (idx + 1) & mask;
+            int v = id[p];
+            if (v < 0) return -1;
+            if (hash[p] == h)
+            {
+                byte[] k = keys[p];
+                if (k.Length == len)
+                {
+                    int i = 0;
+                    while (i < len && k[i] == s[i]) i++;
+                    if (i == len) return v;
+                }
+            }
+            p = (p + 1) & mask;
         }
     }
 
-    static void AddEntry(int len)
+    public void Put(byte[] key, int len, ulong h, int v)
     {
-        if (nEntries == tmpl.Length)
-        {
-            int cap = nEntries * 2;
-            Array.Resize(ref tmpl, cap);
-            Array.Resize(ref tmplLen, cap);
-            Array.Resize(ref count, cap);
-            Array.Resize(ref lat, cap);
-            Array.Resize(ref latN, cap);
-        }
-        int e = nEntries++;
-        tmpl[e] = scratch.AsSpan(0, len).ToArray();
-        tmplLen[e] = len;
-        lat[e] = new long[16];
-        if ((long)nEntries * 2 >= table.Length)
-        {
-            int[] t = new int[table.Length * 2];
-            int mask = t.Length - 1;
-            for (int i = 0; i < nEntries; i++)
-            {
-                int idx = Hash(tmpl[i], tmplLen[i]) & mask;
-                while (t[idx] != 0) idx = (idx + 1) & mask;
-                t[idx] = i + 1;
-            }
-            table = t;
-        }
-        else
-        {
-            int mask = table.Length - 1;
-            int idx = Hash(tmpl[e], len) & mask;
-            while (table[idx] != 0) idx = (idx + 1) & mask;
-            table[idx] = e + 1;
-        }
+        if ((size + 1) << 1 > id.Length) Resize();
+        int p = (int)h & mask;
+        while (id[p] >= 0) p = (p + 1) & mask;
+        id[p] = v;
+        hash[p] = h;
+        var k = new byte[len];
+        Array.Copy(key, k, len);
+        keys[p] = k;
+        size++;
+    }
+}
+
+static unsafe class Program
+{
+    static List<byte[]> names;
+    static List<IntList> lists;
+    static List<int> maxes;
+    static Table table;
+    static byte[] scratch;
+    static long lines, malformed;
+    static long[] statusCount;
+
+    static bool IsDig(byte c) => (uint)(c - (byte)'0') <= 9u;
+
+    static bool IsPathCh(byte c) =>
+        (c >= (byte)'A' && c <= (byte)'Z') || (c >= (byte)'a' && c <= (byte)'z') ||
+        (c >= (byte)'0' && c <= (byte)'9') || c == (byte)'_' || c == (byte)'-' || c == (byte)'/';
+
+    static bool TsOk(byte* p)
+    {
+        return IsDig(p[0]) && IsDig(p[1]) && IsDig(p[2]) && IsDig(p[3]) && p[4] == (byte)'-'
+            && IsDig(p[5]) && IsDig(p[6]) && p[7] == (byte)'-'
+            && IsDig(p[8]) && IsDig(p[9]) && p[10] == (byte)'T'
+            && IsDig(p[11]) && IsDig(p[12]) && p[13] == (byte)':'
+            && IsDig(p[14]) && IsDig(p[15]) && p[16] == (byte)':'
+            && IsDig(p[17]) && IsDig(p[18]) && p[19] == (byte)'.'
+            && IsDig(p[20]) && IsDig(p[21]) && IsDig(p[22]) && p[23] == (byte)'Z';
     }
 
-    static bool ParseLine(int p, int le)
+    static ulong HashBytes(byte[] s, int len)
     {
-        byte[] d = data;
-        if (le - p < 25) return false;
-        if (!(IsDig(d[p]) && IsDig(d[p + 1]) && IsDig(d[p + 2]) && IsDig(d[p + 3]) && d[p + 4] == '-'
-              && IsDig(d[p + 5]) && IsDig(d[p + 6]) && d[p + 7] == '-' && IsDig(d[p + 8])
-              && IsDig(d[p + 9]) && d[p + 10] == 'T' && IsDig(d[p + 11]) && IsDig(d[p + 12])
-              && d[p + 13] == ':' && IsDig(d[p + 14]) && IsDig(d[p + 15]) && d[p + 16] == ':'
-              && IsDig(d[p + 17]) && IsDig(d[p + 18]) && d[p + 19] == '.' && IsDig(d[p + 20])
-              && IsDig(d[p + 21]) && IsDig(d[p + 22]) && d[p + 23] == 'Z' && d[p + 24] == ' '))
-            return false;
-
-        int i = p + 25;
-        int j = i;
-        while (j < le && d[j] >= 'a' && d[j] <= 'z') j++;
-        if (j == i || j >= le || d[j] != '-') return false;
-        j++;
-        int ds = j;
-        while (j < le && IsDig(d[j])) j++;
-        if (j == ds || j >= le || d[j] != ' ') return false;
-        j++;
-
-        if (j + 4 <= le && d[j] == 'G' && d[j + 1] == 'E' && d[j + 2] == 'T' && d[j + 3] == ' ') j += 4;
-        else if (j + 5 <= le && d[j] == 'P' && d[j + 1] == 'O' && d[j + 2] == 'S' && d[j + 3] == 'T' && d[j + 4] == ' ') j += 5;
-        else if (j + 4 <= le && d[j] == 'P' && d[j + 1] == 'U' && d[j + 2] == 'T' && d[j + 3] == ' ') j += 4;
-        else if (j + 7 <= le && d[j] == 'D' && d[j + 1] == 'E' && d[j + 2] == 'L' && d[j + 3] == 'E' && d[j + 4] == 'T' && d[j + 5] == 'E' && d[j + 6] == ' ') j += 7;
-        else if (j + 6 <= le && d[j] == 'P' && d[j + 1] == 'A' && d[j + 2] == 'T' && d[j + 3] == 'C' && d[j + 4] == 'H' && d[j + 5] == ' ') j += 6;
-        else return false;
-
-        if (j >= le || d[j] != '/') return false;
-        int q = j + 1;
-        while (q < le)
+        ulong h = 1469598103934665603UL;
+        for (int i = 0; i < len; i++)
         {
-            int c = d[q];
-            if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-                || c == '_' || c == '/' || c == '-')
-                q++;
-            else break;
+            h ^= s[i];
+            h *= 1099511628211UL;
         }
-
-        int fieldEnd;
-        if (q < le && d[q] == '?')
-        {
-            int r = q + 1;
-            while (r < le && d[r] != ' ') r++;
-            if (r >= le) return false;
-            fieldEnd = r;
-        }
-        else if (q < le && d[q] == ' ')
-        {
-            fieldEnd = q;
-        }
-        else return false;
-
-        EnsureScratch((q - j) * 4 + 16);
-        byte[] sc = scratch;
-        int t = 0;
-        int s = j;
-        while (s < q)
-        {
-            if (d[s] == '/')
-            {
-                sc[t++] = (byte)'/';
-                s++;
-                continue;
-            }
-            int e = s;
-            bool allDig = true;
-            while (e < q && d[e] != '/')
-            {
-                if (!IsDig(d[e])) allDig = false;
-                e++;
-            }
-            if (allDig)
-            {
-                sc[t] = (byte)'{'; sc[t + 1] = (byte)'i'; sc[t + 2] = (byte)'d'; sc[t + 3] = (byte)'}';
-                t += 4;
-            }
-            else
-            {
-                for (int k = s; k < e; k++) sc[t++] = d[k];
-            }
-            s = e;
-        }
-
-        int kk = fieldEnd;
-        if (kk + 4 >= le) return false;
-        if (!IsDig(d[kk + 1]) || !IsDig(d[kk + 2]) || !IsDig(d[kk + 3]) || d[kk + 4] != ' ') return false;
-        stStatus = d[kk + 1] - '0';
-        kk += 5;
-
-        int e2 = kk;
-        while (e2 < le && IsDig(d[e2])) e2++;
-        if (e2 == kk) return false;
-        if (e2 >= le || d[e2] != 'B') return false;
-        e2++;
-        if (e2 >= le || d[e2] != ' ') return false;
-        e2++;
-
-        int ls = e2;
-        long v = 0;
-        while (e2 < le && IsDig(d[e2]))
-        {
-            v = v * 10 + (d[e2] - '0');
-            e2++;
-        }
-        if (e2 == ls) return false;
-        if (e2 >= le || d[e2] != '.') return false;
-        e2++;
-        if (e2 >= le || !IsDig(d[e2])) return false;
-        v = v * 10 + (d[e2] - '0');
-        e2++;
-        if (e2 + 3 >= le) return false;
-        if (d[e2] != 'm' || d[e2 + 1] != 's' || d[e2 + 2] != ' ') return false;
-        e2 += 3;
-        if (d[e2] != '"') return false;
-        e2++;
-        int r2 = e2;
-        while (r2 < le && d[r2] != '"') r2++;
-        if (r2 != le - 1) return false;
-
-        stLat = v;
-        stTlen = t;
-        return true;
+        return h;
     }
 
     static int CmpBytes(byte[] a, byte[] b)
     {
-        int m = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < m; i++)
+        int n = Math.Min(a.Length, b.Length);
+        for (int i = 0; i < n; i++)
         {
-            int x = a[i], y = b[i];
-            if (x != y) return x - y;
+            int d = a[i] - b[i];
+            if (d != 0) return d;
         }
         return a.Length - b.Length;
     }
 
-    static bool Better(int a, int b)
+    static void Process(byte* lp, byte* lineEnd)
     {
-        if (count[a] != count[b]) return count[a] > count[b];
-        return CmpBytes(tmpl[a], tmpl[b]) < 0;
+        lines++;
+        bool ok = true;
+        int statusClass = 0;
+        int lat = 0;
+        byte* pathStart = null, pathEnd = null;
+
+        byte* q = lp;
+        byte* end = lineEnd;
+
+        do
+        {
+            if (end - q < 25 || !TsOk(q)) { ok = false; break; }
+            q += 24;
+            if (*q != (byte)' ') { ok = false; break; }
+            q++;
+            if (q >= end || *q < (byte)'a' || *q > (byte)'z') { ok = false; break; }
+            q++;
+            while (q < end && *q >= (byte)'a' && *q <= (byte)'z') q++;
+            if (q >= end || *q != (byte)'-') { ok = false; break; }
+            q++;
+            if (q >= end || !IsDig(*q)) { ok = false; break; }
+            while (q < end && IsDig(*q)) q++;
+            if (q >= end || *q != (byte)' ') { ok = false; break; }
+            q++;
+
+            long rem = end - q;
+            if (rem >= 4 && q[0] == (byte)'G' && q[1] == (byte)'E' && q[2] == (byte)'T' && q[3] == (byte)' ') q += 4;
+            else if (rem >= 5 && q[0] == (byte)'P' && q[1] == (byte)'O' && q[2] == (byte)'S' && q[3] == (byte)'T' && q[4] == (byte)' ') q += 5;
+            else if (rem >= 4 && q[0] == (byte)'P' && q[1] == (byte)'U' && q[2] == (byte)'T' && q[3] == (byte)' ') q += 4;
+            else if (rem >= 7 && q[0] == (byte)'D' && q[1] == (byte)'E' && q[2] == (byte)'L' && q[3] == (byte)'E' && q[4] == (byte)'T' && q[5] == (byte)'E' && q[6] == (byte)' ') q += 7;
+            else if (rem >= 6 && q[0] == (byte)'P' && q[1] == (byte)'A' && q[2] == (byte)'T' && q[3] == (byte)'C' && q[4] == (byte)'H' && q[5] == (byte)' ') q += 6;
+            else { ok = false; break; }
+
+            if (q >= end || *q != (byte)'/') { ok = false; break; }
+            pathStart = q;
+            while (q < end && IsPathCh(*q)) q++;
+            pathEnd = q;
+            if (q < end && *q == (byte)'?')
+            {
+                q++;
+                while (q < end && *q != (byte)' ') q++;
+            }
+            if (q >= end || *q != (byte)' ') { ok = false; break; }
+            q++;
+            if (end - q < 4 || !IsDig(q[0]) || !IsDig(q[1]) || !IsDig(q[2]) || q[3] != (byte)' ') { ok = false; break; }
+            statusClass = q[0] - (byte)'0';
+            q += 4;
+            if (q >= end || !IsDig(*q)) { ok = false; break; }
+            while (q < end && IsDig(*q)) q++;
+            if (q >= end || *q != (byte)'B') { ok = false; break; }
+            q++;
+            if (q >= end || *q != (byte)' ') { ok = false; break; }
+            q++;
+            if (q >= end || !IsDig(*q)) { ok = false; break; }
+            int v = 0;
+            while (q < end && IsDig(*q)) { v = v * 10 + (*q - (byte)'0'); q++; }
+            if (q >= end || *q != (byte)'.') { ok = false; break; }
+            q++;
+            if (q >= end || !IsDig(*q)) { ok = false; break; }
+            v = v * 10 + (*q - (byte)'0');
+            q++;
+            if (end - q < 3 || q[0] != (byte)'m' || q[1] != (byte)'s' || q[2] != (byte)' ') { ok = false; break; }
+            q += 3;
+            if (q >= end || *q != (byte)'"') { ok = false; break; }
+            q++;
+            while (q < end && *q != (byte)'"') q++;
+            if (q >= end) { ok = false; break; }
+            q++;
+            if (q != end) { ok = false; break; }
+            lat = v;
+        } while (false);
+
+        if (!ok)
+        {
+            malformed++;
+        }
+        else
+        {
+            statusCount[statusClass]++;
+            long pathLen = pathEnd - pathStart;
+            int need = (int)pathLen * 4 + 4;
+            if (need > scratch.Length) scratch = new byte[need];
+            int tlen = 0;
+            byte* t = pathStart;
+            while (t < pathEnd)
+            {
+                scratch[tlen++] = (byte)'/';
+                t++;
+                byte* s = t;
+                bool digits = true, nonempty = false;
+                while (t < pathEnd && *t != (byte)'/')
+                {
+                    if (!IsDig(*t)) digits = false;
+                    nonempty = true;
+                    t++;
+                }
+                if (nonempty && digits)
+                {
+                    scratch[tlen++] = (byte)'{';
+                    scratch[tlen++] = (byte)'i';
+                    scratch[tlen++] = (byte)'d';
+                    scratch[tlen++] = (byte)'}';
+                }
+                else
+                {
+                    while (s < t) scratch[tlen++] = *s++;
+                }
+            }
+            ulong h = HashBytes(scratch, tlen);
+            int id = table.Find(scratch, tlen, h);
+            if (id < 0)
+            {
+                id = names.Count;
+                byte[] key = new byte[tlen];
+                Array.Copy(scratch, key, tlen);
+                table.Put(key, tlen, h, id);
+                names.Add(key);
+                lists.Add(new IntList());
+                maxes.Add(0);
+            }
+            IntList il = lists[id];
+            il.Add(lat);
+            if (lat > maxes[id]) maxes[id] = lat;
+        }
     }
 
-    static void AppendTenths(StringBuilder sb, long v)
+    static int Main(string[] args)
     {
-        sb.Append(v / 10).Append('.').Append(v % 10);
-    }
+        names = new List<byte[]>();
+        lists = new List<IntList>();
+        maxes = new List<int>();
+        table = new Table(1024);
+        scratch = new byte[2048];
+        statusCount = new long[10];
 
-    static void Main(string[] args)
-    {
-        data = File.ReadAllBytes(args[0]);
-        n = data.Length;
-
-        long lines = 0, malformed = 0;
-        long[] statusCount = new long[10];
-
-        int p = 0;
-        while (p < n)
+        byte[] buf = new byte[1 << 22];
+        int len = 0;
+        bool eof = false;
+        using (var fs = new FileStream(args[0], FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, FileOptions.SequentialScan))
         {
-            int rel = data.AsSpan(p).IndexOf((byte)'\n');
-            int le = rel < 0 ? n : p + rel;
-            lines++;
-            if (ParseLine(p, le))
+            while (!eof)
             {
-                statusCount[stStatus]++;
-                int len = stTlen;
-                int e = FindEntry(len);
-                if (e < 0)
+                if (len == buf.Length) Array.Resize(ref buf, len << 1);
+                int r = fs.Read(buf, len, buf.Length - len);
+                if (r <= 0)
                 {
-                    AddEntry(len);
-                    e = nEntries - 1;
+                    eof = true;
                 }
-                count[e]++;
-                long[] a = lat[e];
-                int k = latN[e];
-                if (k == a.Length)
+                else
                 {
-                    Array.Resize(ref a, k * 2);
-                    lat[e] = a;
+                    len += r;
                 }
-                a[k] = stLat;
-                latN[e] = k + 1;
-            }
-            else
-            {
-                malformed++;
-            }
-            p = rel < 0 ? n : le + 1;
-        }
-
-        int[] best = new int[10];
-        int bestN = 0;
-        for (int e = 0; e < nEntries; e++)
-        {
-            int pos = 0;
-            while (pos < bestN && Better(best[pos], e)) pos++;
-            if (pos < 10)
-            {
-                int lim = Math.Min(bestN, 9);
-                for (int k = lim; k > pos; k--) best[k] = best[k - 1];
-                best[pos] = e;
-                if (bestN < 10) bestN++;
+                int s = 0;
+                fixed (byte* bp = buf)
+                {
+                    while (s < len)
+                    {
+                        int rel = buf.AsSpan(s, len - s).IndexOf((byte)'\n');
+                        if (rel < 0) break;
+                        int nl = s + rel;
+                        Process(bp + s, bp + nl);
+                        s = nl + 1;
+                    }
+                }
+                if (s > 0)
+                {
+                    Buffer.BlockCopy(buf, s, buf, 0, len - s);
+                    len -= s;
+                }
             }
         }
+        if (len > 0)
+        {
+            fixed (byte* bp = buf) Process(bp, bp + len);
+        }
 
-        var sb = new StringBuilder(8192);
+        var sb = new StringBuilder(512);
         sb.Append("lines ").Append(lines).Append('\n');
         sb.Append("malformed ").Append(malformed).Append('\n');
-        for (int c = 0; c < 10; c++)
+        for (int d = 0; d < 10; d++)
         {
-            if (statusCount[c] != 0)
-                sb.Append("status ").Append((char)('0' + c)).Append("xx ").Append(statusCount[c]).Append('\n');
-        }
-        for (int bi = 0; bi < bestN; bi++)
-        {
-            int e = best[bi];
-            int len = latN[e];
-            Array.Sort(lat[e], 0, len);
-            int i50 = (50 * len + 99) / 100 - 1;
-            int i95 = (95 * len + 99) / 100 - 1;
-            sb.Append("path ").Append(Encoding.ASCII.GetString(tmpl[e])).Append(' ').Append(count[e]).Append(' ');
-            AppendTenths(sb, lat[e][i50]);
-            sb.Append(' ');
-            AppendTenths(sb, lat[e][i95]);
-            sb.Append(' ');
-            AppendTenths(sb, lat[e][len - 1]);
-            sb.Append('\n');
+            if (statusCount[d] != 0)
+                sb.Append("status ").Append(d).Append("xx ").Append(statusCount[d]).Append('\n');
         }
 
-        using Stream stdout = Console.OpenStandardOutput();
-        byte[] outb = Encoding.UTF8.GetBytes(sb.ToString());
-        stdout.Write(outb, 0, outb.Length);
+        int m = names.Count;
+        int[] order = new int[m];
+        for (int i = 0; i < m; i++) order[i] = i;
+        Array.Sort(order, (a, b) =>
+        {
+            int ca = lists[a].n, cb = lists[b].n;
+            if (ca != cb) return cb - ca;
+            return CmpBytes(names[a], names[b]);
+        });
+
+        int top = Math.Min(10, m);
+        for (int k = 0; k < top; k++)
+        {
+            int idx = order[k];
+            IntList il = lists[idx];
+            Array.Sort(il.a, 0, il.n);
+            long cnt = il.n;
+            int i50 = (int)((50L * cnt + 99) / 100) - 1;
+            int i95 = (int)((95L * cnt + 99) / 100) - 1;
+            int p50 = il.a[i50], p95 = il.a[i95], mx = il.a[il.n - 1];
+            sb.Append("path ").Append(Encoding.Latin1.GetString(names[idx]))
+              .Append(' ').Append(cnt)
+              .Append(' ').Append(p50 / 10).Append('.').Append(p50 % 10)
+              .Append(' ').Append(p95 / 10).Append('.').Append(p95 % 10)
+              .Append(' ').Append(mx / 10).Append('.').Append(mx % 10)
+              .Append('\n');
+        }
+
+        Console.Out.Write(sb.ToString());
+        return 0;
     }
 }

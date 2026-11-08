@@ -1,555 +1,489 @@
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
+// Ledger: fast single-pass JSON Lines aggregator.
+// Hand-rolled byte scanner over the whole input (no DOM), no per-line line splitting.
 public class Main {
+    private static byte[] buf;
+    private static int i;
+    private static int n;
 
-    // ---------- open-addressing hash table keyed by byte ranges ----------
-    // Keys are copied into a private byte pool; lookups hash the raw slice.
-    static final class Table {
-        int cap = 1024;          // power of two
-        int mask = cap - 1;
-        int[] slot = new int[cap];      // entry index + 1, 0 = empty
-        int[] keyOff = new int[cap];
-        int[] keyLen = new int[cap];
-        long[] a = new long[cap];       // count (channels) / unused
-        long[] b = new long[cap];       // net
-        int size = 0;
-        byte[] pool = new byte[1 << 16];
-        int poolLen = 0;
+    private static int sStart;
+    private static int sEnd;
+    private static boolean sEsc;
 
-        long hash(byte[] d, int off, int len) {
-            long h = 0xcbf29ce484222325L;
-            for (int i = 0; i < len; i++) {
-                h ^= d[off + i] & 0xffL;
-                h *= 0x100000001b3L;
-            }
-            return h;
-        }
+    public static void main(String[] args) throws IOException {
+        buf = Files.readAllBytes(Paths.get(args[0]));
+        n = buf.length;
 
-        void ensurePool(int n) {
-            if (poolLen + n > pool.length) {
-                pool = Arrays.copyOf(pool, Math.max(pool.length * 2, poolLen + n));
-            }
-        }
+        HashMap<String, Long> rates = new HashMap<>();
+        HashMap<String, long[]> channels = new HashMap<>(); // [count, net]
+        HashMap<String, long[]> accounts = new HashMap<>(); // [net]
 
-        int find(byte[] d, int off, int len) {
-            int h = (int) hash(d, off, len);
-            int i = h & mask;
-            while (slot[i] != 0) {
-                int e = slot[i] - 1;
-                if (keyLen[e] == len) {
-                    byte[] p = pool;
-                    int po = keyOff[e];
-                    int k = 0;
-                    while (k < len && p[po + k] == d[off + k]) k++;
-                    if (k == len) return e;
+        // ---- first line: rates ----
+        skipWs();
+        i++; // '{'
+        while (true) {
+            skipWs();
+            scanString();
+            int ks = sStart, ke = sEnd;
+            boolean kesc = sEsc;
+            skipWs();
+            i++; // ':'
+            skipWs();
+            if (!kesc && ke - ks == 5 && eq(ks, ke, "rates")) {
+                i++; // '{'
+                while (true) {
+                    skipWs();
+                    if (buf[i] == '}') {
+                        i++;
+                        break;
+                    }
+                    scanString();
+                    String cur = strValue();
+                    skipWs();
+                    i++; // ':'
+                    skipWs();
+                    long r = 0;
+                    while (buf[i] >= '0' && buf[i] <= '9') {
+                        r = r * 10 + (buf[i] - '0');
+                        i++;
+                    }
+                    rates.put(cur, r);
+                    skipWs();
+                    if (buf[i] == ',') i++;
                 }
-                i = (i + 1) & mask;
+            } else {
+                skipValue();
             }
-            return -1;
-        }
-
-        int findOrInsert(byte[] d, int off, int len) {
-            if (size * 10 >= cap * 7) grow();
-            int h = (int) hash(d, off, len);
-            int i = h & mask;
-            while (slot[i] != 0) {
-                int e = slot[i] - 1;
-                int kl = keyLen[e];
-                if (kl == len) {
-                    byte[] p = pool;
-                    int po = keyOff[e];
-                    int k = 0;
-                    while (k < len && p[po + k] == d[off + k]) k++;
-                    if (k == len) return e;
-                }
-                i = (i + 1) & mask;
-            }
-            int e = size++;
-            ensurePool(len);
-            System.arraycopy(d, off, pool, poolLen, len);
-            keyOff[e] = poolLen;
-            keyLen[e] = len;
-            poolLen += len;
-            a[e] = 0;
-            b[e] = 0;
-            slot[i] = e + 1;
-            return e;
-        }
-
-        private void grow() {
-            cap <<= 1;
-            mask = cap - 1;
-            slot = new int[cap];
-            int[] nKeyOff = new int[cap];
-            int[] nKeyLen = new int[cap];
-            long[] na = new long[cap];
-            long[] nb = new long[cap];
-            for (int e = 0; e < size; e++) {
-                int h = (int) hash(pool, keyOff[e], keyLen[e]);
-                int i = h & mask;
-                while (slot[i] != 0) i = (i + 1) & mask;
-                slot[i] = e + 1;
-                nKeyOff[e] = keyOff[e];
-                nKeyLen[e] = keyLen[e];
-                na[e] = a[e];
-                nb[e] = b[e];
-            }
-            keyOff = nKeyOff;
-            keyLen = nKeyLen;
-            a = na;
-            b = nb;
-        }
-
-        int size() { return size; }
-    }
-
-    static byte[] data;
-    static byte[] scratch = new byte[256];
-    static int scratchLen;
-
-    // ---------- JSON scanning helpers ----------
-    static boolean isWS(byte c) {
-        return c == ' ' || c == '\t' || c == '\r' || c == '\n';
-    }
-
-    static int skipWS(int i) {
-        while (i < data.length && isWS(data[i])) i++;
-        return i;
-    }
-
-    // parses string starting at '"'; result in sVal (start), eVal (end), i advanced past quote
-    static int sVal, eVal;
-    static boolean escVal;
-
-    static void parseString(int i) {
-        i++;
-        sVal = i;
-        boolean esc = false;
-        while (i < data.length) {
-            byte c = data[i];
-            if (c == '"') break;
-            if (c == '\\') {
-                esc = true;
+            skipWs();
+            if (buf[i] == ',') {
                 i++;
-                if (i < data.length && data[i] == 'u') i += 4;
+                continue;
             }
             i++;
+            break;
         }
-        eVal = i;
-        escVal = esc;
-        sNext = i + 1;
-    }
 
-    static int sNext;
+        // ---- transactions ----
+        long totalCount = 0;
+        long totalNet = 0;
 
-    static int skipValue(int i) {
-        int n = data.length;
-        if (i < n && data[i] == '"') {
-            parseString(i);
-            return sNext;
-        }
-        if (i < n && (data[i] == '{' || data[i] == '[')) {
-            int depth = 0;
-            while (i < n) {
-                byte c = data[i];
-                if (c == '"') {
-                    parseString(i);
-                    i = sNext;
+        while (true) {
+            skipWs();
+            if (i >= n) break;
+            i++; // '{'
+
+            int typeCode = 0; // 1 credit, 2 debit, 3 refund, 4 void
+            boolean testTag = false;
+            long hund = 0;
+            String currency = null;
+            String account = null;
+            String channel = null;
+
+            while (true) {
+                skipWs();
+                scanString();
+                int ks = sStart, ke = sEnd;
+                int klen = ke - ks;
+                boolean kesc = sEsc;
+                skipWs();
+                i++; // ':'
+                skipWs();
+                if (!kesc) {
+                    char c0 = klen > 0 ? (char) buf[ks] : 0;
+                    if (klen == 4 && c0 == 't' && eq(ks, ke, "type")) {
+                        scanString();
+                        typeCode = typeCode();
+                    } else if (klen == 6 && eq(ks, ke, "amount")) {
+                        scanString();
+                        hund = parseAmount(sStart, sEnd, sEsc);
+                    } else if (klen == 8 && eq(ks, ke, "currency")) {
+                        scanString();
+                        currency = strValue();
+                    } else if (klen == 7 && eq(ks, ke, "account")) {
+                        scanString();
+                        account = strValue();
+                    } else if (klen == 4 && c0 == 't' && eq(ks, ke, "tags")) {
+                        testTag = parseTags();
+                    } else if (klen == 4 && c0 == 'm' && eq(ks, ke, "meta")) {
+                        channel = parseMeta();
+                    } else {
+                        skipValue();
+                    }
+                } else {
+                    // escaped key: decode and compare (rare)
+                    String k = decodeString(ks, ke);
+                    switch (k) {
+                        case "type":
+                            scanString();
+                            typeCode = typeCode();
+                            break;
+                        case "amount":
+                            scanString();
+                            hund = parseAmount(sStart, sEnd, sEsc);
+                            break;
+                        case "currency":
+                            scanString();
+                            currency = strValue();
+                            break;
+                        case "account":
+                            scanString();
+                            account = strValue();
+                            break;
+                        case "tags":
+                            testTag = parseTags();
+                            break;
+                        case "meta":
+                            channel = parseMeta();
+                            break;
+                        default:
+                            skipValue();
+                            break;
+                    }
+                }
+                skipWs();
+                if (buf[i] == ',') {
+                    i++;
                     continue;
                 }
-                if (c == '{' || c == '[') depth++;
-                else if (c == '}' || c == ']') {
-                    if (--depth == 0) return i + 1;
+                i++; // '}'
+                break;
+            }
+
+            if (typeCode == 4 || testTag) continue;
+
+            Long rate = rates.get(currency);
+            if (rate == null) continue;
+            long usd = (hund * rate) / 1000000;
+            long v = typeCode == 2 ? -usd : usd;
+
+            totalCount++;
+            totalNet += v;
+
+            long[] c = channels.get(channel);
+            if (c == null) {
+                channels.put(channel, new long[] {1, v});
+            } else {
+                c[0]++;
+                c[1] += v;
+            }
+            long[] a = accounts.get(account);
+            if (a == null) {
+                accounts.put(account, new long[] {v});
+            } else {
+                a[0] += v;
+            }
+        }
+
+        // ---- output ----
+        StringBuilder sb = new StringBuilder(1 << 16);
+        sb.append("counted ").append(totalCount).append('\n');
+        sb.append("net ").append(totalNet).append('\n');
+
+        List<Map.Entry<String, long[]>> chs = new ArrayList<>(channels.entrySet());
+        chs.sort(Map.Entry.comparingByKey());
+        for (Map.Entry<String, long[]> e : chs) {
+            sb.append("channel ").append(e.getKey()).append(' ')
+              .append(e.getValue()[0]).append(' ').append(e.getValue()[1]).append('\n');
+        }
+
+        List<Map.Entry<String, long[]>> accs = new ArrayList<>(accounts.entrySet());
+        accs.sort((x, y) -> {
+            int c = Long.compare(y.getValue()[0], x.getValue()[0]);
+            return c != 0 ? c : x.getKey().compareTo(y.getKey());
+        });
+        int lim = Math.min(10, accs.size());
+        for (int k = 0; k < lim; k++) {
+            sb.append("account ").append(accs.get(k).getKey()).append(' ').append(accs.get(k).getValue()[0]).append('\n');
+        }
+        System.out.print(sb);
+    }
+
+    // ---- scanner helpers ----
+
+    private static void skipWs() {
+        while (i < n) {
+            byte c = buf[i];
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n') i++;
+            else break;
+        }
+    }
+
+    private static void skipString() { // i at opening quote; leaves i past closing quote
+        i++;
+        while (true) {
+            byte c = buf[i];
+            if (c == '\\') {
+                i += 2; // the escape char (and hex digits of a unicode escape) hold no quote or backslash
+                continue;
+            }
+            if (c == '"') {
+                i++;
+                return;
+            }
+            i++;
+        }
+    }
+
+    private static void scanString() { // i at opening quote; leaves i past closing quote
+        i++;
+        sStart = i;
+        sEsc = false;
+        while (true) {
+            byte c = buf[i];
+            if (c == '\\') {
+                sEsc = true;
+                i += 2;
+                continue;
+            }
+            if (c == '"') {
+                sEnd = i;
+                i++;
+                return;
+            }
+            i++;
+        }
+    }
+
+    private static void skipValue() {
+        byte c = buf[i];
+        if (c == '"') {
+            skipString();
+            return;
+        }
+        if (c == '{' || c == '[') {
+            int depth = 0;
+            while (i < n) {
+                byte d = buf[i];
+                if (d == '"') {
+                    skipString();
+                    continue;
+                }
+                if (d == '{' || d == '[') depth++;
+                else if (d == '}' || d == ']') {
+                    depth--;
+                    if (depth == 0) {
+                        i++;
+                        return;
+                    }
                 }
                 i++;
             }
-            return i;
+            return;
         }
         while (i < n) {
-            byte c = data[i];
-            if (c == ',' || c == '}' || c == ']') break;
+            byte d = buf[i];
+            if (d == ',' || d == '}' || d == ']' || d == ' ' || d == '\t' || d == '\r' || d == '\n') return;
             i++;
         }
-        return i;
     }
 
-    static boolean strEq(int s, int e, boolean esc, String lit) {
-        if (!esc) {
-            int len = e - s;
-            if (len != lit.length()) return false;
-            for (int k = 0; k < len; k++) {
-                if (data[s + k] != lit.charAt(k)) return false;
-            }
-            return true;
-        }
-        decodeString(s, e);
-        if (scratchLen != lit.length()) return false;
-        for (int k = 0; k < scratchLen; k++) {
-            if (scratch[k] != lit.charAt(k)) return false;
+    private static boolean eq(int a, int b, String lit) {
+        if (b - a != lit.length()) return false;
+        for (int j = 0; j < lit.length(); j++) {
+            if (buf[a + j] != lit.charAt(j)) return false;
         }
         return true;
     }
 
-    static void decodeString(int s, int e) {
-        if (scratch.length < (e - s) * 4 + 16) scratch = new byte[(e - s) * 4 + 16];
-        scratchLen = 0;
-        for (int i = s; i < e; i++) {
-            byte c = data[i];
-            if (c != '\\') {
-                scratch[scratchLen++] = c;
-                continue;
-            }
-            i++;
-            byte x = data[i];
-            switch (x) {
-                case '"': scratch[scratchLen++] = '"'; break;
-                case '\\': scratch[scratchLen++] = '\\'; break;
-                case '/': scratch[scratchLen++] = '/'; break;
-                case 'b': scratch[scratchLen++] = '\b'; break;
-                case 'f': scratch[scratchLen++] = '\f'; break;
-                case 'n': scratch[scratchLen++] = '\n'; break;
-                case 'r': scratch[scratchLen++] = '\r'; break;
-                case 't': scratch[scratchLen++] = '\t'; break;
-                case 'u': {
-                    int cp = hex4(i + 1);
-                    i += 4;
-                    if (cp >= 0xD800 && cp <= 0xDBFF && i + 2 < e
-                            && data[i + 1] == '\\' && data[i + 2] == 'u') {
-                        int lo = hex4(i + 3);
-                        if (lo >= 0xDC00 && lo <= 0xDFFF) {
-                            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-                            i += 6;
-                        }
-                    }
-                    scratchLen = appendRune(cp);
-                    break;
-                }
-                default: scratch[scratchLen++] = x; break;
-            }
+    // value string at sStart..sEnd (sEsc set) as a Java String
+    private static String strValue() {
+        if (!sEsc) {
+            // account IDs / channel names / currencies are ASCII: ISO-8859-1 decode is a raw widening copy
+            return new String(buf, sStart, sEnd - sStart, StandardCharsets.ISO_8859_1);
         }
+        return decodeString(sStart, sEnd);
     }
 
-    static int hex4(int i) {
+    private static String decodeString(int from, int to) {
+        char[] out = new char[to - from];
+        int o = 0, j = from;
+        while (j < to) {
+            char c = (char) (buf[j] & 0xFF);
+            if (c != '\\') {
+                out[o++] = c;
+                j++;
+                continue;
+            }
+            char e = (char) (buf[j + 1] & 0xFF);
+            j += 2;
+            switch (e) {
+                case '"': out[o++] = '"'; break;
+                case '\\': out[o++] = '\\'; break;
+                case '/': out[o++] = '/'; break;
+                case 'b': out[o++] = '\b'; break;
+                case 'f': out[o++] = '\f'; break;
+                case 'n': out[o++] = '\n'; break;
+                case 'r': out[o++] = '\r'; break;
+                case 't': out[o++] = '\t'; break;
+                case 'u': {
+                    int cp = hex4(j);
+                    j += 4;
+                    if (cp >= 0xD800 && cp <= 0xDBFF && j + 1 < to && buf[j] == '\\' && buf[j + 1] == 'u') {
+                        int lo = hex4(j + 2);
+                        if (lo >= 0xDC00 && lo <= 0xDFFF) {
+                            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                            j += 6;
+                        }
+                    }
+                    if (cp < 0x10000) {
+                        out[o++] = (char) cp;
+                    } else {
+                        cp -= 0x10000;
+                        out[o++] = (char) (0xD800 | (cp >> 10));
+                        out[o++] = (char) (0xDC00 | (cp & 0x3FF));
+                    }
+                    break;
+                }
+                default: out[o++] = e; break;
+            }
+        }
+        return new String(out, 0, o);
+    }
+
+    private static int hex4(int at) {
         int v = 0;
         for (int k = 0; k < 4; k++) {
-            byte c = data[i + k];
+            byte c = buf[at + k];
             v <<= 4;
-            if (c >= '0' && c <= '9') v |= c - '0';
-            else if (c >= 'a' && c <= 'f') v |= c - 'a' + 10;
-            else if (c >= 'A' && c <= 'F') v |= c - 'A' + 10;
+            if (c <= '9') v += c - '0';
+            else if (c <= 'F') v += c - 'A' + 10;
+            else v += c - 'a' + 10;
         }
         return v;
     }
 
-    static int appendRune(int cp) {
-        if (cp < 0x80) {
-            scratch[scratchLen++] = (byte) cp;
-        } else if (cp < 0x800) {
-            scratch[scratchLen++] = (byte) (0xC0 | cp >> 6);
-            scratch[scratchLen++] = (byte) (0x80 | cp & 0x3F);
-        } else if (cp < 0x10000) {
-            scratch[scratchLen++] = (byte) (0xE0 | cp >> 12);
-            scratch[scratchLen++] = (byte) (0x80 | (cp >> 6) & 0x3F);
-            scratch[scratchLen++] = (byte) (0x80 | cp & 0x3F);
-        } else {
-            scratch[scratchLen++] = (byte) (0xF0 | cp >> 18);
-            scratch[scratchLen++] = (byte) (0x80 | (cp >> 12) & 0x3F);
-            scratch[scratchLen++] = (byte) (0x80 | (cp >> 6) & 0x3F);
-            scratch[scratchLen++] = (byte) (0x80 | cp & 0x3F);
-        }
-        return scratchLen;
+    private static boolean decodedEq(String lit) {
+        return decodeString(sStart, sEnd).contentEquals(lit);
     }
 
-    // "12", "12.5", "12.05" -> integer hundredths
-    static long parseAmount(int s, int e) {
-        long whole = 0;
-        int i = s;
-        while (i < e && data[i] >= '0' && data[i] <= '9') {
-            whole = whole * 10 + (data[i] - '0');
-            i++;
+    private static long parseAmount(int from, int to, boolean esc) {
+        if (esc) {
+            String s = decodeString(from, to);
+            return parseAmountDigits(s, 0, s.length());
+        }
+        return parseAmountDigits(buf, from, to);
+    }
+
+    private static long parseAmountDigits(byte[] b, int from, int to) {
+        long ip = 0;
+        int j = from;
+        while (j < to && b[j] >= '0' && b[j] <= '9') {
+            ip = ip * 10 + (b[j] - '0');
+            j++;
         }
         long frac = 0;
-        if (i < e && data[i] == '.') {
-            i++;
-            frac = (data[i] - '0') * 10L;
-            i++;
-            if (i < e) frac += data[i] - '0';
+        int fd = 0;
+        if (j < to && b[j] == '.') {
+            j++;
+            while (j < to && fd < 2 && b[j] >= '0' && b[j] <= '9') {
+                frac = frac * 10 + (b[j] - '0');
+                fd++;
+                j++;
+            }
         }
-        return whole * 100 + frac;
+        while (fd < 2) {
+            frac *= 10;
+            fd++;
+        }
+        return ip * 100 + frac;
     }
 
-    // key into table: raw slice if unescaped, else decoded copy
-    static int keyTempStart, keyTempLen;
-    static byte[] keyArr;      // points to data or to a temp copy
-    static int keyOff, keyLen;
-
-    static void makeKey(int s, int e, boolean esc) {
-        if (!esc) {
-            keyArr = data;
-            keyOff = s;
-            keyLen = e - s;
-        } else {
-            decodeString(s, e);
-            keyArr = scratch;
-            keyOff = 0;
-            keyLen = scratchLen;
+    private static long parseAmountDigits(String s, int from, int to) {
+        long ip = 0;
+        int j = from;
+        while (j < to && s.charAt(j) >= '0' && s.charAt(j) <= '9') {
+            ip = ip * 10 + (s.charAt(j) - '0');
+            j++;
         }
+        long frac = 0;
+        int fd = 0;
+        if (j < to && s.charAt(j) == '.') {
+            j++;
+            while (j < to && fd < 2 && s.charAt(j) >= '0' && s.charAt(j) <= '9') {
+                frac = frac * 10 + (s.charAt(j) - '0');
+                fd++;
+                j++;
+            }
+        }
+        while (fd < 2) {
+            frac *= 10;
+            fd++;
+        }
+        return ip * 100 + frac;
     }
 
-    public static void main(String[] args) throws IOException {
-        data = Files.readAllBytes(Path.of(args[0]));
-        Table rates = new Table();
-        Table channels = new Table();
-        Table accounts = new Table();
-        int n = data.length;
-
-        // First line: rates.
-        int i = skipWS(0);
-        int eol = indexOf(i, (byte) 10);
-        if (eol < 0) eol = n;
-        // parse rates object
-        int p = skipWS(i);
-        if (p < n && data[p] == '{') {
-            p++;
-            while (p < n) {
-                p = skipWS(p);
-                if (p >= n || data[p] == '}') break;
-                if (data[p] == ',') { p++; continue; }
-                parseString(p);
-                int ks = sVal, ke = eVal; boolean kesc = escVal;
-                p = skipWS(sNext);
-                p++; // ':'
-                p = skipWS(p);
-                if (strEq(ks, ke, kesc, "rates")) {
-                    p = skipWS(p);
-                    p++; // '{'
-                    while (p < n) {
-                        p = skipWS(p);
-                        if (p >= n || data[p] == '}') break;
-                        if (data[p] == ',') { p++; continue; }
-                        parseString(p);
-                        int cs = sVal, ce = eVal; boolean cesc = escVal;
-                        p = skipWS(sNext);
-                        p++; // ':'
-                        p = skipWS(p);
-                        boolean neg = data[p] == '-';
-                        if (neg) p++;
-                        long rate = 0;
-                        while (p < n && data[p] >= '0' && data[p] <= '9') {
-                            rate = rate * 10 + (data[p] - '0');
-                            p++;
-                        }
-                        if (neg) rate = -rate;
-                        makeKey(cs, ce, cesc);
-                        int eIdx = rates.findOrInsert(keyArr, keyOff, keyLen);
-                        rates.b[eIdx] = rate;
-                    }
-                    p++; // '}'
-                } else {
-                    p = skipValue(p);
+    private static boolean parseTags() {
+        i++; // '['
+        boolean test = false;
+        while (true) {
+            skipWs();
+            if (buf[i] == ']') {
+                i++;
+                return test;
+            }
+            if (buf[i] == '"') {
+                scanString();
+                if (!test) {
+                    test = sEsc ? decodedEq("test") : (sEnd - sStart == 4 && eq(sStart, sEnd, "test"));
                 }
+            } else {
+                skipValue();
             }
+            skipWs();
+            if (buf[i] == ',') i++;
         }
-        i = eol < n ? eol + 1 : n;
-
-        long totalCount = 0, totalNet = 0;
-        while (i < n) {
-            int q = skipWS(i);
-            eol = indexOf(i, (byte) 10);
-            if (eol < 0) eol = n;
-            if (q < eol && data[q] == '{') {
-                q++;
-                long sign = 0, rate = 0, amount = 0;
-                boolean hasRate = false;
-                int accS = -1, accE = 0, chanS = -1, chanE = 0;
-                boolean accEsc = false, chanEsc = false, isTest = false;
-                while (true) {
-                    q = skipWS(q);
-                    if (q >= n || data[q] == '}') { q++; break; }
-                    if (data[q] == ',') { q++; continue; }
-                    parseString(q);
-                    int ks = sVal, ke = eVal; boolean kesc = escVal;
-                    q = skipWS(sNext);
-                    q++; // ':'
-                    q = skipWS(q);
-                    if (!kesc) {
-                        int kl = ke - ks;
-                        byte k0 = kl > 0 ? data[ks] : 0;
-                        if (k0 == 't' && kl == 4 && data[ks] == 't' && data[ks + 1] == 'y'
-                                && data[ks + 2] == 'p' && data[ks + 3] == 'e') {
-                            parseString(q);
-                            int vs = sVal, ve = eVal; boolean vesc = escVal;
-                            q = sNext;
-                            if (strEq(vs, ve, vesc, "credit") || strEq(vs, ve, vesc, "refund")) sign = 1;
-                            else if (strEq(vs, ve, vesc, "debit")) sign = -1;
-                            continue;
-                        } else if (k0 == 'a' && kl == 6 && data[ks + 1] == 'm'
-                                && data[ks + 2] == 'o' && data[ks + 3] == 'u'
-                                && data[ks + 4] == 'n' && data[ks + 5] == 't') {
-                            parseString(q);
-                            int vs = sVal, ve = eVal;
-                            q = sNext;
-                            amount = parseAmount(vs, ve);
-                            continue;
-                        } else if (k0 == 'c' && kl == 8 && data[ks + 1] == 'u'
-                                && data[ks + 2] == 'r' && data[ks + 3] == 'r'
-                                && data[ks + 4] == 'e' && data[ks + 5] == 'n'
-                                && data[ks + 6] == 'c' && data[ks + 7] == 'y') {
-                            parseString(q);
-                            int vs = sVal, ve = eVal; boolean vesc = escVal;
-                            q = sNext;
-                            makeKey(vs, ve, vesc);
-                            int ri = rates.find(keyArr, keyOff, keyLen);
-                            if (ri >= 0) {
-                                rate = rates.b[ri];
-                                hasRate = true;
-                            } else {
-                                hasRate = false;
-                            }
-                            continue;
-                        } else if (k0 == 'a' && kl == 7 && data[ks + 1] == 'c'
-                                && data[ks + 2] == 'c' && data[ks + 3] == 'o'
-                                && data[ks + 4] == 'u' && data[ks + 5] == 'n'
-                                && data[ks + 6] == 't') {
-                            parseString(q);
-                            accS = sVal; accE = eVal; accEsc = escVal;
-                            q = sNext;
-                            continue;
-                        } else if (k0 == 't' && kl == 4 && data[ks + 1] == 'a'
-                                && data[ks + 2] == 'g' && data[ks + 3] == 's') {
-                            q++; // '['
-                            while (true) {
-                                q = skipWS(q);
-                                if (q >= n || data[q] == ']') { q++; break; }
-                                if (data[q] == ',') { q++; continue; }
-                                if (data[q] == '"') {
-                                    parseString(q);
-                                    int vs = sVal, ve = eVal; boolean vesc = escVal;
-                                    q = sNext;
-                                    if (!isTest && strEq(vs, ve, vesc, "test")) isTest = true;
-                                } else {
-                                    q = skipValue(q);
-                                }
-                            }
-                            continue;
-                        } else if (k0 == 'm' && kl == 4 && data[ks + 1] == 'e'
-                                && data[ks + 2] == 't' && data[ks + 3] == 'a') {
-                            q++; // '{'
-                            while (true) {
-                                q = skipWS(q);
-                                if (q >= n || data[q] == '}') { q++; break; }
-                                if (data[q] == ',') { q++; continue; }
-                                parseString(q);
-                                int mks = sVal, mke = eVal; boolean mkesc = escVal;
-                                q = skipWS(sNext);
-                                q++; // ':'
-                                q = skipWS(q);
-                                if (strEq(mks, mke, mkesc, "channel")) {
-                                    parseString(q);
-                                    chanS = sVal; chanE = eVal; chanEsc = escVal;
-                                    q = sNext;
-                                } else {
-                                    q = skipValue(q);
-                                }
-                            }
-                            continue;
-                        }
-                    }
-                    q = skipValue(q);
-                }
-                if (sign != 0 && !isTest && hasRate && accS >= 0 && chanS >= 0) {
-                    long val = sign * ((amount * rate) / 1_000_000L);
-                    totalCount++;
-                    totalNet += val;
-                    makeKey(chanS, chanE, chanEsc);
-                    int ci = channels.findOrInsert(keyArr, keyOff, keyLen);
-                    channels.a[ci]++;
-                    channels.b[ci] += val;
-                    makeKey(accS, accE, accEsc);
-                    int ai = accounts.findOrInsert(keyArr, keyOff, keyLen);
-                    accounts.b[ai] += val;
-                }
-            }
-            i = eol < n ? eol + 1 : n;
-        }
-
-        StringBuilder out = new StringBuilder(4096);
-        out.append("counted ").append(totalCount).append('\n');
-        out.append("net ").append(totalNet).append('\n');
-
-        // Channel lines sorted by name ascending (byte order).
-        int nc = channels.size();
-        Integer[] cIdx = new Integer[nc];
-        for (int e = 0; e < nc; e++) cIdx[e] = e;
-        java.util.Arrays.sort(cIdx, (x, y) -> {
-            int lx = channels.keyLen[x], ly = channels.keyLen[y];
-            int ox = channels.keyOff[x], oy = channels.keyOff[y];
-            int m = Math.min(lx, ly);
-            for (int k = 0; k < m; k++) {
-                int d = (channels.pool[ox + k] & 0xff) - (channels.pool[oy + k] & 0xff);
-                if (d != 0) return d;
-            }
-            return lx - ly;
-        });
-        for (int e : cIdx) {
-            out.append("channel ").append(new String(channels.pool, channels.keyOff[e],
-                    channels.keyLen[e], StandardCharsets.ISO_8859_1));
-            out.append(' ').append(channels.a[e]).append(' ').append(channels.b[e]).append('\n');
-        }
-
-        // Top 10 accounts by net desc, then id asc.
-        int na = accounts.size();
-        int[] aIdx = new int[na];
-        for (int e = 0; e < na; e++) aIdx[e] = e;
-        int take = Math.min(10, na);
-        // partial selection: place the 10 best in aIdx[0..take)
-        for (int pos = 0; pos < take; pos++) {
-            int best = pos;
-            for (int j = pos + 1; j < na; j++) {
-                if (accountBetter(accounts, aIdx[j], aIdx[best])) best = j;
-            }
-            int t = aIdx[pos]; aIdx[pos] = aIdx[best]; aIdx[best] = t;
-        }
-        // sort those 10
-        int[] top = Arrays.copyOfRange(aIdx, 0, take);
-        Integer[] topBox = new Integer[take];
-        for (int k = 0; k < take; k++) topBox[k] = top[k];
-        java.util.Arrays.sort(topBox, (x, y) -> accountBetter(accounts, x, y) ? -1
-                : accountBetter(accounts, y, x) ? 1 : 0);
-        for (int e : topBox) {
-            out.append("account ").append(new String(accounts.pool, accounts.keyOff[e],
-                    accounts.keyLen[e], StandardCharsets.ISO_8859_1));
-            out.append(' ').append(accounts.b[e]).append('\n');
-        }
-
-        FileOutputStream fos = new FileOutputStream(java.io.FileDescriptor.out);
-        fos.write(out.toString().getBytes(StandardCharsets.ISO_8859_1));
-        fos.flush();
     }
 
-    static boolean accountBetter(Table t, int x, int y) {
-        long nx = t.b[x], ny = t.b[y];
-        if (nx != ny) return nx > ny;
-        int lx = t.keyLen[x], ly = t.keyLen[y];
-        int ox = t.keyOff[x], oy = t.keyOff[y];
-        int m = Math.min(lx, ly);
-        for (int k = 0; k < m; k++) {
-            int d = (t.pool[ox + k] & 0xff) - (t.pool[oy + k] & 0xff);
-            if (d != 0) return d < 0;
+    private static String parseMeta() {
+        i++; // '{'
+        String channel = null;
+        while (true) {
+            skipWs();
+            if (buf[i] == '}') {
+                i++;
+                return channel;
+            }
+            scanString();
+            int ks = sStart, ke = sEnd;
+            boolean kesc = sEsc;
+            skipWs();
+            i++; // ':'
+            skipWs();
+            boolean isChannel = kesc ? "channel".contentEquals(decodeString(ks, ke)) : (ke - ks == 7 && eq(ks, ke, "channel"));
+            if (isChannel) {
+                scanString();
+                channel = strValue();
+            } else {
+                skipValue();
+            }
+            skipWs();
+            if (buf[i] == ',') i++;
         }
-        return lx < ly;
     }
 
-    static int indexOf(int from, byte c) {
-        byte[] d = data;
-        for (int i = from; i < d.length; i++) {
-            if (d[i] == c) return i;
+    private static int typeCode() {
+        if (!sEsc) {
+            int len = sEnd - sStart;
+            if (len == 6 && eq(sStart, sEnd, "credit")) return 1;
+            if (len == 5 && eq(sStart, sEnd, "debit")) return 2;
+            if (len == 6 && eq(sStart, sEnd, "refund")) return 3;
+            if (len == 4 && eq(sStart, sEnd, "void")) return 4;
+            return 0;
         }
-        return -1;
+        switch (decodeString(sStart, sEnd)) {
+            case "credit": return 1;
+            case "debit": return 2;
+            case "refund": return 3;
+            case "void": return 4;
+            default: return 0;
+        }
     }
 }

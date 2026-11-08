@@ -1,323 +1,353 @@
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+import java.io.FileInputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 public class Main {
-    static byte[] data;
-    static int n;
 
-    static byte[] scratch = new byte[1024];
+    static final class IntList {
+        int[] a = new int[8];
+        int n = 0;
 
-    static byte[][] tmpl = new byte[1024][];
-    static int[] tmplLen = new int[1024];
-    static int[] count = new int[1024];
-    static long[][] lat = new long[1024][];
-    static int[] latN = new int[1024];
-    static int nEntries;
-
-    static int[] table = new int[2048];
-
-    // parse outputs
-    static int stStatus;
-    static long stLat;
-
-    static boolean isDig(byte c) { return (c & 0xFF) >= '0' && (c & 0xFF) <= '9'; }
-
-    static void ensureScratch(int need) {
-        if (need > scratch.length) scratch = new byte[need];
+        void add(int v) {
+            if (n == a.length) a = Arrays.copyOf(a, n << 1);
+            a[n++] = v;
+        }
     }
 
-    static void addEntry(int len) {
-        if (nEntries == tmpl.length) {
-            int cap = nEntries * 2;
-            tmpl = Arrays.copyOf(tmpl, cap);
-            tmplLen = Arrays.copyOf(tmplLen, cap);
-            count = Arrays.copyOf(count, cap);
-            lat = Arrays.copyOf(lat, cap);
-            latN = Arrays.copyOf(latN, cap);
+    static final class Table {
+        long[] hash;
+        int[] id;
+        byte[][] keys;
+        int mask;
+        int size;
+
+        Table(int cap) {
+            int c = 16;
+            while (c < cap) c <<= 1;
+            hash = new long[c];
+            id = new int[c];
+            keys = new byte[c][];
+            Arrays.fill(id, -1);
+            mask = c - 1;
         }
-        int e = nEntries++;
-        tmpl[e] = Arrays.copyOf(scratch, len);
-        tmplLen[e] = len;
-        lat[e] = new long[16];
-        if ((long) nEntries * 2 >= table.length) {
-            int[] t = new int[table.length * 2];
-            int mask = t.length - 1;
-            for (int i = 0; i < nEntries; i++) {
-                int h = hash(tmpl[i], tmplLen[i]);
-                int idx = h & mask;
-                while (t[idx] != 0) idx = (idx + 1) & mask;
-                t[idx] = i + 1;
+
+        private void resize() {
+            int nc = id.length << 1;
+            long[] nh = new long[nc];
+            int[] ni = new int[nc];
+            byte[][] nk = new byte[nc][];
+            Arrays.fill(ni, -1);
+            int nm = nc - 1;
+            for (int i = 0; i < id.length; i++) {
+                if (id[i] >= 0) {
+                    int p = (int) hash[i] & nm;
+                    while (ni[p] >= 0) p = (p + 1) & nm;
+                    ni[p] = id[i];
+                    nh[p] = hash[i];
+                    nk[p] = keys[i];
+                }
             }
-            table = t;
-        } else {
-            int mask = table.length - 1;
-            int h = hash(tmpl[e], len);
-            int idx = h & mask;
-            while (table[idx] != 0) idx = (idx + 1) & mask;
-            table[idx] = e + 1;
+            hash = nh;
+            id = ni;
+            keys = nk;
+            mask = nm;
+        }
+
+        int find(byte[] s, int len, long h) {
+            int p = (int) h & mask;
+            while (true) {
+                int v = id[p];
+                if (v < 0) return -1;
+                if (hash[p] == h) {
+                    byte[] k = keys[p];
+                    if (k.length == len) {
+                        int i = 0;
+                        while (i < len && k[i] == s[i]) i++;
+                        if (i == len) return v;
+                    }
+                }
+                p = (p + 1) & mask;
+            }
+        }
+
+        void put(byte[] key, int len, long h, int v) {
+            if ((size + 1) << 1 > id.length) resize();
+            int p = (int) h & mask;
+            while (id[p] >= 0) p = (p + 1) & mask;
+            id[p] = v;
+            hash[p] = h;
+            keys[p] = Arrays.copyOf(key, len);
+            size++;
         }
     }
 
-    static int hash(byte[] b, int len) {
-        int h = 0x811c9dc5;
-        for (int i = 0; i < len; i++) h = (h ^ (b[i] & 0xFF)) * 16777619;
-        h ^= h >>> 16;
+    static ArrayList<byte[]> names;
+    static ArrayList<IntList> lists;
+    static IntList maxes;
+    static Table table;
+    static byte[] scratch;
+    static long lines, malformed;
+    static long[] statusCount;
+
+    static long hashBytes(byte[] s, int len) {
+        long h = 0xcbf29ce484222325L;
+        for (int i = 0; i < len; i++) {
+            h ^= (s[i] & 0xff);
+            h *= 0x100000001b3L;
+        }
         return h;
     }
 
-    static int findEntry(int len) {
-        int mask = table.length - 1;
-        int idx = hash(scratch, len) & mask;
-        while (true) {
-            int s = table[idx];
-            if (s == 0) return -1;
-            int e = s - 1;
-            if (tmplLen[e] == len) {
-                byte[] t = tmpl[e];
-                int i = 0;
-                while (i < len && t[i] == scratch[i]) i++;
-                if (i == len) return e;
-            }
-            idx = (idx + 1) & mask;
-        }
-    }
-
-    static boolean parseLine(int p, int le) {
-        byte[] d = data;
-        if (le - p < 25) return false;
-        if (!(isDig(d[p]) && isDig(d[p + 1]) && isDig(d[p + 2]) && isDig(d[p + 3]) && d[p + 4] == '-'
-                && isDig(d[p + 5]) && isDig(d[p + 6]) && d[p + 7] == '-' && isDig(d[p + 8])
-                && isDig(d[p + 9]) && d[p + 10] == 'T' && isDig(d[p + 11]) && isDig(d[p + 12])
-                && d[p + 13] == ':' && isDig(d[p + 14]) && isDig(d[p + 15]) && d[p + 16] == ':'
-                && isDig(d[p + 17]) && isDig(d[p + 18]) && d[p + 19] == '.' && isDig(d[p + 20])
-                && isDig(d[p + 21]) && isDig(d[p + 22]) && d[p + 23] == 'Z' && d[p + 24] == ' '))
-            return false;
-
-        int i = p + 25;
-        int j = i;
-        while (j < le && d[j] >= 'a' && d[j] <= 'z') j++;
-        if (j == i || j >= le || d[j] != '-') return false;
-        j++;
-        int ds = j;
-        while (j < le && isDig(d[j])) j++;
-        if (j == ds || j >= le || d[j] != ' ') return false;
-        j++;
-
-        // method
-        if (j + 4 <= le && d[j] == 'G' && d[j + 1] == 'E' && d[j + 2] == 'T' && d[j + 3] == ' ') {
-            j += 4;
-        } else if (j + 5 <= le && d[j] == 'P' && d[j + 1] == 'O' && d[j + 2] == 'S'
-                && d[j + 3] == 'T' && d[j + 4] == ' ') {
-            j += 5;
-        } else if (j + 4 <= le && d[j] == 'P' && d[j + 1] == 'U' && d[j + 2] == 'T'
-                && d[j + 3] == ' ') {
-            j += 4;
-        } else if (j + 7 <= le && d[j] == 'D' && d[j + 1] == 'E' && d[j + 2] == 'L'
-                && d[j + 3] == 'E' && d[j + 4] == 'T' && d[j + 5] == 'E' && d[j + 6] == ' ') {
-            j += 7;
-        } else if (j + 6 <= le && d[j] == 'P' && d[j + 1] == 'A' && d[j + 2] == 'T'
-                && d[j + 3] == 'C' && d[j + 4] == 'H' && d[j + 5] == ' ') {
-            j += 6;
-        } else {
-            return false;
-        }
-
-        if (j >= le || d[j] != '/') return false;
-        int q = j + 1;
-        while (q < le) {
-            int c = d[q];
-            if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
-                    || c == '_' || c == '/' || c == '-')
-                q++;
-            else
-                break;
-        }
-
-        int fieldEnd;
-        if (q < le && d[q] == '?') {
-            int r = q + 1;
-            while (r < le && d[r] != ' ') r++;
-            if (r >= le) return false;
-            fieldEnd = r;
-        } else if (q < le && d[q] == ' ') {
-            fieldEnd = q;
-        } else {
-            return false;
-        }
-
-        // build template into scratch
-        ensureScratch((q - j) * 4 + 16);
-        byte[] sc = scratch;
-        int t = 0;
-        int s = j;
-        while (s < q) {
-            if (d[s] == '/') {
-                sc[t++] = '/';
-                s++;
-                continue;
-            }
-            int e = s;
-            boolean allDig = true;
-            while (e < q && d[e] != '/') {
-                if (!isDig(d[e])) allDig = false;
-                e++;
-            }
-            if (allDig) {
-                sc[t] = '{'; sc[t + 1] = 'i'; sc[t + 2] = 'd'; sc[t + 3] = '}';
-                t += 4;
-            } else {
-                for (int k = s; k < e; k++) sc[t++] = d[k];
-            }
-            s = e;
-        }
-
-        int k = fieldEnd;
-        if (k + 4 >= le) return false;
-        if (!isDig(d[k + 1]) || !isDig(d[k + 2]) || !isDig(d[k + 3]) || d[k + 4] != ' ')
-            return false;
-        stStatus = d[k + 1] - '0';
-        k += 5;
-
-        int e = k;
-        while (e < le && isDig(d[e])) e++;
-        if (e == k) return false;
-        if (e >= le || d[e] != 'B') return false;
-        e++;
-        if (e >= le || d[e] != ' ') return false;
-        e++;
-
-        int ls = e;
-        long v = 0;
-        while (e < le && isDig(d[e])) {
-            v = v * 10 + (d[e] - '0');
-            e++;
-        }
-        if (e == ls) return false;
-        if (e >= le || d[e] != '.') return false;
-        e++;
-        if (e >= le || !isDig(d[e])) return false;
-        v = v * 10 + (d[e] - '0');
-        e++;
-        if (e + 3 >= le) return false;
-        if (d[e] != 'm' || d[e + 1] != 's' || d[e + 2] != ' ') return false;
-        e += 3;
-        if (d[e] != '"') return false;
-        e++;
-        int r = e;
-        while (r < le && d[r] != '"') r++;
-        if (r != le - 1) return false;
-
-        stLat = v;
-        stTlen = t;
-        return true;
+    static boolean tsOk(byte[] b, int p) {
+        return b[p] >= '0' && b[p] <= '9'
+                && b[p + 1] >= '0' && b[p + 1] <= '9'
+                && b[p + 2] >= '0' && b[p + 2] <= '9'
+                && b[p + 3] >= '0' && b[p + 3] <= '9'
+                && b[p + 4] == '-'
+                && b[p + 5] >= '0' && b[p + 5] <= '9'
+                && b[p + 6] >= '0' && b[p + 6] <= '9'
+                && b[p + 7] == '-'
+                && b[p + 8] >= '0' && b[p + 8] <= '9'
+                && b[p + 9] >= '0' && b[p + 9] <= '9'
+                && b[p + 10] == 'T'
+                && b[p + 11] >= '0' && b[p + 11] <= '9'
+                && b[p + 12] >= '0' && b[p + 12] <= '9'
+                && b[p + 13] == ':'
+                && b[p + 14] >= '0' && b[p + 14] <= '9'
+                && b[p + 15] >= '0' && b[p + 15] <= '9'
+                && b[p + 16] == ':'
+                && b[p + 17] >= '0' && b[p + 17] <= '9'
+                && b[p + 18] >= '0' && b[p + 18] <= '9'
+                && b[p + 19] == '.'
+                && b[p + 20] >= '0' && b[p + 20] <= '9'
+                && b[p + 21] >= '0' && b[p + 21] <= '9'
+                && b[p + 22] >= '0' && b[p + 22] <= '9'
+                && b[p + 23] == 'Z';
     }
 
     static int cmpBytes(byte[] a, byte[] b) {
-        int m = Math.min(a.length, b.length);
-        for (int i = 0; i < m; i++) {
-            int x = a[i] & 0xFF, y = b[i] & 0xFF;
+        int n = Math.min(a.length, b.length);
+        for (int i = 0; i < n; i++) {
+            int x = a[i] & 0xff, y = b[i] & 0xff;
             if (x != y) return x - y;
         }
         return a.length - b.length;
     }
 
-    static boolean better(int a, int b) {
-        if (count[a] != count[b]) return count[a] > count[b];
-        return cmpBytes(tmpl[a], tmpl[b]) < 0;
+    static void process(byte[] data, int pos, int e) {
+        lines++;
+        boolean ok = true;
+        int statusClass = 0;
+        int lat = 0;
+        int pathStart = 0, pathEnd = 0;
+
+        parse:
+        {
+            int p = pos;
+            int end = e;
+            if (end - p < 25 || !tsOk(data, p)) { ok = false; break parse; }
+            p += 24;
+            if (data[p] != ' ') { ok = false; break parse; }
+            p++;
+            if (p >= end || data[p] < 'a' || data[p] > 'z') { ok = false; break parse; }
+            p++;
+            while (p < end && data[p] >= 'a' && data[p] <= 'z') p++;
+            if (p >= end || data[p] != '-') { ok = false; break parse; }
+            p++;
+            if (p >= end || data[p] < '0' || data[p] > '9') { ok = false; break parse; }
+            while (p < end && data[p] >= '0' && data[p] <= '9') p++;
+            if (p >= end || data[p] != ' ') { ok = false; break parse; }
+            p++;
+            int rem = end - p;
+            if (rem >= 4 && data[p] == 'G' && data[p + 1] == 'E' && data[p + 2] == 'T' && data[p + 3] == ' ') {
+                p += 4;
+            } else if (rem >= 5 && data[p] == 'P' && data[p + 1] == 'O' && data[p + 2] == 'S' && data[p + 3] == 'T' && data[p + 4] == ' ') {
+                p += 5;
+            } else if (rem >= 4 && data[p] == 'P' && data[p + 1] == 'U' && data[p + 2] == 'T' && data[p + 3] == ' ') {
+                p += 4;
+            } else if (rem >= 7 && data[p] == 'D' && data[p + 1] == 'E' && data[p + 2] == 'L' && data[p + 3] == 'E' && data[p + 4] == 'T' && data[p + 5] == 'E' && data[p + 6] == ' ') {
+                p += 7;
+            } else if (rem >= 6 && data[p] == 'P' && data[p + 1] == 'A' && data[p + 2] == 'T' && data[p + 3] == 'C' && data[p + 4] == 'H' && data[p + 5] == ' ') {
+                p += 6;
+            } else { ok = false; break parse; }
+
+            if (p >= end || data[p] != '/') { ok = false; break parse; }
+            pathStart = p;
+            while (p < end) {
+                int c = data[p];
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
+                        || c == '_' || c == '-' || c == '/') {
+                    p++;
+                } else {
+                    break;
+                }
+            }
+            pathEnd = p;
+            if (p < end && data[p] == '?') {
+                p++;
+                while (p < end && data[p] != ' ') p++;
+            }
+            if (p >= end || data[p] != ' ') { ok = false; break parse; }
+            p++;
+            if (end - p < 4 || data[p] < '0' || data[p] > '9' || data[p + 1] < '0' || data[p + 1] > '9'
+                    || data[p + 2] < '0' || data[p + 2] > '9' || data[p + 3] != ' ') {
+                ok = false;
+                break parse;
+            }
+            statusClass = data[p] - '0';
+            p += 4;
+            if (p >= end || data[p] < '0' || data[p] > '9') { ok = false; break parse; }
+            while (p < end && data[p] >= '0' && data[p] <= '9') p++;
+            if (p >= end || data[p] != 'B') { ok = false; break parse; }
+            p++;
+            if (p >= end || data[p] != ' ') { ok = false; break parse; }
+            p++;
+            if (p >= end || data[p] < '0' || data[p] > '9') { ok = false; break parse; }
+            int v = 0;
+            while (p < end && data[p] >= '0' && data[p] <= '9') {
+                v = v * 10 + (data[p] - '0');
+                p++;
+            }
+            if (p >= end || data[p] != '.') { ok = false; break parse; }
+            p++;
+            if (p >= end || data[p] < '0' || data[p] > '9') { ok = false; break parse; }
+            v = v * 10 + (data[p] - '0');
+            p++;
+            if (end - p < 3 || data[p] != 'm' || data[p + 1] != 's' || data[p + 2] != ' ') {
+                ok = false;
+                break parse;
+            }
+            p += 3;
+            if (p >= end || data[p] != '"') { ok = false; break parse; }
+            p++;
+            while (p < end && data[p] != '"') p++;
+            if (p >= end) { ok = false; break parse; }
+            p++;
+            if (p != end) { ok = false; break parse; }
+            lat = v;
+        }
+
+        if (!ok) {
+            malformed++;
+        } else {
+            statusCount[statusClass]++;
+            int need = (pathEnd - pathStart) * 4 + 4;
+            if (need > scratch.length) scratch = new byte[need];
+            int tlen = 0;
+            int q = pathStart;
+            byte[] data2 = data;
+            byte[] sc = scratch;
+            while (q < pathEnd) {
+                sc[tlen++] = '/';
+                q++;
+                int s = q;
+                boolean digits = true, nonempty = false;
+                while (q < pathEnd && data2[q] != '/') {
+                    int c = data2[q];
+                    if (c < '0' || c > '9') digits = false;
+                    nonempty = true;
+                    q++;
+                }
+                if (nonempty && digits) {
+                    sc[tlen++] = '{';
+                    sc[tlen++] = 'i';
+                    sc[tlen++] = 'd';
+                    sc[tlen++] = '}';
+                } else {
+                    int cnt = q - s;
+                    System.arraycopy(data2, s, sc, tlen, cnt);
+                    tlen += cnt;
+                }
+            }
+            long h = hashBytes(sc, tlen);
+            int id = table.find(sc, tlen, h);
+            if (id < 0) {
+                id = names.size();
+                byte[] key = Arrays.copyOf(sc, tlen);
+                table.put(key, tlen, h, id);
+                names.add(key);
+                lists.add(new IntList());
+                maxes.add(0);
+            }
+            IntList il = lists.get(id);
+            il.add(lat);
+            if (lat > maxes.a[id]) maxes.a[id] = lat;
+        }
     }
 
-    public static void main(String[] args) throws IOException {
-        if (args.length < 1) return;
-        try (FileChannel ch = FileChannel.open(Paths.get(args[0]), StandardOpenOption.READ)) {
-            long size = ch.size();
-            if (size > Integer.MAX_VALUE - 8) throw new IOException("too large");
-            data = new byte[(int) size];
-            ByteBuffer bb = ByteBuffer.wrap(data);
-            while (bb.hasRemaining()) {
-                if (ch.read(bb) < 0) break;
-            }
-        }
-        n = data.length;
+    public static void main(String[] args) throws Exception {
+        names = new ArrayList<>();
+        lists = new ArrayList<>();
+        maxes = new IntList();
+        table = new Table(1024);
+        scratch = new byte[2048];
+        statusCount = new long[10];
 
-        long lines = 0, malformed = 0;
-        long[] statusCount = new long[10];
-
-        int p = 0;
-        while (p < n) {
-            int le = p;
-            while (le < n && data[le] != '\n') le++;
-            lines++;
-            if (parseLine(p, le)) {
-                statusCount[stStatus]++;
-                int len = stTlen;
-                int e = findEntry(len);
-                if (e < 0) {
-                    addEntry(len);
-                    e = nEntries - 1;
+        byte[] buf = new byte[1 << 22];
+        int len = 0;
+        boolean eof = false;
+        try (FileInputStream in = new FileInputStream(args[0])) {
+            while (!eof) {
+                if (len == buf.length) buf = Arrays.copyOf(buf, len << 1);
+                int r = in.read(buf, len, buf.length - len);
+                if (r <= 0) {
+                    eof = true;
+                } else {
+                    len += r;
                 }
-                count[e]++;
-                long[] a = lat[e];
-                int k = latN[e];
-                if (k == a.length) {
-                    a = Arrays.copyOf(a, k * 2);
-                    lat[e] = a;
+                int s = 0;
+                while (s < len) {
+                    int nl = -1;
+                    for (int i = s; i < len; i++) {
+                        if (buf[i] == '\n') { nl = i; break; }
+                    }
+                    if (nl < 0) break;
+                    process(buf, s, nl);
+                    s = nl + 1;
                 }
-                a[k] = stLat;
-                latN[e] = k + 1;
-            } else {
-                malformed++;
-            }
-            p = (le < n) ? le + 1 : n;
-        }
-
-        int[] best = new int[10];
-        int bestN = 0;
-        for (int e = 0; e < nEntries; e++) {
-            int pos = 0;
-            while (pos < bestN && better(best[pos], e)) pos++;
-            if (pos < 10) {
-                int lim = Math.min(bestN, 9);
-                for (int k = lim; k > pos; k--) best[k] = best[k - 1];
-                best[pos] = e;
-                if (bestN < 10) bestN++;
+                if (s > 0) {
+                    System.arraycopy(buf, s, buf, 0, len - s);
+                    len -= s;
+                }
             }
         }
+        if (len > 0) process(buf, 0, len);
 
-        StringBuilder sb = new StringBuilder(8192);
+        StringBuilder sb = new StringBuilder(512);
         sb.append("lines ").append(lines).append('\n');
         sb.append("malformed ").append(malformed).append('\n');
-        for (int c = 0; c < 10; c++) {
-            if (statusCount[c] != 0) {
-                sb.append("status ").append((char) ('0' + c)).append("xx ")
-                        .append(statusCount[c]).append('\n');
+        for (int d = 0; d < 10; d++) {
+            if (statusCount[d] != 0) {
+                sb.append("status ").append(d).append("xx ").append(statusCount[d]).append('\n');
             }
         }
-        for (int bi = 0; bi < bestN; bi++) {
-            int e = best[bi];
-            int len = latN[e];
-            Arrays.sort(lat[e], 0, len);
-            int i50 = (50 * len + 99) / 100 - 1;
-            int i95 = (95 * len + 99) / 100 - 1;
-            sb.append("path ").append(new String(tmpl[e], StandardCharsets.ISO_8859_1)).append(' ')
-                    .append(count[e]).append(' ');
-            appendTenths(sb, lat[e][i50]);
-            sb.append(' ');
-            appendTenths(sb, lat[e][i95]);
-            sb.append(' ');
-            appendTenths(sb, lat[e][len - 1]);
-            sb.append('\n');
+
+        int m = names.size();
+        Integer[] order = new Integer[m];
+        for (int i = 0; i < m; i++) order[i] = i;
+        Arrays.sort(order, (a, b) -> {
+            int ca = lists.get(a).n, cb = lists.get(b).n;
+            if (ca != cb) return Integer.compare(cb, ca);
+            return cmpBytes(names.get(a), names.get(b));
+        });
+
+        int top = Math.min(10, m);
+        for (int k = 0; k < top; k++) {
+            int idx = order[k];
+            IntList il = lists.get(idx);
+            Arrays.sort(il.a, 0, il.n);
+            long cnt = il.n;
+            int i50 = (int) ((50L * cnt + 99) / 100) - 1;
+            int i95 = (int) ((95L * cnt + 99) / 100) - 1;
+            int p50 = il.a[i50], p95 = il.a[i95], mx = il.a[il.n - 1];
+            sb.append("path ").append(new String(names.get(idx), java.nio.charset.StandardCharsets.ISO_8859_1))
+              .append(' ').append(cnt)
+              .append(' ').append(p50 / 10).append('.').append(p50 % 10)
+              .append(' ').append(p95 / 10).append('.').append(p95 % 10)
+              .append(' ').append(mx / 10).append('.').append(mx % 10)
+              .append('\n');
         }
+
         System.out.print(sb);
-    }
-
-    static int stTlen;
-
-    static void appendTenths(StringBuilder sb, long v) {
-        sb.append(v / 10).append('.').append(v % 10);
     }
 }

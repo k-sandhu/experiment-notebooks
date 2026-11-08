@@ -2,25 +2,19 @@
 
 const fs = require("fs");
 
-const data = fs.readFileSync(process.argv[2]);
-const dataLen = data.length;
+const raw = fs.readFileSync(process.argv[2]);
+const data = Buffer.allocUnsafe(raw.length + 1);
+raw.copy(data);
+data[raw.length] = 0;
 let pos = 0;
 
 function nextInt() {
-    let i = pos;
-    while (i < dataLen) {
-        const c = data[i] - 48;
-        if (c >= 0 && c <= 9) break;
-        ++i;
-    }
+    while (data[pos] <= 32) pos++;
     let x = 0;
-    while (i < dataLen) {
-        const c = data[i] - 48;
-        if (c < 0 || c > 9) break;
-        x = x * 10 + c;
-        ++i;
+    while (data[pos] > 32) {
+        x = x * 10 + (data[pos] - 48);
+        pos++;
     }
-    pos = i;
     return x;
 }
 
@@ -31,113 +25,135 @@ const Q = nextInt();
 const eu = new Int32Array(M);
 const ev = new Int32Array(M);
 const ew = new Int32Array(M);
-const deg = new Int32Array(N + 1);
-for (let i = 0; i < M; ++i) {
-    const u = nextInt(), v = nextInt(), w = nextInt();
-    eu[i] = u; ev[i] = v; ew[i] = w;
-    ++deg[u]; ++deg[v];
+const deg = new Int32Array(N);
+let maxW = 0;
+
+for (let i = 0; i < M; i++) {
+    const u = nextInt();
+    const v = nextInt();
+    const w = nextInt();
+    eu[i] = u;
+    ev[i] = v;
+    ew[i] = w;
+    deg[u]++;
+    deg[v]++;
+    if (w > maxW) maxW = w;
 }
-const src = new Int32Array(Q);
-for (let i = 0; i < Q; ++i) src[i] = nextInt();
 
 const off = new Int32Array(N + 1);
 let acc = 0;
-for (let i = 0; i < N; ++i) { off[i] = acc; acc += deg[i]; }
+for (let i = 0; i < N; i++) {
+    off[i] = acc;
+    acc += deg[i];
+}
 off[N] = acc;
 
-const fill = off.slice();
-const adj = new Int32Array(2 * M);
-for (let i = 0; i < M; ++i) {
+const at = new Int32Array(acc);
+const aw = new Int32Array(acc);
+const curOff = off.slice(0, N + 1);
+for (let i = 0; i < M; i++) {
     const u = eu[i], v = ev[i], w = ew[i];
-    let p = fill[u]++; adj[p] = (v << 10) | w;
-    p = fill[v]++; adj[p] = (u << 10) | w;
+    at[curOff[u]] = v;
+    aw[curOff[u]] = w;
+    curOff[u]++;
+    at[curOff[v]] = u;
+    aw[curOff[v]] = w;
+    curOff[v]++;
 }
 
-const INF = 0x3f3f3f3f;
-const dist = new Int32Array(N);
+const src = new Int32Array(Q);
+for (let i = 0; i < Q; i++) src[i] = nextInt();
 
-let shift = 0;
-while ((2 ** shift) < N) ++shift;
-const mult = 2 ** shift;
-const mask = mult - 1;
+const small = N * maxW < 2147483646;
+const dist = small ? new Int32Array(N) : new Float64Array(N);
+const INF = small ? 2147483647 : Infinity;
 
-let heap = new Float64Array(2 * M + 16);
-let heapSize = 0;
+// Monotone circular bucket queue (Dial); buckets hold node ids, a bitset of
+// occupied buckets lets us skip empty distance ranges.
+let nb = maxW + 1;
+if (nb < 2) nb = 2;
+const words = (nb + 31) >> 5;
+const bits = new Uint32Array(words);
+const buckets = new Array(nb);
+for (let i = 0; i < nb; i++) buckets[i] = [];
+let qcur = 0;
 
-function heapPush(x) {
-    let i = heapSize++;
-    if (i >= heap.length) {
-        const nh = new Float64Array(heap.length * 2);
-        nh.set(heap);
-        heap = nh;
+function nextSetBit(p) {
+    const wi = p >> 5;
+    let w = bits[wi] & (~0 << (p & 31));
+    if (w !== 0) return (wi << 5) + (31 - Math.clz32(w & -w));
+    for (let i = wi + 1; i < words; i++) {
+        const x = bits[i];
+        if (x !== 0) return (i << 5) + (31 - Math.clz32(x & -x));
     }
-    const h = heap;
-    while (i > 0) {
-        const p = (i - 1) >> 1;
-        if (h[p] <= x) break;
-        h[i] = h[p];
-        i = p;
+    for (let i = 0; i < wi; i++) {
+        const x = bits[i];
+        if (x !== 0) return (i << 5) + (31 - Math.clz32(x & -x));
     }
-    h[i] = x;
+    const low = bits[wi] & ((1 << (p & 31)) - 1);
+    if (low !== 0) return (wi << 5) + (31 - Math.clz32(low & -low));
+    return -1;
 }
 
-function heapPop() {
-    const h = heap;
-    const top = h[0];
-    const x = h[--heapSize];
-    const n = heapSize;
-    if (n > 0) {
-        let i = 0;
-        for (;;) {
-            let c = (i << 1) + 1;
-            if (c >= n) break;
-            if (c + 1 < n && h[c + 1] < h[c]) ++c;
-            if (h[c] >= x) break;
-            h[i] = h[c];
-            i = c;
-        }
-        h[i] = x;
-    }
-    return top;
-}
+let out = "";
 
-const lines = [];
-
-for (let qi = 0; qi < Q; ++qi) {
+for (let qi = 0; qi < Q; qi++) {
     const s = src[qi];
-    dist.fill(INF);
-    heapSize = 0;
+    if (small) dist.fill(INF);
+    else dist.fill(INF);
+    for (let i = 0; i < nb; i++) buckets[i].length = 0;
+    bits.fill(0);
+    qcur = 0;
     dist[s] = 0;
-    heapPush(s);
+    buckets[0].push(s);
+    bits[0] |= 1;
 
-    let total = 0;
     let reach = 0;
-    let far = 0;
-    let farNode = s;
+    let total = 0;
+    let far = -1;
+    let farNode = -1;
 
-    while (heapSize > 0) {
-        const key = heapPop();
-        const v = key % mult;
-        const d = (key - v) / mult;
-        if (d !== dist[v]) continue;
+    for (;;) {
+        const p = qcur % nb;
+        const idx = nextSetBit(p);
+        if (idx < 0) break;
+        let offset = idx - p;
+        if (offset < 0) offset += nb;
+        qcur += offset;
+        const d = qcur;
 
-        ++reach;
-        total += d;
-        if (d > far) { far = d; farNode = v; }
+        const bk = buckets[idx];
+        while (bk.length > 0) {
+            const u = bk.pop();
+            if (dist[u] !== d) continue;
 
-        const end = off[v + 1];
-        for (let e = off[v]; e < end; ++e) {
-            const a = adj[e];
-            const u = a >>> 10;
-            const nd = d + (a & 1023);
-            if (nd < dist[u]) {
-                dist[u] = nd;
-                heapPush(nd * mult + u);
+            reach++;
+            total += d;
+            if (d > far) {
+                far = d;
+                farNode = u;
+            } else if (d === far && u < farNode) {
+                farNode = u;
+            }
+
+            const end = off[u + 1];
+            for (let e = off[u]; e < end; e++) {
+                const v = at[e];
+                const w = aw[e];
+                const nd = d + w;
+                if (nd < dist[v]) {
+                    dist[v] = nd;
+                    let idx2 = idx + w;
+                    if (idx2 >= nb) idx2 -= nb;
+                    buckets[idx2].push(v);
+                    bits[idx2 >> 5] |= 1 << (idx2 & 31);
+                }
             }
         }
+        bits[idx >> 5] &= ~(1 << (idx & 31));
     }
 
-    lines.push(s + " " + reach + " " + total + " " + far + " " + farNode);
+    out += s + " " + reach + " " + total + " " + far + " " + farNode + "\n";
 }
 
-process.stdout.write(lines.join("\n") + "\n");
+process.stdout.write(out);

@@ -1,217 +1,223 @@
+// Word pairs benchmark - C++20, MSVC.
+// Single pass over the text: lowercase words in place, intern them to ids,
+// emit (prevId, curId) pairs within sentences, sort packed pairs, count runs,
+// keep the top 20 by (count desc, word1 asc, word2 asc).
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <vector>
-#include <string>
-#include <string_view>
 #include <algorithm>
 #include <io.h>
 #include <fcntl.h>
 
-static inline bool isLetter(unsigned char c) {
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+using u32 = uint32_t;
+using u64 = uint64_t;
+
+static inline bool is_letter(unsigned char c) {
+    c = (unsigned char)(c | 0x20); // fold to lower case
+    return c >= 'a' && c <= 'z';
 }
 
-static inline unsigned char toLower(unsigned char c) { return c | 0x20u; }
+static inline unsigned char to_lower(unsigned char c) {
+    if (c >= 'A' && c <= 'Z') return (unsigned char)(c + 0x20);
+    return c;
+}
 
-// Open-addressing map from lowercased word (string_view) to id.
-// Views point into owned std::string objects in `words`, which never move
-// their character data, so views stay valid across rehashes.
-struct WordMap {
-    std::vector<std::string> words; // id -> lowercase word
-    std::vector<uint32_t> slots;    // id + 1, 0 means empty
-    size_t mask;
-    size_t count;
+// Open-addressing hash map from lowercase word (view into the input buffer)
+// to a dense word id. The buffer owns the strings, so no copies are made.
+struct InternMap {
+    struct Slot {
+        u32 hashPlusOne; // 0 means empty slot
+        u32 id;
+    };
 
-    WordMap() : mask(4095), count(0) { slots.assign(4096, 0); }
+    std::vector<Slot> slots;
+    std::vector<char> pool;   // null-terminated words, indexed by id
+    std::vector<u32> offs;    // offset of each word inside pool
+    std::vector<u32> lens;    // length of each word
+    u64 mask;
+    u32 occupied;
 
-    static size_t hashView(std::string_view s) noexcept {
-        size_t h = 14695981039346656037ull;
-        for (unsigned char c : s) {
-            h ^= c;
-            h *= 1099511628211ull;
-        }
-        return h;
+    InternMap() : mask(0), occupied(0) { reset(1 << 14); }
+
+    void reset(size_t cap) {
+        slots.assign(cap, Slot{0, 0});
+        mask = (u64)cap - 1;
     }
 
-    void grow() {
-        std::vector<uint32_t> old;
-        old.swap(slots);
-        mask = mask * 2 + 1;
-        slots.assign(mask + 1, 0);
-        count = 0;
-        for (uint32_t v : old) {
-            if (v == 0) continue;
-            size_t i = hashView(std::string_view(words[v - 1])) & mask;
-            while (slots[i] != 0) i = (i + 1) & mask;
-            slots[i] = v;
-            ++count;
-        }
-    }
-
-    std::pair<uint32_t, bool> intern(std::string_view s) {
-        if (count * 4 >= slots.size() * 3) grow();
-        size_t i = hashView(s) & mask;
-        while (true) {
-            uint32_t v = slots[i];
-            if (v == 0) {
-                words.emplace_back(s.data(), s.size());
-                uint32_t id = uint32_t(words.size() - 1);
-                slots[i] = id + 1;
-                ++count;
-                return { id, true };
+    void rehash(const std::vector<Slot>& old) {
+        for (const Slot& s : old) {
+            if (s.hashPlusOne != 0) {
+                u32 h = s.hashPlusOne - 1;
+                size_t pos = (u64)h & mask;
+                while (slots[pos].hashPlusOne != 0) pos = (pos + 1) & mask;
+                slots[pos] = s;
             }
-            const std::string& w = words[v - 1];
-            if (w.size() == s.size() && std::memcmp(w.data(), s.data(), s.size()) == 0)
-                return { v - 1, false };
-            i = (i + 1) & mask;
-        }
-    }
-};
-
-// Open-addressing map from packed (id1, id2) pair key to count.
-struct PairMap {
-    std::vector<uint64_t> keys;   // UINT64_MAX means empty
-    std::vector<uint32_t> counts;
-    size_t mask;
-    size_t count;
-
-    PairMap() : mask((uint32_t(1) << 16) - 1), count(0) {
-        keys.assign(mask + 1, UINT64_MAX);
-        counts.assign(mask + 1, 0);
-    }
-
-    void grow() {
-        std::vector<uint64_t> oldK;
-        oldK.swap(keys);
-        std::vector<uint32_t> oldC;
-        oldC.swap(counts);
-        mask = mask * 2 + 1;
-        keys.assign(mask + 1, UINT64_MAX);
-        counts.assign(mask + 1, 0);
-        count = 0;
-        for (size_t i = 0; i < oldK.size(); ++i) {
-            uint64_t k = oldK[i];
-            if (k == UINT64_MAX) continue;
-            size_t j = slot(k, mask);
-            while (keys[j] != UINT64_MAX) j = (j + 1) & mask;
-            keys[j] = k;
-            counts[j] = oldC[i];
-            ++count;
         }
     }
 
-    static size_t slot(uint64_t k, size_t m) noexcept {
-        return size_t(k * 0x9E3779B97F4A7C15ull) & m;
-    }
-
-    uint32_t* findOrInsert(uint64_t key) {
-        if ((count + 1) * 4 >= keys.size() * 3) grow();
-        size_t i = slot(key, mask);
-        while (keys[i] != UINT64_MAX) {
-            if (keys[i] == key) return &counts[i];
-            i = (i + 1) & mask;
+    u32 intern(const char* data, u32 start, u32 len, u32 hash) {
+        if (((u64)occupied + 1) * 4 >= (u64)slots.size() * 3) {
+            size_t newCap = slots.size() * 2;
+            std::vector<Slot> old = std::move(slots);
+            slots.assign(newCap, Slot{0, 0});
+            mask = (u64)newCap - 1;
+            rehash(old);
         }
-        keys[i] = key;
-        counts[i] = 0;
-        ++count;
-        return &counts[i];
+        u32 hp = hash + 1;
+        size_t pos = (u64)hash & mask;
+        while (true) {
+            Slot& s = slots[pos];
+            if (s.hashPlusOne == 0) {
+                s.hashPlusOne = hp;
+                s.id = occupied;
+                offs.push_back((u32)pool.size());
+                lens.push_back(len);
+                pool.insert(pool.end(), data + start, data + start + len);
+                pool.push_back('\0');
+                ++occupied;
+                return s.id;
+            }
+            if (s.hashPlusOne == hp) {
+                u32 id = s.id;
+                if (lens[id] == len && std::memcmp(pool.data() + offs[id], data + start, len) == 0)
+                    return id;
+            }
+            pos = (pos + 1) & mask;
+        }
     }
-};
-
-struct Entry {
-    uint32_t count;
-    uint32_t id1;
-    uint32_t id2;
 };
 
 int main(int argc, char** argv) {
     if (argc < 2) return 1;
 
+    // write LF-only output no matter how stdout is captured
     _setmode(_fileno(stdout), _O_BINARY);
 
-    FILE* f = std::fopen(argv[1], "rb");
+    FILE* f = fopen(argv[1], "rb");
     if (!f) return 1;
-    if (std::fseek(f, 0, SEEK_END) != 0) { std::fclose(f); return 1; }
-    long len = std::ftell(f);
-    if (len < 0) { std::fclose(f); return 1; }
-    if (std::fseek(f, 0, SEEK_SET) != 0) { std::fclose(f); return 1; }
-    std::string data;
-    data.resize(size_t(len) + 1);
-    if (len > 0) {
-        std::fread(data.data(), 1, size_t(len), f);
-    }
-    std::fclose(f);
-
-    const unsigned char* s = reinterpret_cast<const unsigned char*>(data.data());
-    const unsigned char* end = s + size_t(len);
-
-    WordMap wmap;
-    PairMap pmap;
-    std::string buf;
-    buf.reserve(64);
-
-    uint64_t wordsCount = 0;
-    uint64_t pairsCount = 0;
-    uint32_t prevId = UINT32_MAX;
-
-    auto noteWord = [&](uint32_t id) {
-        ++wordsCount;
-        if (prevId != UINT32_MAX) {
-            ++pairsCount;
-            uint64_t key = (uint64_t(prevId) << 32) | uint64_t(id);
-            *pmap.findOrInsert(key) += 1;
+    fseek(f, 0, SEEK_END);
+    long fileLen = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    std::vector<char> buf;
+    if (fileLen > 0) {
+        buf.resize((size_t)fileLen);
+        if (fread(buf.data(), 1, buf.size(), f) != (size_t)fileLen) {
+            fclose(f);
+            return 1;
         }
-        prevId = id;
+    }
+    fclose(f);
+
+    char* data = buf.data();
+    size_t n = buf.size();
+
+    InternMap intern;
+    std::vector<u64> pairs;
+    pairs.reserve(1 << 20);
+
+    u32 prevId = 0;
+    bool havePrev = false;
+    u64 wordTotal = 0, pairTotal = 0;
+
+    // compare two word ids by their lower-cased spelling (byte order)
+    auto wordLess = [&](u32 a, u32 b) -> bool {
+        const char* sa = intern.pool.data() + intern.offs[a];
+        const char* sb = intern.pool.data() + intern.offs[b];
+        u32 la = intern.lens[a], lb = intern.lens[b];
+        u32 m = la < lb ? la : lb;
+        int c = std::memcmp(sa, sb, m);
+        if (c != 0) return c < 0;
+        return la < lb;
     };
 
-    while (s < end) {
-        unsigned char c = *s++;
-        if (isLetter(c)) {
-            buf.push_back(char(toLower(c)));
-        } else {
-            if (!buf.empty()) {
-                noteWord(wmap.intern(std::string_view(buf.data(), buf.size())).first);
-                buf.clear();
+    auto better = [&](u64 c1, u32 a1, u32 b1, u64 c2, u32 a2, u32 b2) -> bool {
+        // is (c1,a1,b1) better than (c2,a2,b2)? count desc, then words asc
+        if (c1 != c2) return c1 > c2;
+        if (wordLess(a1, a2)) return true;
+        if (wordLess(a2, a1)) return false;
+        return wordLess(b1, b2);
+    };
+
+    struct Entry { u64 count; u32 w1; u32 w2; };
+    Entry best[20];
+    int bestn = 0;
+
+    auto consider = [&](u64 count, u32 w1, u32 w2) {
+        if (bestn < 20) {
+            int pos = bestn;
+            while (pos > 0 && better(count, w1, w2, best[pos - 1].count, best[pos - 1].w1, best[pos - 1].w2)) {
+                best[pos] = best[pos - 1];
+                --pos;
             }
-            if (c == '.' || c == '!' || c == '?') prevId = UINT32_MAX;
+            best[pos].count = count;
+            best[pos].w1 = w1;
+            best[pos].w2 = w2;
+            ++bestn;
+        } else if (better(count, w1, w2, best[19].count, best[19].w1, best[19].w2)) {
+            Entry e{count, w1, w2};
+            int pos = 19;
+            while (pos > 0 && better(count, w1, w2, best[pos - 1].count, best[pos - 1].w1, best[pos - 1].w2)) {
+                best[pos] = best[pos - 1];
+                --pos;
+            }
+            best[pos] = e;
         }
-    }
-    if (!buf.empty()) {
-        noteWord(wmap.intern(std::string_view(buf.data(), buf.size())).first);
-    }
+    };
 
-    uint64_t distinct = pmap.count;
-    std::vector<Entry> entries;
-    entries.reserve(pmap.count);
-    for (size_t i = 0; i < pmap.keys.size(); ++i) {
-        if (pmap.keys[i] != UINT64_MAX) {
-            entries.push_back(Entry{
-                pmap.counts[i],
-                uint32_t(pmap.keys[i] >> 32),
-                uint32_t(pmap.keys[i])
-            });
+    size_t i = 0;
+    while (i < n) {
+        // skip to the next word; sentence enders reset the previous word
+        while (i < n) {
+            unsigned char c = (unsigned char)data[i];
+            if (is_letter(c)) break;
+            if (c == '.' || c == '!' || c == '?') havePrev = false;
+            ++i;
         }
+        if (i >= n) break;
+
+        // scan the word, lowercasing in place
+        u32 start = (u32)i;
+        u32 hash = 2166136261u;
+        while (i < n) {
+            unsigned char c = (unsigned char)data[i];
+            if (!is_letter(c)) break;
+            c = to_lower(c);
+            data[i] = (char)c;
+            hash ^= c;
+            hash *= 16777619u;
+            ++i;
+        }
+        u32 len = (u32)(i - start);
+
+        u32 id = intern.intern(data, start, len, hash);
+        ++wordTotal;
+        if (havePrev) {
+            pairs.push_back(((u64)prevId << 32) | (u64)id);
+            ++pairTotal;
+        }
+        prevId = id;
+        havePrev = true;
     }
 
-    std::sort(entries.begin(), entries.end(), [&](const Entry& a, const Entry& b) {
-        if (a.count != b.count) return a.count > b.count;
-        const std::string& w1a = wmap.words[a.id1];
-        const std::string& w1b = wmap.words[b.id1];
-        int c = w1a.compare(w1b);
-        if (c != 0) return c < 0;
-        const std::string& w2a = wmap.words[a.id2];
-        const std::string& w2b = wmap.words[b.id2];
-        return w2a.compare(w2b) < 0;
-    });
+    std::sort(pairs.begin(), pairs.end());
 
-    std::printf("words %llu\npairs %llu\ndistinct %llu\n",
-        (unsigned long long)wordsCount, (unsigned long long)pairsCount, (unsigned long long)distinct);
-    size_t limit = entries.size() < 20 ? entries.size() : 20;
-    for (size_t i = 0; i < limit; ++i) {
-        std::printf("%u %s %s\n", entries[i].count,
-            wmap.words[entries[i].id1].c_str(),
-            wmap.words[entries[i].id2].c_str());
+    size_t k = 0;
+    u64 distinct = 0;
+    while (k < pairs.size()) {
+        size_t j = k + 1;
+        while (j < pairs.size() && pairs[j] == pairs[k]) ++j;
+        consider((u64)(j - k), (u32)(pairs[k] >> 32), (u32)pairs[k]);
+        ++distinct;
+        k = j;
+    }
+
+    printf("words %llu\npairs %llu\ndistinct %llu\n",
+           (unsigned long long)wordTotal, (unsigned long long)pairTotal, (unsigned long long)distinct);
+    for (int t = 0; t < bestn; ++t) {
+        const char* w1 = intern.pool.data() + intern.offs[best[t].w1];
+        const char* w2 = intern.pool.data() + intern.offs[best[t].w2];
+        printf("%llu %s %s\n", (unsigned long long)best[t].count, w1, w2);
     }
     return 0;
 }

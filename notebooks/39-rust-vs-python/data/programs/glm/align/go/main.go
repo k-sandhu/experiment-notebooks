@@ -1,148 +1,150 @@
 package main
 
 import (
-	"bufio"
 	"os"
+	"strconv"
 )
 
-func isWs(b byte) bool {
-	return b == ' ' || b == '\n' || b == '\r' || b == '\t' || b == '\f' || b == 11
+var data []byte
+var pos int
+var tokStart, tokLen int
+
+func isWs(c byte) bool {
+	return c == ' ' || c == '\n' || c == '\r' || c == '\t'
 }
 
-var (
-	buf    []byte
-	pos    int
-	tStart int
-	tEnd   int
-)
-
-func token() []byte {
-	for pos < len(buf) && isWs(buf[pos]) {
+func skipWs() {
+	for pos < len(data) && isWs(data[pos]) {
 		pos++
 	}
-	tStart = pos
-	for pos < len(buf) && !isWs(buf[pos]) {
-		pos++
-	}
-	tEnd = pos
-	return buf[tStart:tEnd]
 }
 
-func nextInt() int {
-	for pos < len(buf) && isWs(buf[pos]) {
+func nextInt() int64 {
+	skipWs()
+	neg := false
+	if pos < len(data) && (data[pos] == '-' || data[pos] == '+') {
+		neg = data[pos] == '-'
 		pos++
 	}
-	v := 0
-	for pos < len(buf) && !isWs(buf[pos]) {
-		v = v*10 + int(buf[pos]-'0')
+	var v int64
+	for pos < len(data) && data[pos] >= '0' && data[pos] <= '9' {
+		v = v*10 + int64(data[pos]-'0')
 		pos++
+	}
+	if neg {
+		return -v
 	}
 	return v
 }
 
-func writeUint(w *bufio.Writer, v uint64) {
-	var tmp [20]byte
-	k := 0
-	if v == 0 {
-		tmp[0] = '0'
-		k = 1
+func nextToken() {
+	skipWs()
+	tokStart = pos
+	for pos < len(data) && !isWs(data[pos]) {
+		pos++
 	}
-	for v > 0 {
-		tmp[k] = byte('0' + v%10)
-		k++
-		v /= 10
+	tokLen = pos - tokStart
+}
+
+var rowBuf = make([]int32, 64)
+var tIdxBuf = make([]int32, 64)
+var insTBuf = make([]int32, 64)
+
+func solve(sStart, sLen, tStart, tLen int, idx *[256]int16, ins, del, sub []int32) int64 {
+	n, m := sLen, tLen
+	row := rowBuf
+	if len(row) < m+1 {
+		row = make([]int32, m+1)
+		rowBuf = row
 	}
-	for k > 0 {
-		k--
-		w.WriteByte(tmp[k])
+	tIdx, insT := tIdxBuf, insTBuf
+	if len(tIdx) < m {
+		tIdx = make([]int32, m)
+		tIdxBuf = tIdx
+		insT = make([]int32, m)
+		insTBuf = insT
 	}
-	w.WriteByte('\n')
+	for j := 0; j < m; j++ {
+		c := idx[data[tStart+j]]
+		tIdx[j] = int32(c)
+		insT[j] = ins[c]
+	}
+
+	_ = row[m]
+	row[0] = 0
+	for j := 0; j < m; j++ {
+		row[j+1] = row[j] + insT[j]
+	}
+
+	for i := 0; i < n; i++ {
+		si := idx[data[sStart+i]]
+		dl := del[si]
+		subr := sub[si<<5 : si<<5+26]
+		diag := row[0]
+		row[0] = diag + dl
+		for j := 0; j < m; j++ {
+			up := row[j+1]
+			v := up + dl
+			x := row[j] + insT[j]
+			if x < v {
+				v = x
+			}
+			x = diag + subr[tIdx[j]]
+			if x < v {
+				v = x
+			}
+			row[j+1] = v
+			diag = up
+		}
+	}
+	return int64(row[m])
 }
 
 func main() {
-	data, err := os.ReadFile(os.Args[1])
-	if err != nil {
-		os.Exit(1)
-	}
-	buf = data
-	w := bufio.NewWriterSize(os.Stdout, 1<<16)
-	defer w.Flush()
+	data, _ = os.ReadFile(os.Args[1])
+	pos = 0
 
-	alpha := token()
-	a := len(alpha)
-	charId := make([]int, 128)
-	for i := range charId {
-		charId[i] = -1
+	nextToken()
+	A := tokLen
+	var idx [256]int16
+	for i := range idx {
+		idx[i] = -1
 	}
-	for i := 0; i < a; i++ {
-		charId[alpha[i]] = i
+	for i := 0; i < A; i++ {
+		idx[data[tokStart+i]] = int16(i)
 	}
 
-	ins := make([]int, a)
-	del := make([]int, a)
-	sub := make([]int, a*a)
-	for i := 0; i < a; i++ {
-		ins[i] = nextInt()
+	ins := make([]int32, A)
+	del := make([]int32, A)
+	sub := make([]int32, A<<5) // stride 32 rows
+	for i := 0; i < A; i++ {
+		ins[i] = int32(nextInt())
 	}
-	for i := 0; i < a; i++ {
-		del[i] = nextInt()
+	for i := 0; i < A; i++ {
+		del[i] = int32(nextInt())
 	}
-	for i := 0; i < a*a; i++ {
-		sub[i] = nextInt()
-	}
-	p := nextInt()
-
-	total := int64(0)
-
-	sIds := make([]int, 1100)
-	tIds := make([]int, 1100)
-	rowA := make([]int, 1101)
-	rowB := make([]int, 1101)
-
-	for q := 0; q < p; q++ {
-		tok := token()
-		n := len(tok)
-		for i := 0; i < n; i++ {
-			sIds[i] = charId[tok[i]]
+	for i := 0; i < A; i++ {
+		for j := 0; j < A; j++ {
+			sub[(i<<5)+j] = int32(nextInt())
 		}
-		tok = token()
-		m := len(tok)
-		for j := 0; j < m; j++ {
-			tIds[j] = charId[tok[j]]
-		}
-
-		prev := rowA[:m+1]
-		cur := rowB[:m+1]
-		prev[0] = 0
-		for j := 1; j <= m; j++ {
-			prev[j] = prev[j-1] + ins[tIds[j-1]]
-		}
-		for i := 0; i < n; i++ {
-			si := sIds[i]
-			dc := del[si]
-			subBase := si * a
-			left := prev[0] + dc
-			cur[0] = left
-			diag := prev[0]
-			for j := 1; j <= m; j++ {
-				tj := tIds[j-1]
-				best := prev[j] + dc
-				if l := left + ins[tj]; l < best {
-					best = l
-				}
-				if d := diag + sub[subBase+tj]; d < best {
-					best = d
-				}
-				cur[j] = best
-				left = best
-				diag = prev[j]
-			}
-			prev, cur = cur, prev
-		}
-		total += int64(prev[m])
-		writeUint(w, uint64(prev[m]))
 	}
 
-	w.WriteString("total ")
-	writeUint(w, uint64(total))
+	P := int(nextInt())
+
+	out := make([]byte, 0, P*13+16)
+	var total int64
+	for q := 0; q < P; q++ {
+		nextToken()
+		sStart, n := tokStart, tokLen
+		nextToken()
+		tStart, m := tokStart, tokLen
+		cost := solve(sStart, n, tStart, m, &idx, ins, del, sub)
+		total += cost
+		out = strconv.AppendInt(out, cost, 10)
+		out = append(out, '\n')
+	}
+	out = append(out, "total "...)
+	out = strconv.AppendInt(out, total, 10)
+	out = append(out, '\n')
+	os.Stdout.Write(out)
 }

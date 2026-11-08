@@ -1,637 +1,486 @@
 using System;
-using System.Buffers.Binary;
+using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
-// Ledger: sum JSON-lines transactions with exact integer currency conversion.
-// Single pass over the raw bytes; only the needed fields are extracted.
-// Keys live in open-addressing tables backed by a private byte pool.
-sealed class Table
-{
-    public int cap = 1024, mask = 1023, size, poolLen;
-    public int[] slot = new int[1024];   // entry index + 1, 0 = empty
-    public int[] keyOff = new int[1024];
-    public int[] keyLen = new int[1024];
-    public long[] a = new long[1024];    // count (channels)
-    public long[] b = new long[1024];    // net
-    public byte[] pool = new byte[1 << 16];
+// Ledger: fast single-pass JSON Lines aggregator.
+// Hand-rolled byte scanner over the whole input (no DOM), unsafe pointer access.
+internal static class Program {
+    private static unsafe byte* p;
+    private static int i;
+    private static int n;
 
-    static long Hash(byte[] d, int off, int len)
-    {
-        ulong h = 0xcbf29ce484222325UL;
-        for (int i = 0; i < len; i++)
-        {
-            h ^= d[off + i];
-            h *= 0x100000001b3UL;
-        }
-        return (long)h;
-    }
+    private static int sStart;
+    private static int sEnd;
+    private static bool sEsc;
 
-    public int Find(byte[] d, int off, int len)
-    {
-        int h = (int)Hash(d, off, len);
-        int i = h & mask;
-        int[] slot = this.slot;
-        while (slot[i] != 0)
-        {
-            int e = slot[i] - 1;
-            if (keyLen[e] == len)
-            {
-                var p = pool;
-                int po = keyOff[e], k = 0;
-                while (k < len && p[po + k] == d[off + k]) k++;
-                if (k == len) return e;
-            }
-            i = (i + 1) & mask;
-        }
-        return -1;
-    }
+    private static unsafe void Main(string[] args) {
+        byte[] data = File.ReadAllBytes(args[0]);
+        n = data.Length;
 
-    public int FindOrInsert(byte[] d, int off, int len)
-    {
-        if (size * 10 >= cap * 7) Grow();
-        int h = (int)Hash(d, off, len);
-        int i = h & mask;
-        int[] slot = this.slot;
-        while (slot[i] != 0)
-        {
-            int e = slot[i] - 1;
-            if (keyLen[e] == len)
-            {
-                var p = pool;
-                int po = keyOff[e], k = 0;
-                while (k < len && p[po + k] == d[off + k]) k++;
-                if (k == len) return e;
-            }
-            i = (i + 1) & mask;
-        }
-        int ne = size++;
-        if (poolLen + len > pool.Length)
-            Array.Resize(ref pool, Math.Max(pool.Length * 2, poolLen + len));
-        Array.Copy(d, off, pool, poolLen, len);
-        keyOff[ne] = poolLen;
-        keyLen[ne] = len;
-        poolLen += len;
-        a[ne] = 0;
-        b[ne] = 0;
-        slot[i] = ne + 1;
-        return ne;
-    }
+        var rates = new Dictionary<string, long>();
+        var channels = new Dictionary<string, long[]>(); // [count, net]
+        var accounts = new Dictionary<string, long[]>(); // [net]
 
-    void Grow()
-    {
-        cap <<= 1;
-        mask = cap - 1;
-        var nslot = new int[cap];
-        var nKeyOff = new int[cap];
-        var nKeyLen = new int[cap];
-        var na = new long[cap];
-        var nb = new long[cap];
-        for (int e = 0; e < size; e++)
-        {
-            int h = (int)Hash(pool, keyOff[e], keyLen[e]);
-            int i = h & mask;
-            while (nslot[i] != 0) i = (i + 1) & mask;
-            nslot[i] = e + 1;
-            nKeyOff[e] = keyOff[e];
-            nKeyLen[e] = keyLen[e];
-            na[e] = a[e];
-            nb[e] = b[e];
-        }
-        slot = nslot;
-        keyOff = nKeyOff;
-        keyLen = nKeyLen;
-        a = na;
-        b = nb;
-    }
-}
+        fixed (byte* basePtr = data) {
+            p = basePtr;
 
-static class Program
-{
-    static byte[] data;
-    static byte[] scratch = new byte[256];
-    static int scratchLen;
-
-    static bool IsWS(byte c) => c == (byte)' ' || c == (byte)'\t' || c == (byte)'\r' || c == (byte)'\n';
-
-    static int SkipWS(int i)
-    {
-        while (i < data.Length && IsWS(data[i])) i++;
-        return i;
-    }
-
-    static int sVal, eVal, sNext;
-    static bool escVal;
-
-    static void ParseString(int i)
-    {
-        i++;
-        sVal = i;
-        bool esc = false;
-        int n = data.Length;
-        while (i < n)
-        {
-            byte c = data[i];
-            if (c == (byte)'"') break;
-            if (c == (byte)'\\')
-            {
-                esc = true;
-                i++;
-                if (i < n && data[i] == (byte)'u') i += 4;
-            }
-            i++;
-        }
-        eVal = i;
-        escVal = esc;
-        sNext = i + 1;
-    }
-
-    static int SkipValue(int i)
-    {
-        int n = data.Length;
-        if (i < n && data[i] == (byte)'"')
-        {
-            ParseString(i);
-            return sNext;
-        }
-        if (i < n && (data[i] == (byte)'{' || data[i] == (byte)'['))
-        {
-            int depth = 0;
-            while (i < n)
-            {
-                byte c = data[i];
-                if (c == (byte)'"')
-                {
-                    ParseString(i);
-                    i = sNext;
+            // ---- first line: rates ----
+            SkipWs();
+            i++; // '{'
+            while (true) {
+                SkipWs();
+                ScanString();
+                int ks = sStart, ke = sEnd;
+                bool kesc = sEsc;
+                SkipWs();
+                i++; // ':'
+                SkipWs();
+                if (!kesc && ke - ks == 5 && Eq(ks, ke, "rates")) {
+                    i++; // '{'
+                    while (true) {
+                        SkipWs();
+                        if (p[i] == '}') {
+                            i++;
+                            break;
+                        }
+                        ScanString();
+                        string cur = StrValue();
+                        SkipWs();
+                        i++; // ':'
+                        SkipWs();
+                        long r = 0;
+                        while (p[i] >= '0' && p[i] <= '9') {
+                            r = r * 10 + (p[i] - '0');
+                            i++;
+                        }
+                        rates[cur] = r;
+                        SkipWs();
+                        if (p[i] == ',') i++;
+                    }
+                } else {
+                    SkipValue();
+                }
+                SkipWs();
+                if (p[i] == ',') {
+                    i++;
                     continue;
                 }
-                if (c == (byte)'{' || c == (byte)'[') depth++;
-                else if (c == (byte)'}' || c == (byte)']')
-                {
-                    if (--depth == 0) return i + 1;
+                i++;
+                break;
+            }
+
+            // ---- transactions ----
+            long totalCount = 0;
+            long totalNet = 0;
+
+            while (true) {
+                SkipWs();
+                if (i >= n) break;
+                i++; // '{'
+
+                int typeCode = 0; // 1 credit, 2 debit, 3 refund, 4 void
+                bool testTag = false;
+                long hund = 0;
+                string currency = null;
+                string account = null;
+                string channel = null;
+
+                while (true) {
+                    SkipWs();
+                    ScanString();
+                    int ks = sStart, ke = sEnd;
+                    int klen = ke - ks;
+                    bool kesc = sEsc;
+                    SkipWs();
+                    i++; // ':'
+                    SkipWs();
+                    if (!kesc) {
+                        char c0 = klen > 0 ? (char)p[ks] : '\0';
+                        if (klen == 4 && c0 == 't' && Eq(ks, ke, "type")) {
+                            ScanString();
+                            typeCode = TypeCode();
+                        } else if (klen == 6 && Eq(ks, ke, "amount")) {
+                            ScanString();
+                            hund = ParseAmount(sStart, sEnd, sEsc);
+                        } else if (klen == 8 && Eq(ks, ke, "currency")) {
+                            ScanString();
+                            currency = StrValue();
+                        } else if (klen == 7 && Eq(ks, ke, "account")) {
+                            ScanString();
+                            account = StrValue();
+                        } else if (klen == 4 && c0 == 't' && Eq(ks, ke, "tags")) {
+                            testTag = ParseTags();
+                        } else if (klen == 4 && c0 == 'm' && Eq(ks, ke, "meta")) {
+                            channel = ParseMeta();
+                        } else {
+                            SkipValue();
+                        }
+                    } else {
+                        // escaped key: decode and compare (rare)
+                        switch (DecodeString(ks, ke)) {
+                            case "type":
+                                ScanString();
+                                typeCode = TypeCode();
+                                break;
+                            case "amount":
+                                ScanString();
+                                hund = ParseAmount(sStart, sEnd, sEsc);
+                                break;
+                            case "currency":
+                                ScanString();
+                                currency = StrValue();
+                                break;
+                            case "account":
+                                ScanString();
+                                account = StrValue();
+                                break;
+                            case "tags":
+                                testTag = ParseTags();
+                                break;
+                            case "meta":
+                                channel = ParseMeta();
+                                break;
+                            default:
+                                SkipValue();
+                                break;
+                        }
+                    }
+                    SkipWs();
+                    if (p[i] == ',') {
+                        i++;
+                        continue;
+                    }
+                    i++; // '}'
+                    break;
+                }
+
+                if (typeCode == 4 || testTag) continue;
+
+                if (!rates.TryGetValue(currency, out long rate)) continue;
+                long usd = (hund * rate) / 1000000;
+                long v = typeCode == 2 ? -usd : usd;
+
+                totalCount++;
+                totalNet += v;
+
+                if (channels.TryGetValue(channel, out var c)) {
+                    c[0]++;
+                    c[1] += v;
+                } else {
+                    channels[channel] = new[] { 1L, v };
+                }
+                if (accounts.TryGetValue(account, out var a)) {
+                    a[0] += v;
+                } else {
+                    accounts[account] = new[] { v };
+                }
+            }
+
+            // ---- output ----
+            var sb = new StringBuilder(1 << 16);
+            sb.Append("counted ").Append(totalCount).Append('\n');
+            sb.Append("net ").Append(totalNet).Append('\n');
+
+            var chs = new List<KeyValuePair<string, long[]>>(channels);
+            chs.Sort((x, y) => string.CompareOrdinal(x.Key, y.Key));
+            foreach (var e in chs) {
+                sb.Append("channel ").Append(e.Key).Append(' ')
+                  .Append(e.Value[0]).Append(' ').Append(e.Value[1]).Append('\n');
+            }
+
+            var accs = new List<KeyValuePair<string, long[]>>(accounts);
+            accs.Sort((x, y) => {
+                int c = y.Value[0].CompareTo(x.Value[0]);
+                return c != 0 ? c : string.CompareOrdinal(x.Key, y.Key);
+            });
+            int lim = Math.Min(10, accs.Count);
+            for (int k = 0; k < lim; k++) {
+                sb.Append("account ").Append(accs[k].Key).Append(' ').Append(accs[k].Value[0]).Append('\n');
+            }
+
+            using Stream stdout = Console.OpenStandardOutput();
+            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            stdout.Write(bytes, 0, bytes.Length);
+        }
+    }
+
+    // ---- scanner helpers ----
+
+    private static unsafe void SkipWs() {
+        while (i < n) {
+            byte c = p[i];
+            if (c == (byte)' ' || c == (byte)'\t' || c == (byte)'\r' || c == (byte)'\n') i++;
+            else break;
+        }
+    }
+
+    private static unsafe void SkipString() { // i at opening quote; leaves i past closing quote
+        i++;
+        while (true) {
+            byte c = p[i];
+            if (c == (byte)'\\') {
+                i += 2; // hex digits after \u contain no '"' or '\\'
+                continue;
+            }
+            if (c == (byte)'"') {
+                i++;
+                return;
+            }
+            i++;
+        }
+    }
+
+    private static unsafe void ScanString() { // i at opening quote; leaves i past closing quote
+        i++;
+        sStart = i;
+        sEsc = false;
+        while (true) {
+            byte c = p[i];
+            if (c == (byte)'\\') {
+                sEsc = true;
+                i += 2;
+                continue;
+            }
+            if (c == (byte)'"') {
+                sEnd = i;
+                i++;
+                return;
+            }
+            i++;
+        }
+    }
+
+    private static unsafe void SkipValue() {
+        byte c = p[i];
+        if (c == (byte)'"') {
+            SkipString();
+            return;
+        }
+        if (c == (byte)'{' || c == (byte)'[') {
+            int depth = 0;
+            while (i < n) {
+                byte d = p[i];
+                if (d == (byte)'"') {
+                    SkipString();
+                    continue;
+                }
+                if (d == (byte)'{' || d == (byte)'[') depth++;
+                else if (d == (byte)'}' || d == (byte)']') {
+                    depth--;
+                    if (depth == 0) {
+                        i++;
+                        return;
+                    }
                 }
                 i++;
             }
-            return i;
+            return;
         }
-        while (i < n)
-        {
-            byte c = data[i];
-            if (c == (byte)',' || c == (byte)'}' || c == (byte)']') break;
+        while (i < n) {
+            byte d = p[i];
+            if (d == (byte)',' || d == (byte)'}' || d == (byte)']' || d == (byte)' ' || d == (byte)'\t' || d == (byte)'\r' || d == (byte)'\n') return;
             i++;
         }
-        return i;
     }
 
-    static bool StrEq(int s, int e, bool esc, string lit)
-    {
-        if (!esc)
-        {
-            int len = e - s;
-            if (len != lit.Length) return false;
-            for (int k = 0; k < len; k++)
-                if (data[s + k] != lit[k]) return false;
-            return true;
+    private static unsafe bool Eq(int a, int b, string lit) {
+        if (b - a != lit.Length) return false;
+        for (int j = 0; j < lit.Length; j++) {
+            if (p[a + j] != lit[j]) return false;
         }
-        DecodeString(s, e);
-        if (scratchLen != lit.Length) return false;
-        for (int k = 0; k < scratchLen; k++)
-            if (scratch[k] != lit[k]) return false;
         return true;
     }
 
-    static void DecodeString(int s, int e)
-    {
-        int need = (e - s) * 4 + 16;
-        if (scratch.Length < need) scratch = new byte[need];
-        scratchLen = 0;
-        for (int i = s; i < e; i++)
-        {
-            byte c = data[i];
-            if (c != (byte)'\\')
-            {
-                scratch[scratchLen++] = c;
-                continue;
-            }
-            i++;
-            byte x = data[i];
-            switch (x)
-            {
-                case (byte)'"': scratch[scratchLen++] = (byte)'"'; break;
-                case (byte)'\\': scratch[scratchLen++] = (byte)'\\'; break;
-                case (byte)'/': scratch[scratchLen++] = (byte)'/'; break;
-                case (byte)'b': scratch[scratchLen++] = (byte)'\b'; break;
-                case (byte)'f': scratch[scratchLen++] = (byte)'\f'; break;
-                case (byte)'n': scratch[scratchLen++] = (byte)'\n'; break;
-                case (byte)'r': scratch[scratchLen++] = (byte)'\r'; break;
-                case (byte)'t': scratch[scratchLen++] = (byte)'\t'; break;
-                case (byte)'u':
-                {
-                    int cp = Hex4(i + 1);
-                    i += 4;
-                    if (cp >= 0xD800 && cp <= 0xDBFF && i + 2 < e &&
-                        data[i + 1] == (byte)'\\' && data[i + 2] == (byte)'u')
-                    {
-                        int lo = Hex4(i + 3);
-                        if (lo >= 0xDC00 && lo <= 0xDFFF)
-                        {
-                            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-                            i += 6;
-                        }
-                    }
-                    AppendRune(cp);
-                    break;
-                }
-                default: scratch[scratchLen++] = x; break;
-            }
+    // value string at sStart..sEnd (sEsc set) as a .NET String
+    private static unsafe string StrValue() {
+        if (!sEsc) {
+            // account IDs / channel names / currencies are ASCII: Latin1 decode is a raw widening copy
+            return Encoding.Latin1.GetString(p + sStart, sEnd - sStart);
         }
+        return DecodeString(sStart, sEnd);
     }
 
-    static int Hex4(int i)
-    {
+    private static unsafe string DecodeString(int from, int to) {
+        var outChars = new char[to - from];
+        int o = 0, j = from;
+        while (j < to) {
+            char c = (char)p[j];
+            if (c != '\\') {
+                outChars[o++] = c;
+                j++;
+                continue;
+            }
+            char e = (char)p[j + 1];
+            j += 2;
+            switch (e) {
+                case '"': outChars[o++] = '"'; break;
+                case '\\': outChars[o++] = '\\'; break;
+                case '/': outChars[o++] = '/'; break;
+                case 'b': outChars[o++] = '\b'; break;
+                case 'f': outChars[o++] = '\f'; break;
+                case 'n': outChars[o++] = '\n'; break;
+                case 'r': outChars[o++] = '\r'; break;
+                case 't': outChars[o++] = '\t'; break;
+                case 'u': {
+                    int cp = Hex4(j);
+                    j += 4;
+                    if (cp >= 0xD800 && cp <= 0xDBFF && j + 1 < to && p[j] == (byte)'\\' && p[j + 1] == (byte)'u') {
+                        int lo = Hex4(j + 2);
+                        if (lo >= 0xDC00 && lo <= 0xDFFF) {
+                            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                            j += 6;
+                        }
+                    }
+                    if (cp < 0x10000) {
+                        outChars[o++] = (char)cp;
+                    } else {
+                        cp -= 0x10000;
+                        outChars[o++] = (char)(0xD800 | (cp >> 10));
+                        outChars[o++] = (char)(0xDC00 | (cp & 0x3FF));
+                    }
+                    break;
+                }
+                default: outChars[o++] = e; break;
+            }
+        }
+        return new string(outChars, 0, o);
+    }
+
+    private static unsafe int Hex4(int at) {
         int v = 0;
-        for (int k = 0; k < 4; k++)
-        {
-            byte c = data[i + k];
+        for (int k = 0; k < 4; k++) {
+            byte c = p[at + k];
             v <<= 4;
-            if (c >= (byte)'0' && c <= (byte)'9') v |= c - (byte)'0';
-            else if (c >= (byte)'a' && c <= (byte)'f') v |= c - (byte)'a' + 10;
-            else if (c >= (byte)'A' && c <= (byte)'F') v |= c - (byte)'A' + 10;
+            if (c <= (byte)'9') v += c - (byte)'0';
+            else if (c <= (byte)'F') v += c - (byte)'A' + 10;
+            else v += c - (byte)'a' + 10;
         }
         return v;
     }
 
-    static void AppendRune(int cp)
-    {
-        if (cp < 0x80) scratch[scratchLen++] = (byte)cp;
-        else if (cp < 0x800)
-        {
-            scratch[scratchLen++] = (byte)(0xC0 | cp >> 6);
-            scratch[scratchLen++] = (byte)(0x80 | cp & 0x3F);
+    private static bool DecodedEq(string lit) => DecodeString(sStart, sEnd) == lit;
+
+    private static unsafe long ParseAmount(int from, int to, bool esc) {
+        if (esc) {
+            string s = DecodeString(from, to);
+            return ParseAmountDigits(s, 0, s.Length);
         }
-        else if (cp < 0x10000)
-        {
-            scratch[scratchLen++] = (byte)(0xE0 | cp >> 12);
-            scratch[scratchLen++] = (byte)(0x80 | (cp >> 6) & 0x3F);
-            scratch[scratchLen++] = (byte)(0x80 | cp & 0x3F);
-        }
-        else
-        {
-            scratch[scratchLen++] = (byte)(0xF0 | cp >> 18);
-            scratch[scratchLen++] = (byte)(0x80 | (cp >> 12) & 0x3F);
-            scratch[scratchLen++] = (byte)(0x80 | (cp >> 6) & 0x3F);
-            scratch[scratchLen++] = (byte)(0x80 | cp & 0x3F);
-        }
+        return ParseAmountDigits(from, to);
     }
 
-    // "12", "12.5", "12.05" -> integer hundredths
-    static long ParseAmount(int s, int e)
-    {
-        long whole = 0;
-        int i = s;
-        while (i < e && data[i] >= (byte)'0' && data[i] <= (byte)'9')
-        {
-            whole = whole * 10 + (data[i] - (byte)'0');
-            i++;
+    private static unsafe long ParseAmountDigits(int from, int to) {
+        long ip = 0;
+        int j = from;
+        while (j < to && p[j] >= (byte)'0' && p[j] <= (byte)'9') {
+            ip = ip * 10 + (p[j] - (byte)'0');
+            j++;
         }
         long frac = 0;
-        if (i < e && data[i] == (byte)'.')
-        {
-            i++;
-            frac = (data[i] - (byte)'0') * 10L;
-            i++;
-            if (i < e) frac += data[i] - (byte)'0';
-        }
-        return whole * 100 + frac;
-    }
-
-    static byte[] keyArr = Array.Empty<byte>();
-    static int keyOff, keyLen;
-
-    static void MakeKey(int s, int e, bool esc)
-    {
-        if (!esc)
-        {
-            keyArr = data;
-            keyOff = s;
-            keyLen = e - s;
-        }
-        else
-        {
-            DecodeString(s, e);
-            keyArr = scratch;
-            keyOff = 0;
-            keyLen = scratchLen;
-        }
-    }
-
-    static int IndexOf(int from, byte c)
-    {
-        for (int i = from; i < data.Length; i++)
-            if (data[i] == c) return i;
-        return -1;
-    }
-
-    static bool AccountBetter(Table t, int x, int y)
-    {
-        long nx = t.b[x], ny = t.b[y];
-        if (nx != ny) return nx > ny;
-        int lx = t.keyLen[x], ly = t.keyLen[y];
-        int ox = t.keyOff[x], oy = t.keyOff[y];
-        int m = Math.Min(lx, ly);
-        for (int k = 0; k < m; k++)
-        {
-            int d = (t.pool[ox + k] & 0xff) - (t.pool[oy + k] & 0xff);
-            if (d != 0) return d < 0;
-        }
-        return lx < ly;
-    }
-
-    static void AppendLong(byte[] buf, ref int len, long v)
-    {
-        if (v == 0) { buf[len++] = (byte)'0'; return; }
-        bool neg = v < 0;
-        ulong u = neg ? (ulong)(-v) : (ulong)v;
-        int start = len;
-        while (u > 0)
-        {
-            buf[len++] = (byte)('0' + (int)(u % 10));
-            u /= 10;
-        }
-        if (neg) buf[len++] = (byte)'-';
-        Array.Reverse(buf, start, len - start);
-    }
-
-    static void Main(string[] args)
-    {
-        data = System.IO.File.ReadAllBytes(args[0]);
-        int n = data.Length;
-        var rates = new Table();
-        var channels = new Table();
-        var accounts = new Table();
-
-        // First line: rates.
-        int i = SkipWS(0);
-        int eol = IndexOf(i, (byte)'\n');
-        if (eol < 0) eol = n;
-        int p = SkipWS(i);
-        if (p < n && data[p] == (byte)'{')
-        {
-            p++;
-            while (p < n)
-            {
-                p = SkipWS(p);
-                if (p >= n || data[p] == (byte)'}') break;
-                if (data[p] == (byte)',') { p++; continue; }
-                ParseString(p);
-                int ks = sVal, ke = eVal; bool kesc = escVal;
-                p = SkipWS(sNext);
-                p++; // ':'
-                p = SkipWS(p);
-                if (StrEq(ks, ke, kesc, "rates"))
-                {
-                    p = SkipWS(p);
-                    p++; // '{'
-                    while (p < n)
-                    {
-                        p = SkipWS(p);
-                        if (p >= n || data[p] == (byte)'}') break;
-                        if (data[p] == (byte)',') { p++; continue; }
-                        ParseString(p);
-                        int cs = sVal, ce = eVal; bool cesc = escVal;
-                        p = SkipWS(sNext);
-                        p++; // ':'
-                        p = SkipWS(p);
-                        bool neg = data[p] == (byte)'-';
-                        if (neg) p++;
-                        long rate = 0;
-                        while (p < n && data[p] >= (byte)'0' && data[p] <= (byte)'9')
-                        {
-                            rate = rate * 10 + (data[p] - (byte)'0');
-                            p++;
-                        }
-                        if (neg) rate = -rate;
-                        MakeKey(cs, ce, cesc);
-                        rates.b[rates.FindOrInsert(keyArr, keyOff, keyLen)] = rate;
-                    }
-                    p++; // '}'
-                }
-                else
-                {
-                    p = SkipValue(p);
-                }
+        int fd = 0;
+        if (j < to && p[j] == (byte)'.') {
+            j++;
+            while (j < to && fd < 2 && p[j] >= (byte)'0' && p[j] <= (byte)'9') {
+                frac = frac * 10 + (p[j] - (byte)'0');
+                fd++;
+                j++;
             }
         }
-        i = eol < n ? eol + 1 : n;
+        while (fd < 2) {
+            frac *= 10;
+            fd++;
+        }
+        return ip * 100 + frac;
+    }
 
-        long totalCount = 0, totalNet = 0;
-        while (i < n)
-        {
-            int q = SkipWS(i);
-            eol = IndexOf(i, (byte)'\n');
-            if (eol < 0) eol = n;
-            if (q < eol && data[q] == (byte)'{')
-            {
-                q++;
-                long sign = 0, rate = 0, amount = 0;
-                bool hasRate = false;
-                int accS = -1, accE = 0, chanS = -1, chanE = 0;
-                bool accEsc = false, chanEsc = false, isTest = false;
-                while (true)
-                {
-                    q = SkipWS(q);
-                    if (q >= n || data[q] == (byte)'}') { q++; break; }
-                    if (data[q] == (byte)',') { q++; continue; }
-                    ParseString(q);
-                    int ks = sVal, ke = eVal; bool kesc = escVal;
-                    q = SkipWS(sNext);
-                    q++; // ':'
-                    q = SkipWS(q);
-                    if (!kesc)
-                    {
-                        int kl = ke - ks;
-                        byte k0 = kl > 0 ? data[ks] : (byte)0;
-                        if (k0 == (byte)'t' && kl == 4 && data[ks + 1] == (byte)'y'
-                            && data[ks + 2] == (byte)'p' && data[ks + 3] == (byte)'e')
-                        {
-                            ParseString(q);
-                            int vs = sVal, ve = eVal; bool vesc = escVal;
-                            q = sNext;
-                            if (StrEq(vs, ve, vesc, "credit") || StrEq(vs, ve, vesc, "refund")) sign = 1;
-                            else if (StrEq(vs, ve, vesc, "debit")) sign = -1;
-                            continue;
-                        }
-                        else if (k0 == (byte)'a' && kl == 6 && data[ks + 1] == (byte)'m'
-                            && data[ks + 2] == (byte)'o' && data[ks + 3] == (byte)'u'
-                            && data[ks + 4] == (byte)'n' && data[ks + 5] == (byte)'t')
-                        {
-                            ParseString(q);
-                            int vs = sVal, ve = eVal;
-                            q = sNext;
-                            amount = ParseAmount(vs, ve);
-                            continue;
-                        }
-                        else if (k0 == (byte)'c' && kl == 8 && data[ks + 1] == (byte)'u'
-                            && data[ks + 2] == (byte)'r' && data[ks + 3] == (byte)'r'
-                            && data[ks + 4] == (byte)'e' && data[ks + 5] == (byte)'n'
-                            && data[ks + 6] == (byte)'c' && data[ks + 7] == (byte)'y')
-                        {
-                            ParseString(q);
-                            int vs = sVal, ve = eVal; bool vesc = escVal;
-                            q = sNext;
-                            MakeKey(vs, ve, vesc);
-                            int ri = rates.Find(keyArr, keyOff, keyLen);
-                            hasRate = ri >= 0;
-                            if (hasRate) rate = rates.b[ri];
-                            continue;
-                        }
-                        else if (k0 == (byte)'a' && kl == 7 && data[ks + 1] == (byte)'c'
-                            && data[ks + 2] == (byte)'c' && data[ks + 3] == (byte)'o'
-                            && data[ks + 4] == (byte)'u' && data[ks + 5] == (byte)'n'
-                            && data[ks + 6] == (byte)'t')
-                        {
-                            ParseString(q);
-                            accS = sVal; accE = eVal; accEsc = escVal;
-                            q = sNext;
-                            continue;
-                        }
-                        else if (k0 == (byte)'t' && kl == 4 && data[ks + 1] == (byte)'a'
-                            && data[ks + 2] == (byte)'g' && data[ks + 3] == (byte)'s')
-                        {
-                            q++; // '['
-                            while (true)
-                            {
-                                q = SkipWS(q);
-                                if (q >= n || data[q] == (byte)']') { q++; break; }
-                                if (data[q] == (byte)',') { q++; continue; }
-                                if (data[q] == (byte)'"')
-                                {
-                                    ParseString(q);
-                                    int vs = sVal, ve = eVal; bool vesc = escVal;
-                                    q = sNext;
-                                    if (!isTest && StrEq(vs, ve, vesc, "test")) isTest = true;
-                                }
-                                else
-                                {
-                                    q = SkipValue(q);
-                                }
-                            }
-                            continue;
-                        }
-                        else if (k0 == (byte)'m' && kl == 4 && data[ks + 1] == (byte)'e'
-                            && data[ks + 2] == (byte)'t' && data[ks + 3] == (byte)'a')
-                        {
-                            q++; // '{'
-                            while (true)
-                            {
-                                q = SkipWS(q);
-                                if (q >= n || data[q] == (byte)'}') { q++; break; }
-                                if (data[q] == (byte)',') { q++; continue; }
-                                ParseString(q);
-                                int mks = sVal, mke = eVal; bool mkesc = escVal;
-                                q = SkipWS(sNext);
-                                q++; // ':'
-                                q = SkipWS(q);
-                                if (StrEq(mks, mke, mkesc, "channel"))
-                                {
-                                    ParseString(q);
-                                    chanS = sVal; chanE = eVal; chanEsc = escVal;
-                                    q = sNext;
-                                }
-                                else
-                                {
-                                    q = SkipValue(q);
-                                }
-                            }
-                            continue;
-                        }
-                    }
-                    q = SkipValue(q);
+    private static long ParseAmountDigits(string s, int from, int to) {
+        long ip = 0;
+        int j = from;
+        while (j < to && s[j] >= '0' && s[j] <= '9') {
+            ip = ip * 10 + (s[j] - '0');
+            j++;
+        }
+        long frac = 0;
+        int fd = 0;
+        if (j < to && s[j] == '.') {
+            j++;
+            while (j < to && fd < 2 && s[j] >= '0' && s[j] <= '9') {
+                frac = frac * 10 + (s[j] - '0');
+                fd++;
+                j++;
+            }
+        }
+        while (fd < 2) {
+            frac *= 10;
+            fd++;
+        }
+        return ip * 100 + frac;
+    }
+
+    private static unsafe bool ParseTags() {
+        i++; // '['
+        bool test = false;
+        while (true) {
+            SkipWs();
+            if (p[i] == (byte)']') {
+                i++;
+                return test;
+            }
+            if (p[i] == (byte)'"') {
+                ScanString();
+                if (!test) {
+                    test = sEsc ? DecodedEq("test") : (sEnd - sStart == 4 && Eq(sStart, sEnd, "test"));
                 }
-                if (sign != 0 && !isTest && hasRate && accS >= 0 && chanS >= 0)
-                {
-                    long val = sign * ((amount * rate) / 1_000_000L);
-                    totalCount++;
-                    totalNet += val;
-                    MakeKey(chanS, chanE, chanEsc);
-                    int ci = channels.FindOrInsert(keyArr, keyOff, keyLen);
-                    channels.a[ci]++;
-                    channels.b[ci] += val;
-                    MakeKey(accS, accE, accEsc);
-                    int ai = accounts.FindOrInsert(keyArr, keyOff, keyLen);
-                    accounts.b[ai] += val;
-                }
+            } else {
+                SkipValue();
             }
-            i = eol < n ? eol + 1 : n;
+            SkipWs();
+            if (p[i] == (byte)',') i++;
         }
+    }
 
-        // ---- output ----
-        byte[] buf = new byte[1 << 16];
-        int len = 0;
-        void Ensure(int extra)
-        {
-            if (len + extra > buf.Length) Array.Resize(ref buf, Math.Max(buf.Length * 2, len + extra));
-        }
-        void Put(string s)
-        {
-            Ensure(s.Length);
-            foreach (char c in s) buf[len++] = (byte)c;
-        }
-        void PutLong(long v) { Ensure(24); AppendLong(buf, ref len, v); }
-
-        Put("counted "); PutLong(totalCount); Put("\nnet "); PutLong(totalNet); Put("\n");
-
-        // Channel lines sorted by name ascending (byte order).
-        int nc = channels.size;
-        int[] cIdx = new int[nc];
-        for (int e = 0; e < nc; e++) cIdx[e] = e;
-        Array.Sort(cIdx, (x, y) =>
-        {
-            int lx = channels.keyLen[x], ly = channels.keyLen[y];
-            int ox = channels.keyOff[x], oy = channels.keyOff[y];
-            int m = Math.Min(lx, ly);
-            for (int k = 0; k < m; k++)
-            {
-                int d = channels.pool[ox + k] - channels.pool[oy + k];
-                if (d != 0) return d;
+    private static unsafe string ParseMeta() {
+        i++; // '{'
+        string channel = null;
+        while (true) {
+            SkipWs();
+            if (p[i] == (byte)'}') {
+                i++;
+                return channel;
             }
-            return lx - ly;
-        });
-        foreach (int e in cIdx)
-        {
-            Put("channel ");
-            Put(Encoding.Latin1.GetString(channels.pool, channels.keyOff[e], channels.keyLen[e]));
-            Put(" "); PutLong(channels.a[e]); Put(" "); PutLong(channels.b[e]); Put("\n");
-        }
-
-        // Top 10 accounts by net desc, then id asc.
-        int na = accounts.size;
-        int take = Math.Min(10, na);
-        int[] best = new int[take];
-        int bestCount = 0;
-        for (int e = 0; e < na; e++)
-        {
-            if (bestCount < take)
-            {
-                best[bestCount++] = e;
-                continue;
+            ScanString();
+            int ks = sStart, ke = sEnd;
+            bool kesc = sEsc;
+            SkipWs();
+            i++; // ':'
+            SkipWs();
+            bool isChannel = kesc ? DecodeString(ks, ke) == "channel" : (ke - ks == 7 && Eq(ks, ke, "channel"));
+            if (isChannel) {
+                ScanString();
+                channel = StrValue();
+            } else {
+                SkipValue();
             }
-            int worst = 0;
-            for (int j = 1; j < take; j++)
-                if (AccountBetter(accounts, best[worst], best[j])) worst = j;
-            if (AccountBetter(accounts, e, best[worst])) best[worst] = e;
+            SkipWs();
+            if (p[i] == (byte)',') i++;
         }
-        Array.Sort(best, 0, bestCount, Comparer<int>.Create((x, y) =>
-            AccountBetter(accounts, x, y) ? -1 : AccountBetter(accounts, y, x) ? 1 : 0));
-        for (int k = 0; k < bestCount; k++)
-        {
-            int e = best[k];
-            Put("account ");
-            Put(Encoding.Latin1.GetString(accounts.pool, accounts.keyOff[e], accounts.keyLen[e]));
-            Put(" "); PutLong(accounts.b[e]); Put("\n");
-        }
+    }
 
-        using var so = Console.OpenStandardOutput();
-        so.Write(buf, 0, len);
+    private static unsafe int TypeCode() {
+        if (!sEsc) {
+            int len = sEnd - sStart;
+            if (len == 6 && Eq(sStart, sEnd, "credit")) return 1;
+            if (len == 5 && Eq(sStart, sEnd, "debit")) return 2;
+            if (len == 6 && Eq(sStart, sEnd, "refund")) return 3;
+            if (len == 4 && Eq(sStart, sEnd, "void")) return 4;
+            return 0;
+        }
+        switch (DecodeString(sStart, sEnd)) {
+            case "credit": return 1;
+            case "debit": return 2;
+            case "refund": return 3;
+            case "void": return 4;
+            default: return 0;
+        }
     }
 }

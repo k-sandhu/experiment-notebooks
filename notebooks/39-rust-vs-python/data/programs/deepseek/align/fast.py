@@ -4,84 +4,91 @@ import numpy as np
 
 
 def main():
-    with open(sys.argv[1], 'rb') as f:
+    path = sys.argv[1]
+    with open(path, "rb") as f:
         data = f.read()
+
     toks = data.split()
-    alpha = toks[0]
-    a_count = len(alpha)
+    p = 0
+    alpha = toks[p]
+    p += 1
+    A = len(alpha)
+    tbl = bytearray(range(256))
+    for k in range(A):
+        tbl[alpha[k]] = k
+    tbl = bytes(tbl)
 
-    lut = bytearray(256)
-    for i in range(a_count):
-        lut[alpha[i]] = i
-    lut = bytes(lut)
-
-    p = 1
-    ins = np.array([int(x) for x in toks[p:p + a_count]], dtype=np.int32)
-    p += a_count
-    dele = np.array([int(x) for x in toks[p:p + a_count]], dtype=np.int32)
-    p += a_count
-    sub = np.array([int(x) for x in toks[p:p + a_count * a_count]],
-                   dtype=np.int32).reshape(a_count, a_count)
-    p += a_count * a_count
-    pairs = int(toks[p])
+    ins_a = np.array([int(x) for x in toks[p:p + A]], dtype=np.int32)
+    p += A
+    del_a = np.array([int(x) for x in toks[p:p + A]], dtype=np.int32)
+    p += A
+    sub_flat = [int(x) for x in toks[p:p + A * A]]
+    sub_a = np.array(sub_flat, dtype=np.int32).reshape(A, A)
+    p += A * A
+    P = int(toks[p])
     p += 1
 
-    sub_t = sub.T.copy()
+    sub_T = np.ascontiguousarray(sub_a.T)
 
-    res = []
+    # DP in the "shifted" representation:
+    #   H_o[j] = D[o][j] - prefix_icost[j]
+    # where o indexes the outer string and j the vector (inner) dimension.
+    # Then per outer letter with cost oc and sub row cs[j] = sub - icost[j]:
+    #   base[0] = H[0] + oc
+    #   base[j] = min(H[j] + oc, H[j-1] + cs[j-1])   (j >= 1)
+    #   H' = cumulative_min(base)
+    # and the final answer is H'[last] + sum(icost).
+
+    out = []
     total = 0
-
-    for _ in range(pairs):
-        s = toks[p]
-        t = toks[p + 1]
+    for _ in range(P):
+        sb = toks[p].translate(tbl)
+        tb = toks[p + 1].translate(tbl)
         p += 2
+        n = len(sb)
+        m = len(tb)
 
-        # The cost is symmetric; put the shorter string on the (serial) row
-        # axis and vectorise over the longer one.
-        if len(s) > len(t):
-            rows = t.translate(lut)
-            cols = np.frombuffer(s.translate(lut), dtype=np.uint8)
-            ins_e = dele
-            del_e = ins
-            sub_e = sub_t
+        if n <= m:
+            s_idx = np.frombuffer(sb, dtype=np.uint8).astype(np.intp)
+            t_idx = np.frombuffer(tb, dtype=np.uint8).astype(np.intp)
+            outer = sb
+            inner_idx = t_idx
+            icost_pos = ins_a[t_idx]
+            submat = sub_a
         else:
-            rows = s.translate(lut)
-            cols = np.frombuffer(t.translate(lut), dtype=np.uint8)
-            ins_e = ins
-            del_e = dele
-            sub_e = sub
+            s_idx = np.frombuffer(sb, dtype=np.uint8).astype(np.intp)
+            t_idx = np.frombuffer(tb, dtype=np.uint8).astype(np.intp)
+            outer = tb
+            inner_idx = s_idx
+            icost_pos = del_a[s_idx]
+            submat = sub_T
 
-        m = cols.size
+        olen = len(outer)
+        vlen = len(inner_idx) + 1
+        ic_total = int(icost_pos.sum())
 
-        # R-space: R[i][j] = D[i][j] - I[j] - J[i], where I and J are the
-        # prefix sums of the insertion costs of t and the deletion costs of s.
-        # Both prefix sums cancel out of the recurrence, leaving
-        #   R'[j] = min(R'[j-1], R[j], R[j-1] + sub[s_i][t_j] - ins[t_j] - del[s_i])
-        # so a whole row is one elementwise minimum plus one prefix minimum,
-        # both done by NumPy at C speed.  R[0] stays 0 for every row.
-        insv = ins_e[cols]
-        ins_total = int(insv.sum(dtype=np.int64))
-        del_l = del_e.tolist()
+        # cs for every outer letter at once
+        CS = submat[:, inner_idx] - icost_pos[None, :]
 
-        v = np.empty((a_count, m), dtype=np.int32)
-        np.subtract(sub_e[:, cols], insv, out=v)
-        v -= del_e[:, None]
+        H = np.zeros(vlen, dtype=np.int32)
+        Hn = np.empty(vlen, dtype=np.int32)
 
-        q = np.zeros(m + 1, dtype=np.int32)
-        f = np.empty(m + 1, dtype=np.int32)
-        f[0] = 0
-        tot = ins_total
-        for a in rows:
-            tot += del_l[a]
-            np.minimum(q[1:], q[:-1] + v[a], out=f[1:])
-            np.minimum.accumulate(f, out=q)
+        ocost = del_a if submat is sub_a else ins_a
+        for o in outer:
+            cs = CS[o]
+            oc = int(ocost[o])
+            Hn[0] = H[0] + oc
+            np.minimum(H[:-1] + cs, H[1:] + oc, out=Hn[1:])
+            np.minimum.accumulate(Hn, out=Hn)
+            H = Hn
+            Hn = np.empty(vlen, dtype=np.int32)
 
-        ans = int(q[m]) + tot
-        total += ans
-        res.append(str(ans))
+        cost = int(H[vlen - 1]) + ic_total
+        out.append(str(cost))
+        total += cost
 
-    res.append('total ' + str(total))
-    sys.stdout.buffer.write(('\n'.join(res) + '\n').encode())
+    out.append("total " + str(total))
+    sys.stdout.buffer.write(("\n".join(out) + "\n").encode())
 
 
 main()

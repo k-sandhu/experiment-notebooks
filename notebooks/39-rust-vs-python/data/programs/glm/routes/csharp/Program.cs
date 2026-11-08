@@ -1,158 +1,125 @@
 using System;
 using System.IO;
-using System.Runtime.CompilerServices;
 
-class Program
+internal static class Program
 {
-    static byte[] data;
-    static int ppos = 0;
+    private static byte[] _buf;
+    private static int _pos;
 
-    static void Main(string[] args)
+    private static int ReadInt()
     {
-        data = File.ReadAllBytes(args[0]);
+        while (_buf[_pos] < (byte)'0' || _buf[_pos] > (byte)'9') _pos++;
+        int x = 0;
+        while (_buf[_pos] >= (byte)'0' && _buf[_pos] <= (byte)'9') x = x * 10 + (_buf[_pos++] - '0');
+        return x;
+    }
 
-        long nL = Next(), mL = Next(), qL = Next();
-        int n = (int)nL, m = (int)mL, q = (int)qL;
+    private static int Main(string[] args)
+    {
+        _buf = File.ReadAllBytes(args[0]);
+        int n = ReadInt(), m = ReadInt(), q = ReadInt();
 
-        int[] eu = new int[m], ev = new int[m], ew = new int[m];
+        var eu = new int[m]; var ev = new int[m]; var ew = new int[m];
+        var start = new int[n + 1];
         for (int i = 0; i < m; i++)
         {
-            eu[i] = (int)Next(); ev[i] = (int)Next(); ew[i] = (int)Next();
+            int u = ReadInt(), v = ReadInt(), w = ReadInt();
+            eu[i] = u; ev[i] = v; ew[i] = w;
+            start[u + 1]++; start[v + 1]++;
         }
-        int[] src = new int[q];
-        for (int i = 0; i < q; i++) src[i] = (int)Next();
-
-        // CSR adjacency (skip self-loops)
-        int[] off = new int[n + 1];
+        for (int i = 0; i < n; i++) start[i + 1] += start[i];
+        int e2 = start[n];
+        var adjV = new int[e2]; var adjW = new int[e2];
+        var posArr = new int[n];
+        Array.Copy(start, posArr, n);
         for (int i = 0; i < m; i++)
         {
-            if (eu[i] != ev[i]) { off[eu[i]]++; off[ev[i]]++; }
-        }
-        int run = 0;
-        for (int v = 0; v < n; v++) { int d = off[v]; off[v] = run; run += d; }
-        off[n] = run;
-        int[] adj = new int[run], wt = new int[run];
-        int[] pos = new int[n];
-        Array.Copy(off, pos, n);
-        for (int i = 0; i < m; i++)
-        {
-            int u = eu[i], v = ev[i], w = ew[i];
-            if (u == v) continue;
-            adj[pos[u]] = v; wt[pos[u]] = w; pos[u]++;
-            adj[pos[v]] = u; wt[pos[v]] = w; pos[v]++;
+            adjV[posArr[eu[i]]] = ev[i]; adjW[posArr[eu[i]]] = ew[i]; posArr[eu[i]]++;
+            adjV[posArr[ev[i]]] = eu[i]; adjW[posArr[ev[i]]] = ew[i]; posArr[ev[i]]++;
         }
 
-        long INF = long.MaxValue / 4;
-        long[] dist = new long[n];
-        long[] hd = new long[2L * m + 16];
-        int[] hn = new int[2 * m + 16];
+        // Dial's bucket queue: weights are 1..1000, so a circular array of 1001
+        // buckets (singly linked lists through the arena array) holds all
+        // pending distances. Stale entries are skipped via the dist check.
+        const int nb = 1001;
+        var arena = new int[2 * m + 2];
+        var nextIn = new int[2 * m + 2];
+        var head = new int[nb];
 
-        var outStream = Console.OpenStandardOutput();
-        byte[] obuf = new byte[1 << 20];
-        int opos = 0;
+        var dist = new int[n];
+        var settled = new byte[n];
+        var ob = new byte[q * 80 + 16];
+        int op = 0;
 
         for (int qi = 0; qi < q; qi++)
         {
-            int s = src[qi];
-            for (int v = 0; v < n; v++) dist[v] = INF;
-            int hsize = 0;
+            int s = ReadInt();
+            Array.Fill(dist, -1);
+            Array.Clear(settled);
+            Array.Fill(head, -1);
+            int cnt = 0;
             dist[s] = 0;
-            hd[hsize] = 0; hn[hsize] = s; hsize++;
-            long total = 0, far = -1, cnt = 0;
+            arena[cnt] = s; nextIn[cnt] = -1; head[0] = cnt; cnt++;
+            int remaining = 1;
+            int idx = 0;
+            int d = 0;
+            while (remaining > 0)
+            {
+                int e = head[idx];
+                if (e < 0) { idx = idx + 1 == nb ? 0 : idx + 1; d++; continue; }
+                head[idx] = nextIn[e];
+                remaining--;
+                int v = arena[e];
+                if (settled[v] != 0 || dist[v] != d) continue;
+                settled[v] = 1;
+                int end = start[v + 1];
+                for (int i = start[v]; i < end; i++)
+                {
+                    int u = adjV[i];
+                    if (settled[u] != 0) continue;
+                    int nd = d + adjW[i];
+                    int du = dist[u];
+                    if (du < 0 || nd < du)
+                    {
+                        dist[u] = nd;
+                        int b = nd % nb;
+                        arena[cnt] = u; nextIn[cnt] = head[b]; head[b] = cnt; cnt++;
+                        remaining++;
+                    }
+                }
+            }
+            long total = 0;
+            int far = 0;
             int farNode = s;
-
-            while (hsize > 0)
+            int r = 0;
+            for (int v = 0; v < n; v++)
             {
-                long d = hd[0];
-                int v = hn[0];
-                hsize--;
-                hd[0] = hd[hsize]; hn[0] = hn[hsize];
-                // reinsert the moved last element (hole method, 4-ary)
-                long d0 = hd[hsize]; int v0 = hn[hsize];
-                int i = 0;
-                while (hsize > 0)
+                int dd = dist[v];
+                if (dd >= 0)
                 {
-                    int c = 4 * i + 1;
-                    int mm = i;
-                    long mv = d0;
-                    int e = c + 4;
-                    if (e > hsize) e = hsize;
-                    for (int j = c; j < e; j++)
-                    {
-                        if (hd[j] < mv) { mv = hd[j]; mm = j; }
-                    }
-                    if (mm == i) break;
-                    hd[i] = mv; hn[i] = hn[mm];
-                    i = mm;
-                }
-                if (hsize > 0) { hd[i] = d0; hn[i] = v0; }
-                if (d != dist[v]) continue;
-                cnt++;
-                total += d;
-                if (d > far || (d == far && v < farNode)) { far = d; farNode = v; }
-                int e1 = off[v + 1];
-                for (int e = off[v]; e < e1; e++)
-                {
-                    int to = adj[e];
-                    long nd = d + wt[e];
-                    if (nd < dist[to])
-                    {
-                        dist[to] = nd;
-                        int j = hsize;
-                        hd[j] = nd; hn[j] = to; hsize++;
-                        while (j > 0)
-                        {
-                            int par = (j - 1) >> 2;
-                            if (hd[par] <= nd) break;
-                            hd[j] = hd[par]; hn[j] = hn[par];
-                            j = par;
-                        }
-                        hd[j] = nd; hn[j] = to;
-                    }
+                    r++;
+                    total += dd;
+                    if (dd > far || (dd == far && v < farNode)) { far = dd; farNode = v; }
                 }
             }
-
-            opos = WriteU64(obuf, opos, (ulong)s, (byte)' ');
-            opos = WriteU64(obuf, opos, (ulong)cnt, (byte)' ');
-            opos = WriteU64(obuf, opos, (ulong)total, (byte)' ');
-            opos = WriteU64(obuf, opos, (ulong)far, (byte)' ');
-            opos = WriteU64(obuf, opos, (ulong)farNode, (byte)'\n');
-            if (opos > (1 << 20) - 64)
-            {
-                outStream.Write(obuf, 0, opos);
-                opos = 0;
-            }
+            op = PutLong(ob, op, s); ob[op++] = (byte)' ';
+            op = PutLong(ob, op, r); ob[op++] = (byte)' ';
+            op = PutLong(ob, op, total); ob[op++] = (byte)' ';
+            op = PutLong(ob, op, far); ob[op++] = (byte)' ';
+            op = PutLong(ob, op, farNode); ob[op++] = (byte)'\n';
         }
-        if (opos > 0) outStream.Write(obuf, 0, opos);
+        using Stream so = Console.OpenStandardOutput();
+        so.Write(ob, 0, op);
+        return 0;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    static long Next()
+    private static int PutLong(byte[] ob, int op, long x)
     {
-        byte[] d = data;
-        int i = ppos, n = d.Length;
-        while (i < n && (d[i] < '0' || d[i] > '9')) i++;
-        long v = 0;
-        while (i < n && d[i] >= '0' && d[i] <= '9')
-        {
-            v = v * 10 + (d[i] - '0');
-            i++;
-        }
-        ppos = i;
-        return v;
-    }
-
-    static int WriteU64(byte[] b, int o, ulong v, byte sep)
-    {
-        if (v == 0) b[o++] = (byte)'0';
-        else
-        {
-            int n = 0;
-            Span<byte> tmp = stackalloc byte[20];
-            while (v != 0) { tmp[n++] = (byte)('0' + v % 10); v /= 10; }
-            while (n > 0) b[o++] = tmp[--n];
-        }
-        b[o++] = sep;
-        return o;
+        if (x == 0) { ob[op++] = (byte)'0'; return op; }
+        int t = op;
+        while (x > 0) { ob[op++] = (byte)('0' + (int)(x % 10)); x /= 10; }
+        for (int a = t, b = op - 1; a < b; a++, b--)
+            (ob[a], ob[b]) = (ob[b], ob[a]);
+        return op;
     }
 }

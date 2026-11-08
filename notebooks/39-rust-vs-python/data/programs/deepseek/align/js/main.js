@@ -6,105 +6,119 @@ const data = fs.readFileSync(process.argv[2]);
 const dlen = data.length;
 let pos = 0;
 
-function readInt() {
-    while (pos < dlen && data[pos] <= 32) pos++;
-    let x = 0;
-    while (pos < dlen && data[pos] >= 48 && data[pos] <= 57) {
-        x = x * 10 + (data[pos] - 48);
-        pos++;
-    }
-    return x;
+function skipWs() {
+    while (pos < dlen && data[pos] <= 32) ++pos;
 }
 
-const map = new Int32Array(256).fill(-1);
-while (pos < dlen && data[pos] <= 32) pos++;
-const astart = pos;
-while (pos < dlen && data[pos] > 32) pos++;
-const A = pos - astart;
-for (let i = 0; i < A; i++) map[data[astart + i]] = i;
+function nextInt() {
+    while (pos < dlen && data[pos] <= 32) ++pos;
+    let v = 0;
+    while (pos < dlen) {
+        const c = data[pos];
+        if (c < 48 || c > 57) break;
+        v = v * 10 + (c - 48);
+        ++pos;
+    }
+    return v;
+}
 
-const insC = new Int32Array(A);
-const delC = new Int32Array(A);
-const subC = new Int32Array(A * A);
-for (let i = 0; i < A; i++) insC[i] = readInt();
-for (let i = 0; i < A; i++) delC[i] = readInt();
-for (let i = 0; i < A * A; i++) subC[i] = readInt();
+skipWs();
+const abStart = pos;
+while (pos < dlen && data[pos] > 32) ++pos;
+const A = pos - abStart;
+const mp = new Int32Array(256);
+for (let i = 0; i < A; ++i) mp[data[abStart + i]] = i;
 
-const P = readInt();
+const ins = new Int32Array(A);
+const delc = new Int32Array(A);
+const sub = new Int32Array(A * A);
+for (let i = 0; i < A; ++i) ins[i] = nextInt();
+for (let i = 0; i < A; ++i) delc[i] = nextInt();
+for (let i = 0; i < A * A; ++i) sub[i] = nextInt();
 
-let sIdx = new Uint8Array(4096);
-let tIdx = new Uint8Array(4096);
-let insT = new Int32Array(4096);
-let prev = new Int32Array(4097);
-let cur = new Int32Array(4097);
+const P = nextInt();
 
-const outLines = new Array(P + 1);
+let sBuf = new Uint8Array(1024);
+let tBuf = new Uint8Array(1024);
+let tins = new Int32Array(1024);
+let row = new Int32Array(1024);
+
+const out = [];
 let total = 0;
 
-for (let q = 0; q < P; q++) {
-    while (pos < dlen && data[pos] <= 32) pos++;
-    const s0 = pos;
-    while (pos < dlen && data[pos] > 32) pos++;
-    const n = pos - s0;
-    if (n > sIdx.length) {
-        sIdx = new Uint8Array(n);
-        tIdx = new Uint8Array(n);
-        insT = new Int32Array(n);
-        prev = new Int32Array(n + 1);
-        cur = new Int32Array(n + 1);
+for (let q = 0; q < P; ++q) {
+    skipWs();
+    let sl = 0;
+    while (pos < dlen && data[pos] > 32) {
+        if (sl === sBuf.length) {
+            const n = new Uint8Array(sBuf.length * 2);
+            n.set(sBuf);
+            sBuf = n;
+        }
+        sBuf[sl++] = mp[data[pos]];
+        ++pos;
     }
-    for (let i = 0; i < n; i++) sIdx[i] = map[data[s0 + i]];
+    skipWs();
+    let tl = 0;
+    while (pos < dlen && data[pos] > 32) {
+        if (tl === tBuf.length) {
+            const n = new Uint8Array(tBuf.length * 2);
+            n.set(tBuf);
+            tBuf = n;
+        }
+        tBuf[tl++] = mp[data[pos]];
+        ++pos;
+    }
 
-    while (pos < dlen && data[pos] <= 32) pos++;
-    const t0 = pos;
-    while (pos < dlen && data[pos] > 32) pos++;
-    const m = pos - t0;
-    if (m > tIdx.length) {
-        tIdx = new Uint8Array(m);
-        insT = new Int32Array(m);
-        if (m + 1 > prev.length) {
-            prev = new Int32Array(m + 1);
-            cur = new Int32Array(m + 1);
+    const n = sl;
+    const m = tl;
+
+    let same = n === m;
+    if (same) {
+        for (let i = 0; i < n; ++i) {
+            if (sBuf[i] !== tBuf[i]) { same = false; break; }
         }
     }
-    for (let j = 0; j < m; j++) {
-        const c = map[data[t0 + j]];
-        tIdx[j] = c;
-        insT[j] = insC[c];
+    if (same) {
+        out.push("0");
+        continue;
     }
 
-    prev[0] = 0;
-    for (let j = 1; j <= m; j++) prev[j] = prev[j - 1] + insT[j - 1];
+    if (tins.length < m) tins = new Int32Array(m * 2 + 1);
+    if (row.length < m + 1) row = new Int32Array((m + 1) * 2);
 
-    let pr = prev;
-    let cu = cur;
+    for (let j = 0; j < m; ++j) tins[j] = ins[tBuf[j]];
+    row[0] = 0;
+    for (let j = 1; j <= m; ++j) row[j] = row[j - 1] + tins[j - 1];
 
-    for (let i = 1; i <= n; i++) {
-        const c = sIdx[i - 1];
-        const d = delC[c];
-        const sr = c * A;
-        let v = pr[0] + d;
-        cu[0] = v;
-        for (let j = 1; j <= m; j++) {
-            const best0 = pr[j] + d;
-            let best = v + insT[j - 1];
-            if (best0 < best) best = best0;
-            const x = pr[j - 1] + subC[sr + tIdx[j - 1]];
-            if (x < best) best = x;
-            v = best;
-            cu[j] = best;
+    for (let i = 0; i < n; ++i) {
+        const si = sBuf[i];
+        const dc = delc[si];
+        const sbase = si * A;
+
+        let diag = row[0];
+        let left = diag + dc;
+        row[0] = left;
+
+        for (let j = 1; j <= m; ++j) {
+            const up = row[j];
+            const a = up + dc;
+            const b = diag + sub[sbase + tBuf[j - 1]];
+            let d = b - a;
+            let mn = a + (d & (d >> 31));
+            const x = left + tins[j - 1];
+            d = x - mn;
+            mn = mn + (d & (d >> 31));
+            diag = up;
+            row[j] = mn;
+            left = mn;
         }
-        const tmp = pr;
-        pr = cu;
-        cu = tmp;
     }
 
-    prev = pr;
-    cur = cu;
-    const cost = pr[m];
+    const cost = row[m];
     total += cost;
-    outLines[q] = String(cost);
+    out.push(String(cost));
 }
 
-outLines[P] = "total " + total;
-process.stdout.write(outLines.join("\n") + "\n");
+out.push("total " + total);
+process.stdout.write(out.join("\n") + "\n");

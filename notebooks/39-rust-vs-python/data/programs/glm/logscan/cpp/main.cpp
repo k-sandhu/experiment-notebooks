@@ -1,234 +1,205 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
-#include <cstdlib>
-#include <vector>
-#include <string>
-#include <algorithm>
+#include <charconv>
 #include <fcntl.h>
 #include <io.h>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+#include <algorithm>
 
 using namespace std;
 
-static inline bool isd(unsigned char c) { return (unsigned)(c - '0') < 10; }
-
-struct Entry {
-    string tmpl;
-    uint32_t hash;
-    uint64_t count = 0;
-    vector<uint32_t> lat;
+struct SvHash {
+    using is_transparent = void;
+    size_t operator()(string_view s) const noexcept {
+        return hash<string_view>{}(s);
+    }
 };
 
-static vector<Entry> entries;
-static vector<uint32_t> table; // entry index + 1, 0 = empty
-static size_t tmask;
-static size_t used;
+struct Agg {
+    uint64_t count = 0;
+    vector<int64_t> lats;
+};
 
-static uint32_t hashBytes(const char* b, size_t n) {
-    uint32_t h = 2166136261u;
-    for (size_t i = 0; i < n; i++) { h ^= (unsigned char)b[i]; h *= 16777619u; }
-    return h;
+static inline bool isdig(char c) { return c >= '0' && c <= '9'; }
+static inline bool issegc(char c) {  // path segment char (regex [A-Za-z0-9_-])
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
 }
 
-static void growTable() {
-    size_t ncap = table.size() * 2;
-    table.assign(ncap, 0);
-    tmask = ncap - 1;
-    for (size_t e = 0; e < entries.size(); e++) {
-        uint32_t i = entries[e].hash & (uint32_t)tmask;
-        while (table[i]) i = (i + 1) & (uint32_t)tmask;
-        table[i] = (uint32_t)(e + 1);
-    }
-}
+struct Parser {
+    uint64_t lines = 0, malformed = 0;
+    uint64_t statusCnt[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    unordered_map<string, Agg, SvHash, equal_to<>> aggs;
+    vector<char> scratch;
+    string out;
 
-static size_t findOrInsert(const char* b, size_t n, uint32_t h) {
-    uint32_t i = h & (uint32_t)tmask;
-    while (table[i]) {
-        Entry& e = entries[table[i] - 1];
-        if (e.hash == h && e.tmpl.size() == n && memcmp(e.tmpl.data(), b, n) == 0)
-            return table[i] - 1;
-        i = (i + 1) & (uint32_t)tmask;
+    bool parseLine(const char* p, const char* end) {
+        if (end - p < 26) return false;
+        // timestamp: dddd-dd-ddTdd:dd:dd.dddZ + space
+        if (p[4] != '-' || p[7] != '-' || p[10] != 'T' || p[13] != ':' || p[16] != ':' ||
+            p[19] != '.' || p[23] != 'Z' || p[24] != ' ')
+            return false;
+        for (int i : {0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18, 20, 21, 22})
+            if (!isdig(p[i])) return false;
+        p += 25;
+        // server: [a-z]+-\d+ + space
+        const char* s0 = p;
+        while (p < end && *p >= 'a' && *p <= 'z') ++p;
+        if (p == s0 || p + 1 >= end || *p != '-') return false;
+        ++p;
+        const char* d0 = p;
+        while (p < end && isdig(*p)) ++p;
+        if (p == d0 || p + 1 >= end || *p != ' ') return false;
+        ++p;
+        // method
+        if (end - p >= 4 && memcmp(p, "GET ", 4) == 0) p += 4;
+        else if (end - p >= 6 && memcmp(p, "POST ", 5) == 0) p += 5;
+        else if (end - p >= 4 && memcmp(p, "PUT ", 4) == 0) p += 4;
+        else if (end - p >= 7 && memcmp(p, "DELETE ", 7) == 0) p += 7;
+        else if (end - p >= 6 && memcmp(p, "PATCH ", 6) == 0) p += 6;
+        else return false;
+        // path: /[A-Za-z0-9_/-]* with digit segments -> {id}
+        if (p >= end || *p != '/') return false;
+        scratch.clear();
+        while (true) {
+            size_t segStart = scratch.size();
+            while (p < end && issegc(*p)) { scratch.push_back(*p); ++p; }
+            bool allDig = scratch.size() > segStart;
+            for (size_t i = segStart; allDig && i < scratch.size(); ++i) allDig = isdig(scratch[i]);
+            if (allDig) {
+                scratch.resize(segStart);
+                scratch.insert(scratch.end(), {'{', 'i', 'd', '}'});
+            }
+            if (p < end && *p == '/') { scratch.push_back('/'); ++p; continue; }
+            break;
+        }
+        if (p < end && *p == '?') { ++p; while (p < end && *p != ' ') ++p; }
+        if (p + 1 >= end || *p != ' ') return false;
+        ++p;
+        // status \d{3}
+        if (end - p < 4 || !isdig(p[0]) || !isdig(p[1]) || !isdig(p[2])) return false;
+        unsigned cls = p[0] - '0';
+        p += 3;
+        if (p + 1 >= end || *p != ' ') return false;
+        ++p;
+        // size \d+B
+        const char* b0 = p;
+        while (p < end && isdig(*p)) ++p;
+        if (p == b0 || end - p < 2 || p[0] != 'B' || p[1] != ' ') return false;
+        p += 2;
+        // latency \d+.\dms
+        const char* l0 = p;
+        while (p < end && isdig(*p)) ++p;
+        if (p == l0 || end - p < 5 || p[0] != '.' || !isdig(p[1]) || p[2] != 'm' || p[3] != 's' || p[4] != ' ')
+            return false;
+        uint64_t v = 0;
+        if (p - l0 > 18) {
+            v = 1000000000000000ULL;  // saturate absurdly large latencies
+        } else {
+            while (l0 < p) v = v * 10 + (uint64_t)(*l0++ - '0');
+            v = v * 10 + (uint64_t)(p[1] - '0');
+            if (v > 1000000000000000ULL) v = 1000000000000000ULL;
+        }
+        p += 5;
+        // user agent "[^"]*"
+        if (*p != '"') return false;
+        ++p;
+        while (p < end && *p != '"') ++p;
+        if (p != end - 1) return false;
+        // aggregate
+        ++statusCnt[cls];
+        string_view key(scratch.data(), scratch.size());
+        auto it = aggs.find(key);
+        if (it == aggs.end()) it = aggs.emplace(string(key), Agg{}).first;
+        it->second.count++;
+        it->second.lats.push_back((int64_t)v);
+        return true;
     }
-    entries.emplace_back();
-    Entry& e = entries.back();
-    e.tmpl.assign(b, n);
-    e.hash = h;
-    table[i] = (uint32_t)entries.size();
-    used++;
-    if (used * 10 >= table.size() * 7) growTable();
-    return entries.size() - 1;
-}
 
-static vector<char> tbuf;
+    static void appendNum(string& out, uint64_t v) {
+        char tmp[20];
+        auto r = to_chars(tmp, tmp + sizeof(tmp), v);
+        out.append(tmp, r.ptr);
+    }
+    static void appendTenths(string& out, int64_t v) {
+        appendNum(out, (uint64_t)v / 10);
+        out.push_back('.');
+        out.push_back((char)('0' + (v % 10)));
+    }
 
-static bool parse(const char* s, size_t n, size_t& ps, size_t& pe, uint32_t& tenths, int& cls) {
-    if (n < 50) return false;
-    static const char pat[] = "dddd-dd-ddTdd:dd:dd.dddZ";
-    for (int j = 0; j < 24; j++) {
-        char c = s[j], pc = pat[j];
-        if (pc == 'd') { if (!isd((unsigned char)c)) return false; }
-        else if (c != pc) return false;
+    void run(const char* data, size_t sz) {
+        scratch.reserve(512);
+        const char* p = data;
+        const char* end = data + sz;
+        while (p < end) {
+            const char* nl = (const char*)memchr(p, '\n', (size_t)(end - p));
+            const char* le = nl ? nl : end;
+            ++lines;
+            if (!parseLine(p, le)) ++malformed;
+            p = nl ? nl + 1 : end;
+        }
+        // rank templates
+        vector<pair<const string, Agg>*> ranked;
+        ranked.reserve(aggs.size());
+        for (auto& kv : aggs) ranked.push_back(&kv);
+        sort(ranked.begin(), ranked.end(), [](auto* a, auto* b) {
+            if (a->second.count != b->second.count) return a->second.count > b->second.count;
+            return a->first < b->first;
+        });
+        if (ranked.size() > 10) ranked.resize(10);
+        out.reserve(4096);
+        out += "lines ";
+        appendNum(out, lines);
+        out += "\nmalformed ";
+        appendNum(out, malformed);
+        out += '\n';
+        char clsName[4] = {'0', 'x', 'x', 0};
+        for (unsigned d = 0; d < 10; ++d) {
+            if (!statusCnt[d]) continue;
+            clsName[0] = (char)('0' + d);
+            out += "status ";
+            out += clsName;
+            out += ' ';
+            appendNum(out, statusCnt[d]);
+            out += '\n';
+        }
+        for (auto* kv : ranked) {
+            vector<int64_t>& lats = kv->second.lats;
+            size_t n = lats.size();
+            sort(lats.begin(), lats.end());
+            size_t i50 = (50 * n + 99) / 100 - 1;
+            size_t i95 = (95 * n + 99) / 100 - 1;
+            out += "path ";
+            out += kv->first;
+            out += ' ';
+            appendNum(out, kv->second.count);
+            out += ' ';
+            appendTenths(out, lats[i50]);
+            out += ' ';
+            appendTenths(out, lats[i95]);
+            out += ' ';
+            appendTenths(out, lats[n - 1]);
+            out += '\n';
+        }
+        fwrite(out.data(), 1, out.size(), stdout);
     }
-    size_t i = 24;
-    if (s[i++] != ' ') return false;
-    // host: [a-z]+-\d+
-    size_t st = i;
-    while (i < n && (unsigned)(s[i] - 'a') < 26) i++;
-    if (i == st || i >= n || s[i] != '-') return false;
-    i++;
-    st = i;
-    while (i < n && isd((unsigned char)s[i])) i++;
-    if (i == st || i >= n || s[i] != ' ') return false;
-    i++;
-    // method
-    if (n - i >= 4 && memcmp(s + i, "GET ", 4) == 0) i += 4;
-    else if (n - i >= 4 && memcmp(s + i, "PUT ", 4) == 0) i += 4;
-    else if (n - i >= 5 && memcmp(s + i, "POST ", 5) == 0) i += 5;
-    else if (n - i >= 6 && memcmp(s + i, "PATCH ", 6) == 0) i += 6;
-    else if (n - i >= 7 && memcmp(s + i, "DELETE ", 7) == 0) i += 7;
-    else return false;
-    if (n - i < 17) return false; // '/' + ' ' + minimal tail
-    if (s[i] != '/') return false;
-    ps = i;
-    i++;
-    while (i < n) {
-        unsigned char c = (unsigned char)s[i];
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || isd(c) ||
-            c == '_' || c == '-' || c == '/') i++;
-        else break;
-    }
-    pe = i;
-    if (i < n && s[i] == '?') {
-        i++;
-        while (i < n && s[i] != ' ') i++;
-    }
-    if (i >= n || s[i] != ' ') return false;
-    i++;
-    if (n - i < 15) return false; // minimal tail: status .. closing quote
-    if (!isd((unsigned char)s[i]) || !isd((unsigned char)s[i + 1]) || !isd((unsigned char)s[i + 2])) return false;
-    cls = s[i] - '0';
-    i += 3;
-    if (s[i++] != ' ') return false;
-    if (n - i < 11) return false; // minimal tail: size .. closing quote
-    // size \d+B
-    st = i;
-    while (i < n && isd((unsigned char)s[i])) i++;
-    if (i == st || s[i] != 'B') return false;
-    i++;
-    if (s[i++] != ' ') return false;
-    // latency \d+\.\dms
-    st = i;
-    uint64_t v = 0;
-    size_t nd = 0;
-    while (i < n && isd((unsigned char)s[i])) {
-        if (nd < 15) v = v * 10 + (uint64_t)(s[i] - '0');
-        i++; nd++;
-    }
-    if (i == st || s[i] != '.') return false;
-    i++;
-    if (!isd((unsigned char)s[i])) return false;
-    v = v * 10 + (uint64_t)(s[i] - '0');
-    i++;
-    if (s[i] != 'm' || s[i + 1] != 's' || s[i + 2] != ' ') return false;
-    tenths = (uint32_t)min<uint64_t>(v, 0xFFFFFFFFull);
-    i += 3;
-    if (s[i] != '"') return false;
-    i++;
-    while (i < n && s[i] != '"') i++;
-    if (i + 1 != n) return false;
-    return true;
-}
+};
 
 int main(int argc, char** argv) {
     if (argc < 2) return 1;
     _setmode(_fileno(stdout), _O_BINARY);
-
     FILE* f = fopen(argv[1], "rb");
     if (!f) return 1;
-    fseek(f, 0, SEEK_END);
-    long long fsz = _ftelli64(f);
-    fseek(f, 0, SEEK_SET);
-    vector<char> data((size_t)fsz);
-    if (fsz > 0 && fread(data.data(), 1, (size_t)fsz, f) != (size_t)fsz) { fclose(f); return 1; }
+    _fseeki64(f, 0, SEEK_END);
+    long long sz = _ftelli64(f);
+    _fseeki64(f, 0, SEEK_SET);
+    vector<char> buf((size_t)sz);
+    if (sz > 0 && fread(buf.data(), 1, (size_t)sz, f) != (size_t)sz) return 1;
     fclose(f);
-
-    const char* p = data.data();
-    const char* end = p + fsz;
-
-    table.assign(1024, 0);
-    tmask = 1023;
-    tbuf.reserve(512);
-
-    uint64_t lines = 0, malformed = 0;
-    uint64_t clsCount[10] = { 0 };
-
-    while (p < end) {
-        const char* nl = (const char*)memchr(p, '\n', (size_t)(end - p));
-        const char* le = nl ? nl : end;
-        size_t n = (size_t)(le - p);
-        lines++;
-        size_t ps, pe;
-        uint32_t tenths;
-        int cls;
-        if (parse(p, n, ps, pe, tenths, cls)) {
-            // build template
-            size_t need = (size_t)(pe - ps) * 5 + 8;
-            if (tbuf.size() < need) tbuf.resize(need * 2);
-            size_t t = 0;
-            size_t k = ps;
-            while (k < pe) {
-                tbuf[t++] = '/';
-                k++;
-                size_t s0 = k;
-                while (k < pe && p[k] != '/') k++;
-                size_t len = k - s0;
-                bool dig = len > 0;
-                for (size_t z = 0; dig && z < len; z++) if (!isd((unsigned char)p[s0 + z])) dig = false;
-                if (dig) {
-                    tbuf[t] = '{'; tbuf[t + 1] = 'i'; tbuf[t + 2] = 'd'; tbuf[t + 3] = '}';
-                    t += 4;
-                } else {
-                    memcpy(tbuf.data() + t, p + s0, len);
-                    t += len;
-                }
-            }
-            uint32_t h = hashBytes(tbuf.data(), t);
-            size_t e = findOrInsert(tbuf.data(), t, h);
-            entries[e].count++;
-            entries[e].lat.push_back(tenths);
-            clsCount[cls]++;
-        } else {
-            malformed++;
-        }
-        if (!nl) break;
-        p = nl + 1;
-    }
-
-    // order entries: count desc, template asc
-    vector<uint32_t> ord(entries.size());
-    for (size_t i = 0; i < ord.size(); i++) ord[i] = (uint32_t)i;
-    sort(ord.begin(), ord.end(), [&](uint32_t a, uint32_t b) {
-        if (entries[a].count != entries[b].count) return entries[a].count > entries[b].count;
-        return entries[a].tmpl < entries[b].tmpl;
-    });
-
-    printf("lines %llu\n", (unsigned long long)lines);
-    printf("malformed %llu\n", (unsigned long long)malformed);
-    for (int d = 0; d < 10; d++)
-        if (clsCount[d]) printf("status %dxx %llu\n", d, (unsigned long long)clsCount[d]);
-
-    size_t top = min<size_t>(10, ord.size());
-    for (size_t r = 0; r < top; r++) {
-        Entry& e = entries[ord[r]];
-        vector<uint32_t>& lat = e.lat;
-        sort(lat.begin(), lat.end());
-        size_t nn = lat.size();
-        uint32_t p50 = lat[(50 * nn + 99) / 100 - 1];
-        uint32_t p95 = lat[(95 * nn + 99) / 100 - 1];
-        uint32_t mx = lat[nn - 1];
-        printf("path %s %llu %u.%u %u.%u %u.%u\n", e.tmpl.c_str(),
-               (unsigned long long)e.count,
-               p50 / 10, p50 % 10, p95 / 10, p95 % 10, mx / 10, mx % 10);
-    }
+    Parser ps;
+    ps.run(buf.data(), (size_t)sz);
     return 0;
 }

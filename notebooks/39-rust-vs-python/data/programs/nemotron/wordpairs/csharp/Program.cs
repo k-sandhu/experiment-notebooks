@@ -1,233 +1,235 @@
+// Word pairs benchmark - C# 12, .NET 8, unsafe scanning.
+// Single pass: lowercase words in place, intern them to ids, emit packed
+// (prevId, curId) pairs within sentences, sort the packed pairs, count runs,
+// keep the top 20 by (count desc, word1 asc, word2 asc).
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-internal static class Program
+class Program
 {
-    // Open-addressing map from lowercased word bytes to id.
-    static int[] wordSlots; // id + 1, 0 means empty
-    static int wordMask;
-    static int wordCount;
-    static List<byte[]> words; // id -> lowercase word bytes
-
-    static int WordHash(byte[] buf, int len)
+    static bool IsLetter(byte c)
     {
-        uint h = 2166136261u;
-        for (int i = 0; i < len; ++i)
-        {
-            h ^= buf[i];
-            h *= 16777619u;
-        }
-        return (int)h;
+        c = (byte)(c | 0x20);
+        return c >= (byte)'a' && c <= (byte)'z';
     }
 
-    static void GrowWords()
+    // Open-addressing map from lowercase word to a dense id.
+    // Lookup compares against the input buffer region directly, so only
+    // distinct words are turned into string objects.
+    sealed class WordMap
     {
-        int[] old = wordSlots;
-        int n = old.Length * 2;
-        wordSlots = new int[n];
-        wordMask = n - 1;
-        wordCount = 0;
-        foreach (int v in old)
-        {
-            if (v == 0) continue;
-            byte[] w = words[v - 1];
-            int h = WordHash(w, w.Length) & wordMask;
-            while (wordSlots[h] != 0) h = (h + 1) & wordMask;
-            wordSlots[h] = v;
-            ++wordCount;
-        }
-    }
+        string[] keys;
+        int[] hashes;
+        int[] ids;
+        int mask;
+        int occupied;
+        int growAt;
+        readonly List<string> words; // id -> word
 
-    static int Intern(byte[] buf, int len)
-    {
-        if (wordCount * 4 >= wordSlots.Length * 3) GrowWords();
-        int h = WordHash(buf, len) & wordMask;
-        while (true)
+        public WordMap(int cap)
         {
-            int v = wordSlots[h];
-            if (v == 0)
+            keys = new string[cap];
+            hashes = new int[cap];
+            ids = new int[cap];
+            mask = cap - 1;
+            growAt = (int)(cap * 0.75);
+            words = new List<string>(cap);
+        }
+
+        public List<string> Words => words;
+
+        void Grow()
+        {
+            string[] oldKeys = keys;
+            int[] oldHashes = hashes;
+            int[] oldIds = ids;
+            int newCap = oldKeys.Length * 2;
+            keys = new string[newCap];
+            hashes = new int[newCap];
+            ids = new int[newCap];
+            mask = newCap - 1;
+            growAt = (int)(newCap * 0.75);
+            for (int i = 0; i < oldKeys.Length; i++)
             {
-                int id = wordCount++;
-                byte[] copy = new byte[len];
-                Array.Copy(buf, copy, len);
-                words.Add(copy);
-                wordSlots[h] = id + 1;
-                return id;
-            }
-            int wid = v - 1;
-            byte[] w = words[wid];
-            if (w.Length == len)
-            {
-                bool eq = true;
-                for (int i = 0; i < len; ++i)
+                string k = oldKeys[i];
+                if (k != null)
                 {
-                    if (w[i] != buf[i]) { eq = false; break; }
+                    int h = oldHashes[i] & mask;
+                    int pos = h;
+                    while (keys[pos] != null) pos = (pos + 1) & mask;
+                    keys[pos] = k;
+                    hashes[pos] = oldHashes[i];
+                    ids[pos] = oldIds[i];
                 }
-                if (eq) return wid;
             }
-            h = (h + 1) & wordMask;
         }
-    }
 
-    // Open-addressing map from packed (id1, id2) pair key to count.
-    static long[] pairKeys; // -1L means empty (keys are always >= 0)
-    static int[] pairCounts;
-    static int pairMask;
-    static int pairCount;
-
-    static int PairHash(long k)
-    {
-        k ^= k >> 33;
-        k *= unchecked((long)0xff51afd7ed558ccdL);
-        k ^= k >> 33;
-        k ^= k >> 32;
-        return (int)k;
-    }
-
-    static void GrowPairs()
-    {
-        long[] oldK = pairKeys;
-        int[] oldC = pairCounts;
-        int n = oldK.Length * 2;
-        pairKeys = new long[n];
-        pairCounts = new int[n];
-        pairMask = n - 1;
-        Array.Fill(pairKeys, -1L);
-        pairCount = 0;
-        for (int i = 0; i < oldK.Length; ++i)
+        static int HashBytes(byte[] data, int start, int len)
         {
-            long k = oldK[i];
-            if (k == -1L) continue;
-            int h = PairHash(k) & pairMask;
-            while (pairKeys[h] != -1L) h = (h + 1) & pairMask;
-            pairKeys[h] = k;
-            pairCounts[h] = oldC[i];
-            ++pairCount;
+            int h = unchecked((int)2166136261);
+            for (int i = 0; i < len; i++) h = (h * 16777619) ^ data[start + i];
+            return h;
         }
-    }
 
-    static int PairInsert(long key)
-    {
-        if ((pairCount + 1) * 4 >= pairKeys.Length * 3) GrowPairs();
-        int h = PairHash(key) & pairMask;
-        while (pairKeys[h] != -1L)
+        static bool EqualsBytes(string k, byte[] data, int start, int len)
         {
-            if (pairKeys[h] == key) return h;
-            h = (h + 1) & pairMask;
+            if (k.Length != len) return false;
+            for (int i = 0; i < len; i++)
+                if (k[i] != (char)data[start + i]) return false;
+            return true;
         }
-        pairKeys[h] = key;
-        pairCounts[h] = 0;
-        ++pairCount;
-        return h;
-    }
 
-    static int WordCmp(byte[] x, byte[] y)
-    {
-        int n = x.Length < y.Length ? x.Length : y.Length;
-        for (int i = 0; i < n; ++i)
+        public int GetOrPut(byte[] data, int start, int len, int hash)
         {
-            if (x[i] != y[i]) return x[i] - y[i];
+            int pos = hash & mask;
+            while (true)
+            {
+                string k = keys[pos];
+                if (k == null)
+                {
+                    string s = Encoding.ASCII.GetString(data, start, len);
+                    keys[pos] = s;
+                    hashes[pos] = hash;
+                    ids[pos] = occupied;
+                    words.Add(s);
+                    int id = occupied++;
+                    if (occupied >= growAt) Grow();
+                    return id;
+                }
+                if (hashes[pos] == hash && EqualsBytes(k, data, start, len)) return ids[pos];
+                pos = (pos + 1) & mask;
+            }
         }
-        return x.Length - y.Length;
     }
 
-    static int CompareEntries(Entry x, Entry y)
+    // Top-20 bookkeeping, ordered best-first.
+    static long[] bestCount = new long[20];
+    static int[] bestW1 = new int[20];
+    static int[] bestW2 = new int[20];
+    static int bestn;
+    static List<string> words;
+
+    static bool Better(long c1, int a1, int b1, long c2, int a2, int b2)
     {
-        if (x.c != y.c) return y.c - x.c;
-        int cmp = WordCmp(words[x.a], words[y.a]);
-        if (cmp != 0) return cmp;
-        return WordCmp(words[x.b], words[y.b]);
+        if (c1 != c2) return c1 > c2;
+        int cmp = words[a1].CompareTo(words[a2]);
+        if (cmp != 0) return cmp < 0;
+        return words[b1].CompareTo(words[b2]) < 0;
     }
 
-    static long wordsCount;
-    static long pairsCount;
-    static int prevId = -1;
-
-    static void NoteWord(int id)
+    static void Consider(long count, int w1, int w2)
     {
-        ++wordsCount;
-        if (prevId >= 0)
+        if (bestn < 20)
         {
-            ++pairsCount;
-            long key = ((long)prevId << 32) | (uint)id;
-            int idx = PairInsert(key);
-            pairCounts[idx]++;
+            int pos = bestn;
+            while (pos > 0 && Better(count, w1, w2, bestCount[pos - 1], bestW1[pos - 1], bestW2[pos - 1]))
+            {
+                bestCount[pos] = bestCount[pos - 1];
+                bestW1[pos] = bestW1[pos - 1];
+                bestW2[pos] = bestW2[pos - 1];
+                pos--;
+            }
+            bestCount[pos] = count;
+            bestW1[pos] = w1;
+            bestW2[pos] = w2;
+            bestn++;
         }
-        prevId = id;
+        else if (Better(count, w1, w2, bestCount[19], bestW1[19], bestW2[19]))
+        {
+            long c = count;
+            int a = w1;
+            int b = w2;
+            int pos = 19;
+            while (pos > 0 && Better(c, a, b, bestCount[pos - 1], bestW1[pos - 1], bestW2[pos - 1]))
+            {
+                bestCount[pos] = bestCount[pos - 1];
+                bestW1[pos] = bestW1[pos - 1];
+                bestW2[pos] = bestW2[pos - 1];
+                pos--;
+            }
+            bestCount[pos] = c;
+            bestW1[pos] = a;
+            bestW2[pos] = b;
+        }
     }
 
     static int Main(string[] args)
     {
+        if (args.Length < 1) return 1;
         byte[] data = File.ReadAllBytes(args[0]);
+        int n = data.Length;
+        var map = new WordMap(1 << 14);
+        words = map.Words;
+        long[] pairs = new long[1 << 20];
+        int pairCount = 0;
+        int prevId = 0;
+        bool havePrev = false;
+        long wordTotal = 0, pairTotal = 0;
 
-        wordSlots = new int[1 << 14];
-        wordMask = wordSlots.Length - 1;
-        wordCount = 0;
-        words = new List<byte[]>();
-        pairKeys = new long[1 << 16];
-        pairCounts = new int[1 << 16];
-        pairMask = pairKeys.Length - 1;
-        pairCount = 0;
-        Array.Fill(pairKeys, -1L);
-        wordsCount = 0;
-        pairsCount = 0;
-        prevId = -1;
-
-        byte[] buf = new byte[64];
-        int blen = 0;
-        for (int i = 0; i < data.Length; ++i)
+        int i = 0;
+        while (i < n)
         {
-            int c = data[i];
-            if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122))
+            while (i < n)
             {
-                if (blen == buf.Length)
+                byte c = data[i];
+                if (IsLetter(c)) break;
+                if (c == '.' || c == '!' || c == '?') havePrev = false;
+                i++;
+            }
+            if (i >= n) break;
+            int start = i;
+            int h = unchecked((int)2166136261);
+            while (i < n)
+            {
+                byte c = data[i];
+                if (!IsLetter(c)) break;
+                if (c >= (byte)'A' && c <= (byte)'Z') c = (byte)(c + 0x20);
+                data[i] = c;
+                h = (h * 16777619) ^ c;
+                i++;
+            }
+            int len = i - start;
+            int id = map.GetOrPut(data, start, len, h);
+            wordTotal++;
+            if (havePrev)
+            {
+                pairTotal++;
+                if (pairCount == pairs.Length)
                 {
-                    byte[] nb = new byte[buf.Length * 2];
-                    Array.Copy(buf, nb, blen);
-                    buf = nb;
+                    long[] nb = new long[pairs.Length * 2];
+                    Array.Copy(pairs, 0, nb, 0, pairCount);
+                    pairs = nb;
                 }
-                buf[blen++] = (byte)(c | 0x20);
+                pairs[pairCount++] = ((long)prevId << 32) | (id & 0xFFFFFFFFL);
             }
-            else
-            {
-                if (blen > 0) { NoteWord(Intern(buf, blen)); blen = 0; }
-                if (c == 46 || c == 33 || c == 63) prevId = -1;
-            }
+            prevId = id;
+            havePrev = true;
         }
-        if (blen > 0) NoteWord(Intern(buf, blen));
 
-        int distinct = pairCount;
-        Entry[] ents = new Entry[distinct];
-        int t = 0;
-        for (int i = 0; i < pairKeys.Length; ++i)
+        Array.Sort(pairs, 0, pairCount);
+
+        int k = 0;
+        long distinct = 0;
+        while (k < pairCount)
         {
-            long k = pairKeys[i];
-            if (k != -1L)
-            {
-                ents[t] = new Entry { c = pairCounts[i], a = (int)(k >> 32), b = (int)k };
-                ++t;
-            }
+            int j = k + 1;
+            while (j < pairCount && pairs[j] == pairs[k]) j++;
+            Consider(j - k, (int)(pairs[k] >> 32), (int)(pairs[k] & 0xFFFFFFFFL));
+            distinct++;
+            k = j;
         }
-        Array.Sort(ents, CompareEntries);
 
         var sb = new StringBuilder();
-        sb.Append("words ").Append(wordsCount).Append('\n');
-        sb.Append("pairs ").Append(pairsCount).Append('\n');
+        sb.Append("words ").Append(wordTotal).Append('\n');
+        sb.Append("pairs ").Append(pairTotal).Append('\n');
         sb.Append("distinct ").Append(distinct).Append('\n');
-        int limit = distinct < 20 ? distinct : 20;
-        for (int i = 0; i < limit; ++i)
+        for (int t = 0; t < bestn; t++)
         {
-            sb.Append(ents[i].c).Append(' ');
-            sb.Append(Encoding.ASCII.GetString(words[ents[i].a])).Append(' ');
-            sb.Append(Encoding.ASCII.GetString(words[ents[i].b])).Append('\n');
+            sb.Append(bestCount[t]).Append(' ').Append(words[bestW1[t]]).Append(' ').Append(words[bestW2[t]]).Append('\n');
         }
-        Console.Write(sb);
+        Console.Write(sb.ToString());
         return 0;
-    }
-
-    private struct Entry
-    {
-        public int c, a, b;
     }
 }

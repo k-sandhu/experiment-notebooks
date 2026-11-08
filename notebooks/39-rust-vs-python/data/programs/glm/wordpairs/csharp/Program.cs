@@ -2,317 +2,280 @@ using System;
 using System.IO;
 using System.Text;
 
+// Word pairs: count adjacent word pairs within sentences, report totals and top 20.
 internal static class Program
 {
-    // ---- word table: open addressing, ids into a byte arena ----
-    static int[] wSlot;   // id+1, 0 = empty
-    static int[] wHash;
-    static int[] wOff;
-    static int[] wLen;
-    static byte[] wArena;
-    static int wArenaLen;
-    static int wMask, wCount;
+    private static byte[] _buf;
+    private static long[] _pKeys;          // pair table: key -> count, cnt 0 = empty slot
+    private static int[] _pCnt;
+    private static long _pMask;
+    private static long _pFilled;
 
-    static void WGrow()
+    private static int[] _wTab;            // word table: slot -> id + 1
+    private static int[] _wOff, _wLen, _wHsh;
+    private static long _wMask;
+    private static int _wCount;
+
+    private static long _words, _pairs;
+
+    private static int Main(string[] args)
     {
-        int cap = wMask + 1, cap2 = cap * 2;
-        int[] s2 = new int[cap2], h2 = new int[cap2];
-        int m2 = cap2 - 1;
-        for (int i = 0; i < cap; i++)
+        if (args.Length < 1) { Console.Error.WriteLine("usage: solution INPUT_PATH"); return 1; }
+        _buf = File.ReadAllBytes(args[0]);
+        int n = _buf.Length;
+        for (int i = 0; i < n; i++)
         {
-            if (wSlot[i] != 0)
+            int c = _buf[i];
+            if (c >= 'A' && c <= 'Z') _buf[i] = (byte)(c + 32);
+        }
+
+        int ps = 1 << 20;
+        while (ps < n / 8) ps <<= 1; // distinct pairs scale with input size; avoid rehashing
+        _pKeys = new long[ps];
+        _pCnt = new int[ps];
+        _pMask = ps - 1;
+
+        _wTab = new int[1 << 16];
+        _wMask = (1 << 16) - 1;
+        _wOff = new int[1 << 16];
+        _wLen = new int[1 << 16];
+        _wHsh = new int[1 << 16];
+
+        unsafe
+        {
+            fixed (byte* p = _buf)
             {
-                int j = wHash[i] & m2;
-                while (s2[j] != 0) j = (j + 1) & m2;
-                s2[j] = wSlot[i];
-                h2[j] = wHash[i];
-            }
-        }
-        wSlot = s2; wHash = h2; wMask = m2;
-    }
-
-    static unsafe int WordFindOrAdd(byte* w, int n, int h)
-    {
-        int i = h & wMask;
-        while (wSlot[i] != 0)
-        {
-            int id = wSlot[i] - 1;
-            if (wHash[i] == h && wLen[id] == n)
-            {
-                int o = wOff[id];
-                bool eq = true;
-                for (int k = 0; k < n; k++)
-                    if (wArena[o + k] != w[k]) { eq = false; break; }
-                if (eq) return id;
-            }
-            i = (i + 1) & wMask;
-        }
-        if ((long)(wCount + 1) * 3 > (long)(wMask + 1) * 2)
-        {
-            WGrow();
-            i = h & wMask;
-            while (wSlot[i] != 0) i = (i + 1) & wMask;
-        }
-        int nid = wCount++;
-        int off = wArenaLen;
-        if (wArenaLen + n > wArena.Length)
-        {
-            int nc = wArena.Length;
-            while (wArenaLen + n > nc) nc *= 2;
-            byte[] a2 = new byte[nc];
-            Buffer.BlockCopy(wArena, 0, a2, 0, wArenaLen);
-            wArena = a2;
-        }
-        for (int k = 0; k < n; k++) wArena[wArenaLen + k] = w[k];
-        wArenaLen += n;
-        if (nid == wOff.Length)
-        {
-            Array.Resize(ref wOff, nid * 2);
-            Array.Resize(ref wLen, nid * 2);
-        }
-        wOff[nid] = off;
-        wLen[nid] = n;
-        wSlot[i] = nid + 1;
-        wHash[i] = h;
-        return nid;
-    }
-
-    static int CmpWords(int a, int b)
-    {
-        int la = wLen[a], lb = wLen[b];
-        int oa = wOff[a], ob = wOff[b];
-        int m = la < lb ? la : lb;
-        for (int i = 0; i < m; i++)
-        {
-            int d = wArena[oa + i] - wArena[ob + i];
-            if (d != 0) return d;
-        }
-        return la - lb;
-    }
-
-    // ---- pair table ----
-    static long[] pKey;
-    static int[] pCnt;
-    static long pMask, pCount;
-    const long PEMPTY = -1L;
-
-    static long MixKey(long x)
-    {
-        x *= unchecked((long)0x9E3779B97F4A7C15L);
-        x ^= x >> 32;
-        x *= unchecked((long)0xBF58476D1CE4E5B9L);
-        x ^= x >> 29;
-        return x;
-    }
-
-    static void PGrow()
-    {
-        long cap = pMask + 1, cap2 = cap * 2, m2 = cap2 - 1;
-        long[] k2 = new long[cap2];
-        int[] c2 = new int[cap2];
-        Array.Fill(k2, PEMPTY);
-        for (long i = 0; i < cap; i++)
-        {
-            if (pKey[i] != PEMPTY)
-            {
-                long j = MixKey(pKey[i]) & m2;
-                while (k2[j] != PEMPTY) j = (j + 1) & m2;
-                k2[j] = pKey[i];
-                c2[j] = pCnt[i];
-            }
-        }
-        pKey = k2; pCnt = c2; pMask = m2;
-    }
-
-    static void PairAdd(long key)
-    {
-        long i = MixKey(key) & pMask;
-        while (pKey[i] != PEMPTY)
-        {
-            if (pKey[i] == key) { pCnt[i]++; return; }
-            i = (i + 1) & pMask;
-        }
-        if ((pCount + 1) * 3 > (pMask + 1) * 2)
-        {
-            PGrow();
-            i = MixKey(key) & pMask;
-            while (pKey[i] != PEMPTY) i = (i + 1) & pMask;
-        }
-        pKey[i] = key;
-        pCnt[i] = 1;
-        pCount++;
-    }
-
-    // negative if (c1,w1) ranks better (earlier in output) than (c2,w2)
-    static int Worse(int c1, int i1a, int i1b, int c2, int i2a, int i2b)
-    {
-        if (c1 != c2) return c2 - c1;
-        int d = CmpWords(i1a, i2a);
-        if (d != 0) return d;
-        return CmpWords(i1b, i2b);
-    }
-
-    static unsafe void Main(string[] args)
-    {
-        if (args.Length < 1) return;
-        byte[] data = File.ReadAllBytes(args[0]);
-        long totalWords = 0, totalPairs = 0;
-
-        wMask = (1 << 16) - 1;
-        wSlot = new int[wMask + 1];
-        wHash = new int[wMask + 1];
-        wOff = new int[256];
-        wLen = new int[256];
-        wArena = new byte[1 << 16];
-        wArenaLen = 0;
-
-        pMask = (1L << 20) - 1;
-        pKey = new long[1 << 20];
-        pCnt = new int[1 << 20];
-        Array.Fill(pKey, PEMPTY);
-
-        int prev = -1;
-        byte[] wbuf = new byte[256];
-        fixed (byte* pd = data)
-        {
-            byte* p = pd, end = pd + data.Length;
-            int wl = 0;
-            while (p < end)
-            {
-                int c = *p;
-                int lc = c | 0x20;
-                if ((uint)(lc - 'a') < 26u)
+                long prev = -1; // no previous word in current sentence
+                byte* end = p + n;
+                byte* q = p;
+                while (q < end)
                 {
-                    if (wl == wbuf.Length)
+                    int c = *q;
+                    if (IsLetter(c))
                     {
-                        byte[] nb = new byte[wbuf.Length * 2];
-                        Buffer.BlockCopy(wbuf, 0, nb, 0, wl);
-                        wbuf = nb;
-                    }
-                    wbuf[wl++] = (byte)lc;
-                }
-                else
-                {
-                    if (wl > 0)
-                    {
-                        totalWords++;
-                        int h = unchecked((int)2166136261L);
-                        for (int k = 0; k < wl; k++) { h ^= wbuf[k]; h *= 16777619; }
-                        h = h == 0 ? 1 : h;
-                        fixed (byte* wb = wbuf)
+                        byte* start = q;
+                        int h = unchecked((int)0x811C9DC5);
+                        do
                         {
-                            int id = WordFindOrAdd(wb, wl, h);
-                            if (prev >= 0)
-                            {
-                                totalPairs++;
-                                PairAdd(((long)prev << 32) | (uint)id);
-                            }
-                            prev = id;
+                            h = (h ^ c) * unchecked((int)0x01000193);
+                            q++;
+                            c = q < end ? *q : 0;
+                        } while (q < end && IsLetter(c));
+                        int id = Intern((int)(start - p), (int)(q - start), h);
+                        _words++;
+                        if (prev >= 0)
+                        {
+                            AddPair((prev << 32) | (uint)id);
+                            _pairs++;
                         }
-                        wl = 0;
+                        prev = id;
                     }
-                    if (c == '.' || c == '!' || c == '?') prev = -1;
-                }
-                p++;
-            }
-            if (wl > 0)
-            {
-                totalWords++;
-                int h = unchecked((int)2166136261L);
-                for (int k = 0; k < wl; k++) { h ^= wbuf[k]; h *= 16777619; }
-                h = h == 0 ? 1 : h;
-                fixed (byte* wb = wbuf)
-                {
-                    int id = WordFindOrAdd(wb, wl, h);
-                    if (prev >= 0)
+                    else
                     {
-                        totalPairs++;
-                        PairAdd(((long)prev << 32) | (uint)id);
+                        if (c == '.' || c == '!' || c == '?') prev = -1;
+                        q++;
                     }
                 }
             }
         }
 
-        // top 20 via bounded min-heap (root = worst)
-        int hc = 0;
-        int[] hCnt = new int[21], hId1 = new int[21], hId2 = new int[21];
-        for (long i = 0; i <= pMask; i++)
+        // Keep the 20 best pairs in a min-heap while scanning the pair table.
+        long[] hKey = new long[20];
+        int[] hCnt = new int[20];
+        int hn = 0;
+        for (long j = 0; j <= _pMask; j++)
         {
-            if (pKey[i] == PEMPTY) continue;
-            int c1 = pCnt[i];
-            int id1 = (int)(pKey[i] >> 32), id2 = (int)pKey[i];
-            if (hc < 20)
+            int cnt = _pCnt[j];
+            if (cnt == 0) continue;
+            long key = _pKeys[j];
+            if (hn < 20)
             {
-                int q = hc++;
-                hCnt[q] = c1; hId1[q] = id1; hId2[q] = id2;
-                while (q > 0)
+                int k = hn++;
+                hKey[k] = key; hCnt[k] = cnt;
+                while (k > 0)
                 {
-                    int par = (q - 1) / 2;
-                    if (Worse(hCnt[q], hId1[q], hId2[q], hCnt[par], hId1[par], hId2[par]) <= 0) break;
-                    (hCnt[q], hCnt[par]) = (hCnt[par], hCnt[q]);
-                    (hId1[q], hId1[par]) = (hId1[par], hId1[q]);
-                    (hId2[q], hId2[par]) = (hId2[par], hId2[q]);
-                    q = par;
+                    int pp = (k - 1) / 2;
+                    if (Worse(key, cnt, hKey[pp], hCnt[pp]))
+                    {
+                        (hKey[pp], hKey[k]) = (hKey[k], hKey[pp]);
+                        (hCnt[pp], hCnt[k]) = (hCnt[k], hCnt[pp]);
+                        k = pp;
+                    }
+                    else break;
                 }
             }
-            else if (Worse(c1, id1, id2, hCnt[0], hId1[0], hId2[0]) < 0)
+            else if (Worse(hKey[0], hCnt[0], key, cnt))
             {
-                hCnt[0] = c1; hId1[0] = id1; hId2[0] = id2;
-                SiftDown(hCnt, hId1, hId2, hc);
+                hKey[0] = key; hCnt[0] = cnt;
+                int k = 0;
+                while (true)
+                {
+                    int l = 2 * k + 1, r = l + 1, m = k;
+                    if (l < hn && Worse(hKey[l], hCnt[l], hKey[m], hCnt[m])) m = l;
+                    if (r < hn && Worse(hKey[r], hCnt[r], hKey[m], hCnt[m])) m = r;
+                    if (m == k) break;
+                    (hKey[m], hKey[k]) = (hKey[k], hKey[m]);
+                    (hCnt[m], hCnt[k]) = (hCnt[k], hCnt[m]);
+                    k = m;
+                }
+            }
+        }
+        for (int a = 0; a < hn; a++)
+        {
+            int best = a;
+            for (int b = a + 1; b < hn; b++)
+            {
+                if (hCnt[b] > hCnt[best] ||
+                    (hCnt[b] == hCnt[best] && CmpWords(hKey[b], hKey[best]) < 0)) best = b;
+            }
+            if (best != a)
+            {
+                (hKey[a], hKey[best]) = (hKey[best], hKey[a]);
+                (hCnt[a], hCnt[best]) = (hCnt[best], hCnt[a]);
             }
         }
 
-        int m = hc;
-        int[] rCnt = new int[m], rId1 = new int[m], rId2 = new int[m];
-        for (int idx = m - 1; idx >= 0; idx--)
+        var sb = new StringBuilder(64 + hn * 48);
+        sb.Append("words ").Append(_words).Append('\n');
+        sb.Append("pairs ").Append(_pairs).Append('\n');
+        sb.Append("distinct ").Append(_pFilled).Append('\n');
+        for (int k = 0; k < hn; k++)
         {
-            rCnt[idx] = hCnt[0]; rId1[idx] = hId1[0]; rId2[idx] = hId2[0];
-            hc--;
-            hCnt[0] = hCnt[hc]; hId1[0] = hId1[hc]; hId2[0] = hId2[hc];
-            SiftDown(hCnt, hId1, hId2, hc);
-        }
-        for (int a = 1; a < m; a++)
-        {
-            int c = rCnt[a], i1 = rId1[a], i2 = rId2[a];
-            int b = a - 1;
-            while (b >= 0 && Worse(rCnt[b], rId1[b], rId2[b], c, i1, i2) > 0)
-            {
-                rCnt[b + 1] = rCnt[b]; rId1[b + 1] = rId1[b]; rId2[b + 1] = rId2[b];
-                b--;
-            }
-            rCnt[b + 1] = c; rId1[b + 1] = i1; rId2[b + 1] = i2;
-        }
-
-        var sb = new StringBuilder(4096);
-        sb.Append("words ").Append(totalWords).Append('\n');
-        sb.Append("pairs ").Append(totalPairs).Append('\n');
-        sb.Append("distinct ").Append(pCount).Append('\n');
-        for (int idx = 0; idx < m; idx++)
-        {
-            sb.Append(rCnt[idx]).Append(' ');
-            sb.Append(Encoding.ASCII.GetString(wArena, wOff[rId1[idx]], wLen[rId1[idx]]));
+            long key = hKey[k];
+            int w1 = (int)(key >> 32), w2 = (int)key;
+            sb.Append(hCnt[k]).Append(' ');
+            sb.Append(Encoding.Latin1.GetString(_buf, _wOff[w1], _wLen[w1]));
             sb.Append(' ');
-            sb.Append(Encoding.ASCII.GetString(wArena, wOff[rId2[idx]], wLen[rId2[idx]]));
+            sb.Append(Encoding.Latin1.GetString(_buf, _wOff[w2], _wLen[w2]));
             sb.Append('\n');
         }
-        using var so = Console.OpenStandardOutput();
-        byte[] ob = Encoding.ASCII.GetBytes(sb.ToString());
-        so.Write(ob, 0, ob.Length);
+        using var stdout = Console.OpenStandardOutput();
+        stdout.Write(Encoding.Latin1.GetBytes(sb.ToString()));
+        return 0;
     }
 
-    static void SiftDown(int[] hCnt, int[] hId1, int[] hId2, int size)
+    private static bool IsLetter(int c) => (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+
+    private static bool Worse(long ka, int ca, long kb, int cb)
     {
-        int p = 0;
+        if (ca != cb) return ca < cb;
+        return CmpWords(ka, kb) > 0;
+    }
+
+    private static int CmpWords(long a, long b)
+    {
+        int c = CmpWord((int)(a >> 32), (int)(b >> 32));
+        if (c != 0) return c;
+        return CmpWord((int)a, (int)b);
+    }
+
+    private static int CmpWord(int a, int b)
+    {
+        int o1 = _wOff[a], l1 = _wLen[a], o2 = _wOff[b], l2 = _wLen[b];
+        int m = l1 < l2 ? l1 : l2;
+        for (int k = 0; k < m; k++)
+        {
+            int d = _buf[o1 + k] - _buf[o2 + k];
+            if (d != 0) return d;
+        }
+        return l1 - l2;
+    }
+
+    private static void AddPair(long key)
+    {
+        if ((_pFilled + 1) * 4 > (_pMask + 1) * 3) GrowPairs();
+        int i = Mix(key) & (int)_pMask;
         while (true)
         {
-            int l = 2 * p + 1, r = l + 1, s = p;
-            if (l < size && Worse(hCnt[l], hId1[l], hId2[l], hCnt[s], hId1[s], hId2[s]) > 0) s = l;
-            if (r < size && Worse(hCnt[r], hId1[r], hId2[r], hCnt[s], hId1[s], hId2[s]) > 0) s = r;
-            if (s == p) break;
-            (hCnt[p], hCnt[s]) = (hCnt[s], hCnt[p]);
-            (hId1[p], hId1[s]) = (hId1[s], hId1[p]);
-            (hId2[p], hId2[s]) = (hId2[s], hId2[p]);
-            p = s;
+            if (_pCnt[i] == 0)
+            {
+                _pKeys[i] = key;
+                _pCnt[i] = 1;
+                _pFilled++;
+                return;
+            }
+            if (_pKeys[i] == key)
+            {
+                _pCnt[i]++;
+                return;
+            }
+            i = (i + 1) & (int)_pMask;
+        }
+    }
+
+    private static void GrowPairs()
+    {
+        long[] ok = _pKeys;
+        int[] oc = _pCnt;
+        int ns = ok.Length * 2;
+        _pKeys = new long[ns];
+        _pCnt = new int[ns];
+        _pMask = ns - 1;
+        for (int j = 0; j < ok.Length; j++)
+        {
+            int c = oc[j];
+            if (c != 0)
+            {
+                long key = ok[j];
+                int i = Mix(key) & (int)_pMask;
+                while (_pCnt[i] != 0) i = (i + 1) & (int)_pMask;
+                _pKeys[i] = key;
+                _pCnt[i] = c;
+            }
+        }
+    }
+
+    private static int Mix(long x)
+    {
+        ulong u = (ulong)x;
+        u += 0x9E3779B97F4A7C15UL;
+        u = (u ^ (u >> 30)) * 0xBF58476D1CE4E5B9UL;
+        u = (u ^ (u >> 27)) * 0x94D049BB133111EBUL;
+        return (int)(u ^ (u >> 31));
+    }
+
+    private static unsafe int Intern(int o, int l, int h)
+    {
+        if ((_wCount + 1) * 2 > _wMask + 1) GrowWords();
+        int i = h & (int)_wMask;
+        while (true)
+        {
+            int slot = _wTab[i];
+            if (slot == 0)
+            {
+                int nid = _wCount++;
+                _wOff[nid] = o; _wLen[nid] = l; _wHsh[nid] = h;
+                _wTab[i] = nid + 1;
+                return nid;
+            }
+            int id = slot - 1;
+            if (_wHsh[id] == h && _wLen[id] == l && EqBytes(_wOff[id], o, l)) return id;
+            i = (i + 1) & (int)_wMask;
+        }
+    }
+
+    private static bool EqBytes(int a, int b, int l)
+    {
+        for (int k = 0; k < l; k++) if (_buf[a + k] != _buf[b + k]) return false;
+        return true;
+    }
+
+    private static void GrowWords()
+    {
+        int[] ot = _wTab;
+        int ns = ot.Length * 2;
+        _wTab = new int[ns];
+        _wMask = ns - 1;
+        for (int j = 0; j < ot.Length; j++)
+        {
+            int slot = ot[j];
+            if (slot != 0)
+            {
+                int id = slot - 1;
+                int i = _wHsh[id] & (int)_wMask;
+                while (_wTab[i] != 0) i = (i + 1) & (int)_wMask;
+                _wTab[i] = id + 1;
+            }
         }
     }
 }

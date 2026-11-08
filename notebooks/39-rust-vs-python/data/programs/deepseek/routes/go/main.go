@@ -1,205 +1,334 @@
 package main
 
 import (
+	"math/bits"
 	"os"
+	"runtime/debug"
 	"strconv"
 )
 
-var data []byte
-var pos int
+type parser struct {
+	data []byte
+	pos  int
+}
 
-func nextInt() int {
-	a := data
-	n := len(a)
-	i := pos
-	for i < n {
-		c := int(a[i]) - 48
-		if c >= 0 && c <= 9 {
-			break
-		}
-		i++
+func (p *parser) nextInt() int {
+	for p.data[p.pos] <= ' ' {
+		p.pos++
 	}
 	x := 0
-	for i < n {
-		c := int(a[i]) - 48
-		if c < 0 || c > 9 {
-			break
-		}
-		x = x*10 + c
-		i++
+	for p.data[p.pos] > ' ' {
+		x = x*10 + int(p.data[p.pos]-'0')
+		p.pos++
 	}
-	pos = i
 	return x
 }
 
-var hp []uint64
-
-func heapPush(x uint64) {
-	h := append(hp, x)
-	i := len(h) - 1
-	for i > 0 {
-		p := (i - 1) >> 1
-		if h[p] <= x {
-			break
-		}
-		h[i] = h[p]
-		i = p
-	}
-	h[i] = x
-	hp = h
+// Monotone circular bucket queue (Dial) with a bitset to skip empty ranges.
+type dialQueue struct {
+	nb      int
+	words   int
+	cur     int64
+	bits    []uint64
+	buckets [][]int
 }
 
-func heapPop() uint64 {
-	h := hp
-	top := h[0]
-	x := h[len(h)-1]
-	h = h[:len(h)-1]
-	n := len(h)
-	if n > 0 {
-		i := 0
-		for {
-			c := i*2 + 1
-			if c >= n {
-				break
-			}
-			if c+1 < n && h[c+1] < h[c] {
-				c++
-			}
-			if h[c] >= x {
-				break
-			}
-			h[i] = h[c]
-			i = c
-		}
-		h[i] = x
+func (q *dialQueue) init(maxW int) {
+	nb := maxW + 1
+	if nb < 2 {
+		nb = 2
 	}
-	hp = h
-	return top
+	q.nb = nb
+	q.words = (nb + 63) >> 6
+	q.bits = make([]uint64, q.words)
+	q.buckets = make([][]int, nb)
+	for i := range q.buckets {
+		q.buckets[i] = make([]int, 0, 64)
+	}
+	q.cur = 0
 }
 
-func main() {
-	var err error
-	data, err = os.ReadFile(os.Args[1])
-	if err != nil {
-		os.Exit(1)
+func (q *dialQueue) clear() {
+	for i := range q.buckets {
+		q.buckets[i] = q.buckets[i][:0]
 	}
-
-	N := nextInt()
-	M := nextInt()
-	Q := nextInt()
-
-	eu := make([]int32, M)
-	ev := make([]int32, M)
-	ew := make([]int32, M)
-	deg := make([]int32, N+1)
-	for i := 0; i < M; i++ {
-		u := int32(nextInt())
-		v := int32(nextInt())
-		w := int32(nextInt())
-		eu[i] = u
-		ev[i] = v
-		ew[i] = w
-		deg[u]++
-		deg[v]++
+	for i := range q.bits {
+		q.bits[i] = 0
 	}
-	src := make([]int32, Q)
-	for i := 0; i < Q; i++ {
-		src[i] = int32(nextInt())
-	}
+	q.cur = 0
+}
 
-	off := make([]int32, N+1)
-	acc := int32(0)
-	for i := 0; i < N; i++ {
-		off[i] = acc
-		acc += deg[i]
-	}
-	off[N] = acc
+func (q *dialQueue) push(node, idx int) {
+	q.buckets[idx] = append(q.buckets[idx], node)
+	q.bits[idx>>6] |= uint64(1) << uint(idx&63)
+}
 
-	fill := make([]int32, N+1)
-	copy(fill, off)
-	adj := make([]uint32, 2*M)
-	for i := 0; i < M; i++ {
-		u := eu[i]
-		v := ev[i]
-		w := ew[i]
-		p := fill[u]
-		adj[p] = uint32(v)<<10 | uint32(w)
-		fill[u] = p + 1
-		p = fill[v]
-		adj[p] = uint32(u)<<10 | uint32(w)
-		fill[v] = p + 1
+func (q *dialQueue) nextSetBit(p int) int {
+	wi := p >> 6
+	w := q.bits[wi] & (^uint64(0) << uint(p&63))
+	if w != 0 {
+		return (wi << 6) + bits.TrailingZeros64(w)
 	}
-	eu = nil
-	ev = nil
-	ew = nil
-	deg = nil
-	fill = nil
+	for i := wi + 1; i < q.words; i++ {
+		if q.bits[i] != 0 {
+			return (i << 6) + bits.TrailingZeros64(q.bits[i])
+		}
+	}
+	for i := 0; i < wi; i++ {
+		if q.bits[i] != 0 {
+			return (i << 6) + bits.TrailingZeros64(q.bits[i])
+		}
+	}
+	low := q.bits[wi] & ((uint64(1) << uint(p&63)) - 1)
+	if low != 0 {
+		return (wi << 6) + bits.TrailingZeros64(low)
+	}
+	return -1
+}
 
-	const INF int32 = 0x3f3f3f3f
+func runInt(N, Q int, src, off, at, aw []int32, maxW int, out []int64) {
+	const INF int32 = 1<<31 - 1
 	dist := make([]int32, N)
-
-	shift := 0
-	for (int64(1) << shift) < int64(N) {
-		shift++
-	}
-	mask := uint64(1)<<shift - 1
-
-	hp = make([]uint64, 0, 2*M+16)
-
-	out := make([]byte, 0, 256)
+	q := &dialQueue{}
+	q.init(maxW)
+	nb := int32(q.nb)
 
 	for qi := 0; qi < Q; qi++ {
 		s := src[qi]
 		for i := range dist {
 			dist[i] = INF
 		}
-		hp = hp[:0]
+		q.clear()
 		dist[s] = 0
-		heapPush(uint64(s))
+		q.push(int(s), 0)
 
-		total := int64(0)
-		reach := 0
-		far := int32(0)
-		farNode := s
+		var reach, total, far int64 = 0, 0, -1
+		farNode := -1
 
-		for len(hp) > 0 {
-			key := heapPop()
-			v := int32(key & mask)
-			d := int32(key >> shift)
-			if d != dist[v] {
-				continue
+		for {
+			p := int(q.cur % int64(nb))
+			idx := q.nextSetBit(p)
+			if idx < 0 {
+				break
 			}
-
-			reach++
-			total += int64(d)
-			if d > far {
-				far = d
-				farNode = v
+			offset := idx - p
+			if offset < 0 {
+				offset += int(nb)
 			}
+			q.cur += int64(offset)
+			d := int32(q.cur)
 
-			end := off[v+1]
-			for e := off[v]; e < end; e++ {
-				a := adj[e]
-				u := int32(a >> 10)
-				nd := d + int32(a&1023)
-				if nd < dist[u] {
-					dist[u] = nd
-					heapPush(uint64(nd)<<shift | uint64(uint32(u)))
+			bk := q.buckets[idx]
+			for len(bk) > 0 {
+				u := bk[len(bk)-1]
+				bk = bk[:len(bk)-1]
+				if dist[u] != d {
+					continue
+				}
+
+				reach++
+				total += int64(d)
+				if int64(d) > far {
+					far = int64(d)
+					farNode = u
+				} else if int64(d) == far && u < farNode {
+					farNode = u
+				}
+
+				end := int(off[u+1])
+				for e := int(off[u]); e < end; e++ {
+					v := at[e]
+					w := aw[e]
+					nd := d + w
+					if nd < dist[v] {
+						dist[v] = nd
+						idx2 := idx + int(w)
+						if idx2 >= int(nb) {
+							idx2 -= int(nb)
+						}
+						q.push(int(v), idx2)
+					}
 				}
 			}
+			q.buckets[idx] = bk
+			q.bits[idx>>6] &^= uint64(1) << uint(idx&63)
 		}
 
-		out = strconv.AppendInt(out, int64(s), 10)
-		out = append(out, ' ')
-		out = strconv.AppendInt(out, int64(reach), 10)
-		out = append(out, ' ')
-		out = strconv.AppendInt(out, total, 10)
-		out = append(out, ' ')
-		out = strconv.AppendInt(out, int64(far), 10)
-		out = append(out, ' ')
-		out = strconv.AppendInt(out, int64(farNode), 10)
-		out = append(out, '\n')
+		out[qi*5+0] = int64(s)
+		out[qi*5+1] = reach
+		out[qi*5+2] = total
+		out[qi*5+3] = far
+		out[qi*5+4] = int64(farNode)
+	}
+}
+
+func runLong(N, Q int, src, off, at, aw []int32, maxW int, out []int64) {
+	const INF int64 = 1<<63 - 1
+	dist := make([]int64, N)
+	q := &dialQueue{}
+	q.init(maxW)
+	nb := int64(q.nb)
+
+	for qi := 0; qi < Q; qi++ {
+		s := src[qi]
+		for i := range dist {
+			dist[i] = INF
+		}
+		q.clear()
+		dist[s] = 0
+		q.push(int(s), 0)
+
+		var reach, total, far int64 = 0, 0, -1
+		farNode := -1
+
+		for {
+			p := int(q.cur % nb)
+			idx := q.nextSetBit(p)
+			if idx < 0 {
+				break
+			}
+			offset := idx - p
+			if offset < 0 {
+				offset += int(nb)
+			}
+			q.cur += int64(offset)
+			d := q.cur
+
+			bk := q.buckets[idx]
+			for len(bk) > 0 {
+				u := bk[len(bk)-1]
+				bk = bk[:len(bk)-1]
+				if dist[u] != d {
+					continue
+				}
+
+				reach++
+				total += d
+				if d > far {
+					far = d
+					farNode = u
+				} else if d == far && u < farNode {
+					farNode = u
+				}
+
+				end := int(off[u+1])
+				for e := int(off[u]); e < end; e++ {
+					v := at[e]
+					w := aw[e]
+					nd := d + int64(w)
+					if nd < dist[v] {
+						dist[v] = nd
+						idx2 := idx + int(w)
+						if idx2 >= int(nb) {
+							idx2 -= int(nb)
+						}
+						q.push(int(v), idx2)
+					}
+				}
+			}
+			q.buckets[idx] = bk
+			q.bits[idx>>6] &^= uint64(1) << uint(idx&63)
+		}
+
+		out[qi*5+0] = int64(s)
+		out[qi*5+1] = reach
+		out[qi*5+2] = total
+		out[qi*5+3] = far
+		out[qi*5+4] = int64(farNode)
+	}
+}
+
+func main() {
+	debug.SetGCPercent(-1)
+
+	data, err := os.ReadFile(os.Args[1])
+	if err != nil {
+		os.Exit(1)
+	}
+	data = append(data, 0) // sentinel for the parser
+	p := parser{data: data, pos: 0}
+
+	N := p.nextInt()
+	M := p.nextInt()
+	Q := p.nextInt()
+
+	eu := make([]int32, M)
+	ev := make([]int32, M)
+	ew := make([]int32, M)
+	deg := make([]int32, N)
+	maxW := 0
+
+	for i := 0; i < M; i++ {
+		u := p.nextInt()
+		v := p.nextInt()
+		w := p.nextInt()
+		eu[i] = int32(u)
+		ev[i] = int32(v)
+		ew[i] = int32(w)
+		deg[u]++
+		deg[v]++
+		if w > maxW {
+			maxW = w
+		}
 	}
 
-	os.Stdout.Write(out)
+	off := make([]int32, N+1)
+	acc := 0
+	for i := 0; i < N; i++ {
+		off[i] = int32(acc)
+		acc += int(deg[i])
+	}
+	off[N] = int32(acc)
+
+	at := make([]int32, acc)
+	aw := make([]int32, acc)
+	cur := make([]int32, N+1)
+	copy(cur, off)
+	for i := 0; i < M; i++ {
+		u := eu[i]
+		v := ev[i]
+		w := ew[i]
+		at[cur[u]] = v
+		aw[cur[u]] = w
+		cur[u]++
+		at[cur[v]] = u
+		aw[cur[v]] = w
+		cur[v]++
+	}
+
+	src := make([]int32, Q)
+	for i := 0; i < Q; i++ {
+		src[i] = int32(p.nextInt())
+	}
+
+	eu = nil
+	ev = nil
+	ew = nil
+	deg = nil
+	cur = nil
+	data = nil
+	p.data = nil
+
+	out := make([]int64, Q*5)
+	if int64(N)*int64(maxW) < int64(1<<31-1) {
+		runInt(N, Q, src, off, at, aw, maxW, out)
+	} else {
+		runLong(N, Q, src, off, at, aw, maxW, out)
+	}
+
+	buf := make([]byte, 0, 256)
+	for qi := 0; qi < Q; qi++ {
+		buf = buf[:0]
+		buf = strconv.AppendInt(buf, out[qi*5], 10)
+		buf = append(buf, ' ')
+		buf = strconv.AppendInt(buf, out[qi*5+1], 10)
+		buf = append(buf, ' ')
+		buf = strconv.AppendInt(buf, out[qi*5+2], 10)
+		buf = append(buf, ' ')
+		buf = strconv.AppendInt(buf, out[qi*5+3], 10)
+		buf = append(buf, ' ')
+		buf = strconv.AppendInt(buf, out[qi*5+4], 10)
+		buf = append(buf, '\n')
+		os.Stdout.Write(buf)
+	}
 }

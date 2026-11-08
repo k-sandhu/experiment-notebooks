@@ -1,237 +1,359 @@
-// Log scan: summarise an access log by status class and path-template latency percentiles.
-// .NET 8, BCL only, Release.
-
 using System;
-using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Text;
 
-class Stats {
+// Summarise a web server access log (see SPEC.md).
+// Single pass over the input: validate every line against the grammar, count
+// status classes, group latency tenths by path template, then report the top 10.
+
+sealed class Stats
+{
     public int count;
-    public int maxT; // max latency in tenths of a ms
-    public List<int> lats = new List<int>(16);
+    public int[] lat = new int[16];
+    public int len;
 
-    public void Add(int t) {
-        count++;
-        if (t > maxT) maxT = t;
-        lats.Add(t);
+    public void Add(int v)
+    {
+        if (len == lat.Length)
+        {
+            int[] nw = new int[lat.Length * 2];
+            Array.Copy(lat, 0, nw, 0, len);
+            lat = nw;
+        }
+        lat[len++] = v;
     }
 }
 
-class Program {
-    static bool IsDigit(byte c) => c >= (byte)'0' && c <= (byte)'9';
-    static bool IsUpper(byte c) => c >= (byte)'A' && c <= (byte)'Z';
-    static bool IsLower(byte c) => c >= (byte)'a' && c <= (byte)'z';
+// Open-addressing map from path template -> Stats. Keys are interned strings;
+// lookups compare the raw char buffer against stored strings, so only unique
+// templates are ever allocated as strings.
+sealed class TMap
+{
+    internal string[] keys;
+    internal Stats[] vals;
+    internal int mask;
+    internal int size;
 
-    // Strictly validates one line; if well-formed sets out fields and returns true.
-    // Template is built into tb (reused char buffer), length in tlen.
-    static bool ParseLine(byte[] b, int p, int end, char[] tb, ref int tlen,
-                          out int statusClass, out int latencyT) {
-        statusClass = 0;
-        latencyT = 0;
-
-        // 1. timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z<space>
-        if (end - p < 25) return false;
-        if (!IsDigit(b[p]) || !IsDigit(b[p + 1]) || !IsDigit(b[p + 2]) || !IsDigit(b[p + 3])) return false;
-        if (b[p + 4] != (byte)'-') return false;
-        if (!IsDigit(b[p + 5]) || !IsDigit(b[p + 6])) return false;
-        if (b[p + 7] != (byte)'-') return false;
-        if (!IsDigit(b[p + 8]) || !IsDigit(b[p + 9])) return false;
-        if (b[p + 10] != (byte)'T') return false;
-        if (!IsDigit(b[p + 11]) || !IsDigit(b[p + 12])) return false;
-        if (b[p + 13] != (byte)':') return false;
-        if (!IsDigit(b[p + 14]) || !IsDigit(b[p + 15])) return false;
-        if (b[p + 16] != (byte)':') return false;
-        if (!IsDigit(b[p + 17]) || !IsDigit(b[p + 18])) return false;
-        if (b[p + 19] != (byte)'.') return false;
-        if (!IsDigit(b[p + 20]) || !IsDigit(b[p + 21]) || !IsDigit(b[p + 22])) return false;
-        if (b[p + 23] != (byte)'Z' || b[p + 24] != (byte)' ') return false;
-        p += 25;
-
-        // 2. host: [a-z]+-\d+<space>
-        if (p >= end || !IsLower(b[p])) return false;
-        do { p++; } while (p < end && IsLower(b[p]));
-        if (p >= end || b[p] != (byte)'-') return false;
-        p++;
-        if (p >= end || !IsDigit(b[p])) return false;
-        do { p++; } while (p < end && IsDigit(b[p]));
-        if (p >= end || b[p] != (byte)' ') return false;
-        p++;
-
-        // 3. method
-        bool ok = false;
-        if (!ok && end - p > 3 && b[p] == (byte)'G' && b[p + 1] == (byte)'E' && b[p + 2] == (byte)'T' && b[p + 3] == (byte)' ') { p += 4; ok = true; }
-        if (!ok && end - p > 4 && b[p] == (byte)'P' && b[p + 1] == (byte)'O' && b[p + 2] == (byte)'S' && b[p + 3] == (byte)'T' && b[p + 4] == (byte)' ') { p += 5; ok = true; }
-        if (!ok && end - p > 3 && b[p] == (byte)'P' && b[p + 1] == (byte)'U' && b[p + 2] == (byte)'T' && b[p + 3] == (byte)' ') { p += 4; ok = true; }
-        if (!ok && end - p > 6 && b[p] == (byte)'D' && b[p + 1] == (byte)'E' && b[p + 2] == (byte)'L' && b[p + 3] == (byte)'E' && b[p + 4] == (byte)'T' && b[p + 5] == (byte)'E' && b[p + 6] == (byte)' ') { p += 7; ok = true; }
-        if (!ok && end - p > 5 && b[p] == (byte)'P' && b[p + 1] == (byte)'A' && b[p + 2] == (byte)'T' && b[p + 3] == (byte)'C' && b[p + 4] == (byte)'H' && b[p + 5] == (byte)' ') { p += 6; ok = true; }
-        if (!ok) return false;
-
-        // 4. path + template
-        tlen = 0;
-        if (p >= end || b[p] != (byte)'/') return false;
-        int segStart = 0;
-        bool segDigits = true;
-        int segLen = 0;
-        bool done = false;
-        for (;;) {
-            if (p >= end) return false;
-            byte c = b[p];
-            if (c == (byte)'/') {
-                if (segLen > 0 && segDigits) {
-                    tlen = segStart;
-                    tb[tlen++] = (char)'{';
-                    tb[tlen++] = (char)'i';
-                    tb[tlen++] = (char)'d';
-                    tb[tlen++] = (char)'}';
-                }
-                if (tlen == tb.Length) Array.Resize(ref tb, tb.Length * 2);
-                tb[tlen++] = (char)'/';
-                ++p;
-                segStart = tlen;
-                segDigits = true;
-                segLen = 0;
-            } else if (c == (byte)' ') {
-                if (segLen > 0 && segDigits) {
-                    tlen = segStart;
-                    tb[tlen++] = (char)'{';
-                    tb[tlen++] = (char)'i';
-                    tb[tlen++] = (char)'d';
-                    tb[tlen++] = (char)'}';
-                }
-                ++p;
-                done = true;
-                break;
-            } else if (c == (byte)'?') {
-                if (segLen > 0 && segDigits) {
-                    tlen = segStart;
-                    tb[tlen++] = (char)'{';
-                    tb[tlen++] = (char)'i';
-                    tb[tlen++] = (char)'d';
-                    tb[tlen++] = (char)'}';
-                }
-                ++p;
-                while (p < end && b[p] != (byte)' ') ++p;
-                if (p >= end) return false;
-                ++p;
-                done = true;
-                break;
-            } else {
-                if (!IsDigit(c) && !IsUpper(c) && !IsLower(c) && c != (byte)'_' && c != (byte)'-') return false;
-                if (segLen == 0) segDigits = IsDigit(c);
-                else if (segDigits && !IsDigit(c)) segDigits = false;
-                ++segLen;
-                if (tlen == tb.Length) Array.Resize(ref tb, tb.Length * 2);
-                tb[tlen++] = (char)c;
-                ++p;
-            }
-        }
-        if (!done) return false;
-
-        // 5. status: \d{3}<space>
-        if (end - p < 4) return false;
-        if (!IsDigit(b[p]) || !IsDigit(b[p + 1]) || !IsDigit(b[p + 2])) return false;
-        if (b[p + 3] != (byte)' ') return false;
-        statusClass = b[p] - (byte)'0';
-        p += 4;
-
-        // 6. size: \d+B<space>
-        if (p >= end || !IsDigit(b[p])) return false;
-        do { p++; } while (p < end && IsDigit(b[p]));
-        if (p >= end || b[p] != (byte)'B') return false;
-        p++;
-        if (p >= end || b[p] != (byte)' ') return false;
-        p++;
-
-        // 7. latency: \d+.\d ms<space>
-        int ls = p;
-        long ip = 0;
-        while (p < end && IsDigit(b[p])) { ip = ip * 10 + (b[p] - (byte)'0'); p++; }
-        if (p == ls || p >= end || b[p] != (byte)'.') return false;
-        p++;
-        if (p >= end || !IsDigit(b[p])) return false;
-        int frac = b[p] - (byte)'0';
-        p++;
-        if (end - p < 3 || b[p] != (byte)'m' || b[p + 1] != (byte)'s' || b[p + 2] != (byte)' ') return false;
-        p += 3;
-        latencyT = (int)(ip * 10 + frac);
-
-        // 8. "..." then end of line
-        if (p >= end || b[p] != (byte)'"') return false;
-        p++;
-        while (p < end && b[p] != (byte)'"') p++;
-        if (p >= end) return false;
-        p++;
-        return p == end;
+    public TMap(int cap)
+    {
+        keys = new string[cap];
+        vals = new Stats[cap];
+        mask = cap - 1;
     }
 
-    static int Pos(int pct, int nn) => (pct * nn + 99) / 100 - 1; // nearest-rank, 0-based
-
-    static void Main(string[] args) {
-        byte[] b = File.ReadAllBytes(args[0]);
-        int n = b.Length;
-        int p = 0;
-        long lines = 0, malformed = 0;
-        long[] statusCount = new long[10];
-        var map = new Dictionary<string, Stats>();
-        char[] tb = new char[1024];
-        var outStream = new BufferedStream(Console.OpenStandardOutput());
-        using (outStream) {
-            while (p < n) {
-                int nl = p;
-                while (nl < n && b[nl] != (byte)'\n') nl++;
-                int lineEnd = nl;
-                ++lines;
-                int tlen = 0;
-                if (ParseLine(b, p, lineEnd, tb, ref tlen, out int sc, out int lat)) {
-                    statusCount[sc]++;
-                    string key = new string(tb, 0, tlen);
-                    if (!map.TryGetValue(key, out var s)) {
-                        s = new Stats();
-                        map[key] = s;
-                    }
-                    s.Add(lat);
-                } else {
-                    ++malformed;
-                }
-                p = lineEnd + 1;
+    public Stats FindOrAdd(ReadOnlySpan<char> buf, int len)
+    {
+        uint h = Hash(buf.Slice(0, len));
+        for (int slot = (int)(h & mask); ; slot = (slot + 1) & mask)
+        {
+            string k = keys[slot];
+            if (k == null)
+            {
+                keys[slot] = buf.Slice(0, len).ToString();
+                var st = new Stats();
+                vals[slot] = st;
+                if (++size * 4 > keys.Length * 3) Grow();
+                return st;
             }
-
-            var wb = System.Text.Encoding.ASCII;
-            void W(string s) { outStream.Write(wb.GetBytes(s), 0, wb.GetByteCount(s)); }
-            void Wl(long v) { W(v.ToString()); outStream.WriteByte((byte)'\n'); }
-            void WLat(int t) { W((t / 10).ToString()); outStream.WriteByte((byte)'.'); outStream.WriteByte((byte)('0' + t % 10)); }
-
-            W("lines "); Wl(lines);
-            W("malformed "); Wl(malformed);
-            for (int d = 0; d < 10; d++) {
-                if (statusCount[d] != 0) {
-                    W("status ");
-                    outStream.WriteByte((byte)('0' + d));
-                    W("xx "); Wl(statusCount[d]);
-                }
-            }
-
-            var paths = new List<KeyValuePair<string, Stats>>(map);
-            paths.Sort((a, b) => {
-                int c = b.Value.count.CompareTo(a.Value.count);
-                if (c != 0) return c;
-                return string.Compare(a.Key, b.Key, StringComparison.Ordinal);
-            });
-            int lim = Math.Min(paths.Count, 10);
-            for (int i = 0; i < lim; i++) {
-                var pe = paths[i];
-                var s = pe.Value;
-                s.lats.Sort();
-                int nn = s.lats.Count;
-                W("path "); W(pe.Key); outStream.WriteByte((byte)' ');
-                W(s.count.ToString()); outStream.WriteByte((byte)' ');
-                WLat(s.lats[Pos(50, nn)]); outStream.WriteByte((byte)' ');
-                WLat(s.lats[Pos(95, nn)]); outStream.WriteByte((byte)' ');
-                WLat(s.maxT); outStream.WriteByte((byte)'\n');
-            }
-            outStream.Flush();
+            if (k.Length == len && Equals(k, buf.Slice(0, len))) return vals[slot];
         }
+    }
+
+    private static bool Equals(string k, ReadOnlySpan<char> b)
+    {
+        if (k.Length != b.Length) return false;
+        for (int i = 0; i < k.Length; i++) if (k[i] != b[i]) return false;
+        return true;
+    }
+
+    private void Grow()
+    {
+        string[] oldK = keys;
+        Stats[] oldV = vals;
+        int cap = oldK.Length * 2;
+        keys = new string[cap];
+        vals = new Stats[cap];
+        mask = cap - 1;
+        size = 0;
+        for (int i = 0; i < oldK.Length; i++)
+        {
+            string k = oldK[i];
+            if (k != null) Put0(k, oldV[i]);
+        }
+    }
+
+    private void Put0(string k, Stats v)
+    {
+        uint h = HashStr(k);
+        for (int slot = (int)(h & mask); ; slot = (slot + 1) & mask)
+        {
+            if (keys[slot] == null)
+            {
+                keys[slot] = k;
+                vals[slot] = v;
+                ++size;
+                return;
+            }
+        }
+    }
+
+    private static uint Hash(ReadOnlySpan<char> b)
+    {
+        uint h = 2166136261;
+        foreach (char c in b) { h ^= (byte)c; h *= 16777619; }
+        return h;
+    }
+
+    private static uint HashStr(string s)
+    {
+        uint h = 2166136261;
+        foreach (char c in s) { h ^= (byte)c; h *= 16777619; }
+        return h;
+    }
+}
+
+static class Program
+{
+    // Result of parsing one line.
+    struct Res
+    {
+        public int cls;
+        public int lat; // tenths of a ms
+        public int pathStart;
+        public int pathEnd;
+    }
+
+    static bool IsDig(byte c) { return c >= '0' && c <= '9'; }
+    static bool PathChar(byte c) =>
+        (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+        c == '_' || c == '/' || c == '-';
+
+    // Validates one line (without its newline) against the SPEC.md regex and
+    // extracts status class, latency (tenths of a ms) and the path span.
+    static bool ParseLine(byte[] d, int start, int end, ref Res r)
+    {
+        int len = end - start;
+        if (len < 49) return false; // shortest possible well-formed line
+
+        // timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z<sp>
+        if (d[start + 4] != '-' || d[start + 7] != '-' || d[start + 10] != 'T' ||
+            d[start + 13] != ':' || d[start + 16] != ':' || d[start + 19] != '.' ||
+            d[start + 23] != 'Z' || d[start + 24] != ' ')
+            return false;
+        if (!IsDig(d[start]) || !IsDig(d[start + 1]) || !IsDig(d[start + 2]) || !IsDig(d[start + 3]) ||
+            !IsDig(d[start + 5]) || !IsDig(d[start + 6]) || !IsDig(d[start + 8]) || !IsDig(d[start + 9]) ||
+            !IsDig(d[start + 11]) || !IsDig(d[start + 12]) || !IsDig(d[start + 14]) || !IsDig(d[start + 15]) ||
+            !IsDig(d[start + 17]) || !IsDig(d[start + 18]) || !IsDig(d[start + 20]) || !IsDig(d[start + 21]) ||
+            !IsDig(d[start + 22]))
+            return false;
+
+        // host: [a-z]+-\d+<sp>
+        int h = start + 25;
+        if (h >= end || d[h] < 'a' || d[h] > 'z') return false;
+        do { ++h; } while (h < end && d[h] >= 'a' && d[h] <= 'z');
+        if (h >= end || d[h] != '-') return false;
+        ++h;
+        if (h >= end || !IsDig(d[h])) return false;
+        do { ++h; } while (h < end && IsDig(d[h]));
+        if (h >= end || d[h] != ' ') return false;
+        ++h; // method
+
+        int mlen = 0;
+        int rem = end - h;
+        if (rem >= 3 && Match(d, h, "GET")) mlen = 3;
+        else if (rem >= 3 && Match(d, h, "PUT")) mlen = 3;
+        else if (rem >= 4 && Match(d, h, "POST")) mlen = 4;
+        else if (rem >= 6 && Match(d, h, "DELETE")) mlen = 6;
+        else if (rem >= 5 && Match(d, h, "PATCH")) mlen = 5;
+        if (mlen == 0) return false;
+        h += mlen;
+        if (h >= end || d[h] != ' ') return false;
+        ++h;
+
+        // path: /[A-Za-z0-9_/-]* then optional \?[^ ]* then <sp>
+        if (h >= end || d[h] != '/') return false;
+        int pathStart = h;
+        ++h;
+        while (h < end)
+        {
+            byte c = d[h];
+            if (c == ' ' || c == '?') break;
+            if (!PathChar(c)) return false;
+            ++h;
+        }
+        int pathEnd = h;
+        if (h < end && d[h] == '?')
+        {
+            ++h;
+            while (h < end && d[h] != ' ') ++h;
+        }
+        if (h >= end || d[h] != ' ') return false;
+        ++h;
+
+        // status: \d{3}<sp>
+        if (end - h < 3 || !IsDig(d[h]) || !IsDig(d[h + 1]) || !IsDig(d[h + 2])) return false;
+        r.cls = d[h] - '0';
+        h += 3;
+        if (h >= end || d[h] != ' ') return false;
+        ++h;
+
+        // size: \d+B<sp>
+        if (h >= end || !IsDig(d[h])) return false;
+        do { ++h; } while (h < end && IsDig(d[h]));
+        if (h >= end || d[h] != 'B') return false;
+        ++h;
+        if (h >= end || d[h] != ' ') return false;
+        ++h;
+
+        // latency: \d+.\dms "<ua>"<end>
+        long lat = 0;
+        if (h >= end || !IsDig(d[h])) return false;
+        do { lat = lat * 10 + (d[h] - '0'); ++h; } while (h < end && IsDig(d[h]));
+        if (h >= end || d[h] != '.') return false;
+        ++h;
+        if (h >= end || !IsDig(d[h])) return false;
+        lat = lat * 10 + (d[h] - '0');
+        ++h;
+        if (end - h < 4 || d[h] != 'm' || d[h + 1] != 's' || d[h + 2] != ' ' || d[h + 3] != '"')
+            return false;
+        h += 4;
+        while (h < end && d[h] != '"') ++h;
+        if (h >= end || d[h] != '"') return false;
+        ++h;
+        if (h != end) return false;
+
+        r.pathStart = pathStart;
+        r.pathEnd = pathEnd;
+        r.lat = (int)lat;
+        return true;
+    }
+
+    static bool Match(byte[] d, int pos, string lit)
+    {
+        for (int i = 0; i < lit.Length; i++) if (d[pos + i] != (byte)lit[i]) return false;
+        return true;
+    }
+
+    static int Main(string[] args)
+    {
+        byte[] data = File.ReadAllBytes(args[0]);
+        int n = data.Length;
+        int p = 0;
+        long nLines = 0, nMalformed = 0;
+        int[] statusCount = new int[10];
+        var map = new TMap(1 << 14);
+        char[] tmplArr = new char[128];
+        Res res = default;
+
+        while (p < n)
+        {
+            ++nLines;
+            int lineStart = p;
+            int e = p;
+            while (e < n && data[e] != '\n') ++e;
+            // line is [lineStart, e)
+
+            if (ParseLine(data, lineStart, e, ref res))
+            {
+                ++statusCount[res.cls];
+
+                // path template: split on '/', replace all-digit segments with {id}
+                Span<char> tmpl = tmplArr;
+                int tlen = 1;
+                tmpl[0] = '/';
+                int segStart = res.pathStart + 1;
+                int i = segStart;
+                for (;;)
+                {
+                    if (i == res.pathEnd || data[i] == '/')
+                    {
+                        int seglen = i - segStart;
+                        if (seglen > 0)
+                        {
+                            bool allDig = true;
+                            for (int j = segStart; j < i; j++)
+                            {
+                                if (!IsDig(data[j])) { allDig = false; break; }
+                            }
+                            if (allDig)
+                            {
+                                tmpl[tlen++] = '{';
+                                tmpl[tlen++] = 'i';
+                                tmpl[tlen++] = 'd';
+                                tmpl[tlen++] = '}';
+                            }
+                            else
+                            {
+                                for (int j = segStart; j < i; j++) tmpl[tlen++] = (char)data[j];
+                            }
+                        }
+                        if (i < res.pathEnd) tmpl[tlen++] = '/';
+                        segStart = i + 1;
+                    }
+                    if (i == res.pathEnd) break;
+                    ++i;
+                }
+
+                Stats st = map.FindOrAdd(tmpl.Slice(0, tlen), tlen);
+                ++st.count;
+                st.Add(res.lat);
+            }
+            else
+            {
+                ++nMalformed;
+            }
+            p = e + 1;
+        }
+
+        // collect items and sort: count descending, then template ascending (byte order)
+        int m = 0;
+        for (int slot = 0; slot < map.keys.Length; slot++) if (map.keys[slot] != null) m++;
+        var items = new (string name, Stats st)[m];
+        int k = 0;
+        for (int slot = 0; slot < map.keys.Length; slot++)
+        {
+            if (map.keys[slot] != null) { items[k] = (map.keys[slot], map.vals[slot]); k++; }
+        }
+        Array.Sort(items, (a, b) =>
+        {
+            int cmp = b.st.count.CompareTo(a.st.count);
+            if (cmp != 0) return cmp;
+            return string.CompareOrdinal(a.name, b.name); // byte order
+        });
+
+        StringBuilder sb = new StringBuilder(8192);
+        sb.Append("lines ").Append(nLines).Append('\n');
+        sb.Append("malformed ").Append(nMalformed).Append('\n');
+        for (int c = 0; c < 10; c++)
+        {
+            if (statusCount[c] != 0)
+                sb.Append("status ").Append((char)('0' + c)).Append("xx ").Append(statusCount[c]).Append('\n');
+        }
+        int top = m < 10 ? m : 10;
+        for (int i = 0; i < top; i++)
+        {
+            var (name, st) = items[i];
+            Array.Sort(st.lat, 0, st.len);
+            int nn = st.len;
+            sb.Append("path ").Append(name).Append(' ').Append(st.count).Append(' ');
+            AppendLat(sb, Lat(st.lat, nn, 50));
+            sb.Append(' ');
+            AppendLat(sb, Lat(st.lat, nn, 95));
+            sb.Append(' ');
+            AppendLat(sb, st.lat[nn - 1]);
+            sb.Append('\n');
+        }
+
+        byte[] outb = Encoding.ASCII.GetBytes(sb.ToString());
+        using var stdout = Console.OpenStandardOutput();
+        stdout.Write(outb, 0, outb.Length);
+        return 0;
+    }
+
+    static int Lat(int[] lat, int nn, int pct) => lat[((long)pct * nn + 99) / 100 - 1];
+
+    static void AppendLat(StringBuilder sb, int t)
+    {
+        sb.Append(t / 10).Append('.').Append(t % 10);
     }
 }

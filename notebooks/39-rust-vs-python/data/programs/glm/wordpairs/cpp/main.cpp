@@ -1,278 +1,280 @@
+// Word pairs: count adjacent word pairs within sentences, report totals and top 20.
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
-#include <cstdlib>
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <io.h>
 #include <fcntl.h>
+#include <io.h>
 
-// ---------- word table: open addressing, ids into a byte arena ----------
-static std::vector<uint32_t> wSlot;   // id+1, 0 = empty
-static std::vector<uint32_t> wHash;   // full hash per slot
-static std::vector<uint32_t> wOff;    // per id: offset in arena
-static std::vector<uint32_t> wLen;    // per id: length
-static std::vector<char> wArena;      // lowercased word bytes
-static uint32_t wMask = 0, wCount = 0;
+using u8 = uint8_t;
+using u32 = uint32_t;
+using u64 = uint64_t;
 
-static inline uint32_t hashBytes(const unsigned char* p, uint32_t n) {
-    uint32_t h = 2166136261u;
-    for (uint32_t i = 0; i < n; i++) {
-        h ^= p[i];
-        h *= 16777619u;
-    }
-    return h ? h : 1;
+static inline bool isLetter(unsigned c) { return (c | 32u) - 'a' <= 25u; }
+
+static inline u64 mix64(u64 x) {
+    x += 0x9E3779B97F4A7C15ull;
+    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
+    x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
+    return x ^ (x >> 31);
 }
 
-static void wGrow() {
-    uint32_t cap = wMask + 1, cap2 = cap * 2;
-    std::vector<uint32_t> s2(cap2, 0), h2(cap2);
-    uint32_t m2 = cap2 - 1;
-    for (uint32_t i = 0; i < cap; i++) {
-        if (wSlot[i]) {
-            uint32_t j = wHash[i] & m2;
-            while (s2[j]) j = (j + 1) & m2;
-            s2[j] = wSlot[i];
-            h2[j] = wHash[i];
+static std::vector<u8> readAll(const char* path) {
+    FILE* f = nullptr;
+    if (fopen_s(&f, path, "rb") != 0 || !f) {
+        fprintf(stderr, "cannot open %s\n", path);
+        exit(1);
+    }
+    fseek(f, 0, SEEK_END);
+    long long sz = _ftelli64(f);
+    fseek(f, 0, SEEK_SET);
+    std::vector<u8> buf((size_t)sz);
+    if (sz > 0 && fread(buf.data(), 1, (size_t)sz, f) != (size_t)sz) {
+        fprintf(stderr, "read error\n");
+        exit(1);
+    }
+    fclose(f);
+    return buf;
+}
+
+// Open-addressing map: u64 key -> u32 count. cnt == 0 marks an empty slot.
+struct PairMap {
+    std::vector<u64> keys;
+    std::vector<u32> cnt;
+    u64 mask = 0;
+    u64 filled = 0;
+
+    PairMap() { init(1 << 20); }
+    void init(size_t cap) {
+        size_t s = 16;
+        while (s < cap) s <<= 1;
+        keys.assign(s, 0);
+        cnt.assign(s, 0);
+        mask = s - 1;
+        filled = 0;
+    }
+    void add(u64 key) {
+        if ((filled + 1) * 4 > (mask + 1) * 3) grow();
+        u64 i = mix64(key) & mask;
+        for (;;) {
+            if (cnt[i] == 0) {
+                keys[i] = key;
+                cnt[i] = 1;
+                ++filled;
+                return;
+            }
+            if (keys[i] == key) {
+                ++cnt[i];
+                return;
+            }
+            i = (i + 1) & mask;
         }
     }
-    wSlot.swap(s2);
-    wHash.swap(h2);
-    wMask = m2;
-}
-
-static uint32_t wordFindOrAdd(const char* w, uint32_t n, uint32_t h) {
-    uint32_t i = h & wMask;
-    while (wSlot[i]) {
-        uint32_t id = wSlot[i] - 1;
-        if (wHash[i] == h && wLen[id] == n &&
-            memcmp(wArena.data() + wOff[id], w, n) == 0)
-            return id;
-        i = (i + 1) & wMask;
-    }
-    if ((uint64_t)(wCount + 1) * 3 > (uint64_t)(wMask + 1) * 2) {
-        wGrow();
-        i = h & wMask;
-        while (wSlot[i]) i = (i + 1) & wMask;
-    }
-    uint32_t id = wCount++;
-    uint32_t o = (uint32_t)wArena.size();
-    wArena.insert(wArena.end(), w, w + n);
-    wOff.push_back(o);
-    wLen.push_back(n);
-    wSlot[i] = id + 1;
-    wHash[i] = h;
-    return id;
-}
-
-static inline int cmpWords(uint32_t a, uint32_t b) {
-    uint32_t la = wLen[a], lb = wLen[b];
-    const unsigned char* pa = (const unsigned char*)wArena.data() + wOff[a];
-    const unsigned char* pb = (const unsigned char*)wArena.data() + wOff[b];
-    uint32_t m = la < lb ? la : lb;
-    for (uint32_t i = 0; i < m; i++)
-        if (pa[i] != pb[i]) return pa[i] < pb[i] ? -1 : 1;
-    return la < lb ? -1 : la > lb ? 1 : 0;
-}
-
-// ---------- pair table: open addressing on packed (id1,id2) ----------
-static const uint64_t PEMPTY = 0xFFFFFFFFFFFFFFFFull;
-static std::vector<uint64_t> pKey;
-static std::vector<int32_t> pCnt;
-static uint64_t pMask = 0;
-static uint64_t pCount = 0;
-
-static inline uint64_t mixKey(uint64_t x) {
-    x *= 0x9E3779B97F4A7C15ull;
-    x ^= x >> 32;
-    x *= 0xBF58476D1CE4E5B9ull;
-    x ^= x >> 29;
-    return x;
-}
-
-static void pGrow() {
-    uint64_t cap = pMask + 1, cap2 = cap * 2, m2 = cap2 - 1;
-    std::vector<uint64_t> k2(cap2, PEMPTY);
-    std::vector<int32_t> c2(cap2, 0);
-    for (uint64_t i = 0; i < cap; i++) {
-        if (pKey[i] != PEMPTY) {
-            uint64_t j = mixKey(pKey[i]) & m2;
-            while (k2[j] != PEMPTY) j = (j + 1) & m2;
-            k2[j] = pKey[i];
-            c2[j] = pCnt[i];
+    void grow() {
+        std::vector<u64> ok(std::move(keys));
+        std::vector<u32> oc(std::move(cnt));
+        size_t ns = ok.size() * 2;
+        keys.assign(ns, 0);
+        cnt.assign(ns, 0);
+        mask = ns - 1;
+        filled = 0;
+        for (size_t j = 0; j < ok.size(); ++j) {
+            if (oc[j]) {
+                u64 key = ok[j];
+                u64 i = mix64(key) & mask;
+                while (cnt[i] != 0) i = (i + 1) & mask;
+                keys[i] = key;
+                cnt[i] = oc[j];
+                ++filled;
+            }
         }
     }
-    pKey.swap(k2);
-    pCnt.swap(c2);
-    pMask = m2;
-}
-
-static inline void pairAdd(uint64_t key) {
-    uint64_t i = mixKey(key) & pMask;
-    while (pKey[i] != PEMPTY) {
-        if (pKey[i] == key) {
-            pCnt[i]++;
-            return;
-        }
-        i = (i + 1) & pMask;
-    }
-    if ((pCount + 1) * 3 > (pMask + 1) * 2) {
-        pGrow();
-        i = mixKey(key) & pMask;
-        while (pKey[i] != PEMPTY) i = (i + 1) & pMask;
-    }
-    pKey[i] = key;
-    pCnt[i] = 1;
-    pCount++;
-}
-
-struct PairRec {
-    uint32_t id1, id2;
-    int64_t cnt;
 };
 
-int main(int argc, char** argv) {
-    if (argc < 2) return 1;
-    _setmode(_fileno(stdout), _O_BINARY);
-    FILE* f = fopen(argv[1], "rb");
-    if (!f) return 1;
-    fseek(f, 0, SEEK_END);
-    long fsz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    std::vector<unsigned char> data((size_t)fsz);
-    if (fsz > 0 && fread(data.data(), 1, (size_t)fsz, f) != (size_t)fsz) { fclose(f); return 1; }
-    fclose(f);
+// Interns lowercased words stored inside the shared buffer.
+struct WordMap {
+    const u8* buf = nullptr;
+    std::vector<u32> tab; // slot -> id + 1
+    std::vector<u32> off, len, hsh;
+    u64 mask = 0;
 
-    size_t n = data.size();
-    wMask = (1u << 16) - 1;
-    wSlot.assign(wMask + 1, 0);
-    wHash.assign(wMask + 1, 0);
-    wArena.reserve(1 << 16);
-
-    pMask = (1u << 20) - 1;
-    pKey.assign(pMask + 1, PEMPTY);
-    pCnt.assign(pMask + 1, 0);
-
-    std::vector<unsigned char> wbuf;
-    wbuf.reserve(256);
-
-    long long totalWords = 0, totalPairs = 0;
-    long prev = -1;
-    const unsigned char* d = data.data();
-
-    for (size_t i = 0; i < n; i++) {
-        unsigned int c = d[i];
-        if ((unsigned int)((c | 0x20u) - 'a') < 26u) {
-            if (wbuf.size() == wbuf.capacity()) wbuf.reserve(wbuf.capacity() * 2);
-            wbuf.push_back((unsigned char)(c | 0x20u));
-        } else {
-            if (wbuf.size()) {
-                totalWords++;
-                uint32_t h = hashBytes(wbuf.data(), (uint32_t)wbuf.size());
-                uint32_t id = wordFindOrAdd((const char*)wbuf.data(), (uint32_t)wbuf.size(), h);
-                if (prev >= 0) {
-                    totalPairs++;
-                    pairAdd(((uint64_t)prev << 32) | (uint64_t)id);
-                }
-                prev = id;
-                wbuf.clear();
-            }
-            if (c == '.' || c == '!' || c == '?') prev = -1;
-        }
+    void init(const u8* b) {
+        buf = b;
+        size_t s = 1 << 16;
+        tab.assign(s, 0);
+        mask = s - 1;
+        off.reserve(1 << 16);
+        len.reserve(1 << 16);
+        hsh.reserve(1 << 16);
     }
-    if (wbuf.size()) {
-        totalWords++;
-        uint32_t h = hashBytes(wbuf.data(), (uint32_t)wbuf.size());
-        uint32_t id = wordFindOrAdd((const char*)wbuf.data(), (uint32_t)wbuf.size(), h);
-        if (prev >= 0) {
-            totalPairs++;
-            pairAdd(((uint64_t)prev << 32) | (uint64_t)id);
-        }
-    }
-
-    // top 20 via bounded min-heap (root = worst); avoids materializing all pairs
-    uint32_t hId1[20], hId2[20];
-    int64_t hCnt[20];
-    size_t hc = 0;
-    auto worse = [](uint32_t a1, uint32_t a2, int64_t ac, uint32_t b1, uint32_t b2, int64_t bc) -> int {
-        if (ac != bc) return ac > bc ? -1 : 1;
-        int c = cmpWords(a1, b1);
-        if (c) return c;
-        return cmpWords(a2, b2);
-    };
-    for (uint64_t i = 0; i <= pMask; i++) {
-        if (pKey[i] == PEMPTY) continue;
-        uint32_t id1 = (uint32_t)(pKey[i] >> 32), id2 = (uint32_t)pKey[i];
-        int64_t c1 = pCnt[i];
-        if (hc < 20) {
-            size_t q = hc++;
-            hId1[q] = id1; hId2[q] = id2; hCnt[q] = c1;
-            while (q > 0) {
-                size_t par = (q - 1) / 2;
-                if (worse(hId1[q], hId2[q], hCnt[q], hId1[par], hId2[par], hCnt[par]) <= 0) break;
-                std::swap(hId1[q], hId1[par]);
-                std::swap(hId2[q], hId2[par]);
-                std::swap(hCnt[q], hCnt[par]);
-                q = par;
-            }
-        } else if (worse(id1, id2, c1, hId1[0], hId2[0], hCnt[0]) < 0) {
-            hId1[0] = id1; hId2[0] = id2; hCnt[0] = c1;
-            size_t p = 0;
-            for (;;) {
-                size_t l = 2 * p + 1, r = l + 1, s = p;
-                if (l < hc && worse(hId1[l], hId2[l], hCnt[l], hId1[s], hId2[s], hCnt[s]) > 0) s = l;
-                if (r < hc && worse(hId1[r], hId2[r], hCnt[r], hId1[s], hId2[s], hCnt[s]) > 0) s = r;
-                if (s == p) break;
-                std::swap(hId1[p], hId1[s]);
-                std::swap(hId2[p], hId2[s]);
-                std::swap(hCnt[p], hCnt[s]);
-                p = s;
-            }
-        }
-    }
-
-    size_t k = hc;
-    // pop heap worst-first into reversed slots, then sort best-first
-    std::vector<PairRec> recs(k);
-    while (hc > 0) {
-        hc--;
-        recs[hc] = {hId1[0], hId2[0], hCnt[0]};
-        hId1[0] = hId1[hc]; hId2[0] = hId2[hc]; hCnt[0] = hCnt[hc];
-        size_t p = 0;
+    u32 intern(u32 o, u32 l, u64 h) {
+        u64 i = h & mask;
         for (;;) {
-            size_t l = 2 * p + 1, r = l + 1, s = p;
-            if (l < hc && worse(hId1[l], hId2[l], hCnt[l], hId1[s], hId2[s], hCnt[s]) > 0) s = l;
-            if (r < hc && worse(hId1[r], hId2[r], hCnt[r], hId1[s], hId2[s], hCnt[s]) > 0) s = r;
-            if (s == p) break;
-            std::swap(hId1[p], hId1[s]);
-            std::swap(hId2[p], hId2[s]);
-            std::swap(hCnt[p], hCnt[s]);
-            p = s;
+            u32 slot = tab[i];
+            if (slot == 0) {
+                u32 id = (u32)off.size();
+                off.push_back(o);
+                len.push_back(l);
+                hsh.push_back((u32)h);
+                tab[i] = id + 1;
+                if ((off.size() + 1) * 2 > mask + 1) grow();
+                return id;
+            }
+            u32 id = slot - 1;
+            if (hsh[id] == (u32)h && len[id] == l &&
+                memcmp(buf + off[id], buf + o, l) == 0)
+                return id;
+            i = (i + 1) & mask;
         }
     }
-    std::sort(recs.begin(), recs.begin() + k, [](const PairRec& a, const PairRec& b) {
+    void grow() {
+        std::vector<u32> ot(std::move(tab));
+        size_t ns = ot.size() * 2;
+        tab.assign(ns, 0);
+        mask = ns - 1;
+        for (size_t j = 0; j < ot.size(); ++j) {
+            if (ot[j]) {
+                u32 id = ot[j] - 1;
+                u64 h = hsh[id];
+                u64 i = h & mask;
+                while (tab[i] != 0) i = (i + 1) & mask;
+                tab[i] = id + 1;
+            }
+        }
+    }
+};
+
+struct TopEntry {
+    u32 c1, c2; // word ids
+    u32 cnt;
+};
+
+static const u8* g_buf;
+static const std::vector<u32>* g_off;
+static const std::vector<u32>* g_len;
+
+static int cmpWords(u32 a1, u32 a2, u32 b1, u32 b2) {
+    auto wa = [&](u32 id) { return g_buf + (*g_off)[id]; };
+    auto la = [&](u32 id) { return (*g_len)[id]; };
+    int c = memcmp(wa(a1), wa(b1), std::min(la(a1), la(b1)));
+    if (c != 0) return c;
+    if (la(a1) != la(b1)) return la(a1) < la(b1) ? -1 : 1;
+    c = memcmp(wa(a2), wa(b2), std::min(la(a2), la(b2)));
+    if (c != 0) return c;
+    if (la(a2) != la(b2)) return la(a2) < la(b2) ? -1 : 1;
+    return 0;
+}
+
+// "worse" = lower count, or equal count and lexicographically greater pair.
+static bool worse(const TopEntry& a, const TopEntry& b) {
+    if (a.cnt != b.cnt) return a.cnt < b.cnt;
+    return cmpWords(a.c1, a.c2, b.c1, b.c2) > 0;
+}
+
+int main(int argc, char** argv) {
+    if (argc < 2) {
+        fprintf(stderr, "usage: solution INPUT_PATH\n");
+        return 1;
+    }
+    _setmode(_fileno(stdout), _O_BINARY); // no CRLF translation
+    std::vector<u8> buf = readAll(argv[1]);
+    size_t n = buf.size();
+    // Lowercase in place so words can be compared/printed straight from the buffer.
+    for (size_t i = 0; i < n; ++i) {
+        u8 c = buf[i];
+        if (c >= 'A' && c <= 'Z') buf[i] = c + 32;
+    }
+
+    WordMap wm;
+    wm.init(buf.data());
+    PairMap pm;
+    {
+        size_t want = n / 8; // distinct pairs scale with input size; avoid rehashing
+        size_t s = 1 << 20;
+        while (s < want) s <<= 1;
+        pm.init(s);
+    }
+
+    u64 words = 0, pairs = 0;
+    u32 prev = 0xFFFFFFFFu; // no previous word in current sentence
+    size_t i = 0;
+    while (i < n) {
+        u8 c = buf[i];
+        if (isLetter(c)) {
+            size_t start = i;
+            u64 h = 0xCBF29CE484222325ull;
+            do {
+                h = (h ^ buf[i]) * 0x100000001B3ull;
+                ++i;
+            } while (i < n && isLetter(buf[i]));
+            u32 id = wm.intern((u32)start, (u32)(i - start), h);
+            ++words;
+            if (prev != 0xFFFFFFFFu) {
+                pm.add(((u64)prev << 32) | id);
+                ++pairs;
+            }
+            prev = id;
+        } else {
+            if (c == '.' || c == '!' || c == '?') prev = 0xFFFFFFFFu;
+            ++i;
+        }
+    }
+
+    // Keep the 20 best pairs in a min-heap while scanning the pair table.
+    g_buf = buf.data();
+    g_off = &wm.off;
+    g_len = &wm.len;
+
+    TopEntry heap[20];
+    int hn = 0;
+    for (u64 j = 0; j <= pm.mask; ++j) {
+        if (!pm.cnt[j]) continue;
+        TopEntry e{ (u32)(pm.keys[j] >> 32), (u32)pm.keys[j], pm.cnt[j] };
+        if (hn < 20) {
+            int k = hn++;
+            heap[k] = e;
+            while (k > 0) {
+                int p = (k - 1) / 2;
+                if (worse(heap[k], heap[p])) { std::swap(heap[p], heap[k]); k = p; }
+                else break;
+            }
+        } else if (worse(heap[0], e)) {
+            heap[0] = e;
+            int k = 0;
+            for (;;) {
+                int l = 2 * k + 1, r = l + 1, m = k;
+                if (l < hn && worse(heap[l], heap[m])) m = l;
+                if (r < hn && worse(heap[r], heap[m])) m = r;
+                if (m == k) break;
+                std::swap(heap[m], heap[k]);
+                k = m;
+            }
+        }
+    }
+    std::sort(heap, heap + hn, [](const TopEntry& a, const TopEntry& b) {
         if (a.cnt != b.cnt) return a.cnt > b.cnt;
-        int c = cmpWords(a.id1, b.id1);
-        if (c) return c < 0;
-        return cmpWords(a.id2, b.id2) < 0;
+        return cmpWords(a.c1, a.c2, b.c1, b.c2) < 0;
     });
 
-    // output
     std::string out;
-    out.reserve(4096);
-    char tmp[128];
-    snprintf(tmp, sizeof tmp, "words %lld\npairs %lld\ndistinct %llu\n",
-             totalWords, totalPairs, (unsigned long long)pCount);
-    out += tmp;
-    for (size_t r = 0; r < k; r++) {
-        const PairRec& p = recs[r];
-        int m = snprintf(tmp, sizeof tmp, "%lld ", p.cnt);
-        out.append(tmp, m);
-        out.append(wArena.data() + wOff[p.id1], wLen[p.id1]);
-        out.push_back(' ');
-        out.append(wArena.data() + wOff[p.id2], wLen[p.id2]);
-        out.push_back('\n');
+    out.reserve(4096 + 32 * hn);
+    auto num = [&](u64 v) {
+        char tmp[24];
+        int k = 0;
+        do { tmp[k++] = char('0' + v % 10); v /= 10; } while (v);
+        while (k) out += tmp[--k];
+    };
+    auto word = [&](u32 id) { out.append((const char*)g_buf + wm.off[id], wm.len[id]); };
+
+    out += "words "; num(words); out += '\n';
+    out += "pairs "; num(pairs); out += '\n';
+    out += "distinct "; num(pm.filled); out += '\n';
+    for (int k = 0; k < hn; ++k) {
+        num(heap[k].cnt); out += ' ';
+        word(heap[k].c1); out += ' ';
+        word(heap[k].c2); out += '\n';
     }
     fwrite(out.data(), 1, out.size(), stdout);
     return 0;

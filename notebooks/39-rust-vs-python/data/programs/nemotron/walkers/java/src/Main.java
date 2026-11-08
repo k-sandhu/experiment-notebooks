@@ -1,113 +1,114 @@
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.List;
 
 public class Main {
 
-    private static final long C1 = 0x9E3779B97F4A7C15L;
-    private static final long C2 = 0xBF58476D1CE4E5B9L;
-    private static final long C3 = 0x94D049BB133111EBL;
+    // SplitMix64 constants as signed long bit patterns (arithmetic wraps mod 2^64).
+    private static final long C = -0x61C8864680B583EBL;
+    private static final long M1 = -0x40A7B892E31B1A47L;
+    private static final long M2 = -0x6B2FB644ECCEEE15L;
 
     private static final class Result {
         long spread;
         long bumps;
         long returns;
         long farDist;
-        int farWalker;
+        long farIdx;
     }
 
-    // SplitMix64: advance state by the constant; the walker loop scrambles it.
-    private static long advance(long state) {
-        return state + C1;
-    }
-
-    // Simulate walkers [start, end). Integer sums and the (distance, index)
-    // order are reduction-order independent, so the result does not depend on
-    // how walkers are split across threads.
-    private static Result runRange(long start, long end, long L, int B, long seed) {
-        Result res = new Result();
-        if (start < end) res.farWalker = (int) start;
-        int twoB = 2 * B;
+    // Simulate walkers [start, end) and return partial results.
+    private static Result runChunk(long start, long end, long L, long B, long seed) {
+        long spread = 0, bumps = 0, returns = 0;
+        long farDist = 0, farIdx = start;
         for (long j = start; j < end; ++j) {
-            long state = seed + j;
-            int x = 0, y = 0;
-            long b = 0, r = 0;
-            for (long t = 0; t < L; ++t) {
-                state = advance(state);
+            long state = seed + j;  // (SEED + j) mod 2^64
+            long x = 0, y = 0;
+            long b2 = 0, r2 = 0;
+            for (long s = L; s != 0; --s) {
+                state += C;
                 long z = state;
-                z = (z ^ (z >>> 30)) * C2;
-                z = (z ^ (z >>> 27)) * C3;
-                long rnd = z ^ (z >>> 31);
-                int d = (int) (rnd >>> 62);
-                int nx, ny;
-                switch (d) {
-                    case 0: nx = x + 1; ny = y; break;
-                    case 1: nx = x - 1; ny = y; break;
-                    case 2: nx = x; ny = y + 1; break;
-                    default: nx = x; ny = y - 1; break;
-                }
-                int vx = nx + B;
-                int vy = ny + B;
-                if (vx >= 0 && vx <= twoB && vy >= 0 && vy <= twoB) {
-                    x = nx;
-                    y = ny;
-                    if (x == 0 && y == 0) ++r;
+                z ^= z >>> 30;
+                z *= M1;
+                z ^= z >>> 27;
+                z *= M2;
+                long r = z ^ (z >>> 31);
+                int d = (int)(r >>> 62);
+                boolean bumped;
+                if (d == 0) {
+                    if (x < B) { ++x; bumped = false; } else bumped = true;
+                } else if (d == 1) {
+                    if (x > -B) { --x; bumped = false; } else bumped = true;
+                } else if (d == 2) {
+                    if (y < B) { ++y; bumped = false; } else bumped = true;
                 } else {
-                    ++b;
+                    if (y > -B) { --y; bumped = false; } else bumped = true;
+                }
+                if (bumped) {
+                    ++b2;
+                } else if (x == 0 && y == 0) {
+                    ++r2;
                 }
             }
-            res.spread += (long) x * x + (long) y * y;
-            res.bumps += b;
-            res.returns += r;
-            int dist = (x < 0 ? -x : x) + (y < 0 ? -y : y);
-            if (dist > res.farDist) {
-                res.farDist = dist;
-                res.farWalker = (int) j;
+            spread += x * x + y * y;
+            bumps += b2;
+            returns += r2;
+            long dist = (x < 0 ? -x : x) + (y < 0 ? -y : y);
+            // Strictly greater keeps the smallest walker index on ties.
+            if (dist > farDist) {
+                farDist = dist;
+                farIdx = j;
             }
         }
+        Result res = new Result();
+        res.spread = spread;
+        res.bumps = bumps;
+        res.returns = returns;
+        res.farDist = farDist;
+        res.farIdx = farIdx;
         return res;
     }
 
-    private static void merge(Result into, Result other) {
-        into.spread += other.spread;
-        into.bumps += other.bumps;
-        into.returns += other.returns;
-        if (other.farDist > into.farDist ||
-            (other.farDist == into.farDist && other.farWalker < into.farWalker)) {
-            into.farDist = other.farDist;
-            into.farWalker = other.farWalker;
-        }
-    }
-
     public static void main(String[] args) throws Exception {
-        String text = Files.readString(Paths.get(args[0]));
-        List<String> parts = List.of(text.trim().split("\\s+"));
-        long J = Long.parseLong(parts.get(0));
-        long L = Long.parseLong(parts.get(1));
-        int B = Integer.parseInt(parts.get(2));
-        // SEED is unsigned 64-bit; parseUnsignedLong keeps the exact bit pattern.
-        long seed = Long.parseUnsignedLong(parts.get(3));
-        int W = Integer.parseInt(args[1]);
-        if (W < 1) W = 1;
-        if (W > 32) W = 32;
+        String[] parts = new String(Files.readAllBytes(Paths.get(args[0])), java.nio.charset.StandardCharsets.UTF_8).trim().split("\\s+");
+        long J = Long.parseLong(parts[0]);
+        long L = Long.parseLong(parts[1]);
+        long B = Long.parseLong(parts[2]);
+        long seed = Long.parseUnsignedLong(parts[3]);
 
-        Result[] results = new Result[W];
-        Thread[] threads = new Thread[W];
-        for (int i = 0; i < W; ++i) {
-            long start = i * J / W;
-            long end = (i + 1) * J / W;
-            final int idx = i;
-            threads[i] = new Thread(() -> results[idx] = runRange(start, end, L, B, seed));
-            threads[i].start();
+        int workers = Integer.parseInt(args[1]);
+        if (workers < 1) workers = 1;
+        int nThreads = J == 0 ? 0 : (int)Math.min(workers, J);
+
+        Result[] results = new Result[nThreads];
+        if (nThreads > 0) {
+            long chunk = (J + nThreads - 1) / nThreads;
+            Thread[] threads = new Thread[nThreads];
+            for (int i = 0; i < nThreads; ++i) {
+                final int idx = i;
+                final long start = (long)i * chunk;
+                final long end = Math.min(start + chunk, J);
+                threads[i] = new Thread(() -> results[idx] = runChunk(start, end, L, B, seed));
+                threads[i].start();
+            }
+            for (Thread t : threads) t.join();
         }
-        for (Thread t : threads) t.join();
 
-        Result total = results[0];
-        for (int i = 1; i < W; ++i) merge(total, results[i]);
+        long spread = 0, bumps = 0, returns = 0;
+        long farDist = 0, farIdx = 0;
+        for (int i = 0; i < nThreads; ++i) {
+            Result r = results[i];
+            spread += r.spread;
+            bumps += r.bumps;
+            returns += r.returns;
+            if (r.farDist > farDist || (r.farDist == farDist && r.farIdx < farIdx)) {
+                farDist = r.farDist;
+                farIdx = r.farIdx;
+            }
+        }
 
-        System.out.println("spread " + total.spread);
-        System.out.println("bumps " + total.bumps);
-        System.out.println("returns " + total.returns);
-        System.out.println("farthest " + total.farWalker + " " + total.farDist);
+        System.out.println("spread " + spread);
+        System.out.println("bumps " + bumps);
+        System.out.println("returns " + returns);
+        System.out.println("farthest " + farIdx + " " + farDist);
     }
 }

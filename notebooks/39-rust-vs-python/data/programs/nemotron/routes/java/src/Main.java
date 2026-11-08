@@ -1,118 +1,92 @@
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.io.File;
+import java.io.FileInputStream;
 import java.util.Arrays;
 
-// Routes: shortest road distances from several sources.
-// Multi-source Dijkstra (one run per source) over an undirected graph.
-// Java SE only (Jackson libs are unused: input is plain integers).
-//
-// Graph is stored in CSR form: start[node..node+1) indexes into to/weight.
-// Distances are int: any simple path has at most N-1 edges of weight <= 1000,
-// so a distance never exceeds (N-1)*1000 < 2^31. Totals need long.
-
 public class Main {
-    private static byte[] buf;
-    private static int pos;
+    static byte[] data;
+    static int pos;
+    static int len;
 
-    private static int N, M, Q;
-    private static int[] start, to, weight;
-
-    private static final int INF = Integer.MAX_VALUE;
-
-    private static int nextInt() {
-        while (pos < buf.length && buf[pos] <= 32) pos++;
-        boolean neg = false;
-        if (pos < buf.length && buf[pos] == '-') { neg = true; pos++; }
-        int v = 0;
-        while (pos < buf.length && buf[pos] >= '0' && buf[pos] <= '9') {
-            v = v * 10 + (buf[pos] - '0');
+    static int readInt() {
+        while (pos < len && (data[pos] < '0' || data[pos] > '9')) pos++;
+        int x = 0;
+        while (pos < len && data[pos] >= '0' && data[pos] <= '9') {
+            x = x * 10 + (data[pos] - '0');
             pos++;
         }
-        return neg ? -v : v;
+        return x;
     }
 
-    // Binary heap over (distance, node) pairs stored in two parallel arrays.
-    private static final class Heap {
-        private int[] d;
-        private int[] n;
-        private int size;
+    // Min-heap of packed (distance << 32) | node entries.
+    static final class Heap {
+        long[] h;
+        int n;
 
         Heap(int cap) {
-            d = new int[cap];
-            n = new int[cap];
-            size = 0;
+            h = new long[cap];
         }
 
-        void clear() {
-            size = 0;
-        }
-
-        void push(int dist, int node) {
-            int i = size++;
-            d[i] = dist;
-            n[i] = node;
+        void push(long x) {
+            if (n == h.length) {
+                long[] g = new long[n * 2 + 1];
+                System.arraycopy(h, 0, g, 0, n);
+                h = g;
+            }
+            int i = n++;
             while (i > 0) {
                 int p = (i - 1) / 2;
-                if (d[p] <= dist) break;
-                d[i] = d[p];
-                n[i] = n[p];
+                if (h[p] <= x) break;
+                h[i] = h[p];
                 i = p;
             }
-            d[i] = dist;
-            n[i] = node;
+            h[i] = x;
         }
 
-        // Assumes non-empty. Leaves the min at index 0 until pop() is called.
-        int peekDist() {
-            return d[0];
-        }
-
-        int peekNode() {
-            return n[0];
-        }
-
-        void pop() {
-            --size;
-            if (size == 0) return;
-            int lastD = d[size];
-            int lastN = n[size];
-            int i = 0;
-            for (;;) {
-                int l = 2 * i + 1;
-                int r = l + 1;
-                if (l >= size) break;
-                int child = l;
-                if (r < size && d[r] < d[l]) child = r;
-                if (d[child] >= lastD) break;
-                d[i] = d[child];
-                n[i] = n[child];
-                i = child;
+        long pop() {
+            long top = h[0];
+            long x = h[--n];
+            if (n > 0) {
+                int i = 0;
+                h[0] = x;
+                for (;;) {
+                    int c = 2 * i + 1;
+                    if (c >= n) break;
+                    if (c + 1 < n && h[c + 1] < h[c]) c++;
+                    if (h[c] >= x) break;
+                    h[i] = h[c];
+                    i = c;
+                }
+                h[i] = x;
             }
-            d[i] = lastD;
-            n[i] = lastN;
-        }
-
-        boolean isEmpty() {
-            return size == 0;
+            return top;
         }
     }
 
     public static void main(String[] args) throws Exception {
-        buf = Files.readAllBytes(Paths.get(args[0]));
-        pos = 0;
+        File file = new File(args[0]);
+        data = new byte[(int) file.length()];
+        try (FileInputStream fis = new FileInputStream(file)) {
+            int got = 0;
+            while (got < data.length) {
+                int r = fis.read(data, got, data.length - got);
+                if (r < 0) break;
+                got += r;
+            }
+        }
+        len = data.length;
 
-        N = nextInt();
-        M = nextInt();
-        Q = nextInt();
+        int N = readInt();
+        int M = readInt();
+        int Q = readInt();
 
-        int[] deg = new int[N + 1];
         int[] eu = new int[M];
         int[] ev = new int[M];
         int[] ew = new int[M];
+        int[] deg = new int[N];
         for (int i = 0; i < M; i++) {
-            int u = nextInt();
-            int v = nextInt();
-            int w = nextInt();
+            int u = readInt();
+            int v = readInt();
+            int w = readInt();
             eu[i] = u;
             ev[i] = v;
             ew[i] = w;
@@ -120,76 +94,73 @@ public class Main {
             deg[v]++;
         }
 
-        start = new int[N + 1];
-        for (int i = 0; i < N; i++) start[i + 1] = start[i] + deg[i];
-
-        int totalEdges = 2 * M;
-        to = new int[totalEdges];
-        weight = new int[totalEdges];
+        int[] off = new int[N + 1];
+        for (int i = 0; i < N; i++) off[i + 1] = off[i] + deg[i];
+        int[] to = new int[2 * M];
+        int[] wt = new int[2 * M];
         int[] cur = new int[N];
-        System.arraycopy(start, 0, cur, 0, N);
+        System.arraycopy(off, 0, cur, 0, N);
         for (int i = 0; i < M; i++) {
             int u = eu[i];
             int v = ev[i];
             int w = ew[i];
             int p = cur[u]++;
             to[p] = v;
-            weight[p] = w;
-            p = cur[v]++;
-            to[p] = u;
-            weight[p] = w;
+            wt[p] = w;
+            int q = cur[v]++;
+            to[q] = u;
+            wt[q] = w;
         }
 
-        eu = null;
-        ev = null;
-        ew = null;
-        deg = null;
-        cur = null;
+        int[] sources = new int[Q];
+        for (int i = 0; i < Q; i++) sources[i] = readInt();
 
         int[] dist = new int[N];
-        Heap heap = new Heap(Math.max(16, M));
+        Heap heap = new Heap(Math.max(M + 1, 1));
+        StringBuilder sb = new StringBuilder();
 
-        StringBuilder out = new StringBuilder();
-        for (int q = 0; q < Q; q++) {
-            int s = nextInt();
-            Arrays.fill(dist, INF);
+        for (int s : sources) {
+            Arrays.fill(dist, Integer.MAX_VALUE);
             dist[s] = 0;
-            heap.clear();
-            heap.push(0, s);
-            while (!heap.isEmpty()) {
-                int d = heap.peekDist();
-                int u = heap.peekNode();
-                heap.pop();
-                if (d > dist[u]) continue;
-                for (int e = start[u]; e < start[u + 1]; e++) {
-                    int v = to[e];
-                    int nd = d + weight[e];
-                    if (nd < dist[v]) {
-                        dist[v] = nd;
-                        heap.push(nd, v);
+            heap.n = 0;
+            heap.push(((long) 0 << 32) | s);
+
+            while (heap.n > 0) {
+                long packed = heap.pop();
+                int d = (int) (packed >> 32);
+                int v = (int) (packed & 0xFFFFFFFFL);
+                if (d > dist[v]) continue; // stale entry
+                int e0 = off[v];
+                int e1 = off[v + 1];
+                for (int e = e0; e < e1; e++) {
+                    int t = to[e];
+                    int nd = d + wt[e];
+                    if (nd < dist[t]) {
+                        dist[t] = nd;
+                        heap.push(((long) nd << 32) | t);
                     }
                 }
             }
 
-            int R = 0;
+            long reach = 0;
             long total = 0;
-            int far = -1;
+            long far = -1;
             int node = -1;
-            for (int i = 0; i < N; i++) {
-                int d = dist[i];
-                if (d != INF) {
-                    R++;
-                    total += d;
-                    if (d > far) {
-                        far = d;
-                        node = i;
+            for (int v = 0; v < N; v++) {
+                int dv = dist[v];
+                if (dv != Integer.MAX_VALUE) {
+                    reach++;
+                    total += dv;
+                    if (dv > far) {
+                        far = dv;
+                        node = v;
                     }
                 }
             }
-            out.append(s).append(' ').append(R).append(' ').append(total)
-               .append(' ').append(far).append(' ').append(node).append('\n');
+
+            sb.append(s).append(' ').append(reach).append(' ').append(total).append(' ').append(far).append(' ').append(node).append('\n');
         }
 
-        System.out.print(out);
+        System.out.print(sb);
     }
 }

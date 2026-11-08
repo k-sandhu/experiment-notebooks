@@ -2,199 +2,177 @@ package main
 
 import (
 	"os"
-	"strconv"
 )
 
-type parser struct {
-	d   []byte
-	pos int
+var buf []byte
+var pos int
+
+func readInt() int {
+	for buf[pos] < '0' || buf[pos] > '9' {
+		pos++
+	}
+	x := 0
+	for buf[pos] >= '0' && buf[pos] <= '9' {
+		x = x*10 + int(buf[pos]-'0')
+		pos++
+	}
+	return x
 }
 
-func (p *parser) next() int64 {
-	d := p.d
-	n := len(d)
-	i := p.pos
-	for i < n && (d[i] < '0' || d[i] > '9') {
-		i++
+func putLong(ob []byte, op int, x int64) int {
+	if x == 0 {
+		ob[op] = '0'
+		return op + 1
 	}
-	var v int64
-	for i < n && d[i] >= '0' && d[i] <= '9' {
-		v = v*10 + int64(d[i]-'0')
-		i++
+	t := op
+	for x > 0 {
+		ob[op] = byte('0' + x%10)
+		op++
+		x /= 10
 	}
-	p.pos = i
-	return v
-}
-
-// binary min-heap of (dist, node)
-var hd []int64
-var hn []int32
-
-func hpush(d int64, v int32) {
-	i := len(hd)
-	hd = append(hd, d)
-	hn = append(hn, v)
-	for i > 0 {
-		par := (i - 1) >> 2
-		if hd[par] <= d {
-			break
-		}
-		hd[i] = hd[par]
-		hn[i] = hn[par]
-		i = par
+	for a, b := t, op-1; a < b; a, b = a+1, b-1 {
+		ob[a], ob[b] = ob[b], ob[a]
 	}
-	hd[i] = d
-	hn[i] = v
-}
-
-func hpop() (int64, int32) {
-	d := hd[0]
-	v := hn[0]
-	last := len(hd) - 1
-	d0 := hd[last]
-	v0 := hn[last]
-	hd[0] = d0
-	hn[0] = v0
-	hd = hd[:last]
-	hn = hn[:last]
-	n := last
-	i := 0
-	x := d0
-	for n > 0 {
-		c := 4*i + 1
-		m := i
-		mv := x
-		e := c + 4
-		if e > n {
-			e = n
-		}
-		for j := c; j < e; j++ {
-			if hd[j] < mv {
-				mv = hd[j]
-				m = j
-			}
-		}
-		if m == i {
-			break
-		}
-		hd[i] = mv
-		hn[i] = hn[m]
-		i = m
-	}
-	if n > 0 {
-		hd[i] = x
-		hn[i] = v0
-	}
-	return d, v
+	return op
 }
 
 func main() {
-	data, _ := os.ReadFile(os.Args[1])
-	p := &parser{d: data}
-
-	n := int(p.next())
-	m := int(p.next())
-	q := int(p.next())
+	buf, _ = os.ReadFile(os.Args[1])
+	n := readInt()
+	m := readInt()
+	q := readInt()
 
 	eu := make([]int32, m)
 	ev := make([]int32, m)
 	ew := make([]int32, m)
+	start := make([]int32, n+1)
 	for i := 0; i < m; i++ {
-		eu[i] = int32(p.next())
-		ev[i] = int32(p.next())
-		ew[i] = int32(p.next())
+		u := readInt()
+		v := readInt()
+		w := readInt()
+		eu[i] = int32(u)
+		ev[i] = int32(v)
+		ew[i] = int32(w)
+		start[u+1]++
+		start[v+1]++
 	}
-	src := make([]int32, q)
-	for i := 0; i < q; i++ {
-		src[i] = int32(p.next())
+	for i := 0; i < n; i++ {
+		start[i+1] += start[i]
+	}
+	e2 := start[n]
+	adjV := make([]int32, e2)
+	adjW := make([]int32, e2)
+	posArr := make([]int32, n)
+	copy(posArr, start[:n])
+	for i := 0; i < m; i++ {
+		u, v, w := eu[i], ev[i], ew[i]
+		adjV[posArr[u]] = v
+		adjW[posArr[u]] = w
+		posArr[u]++
+		adjV[posArr[v]] = u
+		adjW[posArr[v]] = w
+		posArr[v]++
 	}
 
-	// CSR adjacency (skip self-loops)
-	off := make([]int32, n+1)
-	for i := 0; i < m; i++ {
-		if eu[i] != ev[i] {
-			off[eu[i]]++
-			off[ev[i]]++
-		}
-	}
-	run := int32(0)
-	for v := 0; v < n; v++ {
-		d := off[v]
-		off[v] = run
-		run += d
-	}
-	off[n] = run
-	adj := make([]int32, run)
-	wt := make([]int32, run)
-	pos := make([]int32, n)
-	copy(pos, off)
-	for i := 0; i < m; i++ {
-		u := eu[i]
-		v := ev[i]
-		w := ew[i]
-		if u == v {
-			continue
-		}
-		adj[pos[u]] = v
-		wt[pos[u]] = w
-		pos[u]++
-		adj[pos[v]] = u
-		wt[pos[v]] = w
-		pos[v]++
-	}
+	// Dial's bucket queue: weights are 1..1000, so a circular array of 1001
+	// buckets (singly linked lists through the arena slice) holds all pending
+	// distances. Stale entries are skipped via the dist check.
+	const nb = 1001
+	arena := make([]int32, 2*m+2)
+	nextIn := make([]int32, 2*m+2)
+	head := make([]int32, nb)
 
-	const INF = int64(1) << 60
-	dist := make([]int64, n)
-	hd = make([]int64, 0, 2*m+16)
-	hn = make([]int32, 0, 2*m+16)
-
-	obuf := make([]byte, 0, 1<<20)
+	dist := make([]int32, n)
+	settled := make([]bool, n)
+	ob := make([]byte, q*80+16)
+	op := 0
 
 	for qi := 0; qi < q; qi++ {
-		s := src[qi]
-		for v := range dist {
-			dist[v] = INF
+		s := readInt()
+		for i := range dist {
+			dist[i] = -1
 		}
-		hd = hd[:0]
-		hn = hn[:0]
+		for i := range settled {
+			settled[i] = false
+		}
+		for i := range head {
+			head[i] = -1
+		}
+		cnt := 0
 		dist[s] = 0
-		hpush(0, s)
-		var total, far, cnt int64
-		far = -1
-		var farNode int32 = s
-
-		for len(hd) > 0 {
-			d, v := hpop()
-			if d != dist[v] {
+		arena[cnt] = int32(s)
+		nextIn[cnt] = -1
+		head[0] = int32(cnt)
+		cnt++
+		remaining := 1
+		idx := 0
+		d := 0
+		for remaining > 0 {
+			e := int(head[idx])
+			if e < 0 {
+				idx++
+				if idx == nb {
+					idx = 0
+				}
+				d++
 				continue
 			}
-			cnt++
-			total += d
-			if d > far || (d == far && v < farNode) {
-				far = d
-				farNode = v
+			head[idx] = nextIn[e]
+			remaining--
+			v := int(arena[e])
+			if settled[v] || int(dist[v]) != d {
+				continue
 			}
-			for e := off[v]; e < off[v+1]; e++ {
-				to := adj[e]
-				nd := d + int64(wt[e])
-				if nd < dist[to] {
-					dist[to] = nd
-					hpush(nd, to)
+			settled[v] = true
+			end := start[v+1]
+			for i := start[v]; i < end; i++ {
+				u := int(adjV[i])
+				if settled[u] {
+					continue
+				}
+				nd := d + int(adjW[i])
+				du := int(dist[u])
+				if du < 0 || nd < du {
+					dist[u] = int32(nd)
+					b := nd % nb
+					arena[cnt] = int32(u)
+					nextIn[cnt] = head[b]
+					head[b] = int32(cnt)
+					cnt++
+					remaining++
 				}
 			}
 		}
-
-		obuf = strconv.AppendInt(obuf, int64(s), 10)
-		obuf = append(obuf, ' ')
-		obuf = strconv.AppendInt(obuf, cnt, 10)
-		obuf = append(obuf, ' ')
-		obuf = strconv.AppendInt(obuf, total, 10)
-		obuf = append(obuf, ' ')
-		obuf = strconv.AppendInt(obuf, far, 10)
-		obuf = append(obuf, ' ')
-		obuf = strconv.AppendInt(obuf, int64(farNode), 10)
-		obuf = append(obuf, '\n')
+		var total int64
+		var far int64
+		farNode := s
+		r := 0
+		for v := 0; v < n; v++ {
+			dd := dist[v]
+			if dd >= 0 {
+				r++
+				total += int64(dd)
+				if int64(dd) > far || (int64(dd) == far && v < farNode) {
+					far = int64(dd)
+					farNode = v
+				}
+			}
+		}
+		op = putLong(ob, op, int64(s))
+		ob[op] = ' '
+		op++
+		op = putLong(ob, op, int64(r))
+		ob[op] = ' '
+		op++
+		op = putLong(ob, op, total)
+		ob[op] = ' '
+		op++
+		op = putLong(ob, op, far)
+		ob[op] = ' '
+		op++
+		op = putLong(ob, op, int64(farNode))
+		ob[op] = '\n'
+		op++
 	}
-
-	os.Stdout.Write(obuf)
+	os.Stdout.Write(ob[:op])
 }

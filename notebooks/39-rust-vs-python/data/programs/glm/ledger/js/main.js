@@ -1,499 +1,525 @@
-'use strict';
-// Ledger: sum JSON-lines transactions with exact integer currency conversion.
-// Single pass over the raw bytes; only the needed fields are extracted.
-const fs = require('fs');
+"use strict";
 
-function main() {
-  const data = fs.readFileSync(process.argv[2]);
-  const n = data.length;
-  const rates = new Table(16);
-  const channels = new Table(16);
-  const accounts = new Table(1 << 12);
-  const scratch = Buffer.allocUnsafe(1024);
+// Ledger: fast single-pass JSON Lines aggregator.
+// Hand-rolled byte scanner over the whole input Buffer (no DOM), plain Maps.
+const fs = require("fs");
 
-  // Open-addressing hash table keyed by byte ranges in `data`.
-  // Keys are copied into a private pool; doubles for the values.
-  function Table(cap0) {
-    let cap = 1 << 10;
-    while (cap < cap0) cap <<= 1;
-    this.mask = cap - 1;
-    this.slot = new Int32Array(cap); // entry idx + 1
-    this.keyOff = new Int32Array(cap);
-    this.keyLen = new Int32Array(cap);
-    this.a = new Float64Array(cap); // count
-    this.b = new Float64Array(cap); // net
-    this.size = 0;
-    this.pool = Buffer.allocUnsafe(1 << 16);
-    this.poolLen = 0;
-    this.entries = []; // [off, len, a, b] filled on finish()
+const data = fs.readFileSync(process.argv[2]);
+const u8 = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+const n = u8.length;
+let i = 0;
+
+let sStart = 0;
+let sEnd = 0;
+let sEsc = false;
+
+// scratch for decoded strings
+let decBuf = new Uint8Array(256);
+let decLen = 0;
+function decNeed(k) {
+  if (decBuf.length < k) {
+    let cap = decBuf.length * 2;
+    while (cap < k) cap *= 2;
+    const nb = new Uint8Array(cap);
+    nb.set(decBuf.subarray(0, decLen));
+    decBuf = nb;
   }
+}
 
-  Table.prototype.find = function (s, e, src) {
-    if (src === undefined) src = data;
-    let i = this.hashRange(src, s, e) & this.mask;
-    const slot = this.slot;
-    while (slot[i] !== 0) {
-      const t = slot[i] - 1;
-      const kl = this.keyLen[t];
-      if (kl === e - s) {
-        const p = this.pool;
-        let po = this.keyOff[t];
-        let k = 0;
-        while (k < kl && p[po + k] === src[s + k]) k++;
-        if (k === kl) return t;
-      }
-      i = (i + 1) & this.mask;
+function decode(from, to) {
+  decNeed(to - from);
+  let o = 0;
+  let j = from;
+  while (j < to) {
+    const c = u8[j];
+    if (c !== 0x5c) {
+      decBuf[o++] = c;
+      j++;
+      continue;
     }
-    return -1;
-  };
-
-  Table.prototype.findOrInsert = function (s, e, src) {
-    if (src === undefined) src = data;
-    if (this.size * 10 >= this.mask * 7) this.grow();
-    let i = this.hashRange(src, s, e) & this.mask;
-    const slot = this.slot;
-    while (slot[i] !== 0) {
-      const t = slot[i] - 1;
-      const kl = this.keyLen[t];
-      if (kl === e - s) {
-        const p = this.pool;
-        let po = this.keyOff[t];
-        let k = 0;
-        while (k < kl && p[po + k] === src[s + k]) k++;
-        if (k === kl) return t;
-      }
-      i = (i + 1) & this.mask;
-    }
-    const t = this.size++;
-    const len = e - s;
-    if (this.poolLen + len > this.pool.length) {
-      const np = Buffer.allocUnsafe(Math.max(this.pool.length * 2, this.poolLen + len));
-      this.pool.copy(np, 0, 0, this.poolLen);
-      this.pool = np;
-    }
-    src.copy(this.pool, this.poolLen, s, e);
-    this.keyOff[t] = this.poolLen;
-    this.keyLen[t] = len;
-    this.poolLen += len;
-    this.a[t] = 0;
-    this.b[t] = 0;
-    slot[i] = t + 1;
-    return t;
-  };
-
-  Table.prototype.hashRange = function (src, s, e) {
-    let h = 0xcbf29ce4;
-    for (let i = s; i < e; i++) {
-      h ^= src[i];
-      h = (h * 0x1000193) | 0;
-    }
-    return h & 0x7fffffff;
-  };
-
-  Table.prototype.grow = function () {
-    const cap = (this.mask + 1) << 1;
-    this.mask = cap - 1;
-    const nslot = new Int32Array(cap);
-    const nKeyOff = new Int32Array(cap);
-    const nKeyLen = new Int32Array(cap);
-    const na = new Float64Array(cap);
-    const nb = new Float64Array(cap);
-    for (let t = 0; t < this.size; t++) {
-      // re-hash from the pool
-      const off = this.keyOff[t], len = this.keyLen[t];
-      let h = 0xcbf29ce4;
-      for (let k = 0; k < len; k++) {
-        h ^= this.pool[off + k];
-        h = (h * 0x1000193) | 0;
-      }
-      let i = (h & 0x7fffffff) & this.mask;
-      while (nslot[i] !== 0) i = (i + 1) & this.mask;
-      nslot[i] = t + 1;
-      nKeyOff[t] = off;
-      nKeyLen[t] = len;
-      na[t] = this.a[t];
-      nb[t] = this.b[t];
-    }
-    this.slot = nslot;
-    this.keyOff = nKeyOff;
-    this.keyLen = nKeyLen;
-    this.a = na;
-    this.b = nb;
-  };
-
-  Table.prototype.decodedKey = function (t) {
-    return this.pool.toString('utf8', this.keyOff[t], this.keyOff[t] + this.keyLen[t]);
-  };
-
-  const isWS = (c) => c === 32 || c === 9 || c === 13 || c === 10;
-
-  function skipWS(i) {
-    while (i < n && isWS(data[i])) i++;
-    return i;
-  }
-
-  // parses string starting at '"'; sets sV (start), eV (end), sN (next index)
-  let sV = 0, eV = 0, sN = 0, escV = false;
-
-  function parseString(i) {
-    i++;
-    sV = i;
-    let esc = false;
-    while (i < n) {
-      const c = data[i];
-      if (c === 34) break; // '"'
-      if (c === 92) { // '\\'
-        esc = true;
-        i++;
-        if (data[i] === 117) i += 4; // 'u'
-      }
-      i++;
-    }
-    eV = i;
-    escV = esc;
-    sN = i + 1;
-  }
-
-  function skipValue(i) {
-    if (i < n && data[i] === 34) {
-      parseString(i);
-      return sN;
-    }
-    if (i < n && (data[i] === 123 || data[i] === 91)) { // '{' '['
-      let depth = 0;
-      while (i < n) {
-        const c = data[i];
-        if (c === 34) {
-          parseString(i);
-          i = sN;
-          continue;
-        }
-        if (c === 123 || c === 91) depth++;
-        else if (c === 125 || c === 93) { // '}' ']'
-          if (--depth === 0) return i + 1;
-        }
-        i++;
-      }
-      return i;
-    }
-    while (i < n) {
-      const c = data[i];
-      if (c === 44 || c === 125 || c === 93) break; // ',' '}' ']'
-      i++;
-    }
-    return i;
-  }
-
-  function decodeInto(s, e) {
-    // decode JSON string escapes into scratch; returns byte length
-    let k = 0;
-    for (let i = s; i < e; i++) {
-      let c = data[i];
-      if (c !== 92) { scratch[k++] = c; continue; }
-      i++;
-      const x = data[i];
-      if (x === 117) { // 'u'
-        let cp = hex4(i + 1);
-        i += 4;
-        if (cp >= 0xd800 && cp <= 0xdbff && data[i + 1] === 92 && data[i + 2] === 117) {
-          const lo = hex4(i + 3);
+    const e = u8[j + 1];
+    j += 2;
+    switch (e) {
+      case 0x22: decBuf[o++] = 0x22; break;
+      case 0x5c: decBuf[o++] = 0x5c; break;
+      case 0x2f: decBuf[o++] = 0x2f; break;
+      case 0x62: decBuf[o++] = 8; break;
+      case 0x66: decBuf[o++] = 12; break;
+      case 0x6e: decBuf[o++] = 10; break;
+      case 0x72: decBuf[o++] = 13; break;
+      case 0x74: decBuf[o++] = 9; break;
+      case 0x75: {
+        let cp = hex4(j);
+        j += 4;
+        if (cp >= 0xd800 && cp <= 0xdbff && j + 1 < to && u8[j] === 0x5c && u8[j + 1] === 0x75) {
+          const lo = hex4(j + 2);
           if (lo >= 0xdc00 && lo <= 0xdfff) {
             cp = 0x10000 + ((cp - 0xd800) << 10) + (lo - 0xdc00);
-            i += 6;
+            j += 6;
           }
         }
         // UTF-8 encode
-        if (cp < 0x80) scratch[k++] = cp;
-        else if (cp < 0x800) {
-          scratch[k++] = 0xc0 | (cp >> 6);
-          scratch[k++] = 0x80 | (cp & 0x3f);
+        if (cp < 0x80) {
+          decBuf[o++] = cp;
+        } else if (cp < 0x800) {
+          decBuf[o++] = 0xc0 | (cp >> 6);
+          decBuf[o++] = 0x80 | (cp & 0x3f);
         } else if (cp < 0x10000) {
-          scratch[k++] = 0xe0 | (cp >> 12);
-          scratch[k++] = 0x80 | ((cp >> 6) & 0x3f);
-          scratch[k++] = 0x80 | (cp & 0x3f);
+          decBuf[o++] = 0xe0 | (cp >> 12);
+          decBuf[o++] = 0x80 | ((cp >> 6) & 0x3f);
+          decBuf[o++] = 0x80 | (cp & 0x3f);
         } else {
-          scratch[k++] = 0xf0 | (cp >> 18);
-          scratch[k++] = 0x80 | ((cp >> 12) & 0x3f);
-          scratch[k++] = 0x80 | ((cp >> 6) & 0x3f);
-          scratch[k++] = 0x80 | (cp & 0x3f);
+          decBuf[o++] = 0xf0 | (cp >> 18);
+          decBuf[o++] = 0x80 | ((cp >> 12) & 0x3f);
+          decBuf[o++] = 0x80 | ((cp >> 6) & 0x3f);
+          decBuf[o++] = 0x80 | (cp & 0x3f);
         }
-      } else {
-        scratch[k++] =
-          x === 114 ? 13 :   // \r
-          x === 110 ? 10 :   // \n
-          x === 116 ? 9 :    // \t
-          x === 98 ? 8 :     // \b
-          x === 102 ? 12 :   // \f
-          x;                 // " \ / \\
+        break;
       }
-    }
-    return k;
-  }
-
-  function hex4(i) {
-    let v = 0;
-    for (let k = 0; k < 4; k++) {
-      const c = data[i + k];
-      v = v * 16 + (c <= 57 ? c - 48 : (c | 32) - 87);
-    }
-    return v;
-  }
-
-  // compares string value (raw, maybe escaped) to ASCII literal
-  function strEq(s, e, esc, lit) {
-    if (!esc) {
-      const len = e - s;
-      if (len !== lit.length) return false;
-      for (let k = 0; k < len; k++) if (data[s + k] !== lit.charCodeAt(k)) return false;
-      return true;
-    }
-    const len = decodeInto(s, e);
-    if (len !== lit.length) return false;
-    for (let k = 0; k < len; k++) if (scratch[k] !== lit.charCodeAt(k)) return false;
-    return true;
-  }
-
-  // "12", "12.5", "12.05" -> integer hundredths
-  function parseAmount(s, e) {
-    let whole = 0;
-    let i = s;
-    while (i < e) {
-      const c = data[i] - 48;
-      if (c < 0 || c > 9) break;
-      whole = whole * 10 + c;
-      i++;
-    }
-    let frac = 0;
-    if (i < e && data[i] === 46) { // '.'
-      i++;
-      frac = (data[i] - 48) * 10;
-      i++;
-      if (i < e) frac += data[i] - 48;
-    }
-    return whole * 100 + frac;
-  }
-
-  function makeKey(s, e, esc) {
-    if (!esc) return data.toString('latin1', s, e);
-    const len = decodeInto(s, e);
-    return scratch.toString('utf8', 0, len);
-  }
-
-  // First line: rates.
-  let i = skipWS(0);
-  let eol = data.indexOf(10, i);
-  if (eol < 0) eol = n;
-  {
-    let p = skipWS(i);
-    if (p < n && data[p] === 123) { // '{'
-      p++;
-      while (p < n) {
-        p = skipWS(p);
-        if (p >= n || data[p] === 125) break; // '}'
-        if (data[p] === 44) { p++; continue; } // ','
-        parseString(p);
-        const ks = sV, ke = eV, kesc = escV;
-        p = skipWS(sN);
-        p++; // ':'
-        p = skipWS(p);
-        if (strEq(ks, ke, kesc, 'rates')) {
-          p = skipWS(p);
-          p++; // '{'
-          while (p < n) {
-            p = skipWS(p);
-            if (p >= n || data[p] === 125) break;
-            if (data[p] === 44) { p++; continue; }
-            parseString(p);
-            const cs = sV, ce = eV, cesc = escV;
-            p = skipWS(sN);
-            p++; // ':'
-            p = skipWS(p);
-            let neg = false;
-            if (data[p] === 45) { neg = true; p++; } // '-'
-            let rate = 0;
-            while (p < n) {
-              const c = data[p] - 48;
-              if (c < 0 || c > 9) break;
-              rate = rate * 10 + c;
-              p++;
-            }
-            if (neg) rate = -rate;
-            let kS = cs, kE = ce, kSrc = data;
-            if (cesc) { kE = decodeInto(cs, ce); kS = 0; kSrc = scratch; }
-            rates.b[rates.findOrInsert(kS, kE, kSrc)] = rate;
-          }
-          p++; // '}'
-        } else {
-          p = skipValue(p);
-        }
-      }
+      default: decBuf[o++] = e; break;
     }
   }
-  i = eol < n ? eol + 1 : n;
-
-  let totalCount = 0, totalNet = 0;
-  while (i < n) {
-    let q = skipWS(i);
-    eol = data.indexOf(10, i);
-    if (eol < 0) eol = n;
-    if (q < eol && data[q] === 123) { // '{'
-      q++;
-      let sign = 0, rate = 0, amount = 0, hasRate = false;
-      let accS = -1, accE = 0, accEsc = false;
-      let chanS = -1, chanE = 0, chanEsc = false;
-      let isTest = false;
-      while (true) {
-        q = skipWS(q);
-        if (q >= n || data[q] === 125) { q++; break; } // '}'
-        if (data[q] === 44) { q++; continue; } // ','
-        parseString(q);
-        const ks = sV, ke = eV, kesc = escV;
-        q = skipWS(sN);
-        q++; // ':'
-        q = skipWS(q);
-        if (!kesc) {
-          const kl = ke - ks;
-          const k0 = kl > 0 ? data[ks] : 0;
-          if (k0 === 116 && kl === 4) { // 't' -> type/tags
-            if (data[ks + 1] === 121) { // 'y' -> "type"
-              parseString(q);
-              const vs = sV, ve = eV, vesc = escV;
-              q = sN;
-              if (strEq(vs, ve, vesc, 'credit') || strEq(vs, ve, vesc, 'refund')) sign = 1;
-              else if (strEq(vs, ve, vesc, 'debit')) sign = -1;
-              continue;
-            } else if (data[ks + 1] === 97) { // 'a' -> "tags"
-              q++; // '['
-              while (true) {
-                q = skipWS(q);
-                if (q >= n || data[q] === 93) { q++; break; } // ']'
-                if (data[q] === 44) { q++; continue; } // ','
-                if (data[q] === 34) { // '"'
-                  parseString(q);
-                  const vs = sV, ve = eV, vesc = escV;
-                  q = sN;
-                  if (!isTest && strEq(vs, ve, vesc, 'test')) isTest = true;
-                } else {
-                  q = skipValue(q);
-                }
-              }
-              continue;
-            }
-          } else if (k0 === 97 && kl === 6 && data[ks + 1] === 109) { // 'a' "amount"
-            parseString(q);
-            const vs = sV, ve = eV;
-            q = sN;
-            amount = parseAmount(vs, ve);
-            continue;
-          } else if (k0 === 97 && kl === 7 && data[ks + 1] === 99) { // 'a' "account"
-            parseString(q);
-            accS = sV; accE = eV; accEsc = escV;
-            q = sN;
-            continue;
-          } else if (k0 === 99 && kl === 8) { // 'c' "currency"
-            parseString(q);
-            const vs = sV, ve = eV, vesc = escV;
-            q = sN;
-            let kS = vs, kE = ve, kSrc = data;
-            if (vesc) { kE = decodeInto(vs, ve); kS = 0; kSrc = scratch; }
-            const ri = rates.find(kS, kE, kSrc);
-            hasRate = ri >= 0;
-            if (hasRate) rate = rates.b[ri];
-            continue;
-          } else if (k0 === 109 && kl === 4) { // 'm' "meta"
-            q++; // '{'
-            while (true) {
-              q = skipWS(q);
-              if (q >= n || data[q] === 125) { q++; break; } // '}'
-              if (data[q] === 44) { q++; continue; } // ','
-              parseString(q);
-              const mks = sV, mke = eV, mkesc = escV;
-              q = skipWS(sN);
-              q++; // ':'
-              q = skipWS(q);
-              if (strEq(mks, mke, mkesc, 'channel')) {
-                parseString(q);
-                chanS = sV; chanE = eV; chanEsc = escV;
-                q = sN;
-              } else {
-                q = skipValue(q);
-              }
-            }
-            continue;
-          }
-        }
-        q = skipValue(q);
-      }
-      if (sign !== 0 && !isTest && hasRate && accS >= 0 && chanS >= 0) {
-        const val = sign * Math.trunc((amount * rate) / 1000000);
-        totalCount++;
-        totalNet += val;
-        let cS = chanS, cE = chanE, cSrc = data;
-        if (chanEsc) { cE = decodeInto(chanS, chanE); cS = 0; cSrc = scratch; }
-        let ci = channels.find(cS, cE, cSrc);
-        if (ci < 0) {
-          ci = channels.findOrInsert(cS, cE, cSrc);
-          channels.a[ci] = 1;
-          channels.b[ci] = val;
-        } else {
-          channels.a[ci]++;
-          channels.b[ci] += val;
-        }
-        let aS = accS, aE = accE, aSrc = data;
-        if (accEsc) { aE = decodeInto(accS, accE); aS = 0; aSrc = scratch; }
-        let ai = accounts.find(aS, aE, aSrc);
-        if (ai < 0) {
-          ai = accounts.findOrInsert(aS, aE, aSrc);
-          accounts.b[ai] = val;
-        } else {
-          accounts.b[ai] += val;
-        }
-      }
-    }
-    i = eol < n ? eol + 1 : n;
-  }
-
-  const out = [];
-  out.push('counted ' + totalCount);
-  out.push('net ' + totalNet);
-
-  // channel lines sorted by name ascending (byte order)
-  const chanIdx = [];
-  for (let t = 0; t < channels.size; t++) chanIdx.push(t);
-  const byteCmp = (tbl, x, y) => {
-    const ox = tbl.keyOff[x], oy = tbl.keyOff[y];
-    const lx = tbl.keyLen[x], ly = tbl.keyLen[y];
-    const m = Math.min(lx, ly);
-    for (let k = 0; k < m; k++) {
-      const d = tbl.pool[ox + k] - tbl.pool[oy + k];
-      if (d !== 0) return d;
-    }
-    return lx - ly;
-  };
-  chanIdx.sort((x, y) => byteCmp(channels, x, y));
-  for (const t of chanIdx) {
-    out.push('channel ' + channels.decodedKey(t) + ' ' + channels.a[t] + ' ' + channels.b[t]);
-  }
-
-  // top 10 accounts by net desc, then id asc
-  const best = [];
-  const accBetter = (x, y) => {
-    if (accounts.b[x] !== accounts.b[y]) return accounts.b[x] > accounts.b[y];
-    return byteCmp(accounts, x, y) < 0;
-  };
-  for (let t = 0; t < accounts.size; t++) {
-    if (best.length < 10) {
-      best.push(t);
-      continue;
-    }
-    let worst = 0;
-    for (let j = 1; j < best.length; j++) if (accBetter(best[worst], best[j])) worst = j;
-    if (accBetter(t, best[worst])) best[worst] = t;
-  }
-  best.sort((x, y) => (accBetter(x, y) ? -1 : accBetter(y, x) ? 1 : 0));
-  for (const t of best) out.push('account ' + accounts.decodedKey(t) + ' ' + accounts.b[t]);
-
-  process.stdout.write(out.join('\n') + '\n');
+  decLen = o;
+  return o;
 }
 
-main();
+function hex4(at) {
+  let v = 0;
+  for (let k = 0; k < 4; k++) {
+    const c = u8[at + k];
+    v <<= 4;
+    if (c <= 0x39) v += c - 0x30;
+    else if (c <= 0x46) v += c - 0x41 + 10;
+    else v += c - 0x61 + 10;
+  }
+  return v;
+}
+
+function decString(from, to) {
+  const o = decode(from, to);
+  return scratchString(decBuf, o);
+}
+
+// Fast string build from ASCII/Latin1 bytes
+function scratchString(bytes, len) {
+  let s = "";
+  const chunk = 4096;
+  for (let j = 0; j < len; j += chunk) {
+    const end = Math.min(j + chunk, len);
+    s += String.fromCharCode.apply(null, bytes.subarray(j, end));
+  }
+  return s;
+}
+
+function skipWs() {
+  while (i < n) {
+    const c = u8[i];
+    if (c === 0x20 || c === 0x09 || c === 0x0d || c === 0x0a) i++;
+    else break;
+  }
+}
+
+function skipString() { // i at opening quote; leaves i past closing quote
+  i++;
+  while (true) {
+    const c = u8[i];
+    if (c === 0x5c) {
+      i += 2; // hex digits after \u contain no '"' or '\\'
+      continue;
+    }
+    if (c === 0x22) {
+      i++;
+      return;
+    }
+    i++;
+  }
+}
+
+function scanString() { // i at opening quote; leaves i past closing quote
+  i++;
+  sStart = i;
+  sEsc = false;
+  while (true) {
+    const c = u8[i];
+    if (c === 0x5c) {
+      sEsc = true;
+      i += 2;
+      continue;
+    }
+    if (c === 0x22) {
+      sEnd = i;
+      i++;
+      return;
+    }
+    i++;
+  }
+}
+
+function skipValue() {
+  const c = u8[i];
+  if (c === 0x22) {
+    skipString();
+    return;
+  }
+  if (c === 0x7b || c === 0x5b) {
+    let depth = 0;
+    while (i < n) {
+      const d = u8[i];
+      if (d === 0x22) {
+        skipString();
+        continue;
+      }
+      if (d === 0x7b || d === 0x5b) depth++;
+      else if (d === 0x7d || d === 0x5d) {
+        depth--;
+        if (depth === 0) {
+          i++;
+          return;
+        }
+      }
+      i++;
+    }
+    return;
+  }
+  while (i < n) {
+    const d = u8[i];
+    if (d === 0x2c || d === 0x7d || d === 0x5d || d === 0x20 || d === 0x09 || d === 0x0d || d === 0x0a) return;
+    i++;
+  }
+}
+
+function eqBytes(a, b, lit) {
+  if (b - a !== lit.length) return false;
+  for (let j = 0; j < lit.length; j++) {
+    if (u8[a + j] !== lit.charCodeAt(j)) return false;
+  }
+  return true;
+}
+
+function decEq(lit) {
+  const o = decode(sStart, sEnd);
+  if (o !== lit.length) return false;
+  for (let j = 0; j < o; j++) {
+    if (decBuf[j] !== lit.charCodeAt(j)) return false;
+  }
+  return true;
+}
+
+// value string at sStart..sEnd (sEsc set)
+function strValue() {
+  if (!sEsc) return data.toString("latin1", sStart, sEnd);
+  return decString(sStart, sEnd);
+}
+
+function parseAmount(from, to, esc) {
+  if (esc) {
+    const o = decode(from, to);
+    return parseAmountDigits(decBuf, 0, o);
+  }
+  return parseAmountDigits(u8, from, to);
+}
+
+function parseAmountDigits(b, from, to) {
+  let ip = 0;
+  let j = from;
+  while (j < to && b[j] >= 0x30 && b[j] <= 0x39) {
+    if (ip > 900719925474098) return parseAmountBig(b, from, to); // next step would exceed 2^53
+    ip = ip * 10 + (b[j] - 0x30);
+    j++;
+  }
+  let frac = 0;
+  let fd = 0;
+  if (j < to && b[j] === 0x2e) {
+    j++;
+    while (j < to && fd < 2 && b[j] >= 0x30 && b[j] <= 0x39) {
+      frac = frac * 10 + (b[j] - 0x30);
+      fd++;
+      j++;
+    }
+  }
+  while (fd < 2) {
+    frac *= 10;
+    fd++;
+  }
+  return ip * 100 + frac;
+}
+
+function parseAmountBig(b, from, to) {
+  let ip = 0n;
+  let j = from;
+  while (j < to && b[j] >= 0x30 && b[j] <= 0x39) {
+    ip = ip * 10n + BigInt(b[j] - 0x30);
+    j++;
+  }
+  let frac = 0n;
+  let fd = 0;
+  if (j < to && b[j] === 0x2e) {
+    j++;
+    while (j < to && fd < 2 && b[j] >= 0x30 && b[j] <= 0x39) {
+      frac = frac * 10n + BigInt(b[j] - 0x30);
+      fd++;
+      j++;
+    }
+  }
+  while (fd < 2) {
+    frac *= 10n;
+    fd++;
+  }
+  return ip * 100n + frac;
+}
+
+function parseTags() {
+  i++; // '['
+  let test = false;
+  while (true) {
+    skipWs();
+    if (u8[i] === 0x5d) {
+      i++;
+      return test;
+    }
+    if (u8[i] === 0x22) {
+      scanString();
+      if (!test) {
+        test = sEsc ? decEq("test") : sEnd - sStart === 4 && eqBytes(sStart, sEnd, "test");
+      }
+    } else {
+      skipValue();
+    }
+    skipWs();
+    if (u8[i] === 0x2c) i++;
+  }
+}
+
+function parseMeta() {
+  i++; // '{'
+  let channel = null;
+  while (true) {
+    skipWs();
+    if (u8[i] === 0x7d) {
+      i++;
+      return channel;
+    }
+    scanString();
+    const ks = sStart, ke = sEnd, kesc = sEsc;
+    skipWs();
+    i++; // ':'
+    skipWs();
+    const isChannel = kesc ? decEq2(ks, ke, "channel") : ke - ks === 7 && eqBytes(ks, ke, "channel");
+    if (isChannel) {
+      scanString();
+      channel = strValue();
+    } else {
+      skipValue();
+    }
+    skipWs();
+    if (u8[i] === 0x2c) i++;
+  }
+}
+
+function decEq2(from, to, lit) {
+  const o = decode(from, to);
+  if (o !== lit.length) return false;
+  for (let j = 0; j < o; j++) {
+    if (decBuf[j] !== lit.charCodeAt(j)) return false;
+  }
+  return true;
+}
+
+// ---- rates ----
+const rates = new Map();
+skipWs();
+i++; // '{'
+for (;;) {
+  skipWs();
+  scanString();
+  const ks = sStart, ke = sEnd, kesc = sEsc;
+  skipWs();
+  i++; // ':'
+  skipWs();
+  if (!kesc && eqBytes(ks, ke, "rates")) {
+    i++; // '{'
+    for (;;) {
+      skipWs();
+      if (u8[i] === 0x7d) {
+        i++;
+        break;
+      }
+      scanString();
+      const cur = strValue();
+      skipWs();
+      i++; // ':'
+      skipWs();
+      let r = 0;
+      while (u8[i] >= 0x30 && u8[i] <= 0x39) {
+        r = r * 10 + (u8[i] - 0x30);
+        i++;
+      }
+      rates.set(cur, r);
+      skipWs();
+      if (u8[i] === 0x2c) i++;
+    }
+  } else {
+    skipValue();
+  }
+  skipWs();
+  if (u8[i] === 0x2c) {
+    i++;
+    continue;
+  }
+  i++;
+  break;
+}
+
+// ---- transactions ----
+let totalCount = 0;
+let totalNet = 0;
+const channels = new Map(); // name -> [count, net]
+const accounts = new Map(); // id -> net
+
+while (true) {
+  skipWs();
+  if (i >= n) break;
+  i++; // '{'
+
+  let typeCode = 0; // 1 credit, 2 debit, 3 refund, 4 void
+  let testTag = false;
+  let hund = 0;
+  let currency = null;
+  let account = null;
+  let channel = null;
+
+  for (;;) {
+    skipWs();
+    scanString();
+    const ks = sStart, ke = sEnd, kesc = sEsc;
+    const klen = ke - ks;
+    skipWs();
+    i++; // ':'
+    skipWs();
+    if (!kesc) {
+      const c0 = klen > 0 ? u8[ks] : 0;
+      if (klen === 4 && c0 === 0x74 && eqBytes(ks, ke, "type")) {
+        scanString();
+        // typeCode
+        if (!sEsc) {
+          const l = sEnd - sStart;
+          if (l === 6 && eqBytes(sStart, sEnd, "credit")) typeCode = 1;
+          else if (l === 5 && eqBytes(sStart, sEnd, "debit")) typeCode = 2;
+          else if (l === 6 && eqBytes(sStart, sEnd, "refund")) typeCode = 3;
+          else if (l === 4 && eqBytes(sStart, sEnd, "void")) typeCode = 4;
+        } else {
+          const t = decString(sStart, sEnd);
+          typeCode = t === "credit" ? 1 : t === "debit" ? 2 : t === "refund" ? 3 : t === "void" ? 4 : 0;
+        }
+      } else if (klen === 6 && eqBytes(ks, ke, "amount")) {
+        scanString();
+        hund = parseAmount(sStart, sEnd, sEsc);
+      } else if (klen === 8 && eqBytes(ks, ke, "currency")) {
+        scanString();
+        currency = strValue();
+      } else if (klen === 7 && eqBytes(ks, ke, "account")) {
+        scanString();
+        account = strValue();
+      } else if (klen === 4 && c0 === 0x74 && eqBytes(ks, ke, "tags")) {
+        testTag = parseTags();
+      } else if (klen === 4 && c0 === 0x6d && eqBytes(ks, ke, "meta")) {
+        channel = parseMeta();
+      } else {
+        skipValue();
+      }
+    } else {
+      const o = decode(ks, ke);
+      // compare decoded key
+      let k;
+      if (o === 4 && decBuf[0] === 0x74 && decBuf[1] === 0x79 && decBuf[2] === 0x70 && decBuf[3] === 0x65) k = "type";
+      else if (o === 6 && decBuf[0] === 0x61) k = "amount";
+      else if (o === 8 && decBuf[0] === 0x63) k = "currency";
+      else if (o === 7 && decBuf[0] === 0x61) k = "account";
+      else if (o === 4 && decBuf[0] === 0x74) k = "tags";
+      else if (o === 4 && decBuf[0] === 0x6d) k = "meta";
+      else k = null;
+      if (k === "type") {
+        scanString();
+        if (!sEsc) {
+          const l = sEnd - sStart;
+          if (l === 6 && eqBytes(sStart, sEnd, "credit")) typeCode = 1;
+          else if (l === 5 && eqBytes(sStart, sEnd, "debit")) typeCode = 2;
+          else if (l === 6 && eqBytes(sStart, sEnd, "refund")) typeCode = 3;
+          else if (l === 4 && eqBytes(sStart, sEnd, "void")) typeCode = 4;
+        } else {
+          const t = decString(sStart, sEnd);
+          typeCode = t === "credit" ? 1 : t === "debit" ? 2 : t === "refund" ? 3 : t === "void" ? 4 : 0;
+        }
+      } else if (k === "amount") {
+        scanString();
+        hund = parseAmount(sStart, sEnd, sEsc);
+      } else if (k === "currency") {
+        scanString();
+        currency = strValue();
+      } else if (k === "account") {
+        scanString();
+        account = strValue();
+      } else if (k === "tags") {
+        testTag = parseTags();
+      } else if (k === "meta") {
+        channel = parseMeta();
+      } else {
+        skipValue();
+      }
+    }
+    skipWs();
+    if (u8[i] === 0x2c) {
+      i++;
+      continue;
+    }
+    i++; // '}'
+    break;
+  }
+
+  if (typeCode === 4 || testTag) continue;
+  const rate = rates.get(currency);
+  if (rate === undefined) continue;
+
+  // exact integer math: products beyond 2^53 go through BigInt
+  let usd;
+  if (typeof hund === "bigint") {
+    usd = Number((hund * BigInt(rate)) / 1000000n);
+  } else if (hund <= 9007199254740991 / rate) {
+    const prod = hund * rate;
+    usd = (prod - (prod % 1000000)) / 1000000;
+  } else {
+    usd = Number((BigInt(hund) * BigInt(rate)) / 1000000n);
+  }
+  const v = typeCode === 2 ? -usd : usd;
+
+  totalCount++;
+  totalNet += v;
+
+  const c = channels.get(channel);
+  if (c === undefined) channels.set(channel, [1, v]);
+  else {
+    c[0]++;
+    c[1] += v;
+  }
+  const a = accounts.get(account);
+  accounts.set(account, a === undefined ? v : a + v);
+}
+
+// ---- output ----
+const out = [];
+out.push("counted " + totalCount);
+out.push("net " + totalNet);
+
+const chRows = Array.from(channels).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+for (const [name, agg] of chRows) {
+  out.push("channel " + name + " " + agg[0] + " " + agg[1]);
+}
+
+const accRows = Array.from(accounts, ([name, net]) => [name, net]);
+accRows.sort((a, b) => (a[1] !== b[1] ? (b[1] - a[1]) : (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
+const lim = Math.min(10, accRows.length);
+for (let k = 0; k < lim; k++) {
+  out.push("account " + accRows[k][0] + " " + accRows[k][1]);
+}
+out.push("");
+process.stdout.write(out.join("\n"));

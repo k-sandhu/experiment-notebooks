@@ -3,97 +3,98 @@ import sys
 
 def main():
     path = sys.argv[1]
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         data = f.read()
+
     toks = data.split()
-    alpha = toks[0]
-    a_count = len(alpha)
+    p = 0
+    alpha = toks[p]
+    p += 1
+    A = len(alpha)
+    tbl = bytearray(range(256))
+    for k in range(A):
+        tbl[alpha[k]] = k
+    tbl = bytes(tbl)
 
-    lut = bytearray(256)
-    for i in range(a_count):
-        lut[alpha[i]] = i
-    lut = bytes(lut)
-
-    p = 1
-    ins = [int(x) for x in toks[p:p + a_count]]
-    p += a_count
-    dele = [int(x) for x in toks[p:p + a_count]]
-    p += a_count
+    ins = [int(x) for x in toks[p:p + A]]
+    p += A
+    dele = [int(x) for x in toks[p:p + A]]
+    p += A
     sub = []
-    for _ in range(a_count):
-        sub.append([int(x) for x in toks[p:p + a_count]])
-        p += a_count
-    pairs = int(toks[p])
+    for i in range(A):
+        sub.append([int(x) for x in toks[p:p + A]])
+        p += A
+    subT = [[sub[j][i] for j in range(A)] for i in range(A)]
+    P = int(toks[p])
     p += 1
 
-    sub_t = None
-    res = []
+    # Shifted representation: H[j] = D[o][j] - prefix(icost)[j].  With
+    #   cs[j] = sub[o][inner[j]] - icost[j]
+    # one outer step is
+    #   base[0] = H[0] + ocost
+    #   base[j] = min(H[j] + ocost, H[j-1] + cs[j-1])
+    #   H' = running_min(base)
+    # and the answer is H'[last] + sum(icost).  The running min removes the
+    # sequential left-to-right dependency of the direct recurrence, which lets
+    # one row be a single tight loop over zipped lists.
+    out = []
     total = 0
-
-    for _ in range(pairs):
-        s = toks[p]
-        t = toks[p + 1]
+    for _ in range(P):
+        s = toks[p].translate(tbl)
+        t = toks[p + 1].translate(tbl)
         p += 2
+        n = len(s)
+        m = len(t)
 
-        # The alignment cost is symmetric: use the shorter string for the
-        # (serial) row loop, the longer one for the inner loop.
-        if len(s) > len(t):
-            rows = t.translate(lut)
-            cols = s.translate(lut)
-            ins_e = dele
-            del_e = ins
-            if sub_t is None:
-                sub_t = [list(r) for r in zip(*sub)]
-            sub_e = sub_t
+        if n <= m:
+            outer, inner = s, t
+            ocost = dele
+            icost = ins
+            submat = sub
         else:
-            rows = s.translate(lut)
-            cols = t.translate(lut)
-            ins_e = ins
-            del_e = dele
-            sub_e = sub
+            outer, inner = t, s
+            ocost = ins
+            icost = dele
+            submat = subT
+            m = n
 
-        m = len(cols)
+        icpos = [icost[x] for x in inner]
+        ic_total = sum(icpos)
+        mm = m + 1
 
-        # Work in "R space": R[i][j] = D[i][j] - I[j] - J[i], where I[j] is the
-        # prefix sum of the insertion costs of t and J[i] the prefix sum of the
-        # deletion costs of s.  Both cancel out of the recurrence, leaving
-        #   R'[j] = min(R'[j-1], R[j], R[j-1] + sub[s_i][t_j] - ins[t_j] - del[s_i])
-        # with R[i][0] = 0 for every i.  The answer is R[n][m] + I[m] + J[n].
-        insv = [ins_e[c] for c in cols]
-        tot = sum(insv)
+        prev = [0] * mm
+        csrows = [None] * A
+        for o in outer:
+            cs = csrows[o]
+            if cs is None:
+                row = submat[o]
+                cs = [row[x] - icpos[j] for j, x in enumerate(inner)]
+                csrows[o] = cs
+            d = ocost[o]
+            pv = prev
+            cv = []
+            ap = cv.append
+            run = pv[0] + d
+            ap(run)
+            w = pv[0]
+            for u, c in zip(pv[1:], cs):
+                v = u + d
+                x = w + c
+                if x < v:
+                    v = x
+                if run < v:
+                    v = run
+                ap(v)
+                run = v
+                w = u
+            prev = cv
 
-        vcache = {}
-        for a in set(rows):
-            row = sub_e[a]
-            dv = del_e[a]
-            vcache[a] = [row[c] - iv - dv for c, iv in zip(cols, insv)]
+        cost = prev[m] + ic_total
+        out.append(str(cost))
+        total += cost
 
-        q = [0] * (m + 1)
-        for a in rows:
-            v = vcache[a]
-            tot += del_e[a]
-            qp = 0          # R[j-1], starting with R[0] = 0
-            left = 0        # R'[j-1], starting with R'[0] = 0
-            acc = [0]
-            ap = acc.append
-            for qj, vj in zip(q[1:], v):
-                c = qj
-                if left < c:
-                    c = left
-                x = qp + vj
-                if x < c:
-                    c = x
-                ap(c)
-                left = c
-                qp = qj
-            q = acc
-
-        ans = q[m] + tot
-        total += ans
-        res.append(str(ans))
-
-    res.append('total ' + str(total))
-    sys.stdout.buffer.write(('\n'.join(res) + '\n').encode())
+    out.append("total " + str(total))
+    sys.stdout.buffer.write(("\n".join(out) + "\n").encode())
 
 
 main()

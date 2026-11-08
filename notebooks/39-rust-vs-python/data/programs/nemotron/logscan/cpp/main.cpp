@@ -1,317 +1,282 @@
-// logscan: summarise an access log by status class and path-template latency percentiles.
-// C++20, MSVC, standard library only.
-
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <fcntl.h>
+#include <io.h>
 #include <vector>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <algorithm>
 #include <utility>
-#include <io.h>
-#include <fcntl.h>
 
 using namespace std;
 
-static inline bool isDigit(char c) { return c >= '0' && c <= '9'; }
-static inline bool isUpper(char c) { return c >= 'A' && c <= 'Z'; }
-static inline bool isLower(char c) { return c >= 'a' && c <= 'z'; }
-
 struct Stats {
     int count = 0;
-    int maxT = 0;          // max latency in tenths of a ms
-    vector<int> lats;      // all latencies of this template, in tenths of a ms
+    vector<int> lat; // latency in tenths of a ms
 };
 
-static inline uint64_t fnv(string_view sv) {
-    uint64_t h = 1469598103934665603ULL;
-    for (unsigned char c : sv) {
-        h ^= c;
-        h *= 1099511628211ULL;
-    }
-    return h;
-}
-
-// Open-addressing map from path template (string_view) to stats.
-// Keys are interned once on first sight; lookups never allocate.
-class Map {
-public:
-    struct Entry {
-        uint64_t hash = 0;
-        string key;
-        Stats stats;
-        bool occupied = false;
-    };
-
-    Map() : buckets_(1 << 10), count_(0) {}
-
-    Stats* findOrCreate(string_view sv) {
-        uint64_t h = fnv(sv);
-        size_t mask = buckets_.size() - 1;
-        size_t i = (size_t)h & mask;
-        while (buckets_[i].occupied) {
-            if (buckets_[i].hash == h && buckets_[i].key == sv) return &buckets_[i].stats;
-            i = (i + 1) & mask;
+struct SVHash {
+    using is_transparent = void;
+    size_t operator()(string_view s) const noexcept {
+        size_t h = 1469598103934665603ULL;
+        for (unsigned char c : s) {
+            h ^= c;
+            h *= 1099511628211ULL;
         }
-        buckets_[i].occupied = true;
-        buckets_[i].hash = h;
-        buckets_[i].key.assign(sv.data(), sv.size());
-        if (++count_ > (buckets_.size() * 7) / 10) grow();
-        return &buckets_[i].stats;
+        return h;
     }
-
-    vector<Entry>& buckets() { return buckets_; }
-
-    void grow() {
-        vector<Entry> nb(buckets_.size() * 2);
-        size_t mask = nb.size() - 1;
-        for (Entry& e : buckets_) {
-            if (!e.occupied) continue;
-            size_t i = (size_t)e.hash & mask;
-            while (nb[i].occupied) i = (i + 1) & mask;
-            nb[i] = move(e);
-        }
-        buckets_ = move(nb);
-    }
-
-private:
-    vector<Entry> buckets_;
-    size_t count_;
+    size_t operator()(const string& s) const noexcept { return (*this)(string_view(s)); }
 };
 
-// Strictly validates one line of the access log and, if well-formed, extracts
-// the status class (first digit of the status), the latency in tenths of a ms,
-// and the path template.
-static bool parseLine(const char* p, const char* e,
-                      int& statusClass, int& latencyT, string& tbuf) {
-    // 1. timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z<space>
-    if (e - p < 25) return false;
-    if (!isDigit(p[0]) || !isDigit(p[1]) || !isDigit(p[2]) || !isDigit(p[3])) return false;
-    if (p[4] != '-') return false;
-    if (!isDigit(p[5]) || !isDigit(p[6])) return false;
-    if (p[7] != '-') return false;
-    if (!isDigit(p[8]) || !isDigit(p[9])) return false;
-    if (p[10] != 'T') return false;
-    if (!isDigit(p[11]) || !isDigit(p[12])) return false;
-    if (p[13] != ':') return false;
-    if (!isDigit(p[14]) || !isDigit(p[15])) return false;
-    if (p[16] != ':') return false;
-    if (!isDigit(p[17]) || !isDigit(p[18])) return false;
-    if (p[19] != '.') return false;
-    if (!isDigit(p[20]) || !isDigit(p[21]) || !isDigit(p[22])) return false;
-    if (p[23] != 'Z' || p[24] != ' ') return false;
-    p += 25;
+struct SVEq {
+    using is_transparent = void;
+    bool operator()(string_view a, string_view b) const noexcept { return a == b; }
+    bool operator()(const string& a, string_view b) const noexcept { return string_view(a) == b; }
+    bool operator()(string_view a, const string& b) const noexcept { return a == string_view(b); }
+    bool operator()(const string& a, const string& b) const noexcept { return a == b; }
+};
 
-    // 2. host: [a-z]+-\d+<space>
-    if (p >= e || !isLower(*p)) return false;
-    do { ++p; } while (p < e && isLower(*p));
-    if (p >= e || *p != '-') return false;
-    ++p;
-    if (p >= e || !isDigit(*p)) return false;
-    do { ++p; } while (p < e && isDigit(*p));
-    if (p >= e || *p != ' ') return false;
-    ++p;
+static unordered_map<string, Stats, SVHash, SVEq> g_map;
 
-    // 3. method: one of GET/POST/PUT/DELETE/PATCH followed by <space>
-    static const struct { const char* s; int n; } methods[5] = {
-        {"GET", 3}, {"POST", 4}, {"PUT", 3}, {"DELETE", 6}, {"PATCH", 5}
-    };
-    bool ok = false;
-    for (int m = 0; m < 5 && !ok; ++m) {
-        if (e - p > methods[m].n && memcmp(p, methods[m].s, methods[m].n) == 0 &&
-            p[methods[m].n] == ' ') {
-            p += methods[m].n + 1;
-            ok = true;
-        }
+static inline bool isDig(char c) { return c >= '0' && c <= '9'; }
+
+struct Parsed {
+    int cls;
+    int lat; // tenths of a ms
+    const char* pathStart;
+    const char* pathEnd;
+};
+
+// Validates one line (without its newline) against the SPEC.md regex and
+// extracts status class, latency (tenths of a ms) and the path span.
+// Full manual validation: every part of the regex is checked.
+static bool parseLine(const char* s, const char* e, Parsed& out) {
+    size_t len = (size_t)(e - s);
+    if (len < 49) return false; // shortest possible well-formed line
+
+    // timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z<sp>
+    if (s[4] != '-' || s[7] != '-' || s[10] != 'T' || s[13] != ':' || s[16] != ':' ||
+        s[19] != '.' || s[23] != 'Z' || s[24] != ' ')
+        return false;
+    if (!isDig(s[0]) || !isDig(s[1]) || !isDig(s[2]) || !isDig(s[3]) ||
+        !isDig(s[5]) || !isDig(s[6]) || !isDig(s[8]) || !isDig(s[9]) ||
+        !isDig(s[11]) || !isDig(s[12]) || !isDig(s[14]) || !isDig(s[15]) ||
+        !isDig(s[17]) || !isDig(s[18]) || !isDig(s[20]) || !isDig(s[21]) || !isDig(s[22]))
+        return false;
+
+    // host: [a-z]+-\d+<sp>
+    const char* h = s + 25;
+    if (h >= e || *h < 'a' || *h > 'z') return false;
+    while (h < e && *h >= 'a' && *h <= 'z') ++h;
+    if (h >= e || *h != '-') return false;
+    ++h;
+    if (h >= e || !isDig(*h)) return false;
+    while (h < e && isDig(*h)) ++h;
+    if (h >= e || *h != ' ') return false;
+    ++h; // method
+
+    size_t mlen = 0;
+    size_t rem = (size_t)(e - h);
+    if (rem >= 3 && (memcmp(h, "GET", 3) == 0 || memcmp(h, "PUT", 3) == 0)) mlen = 3;
+    else if (rem >= 4 && memcmp(h, "POST", 4) == 0) mlen = 4;
+    else if (rem >= 6 && memcmp(h, "DELETE", 6) == 0) mlen = 6;
+    else if (rem >= 5 && memcmp(h, "PATCH", 5) == 0) mlen = 5;
+    if (mlen == 0) return false;
+    h += mlen;
+    if (h >= e || *h != ' ') return false;
+    ++h;
+
+    // path: /[A-Za-z0-9_/-]* then optional \?[^ ]* then <sp>
+    if (h >= e || *h != '/') return false;
+    const char* pathStart = h;
+    ++h;
+    while (h < e) {
+        char c = *h;
+        if (c == ' ' || c == '?') break;
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+              c == '_' || c == '/' || c == '-'))
+            return false;
+        ++h;
     }
-    if (!ok) return false;
-
-    // 4. path: '/' [A-Za-z0-9_/-]* [ '?' [^ ]* ] <space> ; build template on the fly
-    tbuf.clear();
-    if (p >= e || *p != '/') return false;
-    size_t segStart = 0;
-    bool segDigits = true;
-    size_t segLen = 0;
-    bool done = false;
-    for (;;) {
-        if (p >= e) return false; // path must terminate with space
-        char c = *p;
-        if (c == '/') {
-            if (segLen > 0 && segDigits) {
-                tbuf.resize(segStart);
-                tbuf.append("{id}");
-            }
-            tbuf.push_back('/');
-            ++p;
-            segStart = tbuf.size();
-            segDigits = true;
-            segLen = 0;
-        } else if (c == ' ') {
-            if (segLen > 0 && segDigits) {
-                tbuf.resize(segStart);
-                tbuf.append("{id}");
-            }
-            ++p;
-            done = true;
-            break;
-        } else if (c == '?') {
-            if (segLen > 0 && segDigits) {
-                tbuf.resize(segStart);
-                tbuf.append("{id}");
-            }
-            ++p;
-            while (p < e && *p != ' ') ++p; // query string: any non-space chars
-            if (p >= e) return false;
-            ++p;
-            done = true;
-            break;
-        } else {
-            if (!(isDigit(c) || isUpper(c) || isLower(c) || c == '_' || c == '-')) return false;
-            if (segLen == 0) segDigits = isDigit(c);
-            else if (segDigits && !isDigit(c)) segDigits = false;
-            ++segLen;
-            tbuf.push_back(c);
-            ++p;
-        }
+    const char* pathEnd = h;
+    if (h < e && *h == '?') {
+        ++h;
+        while (h < e && *h != ' ') ++h;
     }
-    if (!done) return false;
+    if (h >= e || *h != ' ') return false;
+    ++h;
 
-    // 5. status: \d{3}<space> ; class is the first digit
-    if (e - p < 4) return false;
-    if (!isDigit(p[0]) || !isDigit(p[1]) || !isDigit(p[2])) return false;
-    if (p[3] != ' ') return false;
-    statusClass = p[0] - '0';
-    p += 4;
+    // status: \d{3}<sp>
+    if (e - h < 3 || !isDig(h[0]) || !isDig(h[1]) || !isDig(h[2])) return false;
+    out.cls = h[0] - '0';
+    h += 3;
+    if (h >= e || *h != ' ') return false;
+    ++h;
 
-    // 6. size: \d+B<space>
-    if (p >= e || !isDigit(*p)) return false;
-    do { ++p; } while (p < e && isDigit(*p));
-    if (p >= e || *p != 'B') return false;
-    ++p;
-    if (p >= e || *p != ' ') return false;
-    ++p;
+    // size: \d+B<sp>
+    if (h >= e || !isDig(*h)) return false;
+    while (h < e && isDig(*h)) ++h;
+    if (h >= e || *h != 'B') return false;
+    ++h;
+    if (h >= e || *h != ' ') return false;
+    ++h;
 
-    // 7. latency: \d+.\d ms<space>
-    const char* ls = p;
-    while (p < e && isDigit(*p)) ++p;
-    if (p == ls || p >= e || *p != '.') return false;
-    const char* dot = p++;
-    if (p >= e || !isDigit(*p)) return false;
-    int frac = *p++ - '0';
-    if (e - p < 3 || memcmp(p, "ms ", 3) != 0) return false;
-    p += 3;
-    long long ip = 0;
-    for (const char* q = ls; q < dot; ++q) ip = ip * 10 + (*q - '0');
-    latencyT = (int)(ip * 10 + frac);
+    // latency: \d+.\dms "<ua>"<end>
+    long long lat = 0;
+    if (h >= e || !isDig(*h)) return false;
+    while (h < e && isDig(*h)) { lat = lat * 10 + (*h - '0'); ++h; }
+    if (h >= e || *h != '.') return false;
+    ++h;
+    if (h >= e || !isDig(*h)) return false;
+    lat = lat * 10 + (*h - '0');
+    ++h;
+    if (e - h < 4 || h[0] != 'm' || h[1] != 's' || h[2] != ' ' || h[3] != '"') return false;
+    h += 4;
+    while (h < e && *h != '"') ++h;
+    if (h >= e || *h != '"') return false;
+    ++h;
+    if (h != e) return false;
 
-    // 8. "..." then end of line
-    if (p >= e || *p != '"') return false;
-    ++p;
-    while (p < e && *p != '"') ++p;
-    if (p >= e) return false;
-    ++p;
-    return p == e;
+    out.pathStart = pathStart;
+    out.pathEnd = pathEnd;
+    out.lat = (int)lat;
+    return true;
 }
 
 int main(int argc, char** argv) {
     if (argc < 2) return 1;
-    _setmode(_fileno(stdout), _O_BINARY); // LF output, no CRLF translation
+    _setmode(_fileno(stdout), _O_BINARY);
     FILE* f = fopen(argv[1], "rb");
     if (!f) return 1;
-    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 1; }
-    long sz = ftell(f);
-    if (sz < 0) { fclose(f); return 1; }
-    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return 1; }
-    string buf;
-    buf.resize((size_t)sz);
-    if (sz > 0 && fread(buf.data(), 1, (size_t)sz, f) != (size_t)sz) { fclose(f); return 1; }
+    fseek(f, 0, SEEK_END);
+    long fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    string data;
+    if (fsize > 0) {
+        data.resize((size_t)fsize);
+        if (fread(data.data(), 1, data.size(), f) != data.size()) {
+            fclose(f);
+            return 1;
+        }
+    }
     fclose(f);
 
-    const char* p = buf.data();
-    const char* end = p + sz;
+    const char* p = data.data();
+    const char* end = p + data.size();
 
-    long long lines = 0, malformed = 0;
-    long long statusCount[10] = {};
-    Map map;
-    string tbuf;
+    long long nLines = 0, nMalformed = 0;
+    int statusCount[10] = {};
+
+    g_map.reserve(1 << 14);
+    string tmplBuf;
+    tmplBuf.reserve(128);
+    Parsed parsed;
 
     while (p < end) {
-        const char* nl = (const char*)memchr(p, '\n', end - p);
+        ++nLines;
+        const char* lineStart = p;
+        const char* nl = (const char*)memchr(p, '\n', (size_t)(end - p));
         const char* lineEnd = nl ? nl : end;
-        ++lines;
-        int statusClass = 0, latencyT = 0;
-        if (parseLine(p, lineEnd, statusClass, latencyT, tbuf)) {
-            statusCount[statusClass]++;
-            Stats* s = map.findOrCreate(string_view(tbuf.data(), tbuf.size()));
-            s->count++;
-            if (latencyT > s->maxT) s->maxT = latencyT;
-            s->lats.push_back(latencyT);
-        } else {
-            ++malformed;
+        p = nl ? nl + 1 : end;
+
+        if (!parseLine(lineStart, lineEnd, parsed)) {
+            ++nMalformed;
+            continue;
         }
-        p = lineEnd + 1;
+        ++statusCount[parsed.cls];
+
+        // path template: split on '/', replace all-digit non-empty segments with {id}
+        tmplBuf.clear();
+        tmplBuf.push_back('/');
+        {
+            const char* segStart = parsed.pathStart + 1;
+            const char* i = segStart;
+            for (;;) {
+                if (i == parsed.pathEnd || *i == '/') {
+                    size_t seglen = (size_t)(i - segStart);
+                    if (seglen > 0) {
+                        bool allDig = true;
+                        for (const char* j = segStart; j < i; ++j) {
+                            if (!isDig(*j)) { allDig = false; break; }
+                        }
+                        if (allDig) tmplBuf.append("{id}", 4);
+                        else tmplBuf.append(segStart, seglen);
+                    }
+                    if (i < parsed.pathEnd) tmplBuf.push_back('/');
+                    segStart = i + 1;
+                }
+                if (i == parsed.pathEnd) break;
+                ++i;
+            }
+        }
+
+        string_view key(tmplBuf.data(), tmplBuf.size()); // transparent lookup: no allocation on hit
+        auto it = g_map.find(key);
+        if (it == g_map.end()) {
+            it = g_map.emplace(string(tmplBuf), Stats{}).first;
+            it->second.lat.reserve(16);
+        }
+        Stats& st = it->second;
+        ++st.count;
+        st.lat.push_back(parsed.lat);
     }
+
+    vector<pair<string, Stats>> items;
+    items.reserve(g_map.size());
+    for (auto& kv : g_map)
+        items.emplace_back(kv.first, std::move(kv.second));
+
+    sort(items.begin(), items.end(),
+         [](const pair<string, Stats>& a, const pair<string, Stats>& b) {
+             if (a.second.count != b.second.count) return a.second.count > b.second.count;
+             return a.first.compare(b.first) < 0; // byte order
+         });
 
     string out;
-    out.reserve(1 << 12);
-    out.append("lines ");
-    out.append(to_string(lines));
-    out.push_back('\n');
-    out.append("malformed ");
-    out.append(to_string(malformed));
-    out.push_back('\n');
-    for (int d = 0; d < 10; ++d) {
-        if (statusCount[d] != 0) {
-            out.append("status ");
-            out.push_back(char('0' + d));
-            out.append("xx ");
-            out.append(to_string(statusCount[d]));
-            out.push_back('\n');
+    out.reserve(8192);
+    out += "lines ";
+    out += to_string(nLines);
+    out += '\n';
+    out += "malformed ";
+    out += to_string(nMalformed);
+    out += '\n';
+    for (int c = 0; c < 10; ++c) {
+        if (statusCount[c] != 0) {
+            out += "status ";
+            out += char('0' + c);
+            out += "xx ";
+            out += to_string(statusCount[c]);
+            out += '\n';
         }
     }
-
-    struct PathEntry {
-        string key;
-        Stats stats;
-    };
-    vector<PathEntry> paths;
-    for (Map::Entry& e : map.buckets()) {
-        if (e.occupied) paths.push_back({std::move(e.key), std::move(e.stats)});
-    }
-    sort(paths.begin(), paths.end(), [](const PathEntry& a, const PathEntry& b) {
-        if (a.stats.count != b.stats.count) return a.stats.count > b.stats.count;
-        return a.key < b.key; // byte order
-    });
-
-    auto fmtLat = [&](string& o, int t) {
-        o.append(to_string(t / 10));
-        o.push_back('.');
-        o.push_back(char('0' + t % 10));
-    };
-    auto nearestRank = [](int pct, size_t n) -> size_t {
-        return ((size_t)(((long long)pct * (long long)n + 99) / 100)) - 1;
-    };
-
-    size_t limit = min(paths.size(), (size_t)10);
-    for (size_t i = 0; i < limit; ++i) {
-        PathEntry& pe = paths[i];
-        vector<int>& lats = pe.stats.lats;
-        sort(lats.begin(), lats.end());
-        size_t n = lats.size();
-        out.append("path ");
-        out.append(pe.key);
-        out.push_back(' ');
-        out.append(to_string(pe.stats.count));
-        out.push_back(' ');
-        fmtLat(out, lats[nearestRank(50, n)]);
-        out.push_back(' ');
-        fmtLat(out, lats[nearestRank(95, n)]);
-        out.push_back(' ');
-        fmtLat(out, pe.stats.maxT);
-        out.push_back('\n');
+    size_t top = items.size() < 10 ? items.size() : 10;
+    for (size_t i = 0; i < top; ++i) {
+        vector<int>& lat = items[i].second.lat;
+        sort(lat.begin(), lat.end());
+        size_t n = lat.size();
+        auto kth = [&](int pct) -> int {
+            return lat[((size_t)pct * n + 99) / 100 - 1];
+        };
+        auto fmt = [&](int t) {
+            out += to_string(t / 10);
+            out += '.';
+            out += to_string(t % 10);
+        };
+        out += "path ";
+        out += items[i].first;
+        out += ' ';
+        out += to_string(items[i].second.count);
+        out += ' ';
+        fmt(kth(50));
+        out += ' ';
+        fmt(kth(95));
+        out += ' ';
+        fmt((int)lat.back());
+        out += '\n';
     }
 
-    fputs(out.c_str(), stdout);
+    fwrite(out.data(), 1, out.size(), stdout);
     return 0;
 }

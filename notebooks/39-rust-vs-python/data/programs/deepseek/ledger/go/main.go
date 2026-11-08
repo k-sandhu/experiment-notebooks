@@ -6,658 +6,667 @@ import (
 	"strconv"
 )
 
-type Parser struct {
-	b   []byte
-	i   int
-	end int
+var B []byte
+var LEN, P int
 
-	sBeg int
-	sLen int
-	sEsc bool
-
-	scratch []byte
+// ---------------------------------------------------------------------------
+// Open addressing hash map whose keys are spans of the input buffer.
+// ---------------------------------------------------------------------------
+type SpanMap struct {
+	off  []int64
+	klen []int32
+	v1   []int64
+	v2   []int64
+	cap  int
+	cnt  int
 }
 
-func (p *Parser) skipWs() {
-	b := p.b
-	i := p.i
-	for i < p.end {
-		c := b[i]
-		if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
-			i++
+func newSpanMap(c int) *SpanMap {
+	m := &SpanMap{}
+	m.init(c)
+	return m
+}
+
+func (m *SpanMap) init(c int) {
+	m.cap = c
+	m.cnt = 0
+	m.off = make([]int64, c)
+	m.klen = make([]int32, c)
+	m.v1 = make([]int64, c)
+	m.v2 = make([]int64, c)
+	for i := range m.klen {
+		m.klen[i] = -1
+	}
+}
+
+func hashBytes(s, n int) uint64 {
+	h := uint64(1469598103934665603)
+	for i := 0; i < n; i++ {
+		h ^= uint64(B[s+i])
+		h *= 1099511628211
+	}
+	return h
+}
+
+func (m *SpanMap) grow() {
+	nc := m.cap * 2
+	if nc == 0 {
+		nc = 1024
+	}
+	no := make([]int64, nc)
+	nl := make([]int32, nc)
+	n1 := make([]int64, nc)
+	n2 := make([]int64, nc)
+	for i := range nl {
+		nl[i] = -1
+	}
+	mask := nc - 1
+	for j := 0; j < m.cap; j++ {
+		if m.klen[j] < 0 {
+			continue
+		}
+		i := int(hashBytes(int(m.off[j]), int(m.klen[j]))) & mask
+		for nl[i] >= 0 {
+			i = (i + 1) & mask
+		}
+		no[i] = m.off[j]
+		nl[i] = m.klen[j]
+		n1[i] = m.v1[j]
+		n2[i] = m.v2[j]
+	}
+	m.off, m.klen, m.v1, m.v2 = no, nl, n1, n2
+	m.cap = nc
+}
+
+func (m *SpanMap) find(s, n int) int {
+	mask := m.cap - 1
+	i := int(hashBytes(s, n)) & mask
+	for m.klen[i] >= 0 {
+		if int(m.klen[i]) == n && spanEqBytes(int(m.off[i]), int(m.off[i])+n, s, s+n) {
+			return i
+		}
+		i = (i + 1) & mask
+	}
+	return -1
+}
+
+func (m *SpanMap) getOrInsert(s, n int) int {
+	if (m.cnt+1)*10 > m.cap*7 {
+		m.grow()
+	}
+	mask := m.cap - 1
+	i := int(hashBytes(s, n)) & mask
+	for m.klen[i] >= 0 {
+		if int(m.klen[i]) == n && spanEqBytes(int(m.off[i]), int(m.off[i])+n, s, s+n) {
+			return i
+		}
+		i = (i + 1) & mask
+	}
+	m.off[i] = int64(s)
+	m.klen[i] = int32(n)
+	m.v1[i] = 0
+	m.v2[i] = 0
+	m.cnt++
+	return i
+}
+
+var rates, channels, accounts *SpanMap
+
+func main() {
+	if len(os.Args) < 2 {
+		os.Exit(1)
+	}
+	data, err := os.ReadFile(os.Args[1])
+	if err != nil {
+		os.Exit(1)
+	}
+	B = data
+	LEN = len(B)
+
+	rates = newSpanMap(64)
+	channels = newSpanMap(64)
+	accounts = newSpanMap(1 << 14)
+
+	P = 0
+	skipWs()
+	P++ // '{'
+	for {
+		skipWs()
+		if B[P] == '}' {
+			P++
+			break
+		}
+		ks, ke, esc := parseString()
+		if esc {
+			ke = decode(ks, ke)
+		}
+		skipWs()
+		P++ // ':'
+		skipWs()
+		if spanEq(ks, ke, "rates") {
+			parseRatesObject()
+		} else {
+			skipValue()
+		}
+		skipWs()
+		if B[P] == ',' {
+			P++
+			continue
+		}
+		if B[P] == '}' {
+			P++
+			break
+		}
+	}
+
+	for {
+		skipWs()
+		if P >= LEN {
+			break
+		}
+		parseTransaction()
+	}
+
+	writeOutput()
+}
+
+func skipWs() {
+	for P < LEN {
+		c := B[P]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			P++
 		} else {
 			break
 		}
 	}
-	p.i = i
 }
 
-func (p *Parser) scanString() {
-	b := p.b
-	i := p.i + 1
-	s := i
+func parseString() (int, int, bool) {
+	P++
+	s := P
 	esc := false
-	for b[i] != '"' {
-		if b[i] == '\\' {
+	for {
+		c := B[P]
+		if c == '"' {
+			e := P
+			P++
+			return s, e, esc
+		}
+		if c == '\\' {
 			esc = true
-			i++
-			if b[i] == 'u' {
-				i += 5
-			} else {
-				i++
-			}
+			P += 2
 		} else {
-			i++
+			P++
 		}
 	}
-	p.sBeg = s
-	p.sLen = i - s
-	p.sEsc = esc
-	p.i = i + 1
 }
 
-func (p *Parser) skipString() {
-	b := p.b
-	i := p.i + 1
-	for b[i] != '"' {
-		if b[i] == '\\' {
-			i++
-			if b[i] == 'u' {
-				i += 5
-			} else {
-				i++
-			}
+func hex4(p []byte) uint32 {
+	var v uint32
+	for i := 0; i < 4; i++ {
+		c := p[i]
+		var d uint32
+		if c >= '0' && c <= '9' {
+			d = uint32(c - '0')
+		} else if c >= 'a' && c <= 'f' {
+			d = uint32(c-'a') + 10
 		} else {
-			i++
+			d = uint32(c-'A') + 10
 		}
-	}
-	p.i = i + 1
-}
-
-func hex4(b []byte, q int) int {
-	v := 0
-	for k := 0; k < 4; k++ {
-		c := b[q+k]
-		var d int
-		switch {
-		case c >= '0' && c <= '9':
-			d = int(c - '0')
-		case c >= 'a' && c <= 'f':
-			d = int(c-'a') + 10
-		default:
-			d = int(c-'A') + 10
-		}
-		v = v<<4 | d
+		v = (v << 4) | d
 	}
 	return v
 }
 
-func (p *Parser) unescape() []byte {
-	out := p.scratch[:0]
-	b := p.b
-	q := p.sBeg
-	e := p.sBeg + p.sLen
-	for q < e {
-		c := b[q]
-		q++
+func decode(s, e int) int {
+	w, r := s, s
+	for r < e {
+		c := B[r]
+		r++
 		if c != '\\' {
-			out = append(out, c)
+			B[w] = c
+			w++
 			continue
 		}
-		esc := b[q]
-		q++
-		switch esc {
+		x := B[r]
+		r++
+		switch x {
 		case '"':
-			out = append(out, '"')
+			B[w] = '"'
+			w++
 		case '\\':
-			out = append(out, '\\')
+			B[w] = '\\'
+			w++
 		case '/':
-			out = append(out, '/')
+			B[w] = '/'
+			w++
 		case 'b':
-			out = append(out, '\b')
+			B[w] = 8
+			w++
 		case 'f':
-			out = append(out, '\f')
+			B[w] = 12
+			w++
 		case 'n':
-			out = append(out, '\n')
+			B[w] = '\n'
+			w++
 		case 'r':
-			out = append(out, '\r')
+			B[w] = '\r'
+			w++
 		case 't':
-			out = append(out, '\t')
+			B[w] = '\t'
+			w++
 		case 'u':
-			cp := hex4(b, q)
-			q += 4
-			if cp >= 0xD800 && cp <= 0xDBFF && q+6 <= e && b[q] == '\\' && b[q+1] == 'u' {
-				lo := hex4(b, q+2)
+			cp := hex4(B[r:])
+			r += 4
+			if cp >= 0xD800 && cp <= 0xDBFF && r+6 <= e && B[r] == '\\' && B[r+1] == 'u' {
+				lo := hex4(B[r+2:])
 				if lo >= 0xDC00 && lo <= 0xDFFF {
 					cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00)
-					q += 6
+					r += 6
 				}
 			}
 			if cp < 0x80 {
-				out = append(out, byte(cp))
+				B[w] = byte(cp)
+				w++
 			} else if cp < 0x800 {
-				out = append(out, byte(0xC0|(cp>>6)), byte(0x80|(cp&0x3F)))
+				B[w] = byte(0xC0 | (cp >> 6))
+				B[w+1] = byte(0x80 | (cp & 0x3F))
+				w += 2
 			} else if cp < 0x10000 {
-				out = append(out, byte(0xE0|(cp>>12)), byte(0x80|((cp>>6)&0x3F)), byte(0x80|(cp&0x3F)))
+				B[w] = byte(0xE0 | (cp >> 12))
+				B[w+1] = byte(0x80 | ((cp >> 6) & 0x3F))
+				B[w+2] = byte(0x80 | (cp & 0x3F))
+				w += 3
 			} else {
-				out = append(out, byte(0xF0|(cp>>18)), byte(0x80|((cp>>12)&0x3F)), byte(0x80|((cp>>6)&0x3F)), byte(0x80|(cp&0x3F)))
+				B[w] = byte(0xF0 | (cp >> 18))
+				B[w+1] = byte(0x80 | ((cp >> 12) & 0x3F))
+				B[w+2] = byte(0x80 | ((cp >> 6) & 0x3F))
+				B[w+3] = byte(0x80 | (cp & 0x3F))
+				w += 4
 			}
 		default:
-			out = append(out, esc)
+			B[w] = x
+			w++
 		}
 	}
-	p.scratch = out
-	return out
+	return w
 }
 
-func (p *Parser) str() []byte {
-	if !p.sEsc {
-		return p.b[p.sBeg : p.sBeg+p.sLen]
+func parseStringValue() (int, int) {
+	s, e, esc := parseString()
+	if esc {
+		e = decode(s, e)
 	}
-	return p.unescape()
+	return s, e
 }
 
-func eqLit(a []byte, lit string) bool {
-	if len(a) != len(lit) {
+func spanEq(s, e int, lit string) bool {
+	n := e - s
+	if n != len(lit) {
 		return false
 	}
-	for i := 0; i < len(a); i++ {
-		if a[i] != lit[i] {
+	for i := 0; i < n; i++ {
+		if B[s+i] != lit[i] {
 			return false
 		}
 	}
 	return true
 }
 
-func (p *Parser) skipValue() {
-	p.skipWs()
-	b := p.b
-	i := p.i
-	c := b[i]
-	if c == '"' {
-		i++
-		for b[i] != '"' {
-			if b[i] == '\\' {
-				i++
-				if b[i] == 'u' {
-					i += 5
-				} else {
-					i++
-				}
-			} else {
-				i++
-			}
+func spanEqBytes(s, e, s2, e2 int) bool {
+	n := e - s
+	if n != e2-s2 {
+		return false
+	}
+	for i := 0; i < n; i++ {
+		if B[s+i] != B[s2+i] {
+			return false
 		}
-		p.i = i + 1
+	}
+	return true
+}
+
+func skipValue() {
+	skipWs()
+	c := B[P]
+	if c == '"' {
+		parseString()
 		return
 	}
 	if c == '{' || c == '[' {
 		depth := 0
 		for {
-			d := b[i]
-			if d == '"' {
-				i++
-				for b[i] != '"' {
-					if b[i] == '\\' {
-						i++
-						if b[i] == 'u' {
-							i += 5
-						} else {
-							i++
-						}
-					} else {
-						i++
+			c = B[P]
+			if c == '"' {
+				parseString()
+			} else {
+				P++
+				if c == '{' || c == '[' {
+					depth++
+				} else if c == '}' || c == ']' {
+					depth--
+					if depth == 0 {
+						return
 					}
 				}
-				i++
-			} else if d == '{' || d == '[' {
-				depth++
-				i++
-			} else if d == '}' || d == ']' {
-				i++
-				depth--
-				if depth == 0 {
-					p.i = i
-					return
-				}
-			} else {
-				i++
 			}
 		}
 	}
-	for i < p.end {
-		d := b[i]
-		if d == ',' || d == '}' || d == ']' || d == ' ' || d == '\t' || d == '\r' || d == '\n' {
-			break
+	for P < LEN {
+		c = B[P]
+		if c == ',' || c == '}' || c == ']' || c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+			return
 		}
+		P++
+	}
+}
+
+func parseAmount(s, e int) int64 {
+	var ip int64
+	i := s
+	for i < e && B[i] != '.' {
+		ip = ip*10 + int64(B[i]-'0')
 		i++
 	}
-	p.i = i
-}
-
-// ---------------- rates
-var rateKeys []string
-var rateVals []int64
-
-func lookupRate(s []byte) int64 {
-	for i := 0; i < len(rateKeys); i++ {
-		if eqLit(s, rateKeys[i]) {
-			return rateVals[i]
-		}
-	}
-	return 0
-}
-
-// ---------------- accounts
-var accountIndex = make(map[string]int, 1<<14)
-var accStart []int32
-var accLen []int32
-var accSum []int64
-var accCnt []int32
-var arena []byte
-
-func internAccount(s []byte) int {
-	if idx, ok := accountIndex[string(s)]; ok {
-		return idx
-	}
-	idx := len(accSum)
-	start := len(arena)
-	arena = append(arena, s...)
-	accStart = append(accStart, int32(start))
-	accLen = append(accLen, int32(len(s)))
-	accSum = append(accSum, 0)
-	accCnt = append(accCnt, 0)
-	accountIndex[string(s)] = idx
-	return idx
-}
-
-// ---------------- channels
-type channel struct {
-	name string
-	cnt  int64
-	net  int64
-}
-
-var channels []channel
-
-func internChannel(s []byte) int {
-	for i := range channels {
-		if len(channels[i].name) != len(s) {
-			continue
-		}
-		same := true
-		for j := 0; j < len(s); j++ {
-			if channels[i].name[j] != s[j] {
-				same = false
-				break
-			}
-		}
-		if same {
-			return i
-		}
-	}
-	channels = append(channels, channel{name: string(s)})
-	return len(channels) - 1
-}
-
-func parseAmount(s []byte) int64 {
-	var whole int64
-	i := 0
-	for i < len(s) {
-		c := s[i]
-		if c < '0' || c > '9' {
-			break
-		}
-		whole = whole*10 + int64(c-'0')
+	var frac int64
+	if i < e {
 		i++
-	}
-	var f1, f2 int64
-	if i < len(s) && s[i] == '.' {
-		i++
-		if i < len(s) {
-			f1 = int64(s[i] - '0')
+		digits := 0
+		for i < e {
+			frac = frac*10 + int64(B[i]-'0')
 			i++
+			digits++
 		}
-		if i < len(s) {
-			f2 = int64(s[i] - '0')
+		if digits == 1 {
+			frac *= 10
 		}
 	}
-	return whole*100 + f1*10 + f2
+	return ip*100 + frac
 }
 
-// ---------------- transactions
-var totalCount int64
-var totalNet int64
-
-func (p *Parser) parseTags() bool {
-	p.i++ // '['
-	p.skipWs()
-	b := p.b
-	if b[p.i] == ']' {
-		p.i++
-		return false
-	}
-	hasTest := false
-	for {
-		p.skipWs()
-		if b[p.i] == '"' {
-			p.scanString()
-			if !hasTest {
-				if eqLit(p.str(), "test") {
-					hasTest = true
-				}
-			}
-		} else {
-			p.skipValue()
+func typeKind(s, e int) int {
+	n := e - s
+	if n == 6 {
+		if spanEq(s, e, "credit") {
+			return 0
 		}
-		p.skipWs()
-		if b[p.i] == ',' {
-			p.i++
-			continue
+		if spanEq(s, e, "refund") {
+			return 2
 		}
-		p.i++ // ']'
-		return hasTest
-	}
-}
-
-func (p *Parser) parseMeta() int {
-	chIdx := -1
-	p.i++ // '{'
-	p.skipWs()
-	b := p.b
-	if b[p.i] == '}' {
-		p.i++
-		return chIdx
-	}
-	for {
-		p.skipWs()
-		p.scanString()
-		isChannel := eqLit(p.str(), "channel")
-		p.skipWs()
-		p.i++ // ':'
-		p.skipWs()
-		if isChannel {
-			p.scanString()
-			chIdx = internChannel(p.str())
-		} else {
-			p.skipValue()
-		}
-		p.skipWs()
-		if b[p.i] == ',' {
-			p.i++
-			continue
-		}
-		p.i++ // '}'
-		return chIdx
-	}
-}
-
-func (p *Parser) parseTransaction() {
-	acctIdx := -1
-	chIdx := -1
-	sign := 1
-	hasTest := false
-	var hundredths int64
-	var rate int64
-
-	b := p.b
-	p.i++ // '{'
-	p.skipWs()
-	if b[p.i] == '}' {
-		p.i++
-		return
-	}
-	for {
-		p.skipWs()
-		p.scanString()
-		key := p.str()
-		first := byte(0)
-		if len(key) > 0 {
-			first = key[0]
-		}
-		p.skipWs()
-		p.i++ // ':'
-		p.skipWs()
-		switch first {
-		case 'a':
-			if eqLit(key, "account") {
-				p.scanString()
-				acctIdx = internAccount(p.str())
-			} else if eqLit(key, "amount") {
-				p.scanString()
-				hundredths = parseAmount(p.str())
-			} else {
-				p.skipValue()
-			}
-		case 't':
-			if eqLit(key, "type") {
-				p.scanString()
-				s := p.str()
-				if eqLit(s, "void") {
-					sign = 0
-				} else if eqLit(s, "debit") {
-					sign = -1
-				} else {
-					sign = 1
-				}
-			} else if eqLit(key, "tags") {
-				hasTest = p.parseTags()
-			} else {
-				p.skipValue()
-			}
-		case 'm':
-			if eqLit(key, "meta") {
-				chIdx = p.parseMeta()
-			} else {
-				p.skipValue()
-			}
-		case 'c':
-			if eqLit(key, "currency") {
-				p.scanString()
-				rate = lookupRate(p.str())
-			} else {
-				p.skipValue()
-			}
-		default:
-			p.skipValue()
-		}
-		p.skipWs()
-		if b[p.i] == ',' {
-			p.i++
-			continue
-		}
-		p.i++ // '}'
-		break
-	}
-
-	if sign == 0 || hasTest {
-		return
-	}
-	usd := (hundredths * rate) / 1000000
-	val := usd
-	if sign < 0 {
-		val = -usd
-	}
-	totalCount++
-	totalNet += val
-	if acctIdx >= 0 {
-		accSum[acctIdx] += val
-		accCnt[acctIdx]++
-	}
-	if chIdx >= 0 {
-		channels[chIdx].cnt++
-		channels[chIdx].net += val
-	}
-}
-
-func cmpBytes(a, b []byte) int {
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
-	for i := 0; i < n; i++ {
-		if a[i] != b[i] {
-			if a[i] < b[i] {
-				return -1
-			}
+	} else if n == 5 {
+		if spanEq(s, e, "debit") {
 			return 1
 		}
+	} else if n == 4 {
+		if spanEq(s, e, "void") {
+			return 3
+		}
 	}
-	return len(a) - len(b)
+	return -1
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		return
-	}
-	data, err := os.ReadFile(os.Args[1])
-	if err != nil {
-		return
-	}
-	p := &Parser{b: data, i: 0, end: len(data)}
-
-	// {"rates": {...}}
-	p.skipWs()
-	p.i++ // '{'
-	p.skipWs()
-	b := p.b
-	if b[p.i] != '}' {
-		for {
-			p.skipWs()
-			p.scanString()
-			isRates := eqLit(p.str(), "rates")
-			p.skipWs()
-			p.i++ // ':'
-			p.skipWs()
-			if isRates && b[p.i] == '{' {
-				p.i++
-				p.skipWs()
-				if b[p.i] != '}' {
-					for {
-						p.skipWs()
-						p.scanString()
-						cur := string(p.str())
-						p.skipWs()
-						p.i++ // ':'
-						p.skipWs()
-						neg := false
-						if b[p.i] == '-' {
-							neg = true
-							p.i++
-						}
-						var v int64
-						for b[p.i] >= '0' && b[p.i] <= '9' {
-							v = v*10 + int64(b[p.i]-'0')
-							p.i++
-						}
-						if neg {
-							v = -v
-						}
-						rateKeys = append(rateKeys, cur)
-						rateVals = append(rateVals, v)
-						p.skipWs()
-						if b[p.i] == ',' {
-							p.i++
-							continue
-						}
-						p.i++ // '}'
-						break
-					}
-				} else {
-					p.i++
-				}
-			} else {
-				p.skipValue()
-			}
-			p.skipWs()
-			if b[p.i] == ',' {
-				p.i++
-				continue
-			}
-			p.i++ // '}'
-			break
-		}
-	} else {
-		p.i++
-	}
-
+func parseTags() bool {
+	P++
+	hasTest := false
 	for {
-		p.skipWs()
-		if p.i >= p.end {
-			break
+		skipWs()
+		if B[P] == ']' {
+			P++
+			return hasTest
 		}
-		if b[p.i] != '{' {
-			p.i++
+		s, e := parseStringValue()
+		if spanEq(s, e, "test") {
+			hasTest = true
+		}
+		skipWs()
+		if B[P] == ',' {
+			P++
 			continue
 		}
-		p.parseTransaction()
+		if B[P] == ']' {
+			P++
+			return hasTest
+		}
 	}
+}
 
-	sort.Slice(channels, func(x, y int) bool {
-		return channels[x].name < channels[y].name
-	})
-
-	// top ten accounts
-	var best [10]int
-	bn := 0
-	for i := 0; i < len(accSum); i++ {
-		if accCnt[i] == 0 {
+func parseMeta() (int, int, bool) {
+	P++
+	var chS, chE int
+	chSet := false
+	for {
+		skipWs()
+		if B[P] == '}' {
+			P++
+			return chS, chE, chSet
+		}
+		ks, ke, esc := parseString()
+		if esc {
+			ke = decode(ks, ke)
+		}
+		skipWs()
+		P++
+		skipWs()
+		if spanEq(ks, ke, "channel") {
+			chS, chE = parseStringValue()
+			chSet = true
+		} else {
+			skipValue()
+		}
+		skipWs()
+		if B[P] == ',' {
+			P++
 			continue
 		}
-		s := accSum[i]
-		pos := bn
-		for pos > 0 {
-			o := best[pos-1]
-			var better bool
-			if s != accSum[o] {
-				better = s > accSum[o]
-			} else {
-				better = cmpBytes(arena[accStart[i]:accStart[i]+accLen[i]], arena[accStart[o]:accStart[o]+accLen[o]]) < 0
-			}
-			if !better {
+		if B[P] == '}' {
+			P++
+			return chS, chE, chSet
+		}
+	}
+}
+
+func parseRatesObject() {
+	P++
+	for {
+		skipWs()
+		if B[P] == '}' {
+			P++
+			return
+		}
+		ks, ke, esc := parseString()
+		if esc {
+			ke = decode(ks, ke)
+		}
+		skipWs()
+		P++
+		skipWs()
+		var v int64
+		neg := false
+		if B[P] == '-' {
+			neg = true
+			P++
+		}
+		for P < LEN {
+			c := B[P]
+			if c < '0' || c > '9' {
 				break
 			}
-			pos--
+			v = v*10 + int64(c-'0')
+			P++
 		}
-		if pos >= 10 {
+		if neg {
+			v = -v
+		}
+		idx := rates.getOrInsert(ks, ke-ks)
+		rates.v1[idx] = v
+		skipWs()
+		if B[P] == ',' {
+			P++
 			continue
 		}
-		if bn < 10 {
-			bn++
+		if B[P] == '}' {
+			P++
+			return
 		}
-		for j := bn - 1; j > pos; j-- {
-			best[j] = best[j-1]
+	}
+}
+
+var totalNet int64
+var totalCount int64
+
+func parseTransaction() {
+	P++
+	var accS, accE int
+	var chS, chE int
+	var hundredths int64
+	var rate int64
+	typ := -1
+	hasTest := false
+
+	for {
+		skipWs()
+		if B[P] == '}' {
+			P++
+			break
 		}
-		best[pos] = i
+		ks, ke, esc := parseString()
+		if esc {
+			ke = decode(ks, ke)
+		}
+		skipWs()
+		P++
+		skipWs()
+
+		switch {
+		case spanEq(ks, ke, "account"):
+			accS, accE = parseStringValue()
+		case spanEq(ks, ke, "type"):
+			s, e := parseStringValue()
+			typ = typeKind(s, e)
+		case spanEq(ks, ke, "amount"):
+			s, e := parseStringValue()
+			hundredths = parseAmount(s, e)
+		case spanEq(ks, ke, "currency"):
+			s, e := parseStringValue()
+			ri := rates.find(s, e-s)
+			if ri >= 0 {
+				rate = rates.v1[ri]
+			} else {
+				rate = 0
+			}
+		case spanEq(ks, ke, "tags"):
+			hasTest = parseTags()
+		case spanEq(ks, ke, "meta"):
+			chS, chE, _ = parseMeta()
+		default:
+			skipValue()
+		}
+
+		skipWs()
+		if B[P] == ',' {
+			P++
+			continue
+		}
+		if B[P] == '}' {
+			P++
+			break
+		}
 	}
 
-	out := make([]byte, 0, 4096)
+	if typ == 3 || typ == -1 || hasTest {
+		return
+	}
+
+	usd := (hundredths * rate) / 1000000
+	var signed int64
+	if typ == 1 {
+		signed = -usd
+	} else {
+		signed = usd
+	}
+	totalNet += signed
+	totalCount++
+
+	ci := channels.getOrInsert(chS, chE-chS)
+	channels.v1[ci]++
+	channels.v2[ci] += signed
+
+	ai := accounts.getOrInsert(accS, accE-accS)
+	accounts.v1[ai] += signed
+}
+
+func spanLess(o1 int64, l1 int32, o2 int64, l2 int32) bool {
+	n := int(l1)
+	if int(l2) < n {
+		n = int(l2)
+	}
+	a := B[o1 : o1+int64(n)]
+	b := B[o2 : o2+int64(n)]
+	for i := 0; i < n; i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return l1 < l2
+}
+
+func writeOutput() {
+	var chIdx []int
+	for i := 0; i < channels.cap; i++ {
+		if channels.klen[i] >= 0 {
+			chIdx = append(chIdx, i)
+		}
+	}
+	sort.Slice(chIdx, func(a, b int) bool {
+		i, j := chIdx[a], chIdx[b]
+		return spanLess(channels.off[i], channels.klen[i], channels.off[j], channels.klen[j])
+	})
+
+	var accIdx []int
+	for i := 0; i < accounts.cap; i++ {
+		if accounts.klen[i] >= 0 {
+			accIdx = append(accIdx, i)
+		}
+	}
+	k := len(accIdx)
+	if k > 10 {
+		k = 10
+	}
+	if k > 0 {
+		sort.Slice(accIdx, func(a, b int) bool {
+			i, j := accIdx[a], accIdx[b]
+			if accounts.v1[i] != accounts.v1[j] {
+				return accounts.v1[i] > accounts.v1[j]
+			}
+			return spanLess(accounts.off[i], accounts.klen[i], accounts.off[j], accounts.klen[j])
+		})
+		accIdx = accIdx[:k]
+	}
+
+	out := make([]byte, 0, 8192)
 	out = append(out, "counted "...)
 	out = strconv.AppendInt(out, totalCount, 10)
-	out = append(out, '\n')
-	out = append(out, "net "...)
+	out = append(out, "\nnet "...)
 	out = strconv.AppendInt(out, totalNet, 10)
 	out = append(out, '\n')
-	for i := range channels {
-		c := &channels[i]
-		if c.cnt == 0 {
-			continue
-		}
+
+	for _, idx := range chIdx {
 		out = append(out, "channel "...)
-		out = append(out, c.name...)
+		out = append(out, B[channels.off[idx]:channels.off[idx]+int64(channels.klen[idx])]...)
 		out = append(out, ' ')
-		out = strconv.AppendInt(out, c.cnt, 10)
+		out = strconv.AppendInt(out, channels.v1[idx], 10)
 		out = append(out, ' ')
-		out = strconv.AppendInt(out, c.net, 10)
+		out = strconv.AppendInt(out, channels.v2[idx], 10)
 		out = append(out, '\n')
 	}
-	for i := 0; i < bn; i++ {
-		a := best[i]
+
+	for _, idx := range accIdx {
 		out = append(out, "account "...)
-		out = append(out, arena[accStart[a]:accStart[a]+accLen[a]]...)
+		out = append(out, B[accounts.off[idx]:accounts.off[idx]+int64(accounts.klen[idx])]...)
 		out = append(out, ' ')
-		out = strconv.AppendInt(out, accSum[a], 10)
+		out = strconv.AppendInt(out, accounts.v1[idx], 10)
 		out = append(out, '\n')
 	}
+
 	os.Stdout.Write(out)
 }

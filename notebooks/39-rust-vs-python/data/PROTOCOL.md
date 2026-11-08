@@ -217,3 +217,53 @@ trust the result. All times are local (EDT, UTC-4) on 2026-10-30 unless marked U
   tokens recorded, 69 and 69,191 in fact). `bench/sessions.py` now sums turns and tokens over all result events, and
   `python -m bench.sessions refresh-metadata` rewrote those fields from the saved logs (other records gained only a
   `result_events` count). Costs were already right. Fix by Claude Sonnet 5.5, 2026-11-06.
+- Nemotron reruns (2026-11-07). The six Nemotron language sessions that had hit the daily limit were run again from
+  00:02 UTC, after the reset, two at a time. Five completed (88 to 183 requests each, 611 in all). Logscan's rerun
+  stopped before any model call: its work folder held a file named `nul` (written by the earlier session's redirect to
+  Windows' null device), which Python's `shutil.rmtree` cannot delete. The file was removed and logscan was run again
+  at 01:24 UTC (110 requests). No request in the six reruns got a 429; Nvidia returned 11 transient 404s, which Claude
+  Code retried.
+- DeepSeek and GLM after credits were added (2026-11-07). The 15 remaining DeepSeek and GLM sessions (the four failed
+  main sessions and the eleven language sessions affected by the 402s or the long PATH) were run from 18:00 UTC, six at
+  a time. The laptop slept from 18:51 to 03:23 UTC (Windows event log: Kernel-Power 42 at 13:51 EST, then a power
+  source change and wake at 22:23 EST; the proxy logs show no request in between). `SetThreadExecutionState` prevents
+  only idle sleep. Four sessions were in progress and recorded 523 to 549 minutes of wall time: DeepSeek logscan and
+  walkers, GLM wordpairs and logscan (all language sessions). Every request returned 200 after the wake, but in GLM
+  wordpairs a test command running across the sleep reached its 300-second tool limit at the wake and was moved to the
+  background. The four were run again from scratch on mains power; the runs that spanned the sleep are kept in
+  `data/failed_sessions/` with a `.2` suffix. The other eleven finished normally (9 to 49 minutes).
+- Line endings (2026-11-08). Six saved source files had Windows line endings (GLM walkers `fast.py`, `plain.py`,
+  `go/main.go` and `js/main.js`; DeepSeek logscan `csharp/solution.csproj` and ledger `go/main.go`). The repository
+  stores text with LF (`.gitattributes`), so a checkout would not match their recorded source hashes. They were
+  converted to LF, rebuilt and checked again (all correct) before the final timing.
+- Builds moved aside. `data/results/builds.csv` held build times recorded on battery power or while sessions were
+  running; it was moved to `data/results_battery_2026-11-06/` with the battery timings, and every program was built
+  again in the final sitting.
+- Final timing (2026-11-08). `python -m bench.measure all` ran from 05:40:35 to 10:36:37 UTC on mains power ("Silent"
+  power plan, lid open; `data/machine.json` recorded at 05:40:44 UTC). No `power_events.csv` was written: the guard
+  never waited for power or discarded a run. Rows: 434 builds, 2,950 timed runs, 2,700 size-sweep runs, 1,095
+  scaling runs and 160 start-up runs, all correct; correctness rows from earlier passes were reused where a
+  program's source and executable hashes were unchanged. Other programs kept a median of 9.7 of 22 logical
+  processors busy during the timed runs (4.4 on 2026-11-03); a sample taken right after the run showed OneDrive's
+  sync service using about 4.5 cores. The median coefficient of variation of a program's five repeats was 9 to 14%
+  per version (3 to 6% on 2026-11-03).
+- Analysis changes after the final results were seen (2026-11-08), all by GPT-6.1 Terra in the notebook code:
+  - Stale correctness rows. On 2026-11-06 at 02:47 UTC the harness stored `build_failed` for Muse Wonder Full's ledger
+    C++, Java, Go and JavaScript on the benchmark input, before those programs had been rebuilt; the same sources
+    were checked again at 05:33 UTC and were correct (only the C# row had been deleted, see above). The notebook took
+    the first failing row and dropped those four programs from every analysis. It now keeps the latest correctness
+    row for each program, input and worker count (824 older rows set aside, none of them a failure of a current
+    program); Wonder Full is 64 of 64 correct and its speed index uses all 64 cells.
+  - Stale code-size rows. `loc.csv` keeps one row per version of each source file, so rerun sessions left older rows
+    behind and the notebook counted them (GLM showed 667 kB of source instead of 342 kB). It now keeps only rows whose
+    key matches the current file (143 older rows set aside).
+  - Pooled language-and-model split. The first version fitted one model over all tasks with task, language and model
+    terms, which put task-specific language and model differences into the remainder (six languages: 37% language,
+    26% model, 36% remainder). It was replaced by adding each part's sum of squares over the eight tasks (46%, 40%,
+    14%), which matches the per-task split. The unweighted mean of the per-task shares (46%, 40%) is stored as a
+    check in `data/results/derived/language_vs_model.csv`.
+  - Figure fixes only: plain tick labels on every log axis, full model names, legend and title wording, compact
+    tables.
+- Leftover files. Nemotron's walkers JavaScript folder holds five debug scripts it wrote and left (`dbg.js` to
+  `dbg5.js`, 9.8 kB). They are part of the saved program, its source hash and its code size; `main.js` does not load
+  them. The rerun of that session no longer has the `worker.js` of the failed run, so the file is removed.

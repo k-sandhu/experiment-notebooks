@@ -2,111 +2,120 @@ using System;
 using System.IO;
 using System.Text;
 
+// Weighted edit distance for many string pairs (exact DP recurrence from SPEC.md).
+// Two rolling rows; cells fit in int, the grand total in long.
+// The hot loop runs over pinned arrays with unsafe pointers to drop bounds checks.
+
 class Program {
+    static byte[] b;
+    static int pos;
+    static int len;
+
+    static void SkipWs() {
+        while (pos < len && b[pos] <= 32) pos++;
+    }
+
+    static int NextInt() {
+        SkipWs();
+        int x = 0;
+        while (pos < len && b[pos] > 32) {
+            x = x * 10 + (b[pos] - '0');
+            pos++;
+        }
+        return x;
+    }
+
+    static int[] ReadTokenIdx(int[] idx) {
+        SkipWs();
+        int start = pos;
+        while (pos < len && b[pos] > 32) pos++;
+        int n = pos - start;
+        int[] a = new int[n];
+        for (int i = 0; i < n; i++) a[i] = idx[b[start + i]];
+        return a;
+    }
+
+    static int EditDistance(int[] s, int[] t, int[] ins, int[] del, int[] sub, int A,
+                            int[] prev, int[] cur) {
+        int n = s.Length;
+        int m = t.Length;
+        int result = 0;
+
+        prev[0] = 0;
+        for (int j = 1; j <= m; j++) prev[j] = prev[j - 1] + ins[t[j - 1]];
+
+        unsafe {
+            fixed (int* sp = s, tp = t, pp = prev, cp = cur, subp = sub) {
+                int* pv = pp;
+                int* cv = cp;
+                for (int i = 0; i < n; i++) {
+                    int d = del[sp[i]];
+                    int* subrow = subp + sp[i] * A;
+                    cv[0] = pv[0] + d;
+                    int diag = pv[0];
+                    for (int j = 1; j <= m; j++) {
+                        int tj = tp[j - 1];
+                        int best = pv[j] + d;
+                        int v = cv[j - 1] + ins[tj];
+                        if (v < best) best = v;
+                        v = diag + subrow[tj];
+                        if (v < best) best = v;
+                        cv[j] = best;
+                        diag = pv[j];
+                    }
+                    int* tmp = pv; pv = cv; cv = tmp;
+                }
+                result = pv[m]; // cell values fit in int; pv points at the last row
+            }
+        }
+        return result;
+    }
+
+    static int[] Ensure(ref int[] arr, int minLen) {
+        if (arr == null || arr.Length < minLen) arr = new int[minLen];
+        return arr;
+    }
+
     static void Main(string[] args) {
-        string text = File.ReadAllText(args[0]);
-        int pos = 0;
-        int len = text.Length;
+        b = File.ReadAllBytes(args[0]);
+        len = b.Length;
 
-        void Skip() {
-            while (pos < len) {
-                char c = text[pos];
-                if (c != ' ' && c != '\n' && c != '\r' && c != '\t' && c != '\f') break;
-                pos++;
-            }
-        }
+        SkipWs();
+        int alphaStart = pos;
+        while (pos < len && b[pos] > 32) pos++;
+        int A = pos - alphaStart;
 
-        string Next() {
-            Skip();
-            int start = pos;
-            while (pos < len) {
-                char c = text[pos];
-                if (c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '\f') break;
-                pos++;
-            }
-            return text.Substring(start, pos - start);
-        }
-
-        int NextInt() {
-            Skip();
-            bool neg = false;
-            if (pos < len && text[pos] == '-') { neg = true; pos++; }
-            int v = 0;
-            while (pos < len && text[pos] >= '0' && text[pos] <= '9') {
-                v = v * 10 + (text[pos] - '0');
-                pos++;
-            }
-            return neg ? -v : v;
-        }
-
-        string alphabet = Next();
-        int A = alphabet.Length;
-
-        int[] charIndex = new int[26];
-        for (int i = 0; i < 26; i++) charIndex[i] = -1;
-        for (int i = 0; i < A; i++) charIndex[alphabet[i] - 'A'] = i;
+        int[] idx = new int[256];
+        for (int i = 0; i < 256; i++) idx[i] = -1;
+        for (int i = 0; i < A; i++) idx[b[alphaStart + i]] = i;
 
         int[] ins = new int[A];
         int[] del = new int[A];
+        int[] sub = new int[A * A];
         for (int i = 0; i < A; i++) ins[i] = NextInt();
         for (int i = 0; i < A; i++) del[i] = NextInt();
-        int[][] sub = new int[A][];
-        for (int i = 0; i < A; i++) {
-            sub[i] = new int[A];
-            for (int j = 0; j < A; j++) sub[i][j] = NextInt();
-        }
+        for (int i = 0; i < A * A; i++) sub[i] = NextInt();
 
         int P = NextInt();
 
-        int[] prev = new int[1];
-        int[] cur = new int[1];
-        int[] sIdx = new int[0];
-        int[] tIdx = new int[0];
-        int[] insT = new int[0];
-
+        int[] prev = null;
+        int[] cur = null;
         long total = 0;
         var sb = new StringBuilder();
 
         for (int pair = 0; pair < P; pair++) {
-            string s = Next();
-            string t = Next();
-            int n = s.Length, m = t.Length;
+            int[] s = ReadTokenIdx(idx);
+            int[] t = ReadTokenIdx(idx);
+            int m = t.Length;
+            Ensure(ref prev, m + 1);
+            Ensure(ref cur, m + 1);
 
-            if (sIdx.Length < n) sIdx = new int[n];
-            for (int i = 0; i < n; i++) sIdx[i] = charIndex[s[i] - 'A'];
-            if (tIdx.Length < m) tIdx = new int[m];
-            if (insT.Length < m) insT = new int[m];
-            for (int j = 0; j < m; j++) {
-                tIdx[j] = charIndex[t[j] - 'A'];
-                insT[j] = ins[tIdx[j]];
-            }
-
-            if (prev.Length < m + 1) { prev = new int[m + 1]; cur = new int[m + 1]; }
-
-            prev[0] = 0;
-            for (int j = 1; j <= m; j++) prev[j] = prev[j - 1] + insT[j - 1];
-
-            for (int i = 1; i <= n; i++) {
-                int si = sIdx[i - 1];
-                int delSi = del[si];
-                int[] subRow = sub[si];
-                cur[0] = prev[0] + delSi;
-                for (int j = 1; j <= m; j++) {
-                    int tj = tIdx[j - 1];
-                    int up = prev[j] + delSi;
-                    int left = cur[j - 1] + insT[j - 1];
-                    int diag = prev[j - 1] + subRow[tj];
-                    int best = up < left ? up : left;
-                    cur[j] = diag < best ? diag : best;
-                }
-                int[] tmp = prev; prev = cur; cur = tmp;
-            }
-
-            int cost = prev[m];
+            long cost = EditDistance(s, t, ins, del, sub, A, prev, cur);
             total += cost;
             sb.Append(cost);
             sb.Append('\n');
         }
+
         sb.Append("total ");
         sb.Append(total);
         sb.Append('\n');

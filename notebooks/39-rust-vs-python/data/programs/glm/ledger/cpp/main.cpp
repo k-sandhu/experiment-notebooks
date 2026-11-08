@@ -1,461 +1,631 @@
-// Ledger: sum JSON-lines transactions with exact integer currency conversion.
-// Single pass over the raw bytes; we only extract the fields we need.
-#include <cstdio>
+// Ledger: fast single-pass JSON Lines aggregator.
+// Hand-rolled scanner over the whole input buffer (no DOM), custom open-addressing maps.
+#include <algorithm>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <fcntl.h>
 #include <io.h>
-#include <cstring>
-#include <cstdlib>
-#include <charconv>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
-#include <algorithm>
-
-using namespace std;
 
 namespace {
 
-constexpr uint64_t kMicro = 1000000;
+constexpr uint64_t FNV_OFFSET = 1469598103934665603ULL;
+constexpr uint64_t FNV_PRIME = 1099511628211ULL;
 
-// Aggregates for a channel: number of counted transactions and their net sum.
-struct ChannelAgg {
-    int64_t count = 0;
+inline uint64_t hashBytes(const char* s, size_t len) {
+    uint64_t h = FNV_OFFSET;
+    for (size_t j = 0; j < len; ++j) {
+        h ^= static_cast<unsigned char>(s[j]);
+        h *= FNV_PRIME;
+    }
+    return h;
+}
+
+struct ChVal {
     int64_t net = 0;
+    int64_t count = 0;
 };
 
-// Keys must stay alive for the whole run: string_views point into the file
-// buffer (unescaped keys are copied into a persistent arena when needed).
-unordered_map<string_view, ChannelAgg> g_channels;
-unordered_map<string_view, int64_t> g_accounts;
-unordered_map<string_view, int64_t> g_rates;
-constexpr size_t kChunk = 4096;
-string g_arena;    // backing store for decoded (escaped) keys
-size_t g_arenaOff = 0;
+// Open-addressing map keyed by (ptr, len). Keys must outlive the map: either they
+// point into the input buffer, or a copy is kept in `owned`.
+template <class Val>
+struct HashMap {
+    struct Slot {
+        const char* key;
+        uint32_t keyLen;
+        uint64_t hash;
+        Val val;
+    };
+    std::vector<Slot> slots;
+    size_t mask = 0;
+    size_t count = 0;
+    std::vector<std::string> owned;
 
-const int64_t* findRate(string_view cur) {
-    auto it = g_rates.find(cur);
-    return it == g_rates.end() ? nullptr : &it->second;
-}
+    explicit HashMap(size_t logSlots = 4) : slots(size_t(1) << logSlots), mask((size_t(1) << logSlots) - 1) {}
 
-ChannelAgg* findChannel(string_view name) {
-    auto it = g_channels.find(name);
-    return it == g_channels.end() ? nullptr : &it->second;
-}
-
-int64_t* findAccount(string_view id) {
-    auto it = g_accounts.find(id);
-    return it == g_accounts.end() ? nullptr : &it->second;
-}
-
-// Copy a decoded key into persistent storage and return a view of it.
-// Uses fixed blocks so nothing ever moves (map keys hold views into this).
-string_view intern(string_view key) {
-    if (g_arena.empty() || g_arena.size() - g_arenaOff < key.size()) {
-        g_arena.resize(g_arena.size() + (key.size() > kChunk ? key.size() : kChunk));
+    void grow() {
+        std::vector<Slot> ns(slots.size() * 2);
+        size_t nm = ns.size() - 1;
+        for (const auto& s : slots) {
+            if (!s.key) continue;
+            size_t j = s.hash & nm;
+            while (ns[j].key) j = (j + 1) & nm;
+            ns[j] = s;
+        }
+        slots.swap(ns);
+        mask = nm;
     }
-    char* dst = g_arena.data() + g_arenaOff;
-    memcpy(dst, key.data(), key.size());
-    g_arenaOff += key.size();
-    return string_view(dst, key.size());
+
+    Val* find(const char* key, uint32_t len, uint64_t h) {
+        size_t j = h & mask;
+        while (slots[j].key) {
+            if (slots[j].hash == h && slots[j].keyLen == len && memcmp(slots[j].key, key, len) == 0)
+                return &slots[j].val;
+            j = (j + 1) & mask;
+        }
+        return nullptr;
+    }
+
+    Val& at(const char* key, uint32_t len, uint64_t h) {
+        if ((count + 1) * 2 > slots.size()) grow();
+        size_t j = h & mask;
+        while (slots[j].key) {
+            if (slots[j].hash == h && slots[j].keyLen == len && memcmp(slots[j].key, key, len) == 0)
+                return slots[j].val;
+            j = (j + 1) & mask;
+        }
+        slots[j] = {key, len, h, Val()};
+        ++count;
+        return slots[j].val;
+    }
+
+    void keep(const char* key, uint32_t len) { owned.emplace_back(key, len); }
+};
+
+// ---- scanner state ----
+const char* p;
+size_t n;
+size_t i;
+
+inline void skipWs() {
+    while (i < n) {
+        char c = p[i];
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+            ++i;
+        else
+            break;
+    }
 }
 
-vector<char> g_scratch; // reused scratch for decoded strings
+size_t sStart, sEnd;
+bool sEsc;
 
-string_view decodeString(const char* s, size_t len) {
-    g_scratch.clear();
-    g_scratch.reserve(len);
-    for (size_t i = 0; i < len; ++i) {
-        char c = s[i];
-        if (c != '\\') { g_scratch.push_back(c); continue; }
-        char e = s[++i];
-        switch (e) {
-            case '"': g_scratch.push_back('"'); break;
-            case '\\': g_scratch.push_back('\\'); break;
-            case '/': g_scratch.push_back('/'); break;
-            case 'b': g_scratch.push_back('\b'); break;
-            case 'f': g_scratch.push_back('\f'); break;
-            case 'n': g_scratch.push_back('\n'); break;
-            case 'r': g_scratch.push_back('\r'); break;
-            case 't': g_scratch.push_back('\t'); break;
-            case 'u': {
-                uint32_t cp = 0;
-                for (int k = 1; k <= 4; ++k) {
-                    char h = s[i + k];
-                    cp <<= 4;
-                    if (h >= '0' && h <= '9') cp |= h - '0';
-                    else if (h >= 'a' && h <= 'f') cp |= h - 'a' + 10;
-                    else if (h >= 'A' && h <= 'F') cp |= h - 'A' + 10;
+void skipString() {  // i at opening quote; leaves i past closing quote
+    ++i;
+    while (true) {
+        char c = p[i];
+        if (c == '\\') {
+            i += 2;  // the escape char and, for \u, the 4 hex digits contain no '"' or '\\'
+            continue;
+        }
+        if (c == '"') {
+            ++i;
+            return;
+        }
+        ++i;
+    }
+}
+
+void scanString() {  // i at opening quote; leaves i past closing quote
+    ++i;
+    sStart = i;
+    sEsc = false;
+    while (true) {
+        char c = p[i];
+        if (c == '\\') {
+            sEsc = true;
+            i += 2;
+            continue;
+        }
+        if (c == '"') {
+            sEnd = i;
+            ++i;
+            return;
+        }
+        ++i;
+    }
+}
+
+void skipValue() {
+    char c = p[i];
+    if (c == '"') {
+        skipString();
+        return;
+    }
+    if (c == '{' || c == '[') {
+        int depth = 0;
+        while (i < n) {
+            char d = p[i];
+            if (d == '"') {
+                skipString();
+                continue;
+            }
+            if (d == '{' || d == '[')
+                ++depth;
+            else if (d == '}' || d == ']') {
+                --depth;
+                if (depth == 0) {
+                    ++i;
+                    return;
                 }
-                i += 4;
-                if (cp >= 0xD800 && cp <= 0xDBFF && i + 7 <= len &&
-                    s[i + 1] == '\\' && s[i + 2] == 'u') {
-                    uint32_t lo = 0;
-                    for (int k = 3; k <= 6; ++k) {
-                        char h = s[i + k];
-                        lo <<= 4;
-                        if (h >= '0' && h <= '9') lo |= h - '0';
-                        else if (h >= 'a' && h <= 'f') lo |= h - 'a' + 10;
-                        else if (h >= 'A' && h <= 'F') lo |= h - 'A' + 10;
-                    }
+            }
+            ++i;
+        }
+        return;
+    }
+    while (i < n) {
+        char d = p[i];
+        if (d == ',' || d == '}' || d == ']' || d == ' ' || d == '\t' || d == '\r' || d == '\n') return;
+        ++i;
+    }
+}
+
+// ---- string decoding ----
+std::vector<char> scratch;
+
+unsigned hex4(const char* s, size_t at) {
+    unsigned v = 0;
+    for (int k = 0; k < 4; ++k) {
+        char c = s[at + k];
+        v <<= 4;
+        if (c <= '9')
+            v += static_cast<unsigned>(c - '0');
+        else if (c <= 'F')
+            v += static_cast<unsigned>(c - 'A' + 10);
+        else
+            v += static_cast<unsigned>(c - 'a' + 10);
+    }
+    return v;
+}
+
+size_t decode(char* dst, const char* s, size_t len) {
+    size_t o = 0, j = 0;
+    while (j < len) {
+        char c = s[j];
+        if (c != '\\') {
+            dst[o++] = c;
+            ++j;
+            continue;
+        }
+        char e = s[j + 1];
+        j += 2;
+        switch (e) {
+            case '"': dst[o++] = '"'; break;
+            case '\\': dst[o++] = '\\'; break;
+            case '/': dst[o++] = '/'; break;
+            case 'b': dst[o++] = '\b'; break;
+            case 'f': dst[o++] = '\f'; break;
+            case 'n': dst[o++] = '\n'; break;
+            case 'r': dst[o++] = '\r'; break;
+            case 't': dst[o++] = '\t'; break;
+            case 'u': {
+                unsigned cp = hex4(s, j);
+                j += 4;
+                if (cp >= 0xD800 && cp <= 0xDBFF && j + 1 < len && s[j] == '\\' && s[j + 1] == 'u') {
+                    unsigned lo = hex4(s, j + 2);
                     if (lo >= 0xDC00 && lo <= 0xDFFF) {
                         cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-                        i += 6;
+                        j += 6;
                     }
                 }
-                // UTF-8 encode
-                if (cp < 0x80) g_scratch.push_back(char(cp));
-                else if (cp < 0x800) {
-                    g_scratch.push_back(char(0xC0 | (cp >> 6)));
-                    g_scratch.push_back(char(0x80 | (cp & 0x3F)));
+                if (cp < 0x80) {
+                    dst[o++] = static_cast<char>(cp);
+                } else if (cp < 0x800) {
+                    dst[o++] = static_cast<char>(0xC0 | (cp >> 6));
+                    dst[o++] = static_cast<char>(0x80 | (cp & 0x3F));
                 } else if (cp < 0x10000) {
-                    g_scratch.push_back(char(0xE0 | (cp >> 12)));
-                    g_scratch.push_back(char(0x80 | ((cp >> 6) & 0x3F)));
-                    g_scratch.push_back(char(0x80 | (cp & 0x3F)));
+                    dst[o++] = static_cast<char>(0xE0 | (cp >> 12));
+                    dst[o++] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+                    dst[o++] = static_cast<char>(0x80 | (cp & 0x3F));
                 } else {
-                    g_scratch.push_back(char(0xF0 | (cp >> 18)));
-                    g_scratch.push_back(char(0x80 | ((cp >> 12) & 0x3F)));
-                    g_scratch.push_back(char(0x80 | ((cp >> 6) & 0x3F)));
-                    g_scratch.push_back(char(0x80 | (cp & 0x3F)));
+                    dst[o++] = static_cast<char>(0xF0 | (cp >> 18));
+                    dst[o++] = static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+                    dst[o++] = static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+                    dst[o++] = static_cast<char>(0x80 | (cp & 0x3F));
                 }
                 break;
             }
-            default: g_scratch.push_back(e); break;
+            default: dst[o++] = e; break;
         }
     }
-    return string_view(g_scratch.data(), g_scratch.size());
+    return o;
 }
 
-struct StrVal {
-    const char* p;
-    uint32_t len;
-    bool escaped;
-};
-
-inline bool isWs(char c) {
-    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+inline char* scratchBuf(size_t need) {
+    if (scratch.size() < need) scratch.resize(need);
+    return scratch.data();
 }
 
-// Parses a JSON string starting at '"'; returns raw slice + escape flag.
-StrVal parseString(const char* p) {
-    const char* start = ++p; // skip opening quote
-    bool esc = false;
-    for (;;) {
-        char c = *p;
-        if (c == '"') return {start, uint32_t(p - start), esc};
-        if (c == '\\') {
-            esc = true;
-            ++p;
-            if (*p == 'u') p += 4;
-        }
-        ++p;
+bool strEq(const char* s, size_t len, bool esc, const char* lit, size_t litLen) {
+    if (!esc) return len == litLen && memcmp(s, lit, len) == 0;
+    if (litLen > len) return false;  // decoding never grows the string
+    size_t dn = decode(scratchBuf(len), s, len);
+    return dn == litLen && memcmp(scratch.data(), lit, dn) == 0;
+}
+
+// Key that must outlive this line: raw slices point into the buffer, escaped
+// strings are decoded and copied into `owned`.
+std::string_view keyValueInto(std::vector<std::string>& owned, const char* s, size_t len, bool esc) {
+    if (!esc) return std::string_view(s, len);
+    size_t dn = decode(scratchBuf(len), s, len);
+    owned.emplace_back(scratch.data(), dn);
+    return owned.back();
+}
+
+long long parseAmount(const char* s, size_t len) {
+    long long ip = 0;
+    size_t j = 0;
+    while (j < len && s[j] >= '0' && s[j] <= '9') {
+        ip = ip * 10 + (s[j] - '0');
+        ++j;
     }
-}
-
-// Skips any JSON value (number, string, true/false/null, object, array).
-const char* skipValue(const char* p) {
-    if (*p == '"') return parseString(p).p + parseString(p).len + 1;
-    if (*p == '{' || *p == '[') {
-        int depth = 0;
-        for (;;) {
-            char c = *p;
-            if (c == '"') {
-                p = parseString(p).p + parseString(p).len + 1;
-                continue;
-            }
-            if (c == '{' || c == '[') ++depth;
-            else if (c == '}' || c == ']') {
-                if (--depth == 0) return p + 1;
-            }
-            ++p;
+    long long frac = 0;
+    int fd = 0;
+    if (j < len && s[j] == '.') {
+        ++j;
+        while (j < len && fd < 2 && s[j] >= '0' && s[j] <= '9') {
+            frac = frac * 10 + (s[j] - '0');
+            ++fd;
+            ++j;
         }
     }
-    while (*p != ',' && *p != '}' && *p != ']') ++p;
-    return p;
-}
-
-// Compares a (possibly escaped) string value against a plain ASCII literal.
-bool strEquals(const StrVal& sv, string_view lit) {
-    if (!sv.escaped) return sv.len == lit.size() && memcmp(sv.p, lit.data(), lit.size()) == 0;
-    return decodeString(sv.p, sv.len) == lit;
-}
-
-inline const char* skipWs(const char* p) {
-    while (isWs(*p)) ++p;
-    return p;
-}
-
-// Reads one "key": value pair key name as a raw slice starting at '"'.
-StrVal parseKey(const char* p) { return parseString(p); }
-
-int64_t parseUnsignedAmount(const StrVal& sv) {
-    // digits, optionally '.' plus one or two digits -> integer hundredths
-    const char* p = sv.p;
-    const char* end = sv.p + sv.len;
-    uint64_t whole = 0;
-    while (p < end && *p >= '0' && *p <= '9') whole = whole * 10 + (*p++ - '0');
-    uint32_t frac = 0;
-    if (p < end && *p == '.') {
-        ++p;
-        int d = *p++ - '0';
-        frac = uint32_t(d) * 10;
-        if (p < end) frac += uint32_t(*p - '0');
+    while (fd < 2) {
+        frac *= 10;
+        ++fd;
     }
-    return int64_t(whole * 100 + frac);
+    return ip * 100 + frac;
 }
 
-void appendInt(string& out, int64_t v) {
-    char buf[24];
-    auto res = to_chars(buf, buf + sizeof(buf), v);
-    out.append(buf, res.ptr);
+void appendInt(std::string& out, long long v) {
+    char tmp[24];
+    int k = 24;
+    bool neg = v < 0;
+    unsigned long long u = neg ? (0ULL - static_cast<unsigned long long>(v)) : static_cast<unsigned long long>(v);
+    do {
+        tmp[--k] = static_cast<char>('0' + (u % 10));
+        u /= 10;
+    } while (u);
+    if (neg) tmp[--k] = '-';
+    out.append(tmp + k, 24 - k);
 }
 
-void loadRates(const char* p, const char* lineEnd) {
-    (void)lineEnd;
-    p = skipWs(p);
-    if (*p != '{') return;
-    ++p;
-    for (;;) {
-        p = skipWs(p);
-        if (*p == '}') break;
-        StrVal key = parseKey(p);
-        p = skipWs(key.p + key.len + 1);
-        ++p; // ':'
-        p = skipWs(p);
-        if (strEquals(key, "rates")) {
-            p = skipWs(p);
-            ++p; // '{'
-            for (;;) {
-                p = skipWs(p);
-                if (*p == '}') break;
-                StrVal cur = parseKey(p);
-                p = skipWs(cur.p + cur.len + 1);
-                ++p; // ':'
-                p = skipWs(p);
-                bool neg = (*p == '-');
-                if (neg) ++p;
-                int64_t rate = 0;
-                while (*p >= '0' && *p <= '9') rate = rate * 10 + (*p++ - '0');
-                if (neg) rate = -rate;
-                string_view name(cur.p, cur.len);
-                if (cur.escaped) name = intern(decodeString(cur.p, cur.len));
-                g_rates.emplace(name, rate);
-                p = skipWs(p);
-                if (*p == ',') ++p;
-            }
-            ++p;
+void parseTags(bool& testTag) {
+    ++i;  // '['
+    while (true) {
+        skipWs();
+        if (p[i] == ']') {
+            ++i;
+            return;
+        }
+        if (p[i] == '"') {
+            scanString();
+            if (!testTag && strEq(p + sStart, sEnd - sStart, sEsc, "test", 4)) testTag = true;
         } else {
-            p = skipValue(p);
+            skipValue();
         }
-        p = skipWs(p);
-        if (*p == ',') ++p;
+        skipWs();
+        if (p[i] == ',') ++i;
     }
 }
 
-} // namespace
+void parseMeta(const char*& chPtr, size_t& chLen, bool& chEsc) {
+    ++i;  // '{'
+    while (true) {
+        skipWs();
+        if (p[i] == '}') {
+            ++i;
+            return;
+        }
+        scanString();
+        const char* ks = p + sStart;
+        size_t klen = sEnd - sStart;
+        bool kesc = sEsc;
+        skipWs();
+        ++i;  // ':'
+        skipWs();
+        if (!kesc && klen == 7 && memcmp(ks, "channel", 7) == 0) {
+            scanString();
+            chPtr = p + sStart;
+            chLen = sEnd - sStart;
+            chEsc = sEsc;
+        } else if (kesc && strEq(ks, klen, kesc, "channel", 7)) {
+            scanString();
+            chPtr = p + sStart;
+            chLen = sEnd - sStart;
+            chEsc = sEsc;
+        } else {
+            skipValue();
+        }
+        skipWs();
+        if (p[i] == ',') ++i;
+    }
+}
+
+}  // namespace
 
 int main(int argc, char** argv) {
     if (argc < 2) return 1;
     _setmode(_fileno(stdout), _O_BINARY);
+
     FILE* f = fopen(argv[1], "rb");
     if (!f) return 1;
     fseek(f, 0, SEEK_END);
-    long size = ftell(f);
+    long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
-    string data(size, '\0');
-    size_t got = fread(data.data(), 1, size_t(size), f);
+    std::vector<char> buf(static_cast<size_t>(sz));
+    if (sz > 0 && fread(buf.data(), 1, static_cast<size_t>(sz), f) != static_cast<size_t>(sz)) return 1;
     fclose(f);
-    if (got != size_t(size)) return 1;
 
-    const char* p = data.data();
-    const char* end = p + size;
+    p = buf.data();
+    n = static_cast<size_t>(sz);
+    i = 0;
 
-    // First line: rates.
-    const char* eol = (const char*)memchr(p, '\n', size_t(end - p));
-    if (!eol) eol = end;
-    loadRates(p, eol);
-    p = eol + 1;
+    HashMap<int64_t> rates;
+    HashMap<ChVal> channels;
+    HashMap<int64_t> accounts;
+    std::vector<std::string> ownedKeys;
 
-    int64_t totalNet = 0;
-    int64_t totalCount = 0;
-    int32_t sign = 0;
-    const int64_t* rate = nullptr;
-    int64_t amount = 0;
-    const char* accP = nullptr;
-    uint32_t accLen = 0;
-    bool accEsc = false;
-    StrVal chan{nullptr, 0, false};
-    bool isTest = false;
-
-    while (p < end) {
-        eol = (const char*)memchr(p, '\n', size_t(end - p));
-        if (!eol) eol = end;
-        const char* q = skipWs(p);
-        if (q < eol && *q == '{') {
-            ++q;
-            sign = 0;
-            rate = nullptr;
-            amount = 0;
-            accP = nullptr;
-            accLen = 0;
-            accEsc = false;
-            chan = {nullptr, 0, false};
-            isTest = false;
-            for (;;) {
-                q = skipWs(q);
-                if (*q == '}') { ++q; break; }
-                if (*q == ',') { ++q; continue; }
-                StrVal key = parseKey(q);
-                q = skipWs(key.p + key.len + 1);
-                ++q; // ':'
-                q = skipWs(q);
-                if (!key.escaped) {
-                    uint32_t kl = key.len;
-                    char k0 = kl ? key.p[0] : '\0';
-                    if (k0 == 't' && kl == 4 && memcmp(key.p, "type", 4) == 0) {
-                        StrVal v = parseString(q);
-                        q = v.p + v.len + 1;
-                        if (!v.escaped) {
-                            if (v.len == 6 && memcmp(v.p, "credit", 6) == 0) sign = 1;
-                            else if (v.len == 5 && memcmp(v.p, "debit", 5) == 0) sign = -1;
-                            else if (v.len == 6 && memcmp(v.p, "refund", 6) == 0) sign = 1;
-                        } else {
-                            if (strEquals(v, "credit") || strEquals(v, "refund")) sign = 1;
-                            else if (strEquals(v, "debit")) sign = -1;
-                        }
-                        continue;
-                    } else if (k0 == 'a' && kl == 6 && memcmp(key.p, "amount", 6) == 0) {
-                        StrVal v = parseString(q);
-                        q = v.p + v.len + 1;
-                        amount = parseUnsignedAmount(v);
-                        continue;
-                    } else if (k0 == 'c' && kl == 8 && memcmp(key.p, "currency", 8) == 0) {
-                        StrVal v = parseString(q);
-                        q = v.p + v.len + 1;
-                        rate = findRate(string_view(v.p, v.len));
-                        continue;
-                    } else if (k0 == 'a' && kl == 7 && memcmp(key.p, "account", 7) == 0) {
-                        StrVal v = parseString(q);
-                        q = v.p + v.len + 1;
-                        accP = v.p;
-                        accLen = v.len;
-                        accEsc = v.escaped;
-                        continue;
-                    } else if (k0 == 't' && kl == 4 && memcmp(key.p, "tags", 4) == 0) {
-                        // array of strings; look for "test"
-                        ++q; // '['
-                        for (;;) {
-                            q = skipWs(q);
-                            if (*q == ']') { ++q; break; }
-                            if (*q == '"') {
-                                StrVal v = parseString(q);
-                                q = v.p + v.len + 1;
-                                if (!isTest && strEquals(v, "test")) isTest = true;
-                            } else {
-                                q = skipValue(q);
-                            }
-                            q = skipWs(q);
-                            if (*q == ',') ++q;
-                        }
-                        continue;
-                    } else if (k0 == 'm' && kl == 4 && memcmp(key.p, "meta", 4) == 0) {
-                        // object; we only need meta.channel
-                        ++q; // '{'
-                        for (;;) {
-                            q = skipWs(q);
-                            if (*q == '}') { ++q; break; }
-                            StrVal mk = parseKey(q);
-                            q = skipWs(mk.p + mk.len + 1);
-                            ++q; // ':'
-                            q = skipWs(q);
-                            if (strEquals(mk, "channel")) {
-                                chan = parseString(q);
-                                q = chan.p + chan.len + 1;
-                            } else {
-                                q = skipValue(q);
-                            }
-                            q = skipWs(q);
-                            if (*q == ',') ++q;
-                        }
-                        continue;
-                    }
+    // ---- first line: rates ----
+    skipWs();
+    ++i;  // '{'
+    while (true) {
+        skipWs();
+        scanString();
+        const char* ks = p + sStart;
+        size_t klen = sEnd - sStart;
+        bool kesc = sEsc;
+        skipWs();
+        ++i;  // ':'
+        skipWs();
+        if (!kesc && klen == 5 && memcmp(ks, "rates", 5) == 0) {
+            ++i;  // '{'
+            while (true) {
+                skipWs();
+                if (p[i] == '}') {
+                    ++i;
+                    break;
                 }
-                q = skipValue(q);
+                scanString();
+                std::string_view cur = keyValueInto(ownedKeys, p + sStart, sEnd - sStart, sEsc);
+                skipWs();
+                ++i;  // ':'
+                skipWs();
+                int64_t r = 0;
+                while (p[i] >= '0' && p[i] <= '9') {
+                    r = r * 10 + (p[i] - '0');
+                    ++i;
+                }
+                uint64_t h = hashBytes(cur.data(), cur.size());
+                rates.at(cur.data(), static_cast<uint32_t>(cur.size()), h) = r;
+                skipWs();
+                if (p[i] == ',') ++i;
             }
-            if (sign != 0 && !isTest && rate != nullptr && accP != nullptr &&
-                chan.p != nullptr) {
-                int64_t usd = (amount * *rate) / int64_t(kMicro);
-                int64_t val = sign * usd;
-                ++totalCount;
-                totalNet += val;
-                string_view cname(chan.p, chan.len);
-                if (chan.escaped) cname = intern(decodeString(chan.p, chan.len));
-                if (ChannelAgg* ca = findChannel(cname)) {
-                    ca->count += 1;
-                    ca->net += val;
-                } else {
-                    string_view key = chan.escaped ? intern(decodeString(chan.p, chan.len)) : cname;
-                    g_channels.emplace(key, ChannelAgg{1, val});
-                }
-                string_view aname(accP, accLen);
-                if (accEsc) aname = decodeString(accP, accLen);
-                if (int64_t* an = findAccount(aname)) {
-                    *an += val;
-                } else {
-                    string_view key = accEsc ? intern(aname) : aname;
-                    g_accounts.emplace(key, val);
-                }
-            }
+        } else {
+            skipValue();
         }
-        p = eol < end ? eol + 1 : end;
+        skipWs();
+        if (p[i] == ',') {
+            ++i;
+            continue;
+        }
+        ++i;
+        break;
     }
 
-    string out;
-    out.reserve(1 << 16);
-    out += "counted ";
+    // ---- transactions ----
+    int64_t totalCount = 0;
+    int64_t totalNet = 0;
+
+    while (true) {
+        skipWs();
+        if (i >= n) break;
+        ++i;  // '{'
+
+        const char* typePtr = nullptr;
+        size_t typeLen = 0;
+        bool typeEsc = false;
+        const char* amtPtr = nullptr;
+        size_t amtLen = 0;
+        bool amtEsc = false;
+        const char* curPtr = nullptr;
+        size_t curLen = 0;
+        bool curEsc = false;
+        const char* accPtr = nullptr;
+        size_t accLen = 0;
+        bool accEsc = false;
+        const char* chPtr = nullptr;
+        size_t chLen = 0;
+        bool chEsc = false;
+        bool testTag = false;
+
+        while (true) {
+            skipWs();
+            scanString();
+            const char* ks = p + sStart;
+            size_t klen = sEnd - sStart;
+            bool kesc = sEsc;
+            skipWs();
+            ++i;  // ':'
+            skipWs();
+            if (!kesc) {
+                char c0 = klen ? ks[0] : 0;
+                if (klen == 4 && c0 == 't' && memcmp(ks, "type", 4) == 0) {
+                    scanString();
+                    typePtr = p + sStart;
+                    typeLen = sEnd - sStart;
+                    typeEsc = sEsc;
+                } else if (klen == 6 && memcmp(ks, "amount", 6) == 0) {
+                    scanString();
+                    amtPtr = p + sStart;
+                    amtLen = sEnd - sStart;
+                    amtEsc = sEsc;
+                } else if (klen == 8 && memcmp(ks, "currency", 8) == 0) {
+                    scanString();
+                    curPtr = p + sStart;
+                    curLen = sEnd - sStart;
+                    curEsc = sEsc;
+                } else if (klen == 7 && memcmp(ks, "account", 7) == 0) {
+                    scanString();
+                    accPtr = p + sStart;
+                    accLen = sEnd - sStart;
+                    accEsc = sEsc;
+                } else if (klen == 4 && c0 == 't' && memcmp(ks, "tags", 4) == 0) {
+                    parseTags(testTag);
+                } else if (klen == 4 && c0 == 'm' && memcmp(ks, "meta", 4) == 0) {
+                    parseMeta(chPtr, chLen, chEsc);
+                } else {
+                    skipValue();
+                }
+            } else {
+                size_t dn = decode(scratchBuf(klen), ks, klen);
+                if (dn == 4 && memcmp(scratch.data(), "type", 4) == 0) {
+                    scanString();
+                    typePtr = p + sStart;
+                    typeLen = sEnd - sStart;
+                    typeEsc = sEsc;
+                } else if (dn == 6 && memcmp(scratch.data(), "amount", 6) == 0) {
+                    scanString();
+                    amtPtr = p + sStart;
+                    amtLen = sEnd - sStart;
+                    amtEsc = sEsc;
+                } else if (dn == 8 && memcmp(scratch.data(), "currency", 8) == 0) {
+                    scanString();
+                    curPtr = p + sStart;
+                    curLen = sEnd - sStart;
+                    curEsc = sEsc;
+                } else if (dn == 7 && memcmp(scratch.data(), "account", 7) == 0) {
+                    scanString();
+                    accPtr = p + sStart;
+                    accLen = sEnd - sStart;
+                    accEsc = sEsc;
+                } else if (dn == 4 && memcmp(scratch.data(), "tags", 4) == 0) {
+                    parseTags(testTag);
+                } else if (dn == 4 && memcmp(scratch.data(), "meta", 4) == 0) {
+                    parseMeta(chPtr, chLen, chEsc);
+                } else {
+                    skipValue();
+                }
+            }
+            skipWs();
+            if (p[i] == ',') {
+                ++i;
+                continue;
+            }
+            ++i;  // '}'
+            break;
+        }
+
+        if (strEq(typePtr, typeLen, typeEsc, "void", 4)) continue;
+        if (testTag) continue;
+
+        // currency -> rate
+        std::string_view cur;
+        if (!curEsc) {
+            cur = std::string_view(curPtr, curLen);
+        } else {
+            size_t dn = decode(scratchBuf(curLen), curPtr, curLen);
+            cur = std::string_view(scratch.data(), dn);
+        }
+        uint64_t curHash = hashBytes(cur.data(), cur.size());
+        int64_t* rate = rates.find(cur.data(), static_cast<uint32_t>(cur.size()), curHash);
+        if (!rate) continue;
+
+        long long hund;
+        if (!amtEsc) {
+            hund = parseAmount(amtPtr, amtLen);
+        } else {
+            size_t dn = decode(scratchBuf(amtLen), amtPtr, amtLen);
+            hund = parseAmount(scratch.data(), dn);
+        }
+        long long usd = (hund * (*rate)) / 1000000;
+        long long v = strEq(typePtr, typeLen, typeEsc, "debit", 5) ? -usd : usd;
+
+        totalCount += 1;
+        totalNet += v;
+
+        // channel
+        std::string_view chKey;
+        if (!chEsc) {
+            chKey = std::string_view(chPtr, chLen);
+        } else {
+            size_t dn = decode(scratchBuf(chLen), chPtr, chLen);
+            channels.keep(scratch.data(), static_cast<uint32_t>(dn));
+            chKey = channels.owned.back();
+        }
+        uint64_t chHash = hashBytes(chKey.data(), chKey.size());
+        ChVal& cv = channels.at(chKey.data(), static_cast<uint32_t>(chKey.size()), chHash);
+        cv.net += v;
+        cv.count += 1;
+
+        // account
+        std::string_view accKey;
+        if (!accEsc) {
+            accKey = std::string_view(accPtr, accLen);
+        } else {
+            size_t dn = decode(scratchBuf(accLen), accPtr, accLen);
+            accounts.keep(scratch.data(), static_cast<uint32_t>(dn));
+            accKey = accounts.owned.back();
+        }
+        uint64_t accHash = hashBytes(accKey.data(), accKey.size());
+        accounts.at(accKey.data(), static_cast<uint32_t>(accKey.size()), accHash) += v;
+    }
+
+    // ---- output ----
+    std::string out;
+    out.reserve(1 << 20);
+    out.append("counted ", 8);
     appendInt(out, totalCount);
-    out += "\nnet ";
+    out.push_back('\n');
+    out.append("net ", 4);
     appendInt(out, totalNet);
-    out += '\n';
+    out.push_back('\n');
 
-    // Channel lines sorted by name ascending (byte order).
-    vector<const pair<const string_view, ChannelAgg>*> chans;
-    chans.reserve(g_channels.size());
-    for (const auto& kv : g_channels) chans.push_back(&kv);
-    sort(chans.begin(), chans.end(),
-         [](auto* a, auto* b) { return a->first < b->first; });
-    for (auto* kv : chans) {
-        out += "channel ";
-        out.append(kv->first.data(), kv->first.size());
-        out += ' ';
-        appendInt(out, kv->second.count);
-        out += ' ';
-        appendInt(out, kv->second.net);
-        out += '\n';
+    std::vector<const typename HashMap<ChVal>::Slot*> chRows;
+    chRows.reserve(channels.count);
+    for (const auto& s : channels.slots)
+        if (s.key) chRows.push_back(&s);
+    std::sort(chRows.begin(), chRows.end(), [](const HashMap<ChVal>::Slot* a, const HashMap<ChVal>::Slot* b) {
+        std::string_view ka(a->key, a->keyLen), kb(b->key, b->keyLen);
+        return ka < kb;
+    });
+    for (const auto* s : chRows) {
+        out.append("channel ", 8);
+        out.append(s->key, s->keyLen);
+        out.push_back(' ');
+        appendInt(out, s->val.count);
+        out.push_back(' ');
+        appendInt(out, s->val.net);
+        out.push_back('\n');
     }
 
-    // Top 10 accounts by net desc, then id asc.
-    vector<pair<int64_t, string_view>> accts;
-    accts.reserve(g_accounts.size());
-    for (const auto& kv : g_accounts) accts.emplace_back(kv.second, kv.first);
-    size_t take = min<size_t>(10, accts.size());
-    nth_element(accts.begin(), accts.begin() + take, accts.end(),
-                [](const auto& a, const auto& b) {
-                    if (a.first != b.first) return a.first > b.first;
-                    return a.second < b.second;
-                });
-    sort(accts.begin(), accts.begin() + take,
-         [](const auto& a, const auto& b) {
-             if (a.first != b.first) return a.first > b.first;
-             return a.second < b.second;
-         });
-    for (size_t i = 0; i < take; ++i) {
-        out += "account ";
-        out.append(accts[i].second.data(), accts[i].second.size());
-        out += ' ';
-        appendInt(out, accts[i].first);
-        out += '\n';
+    std::vector<std::pair<int64_t, std::string_view>> accRows;
+    accRows.reserve(accounts.count);
+    for (const auto& s : accounts.slots)
+        if (s.key) accRows.emplace_back(s.val, std::string_view(s.key, s.keyLen));
+    std::sort(accRows.begin(), accRows.end(), [](const auto& a, const auto& b) {
+        if (a.first != b.first) return a.first > b.first;
+        return a.second < b.second;
+    });
+    size_t lim = accRows.size() < 10 ? accRows.size() : 10;
+    for (size_t k = 0; k < lim; ++k) {
+        out.append("account ", 8);
+        out.append(accRows[k].second.data(), accRows[k].second.size());
+        out.push_back(' ');
+        appendInt(out, accRows[k].first);
+        out.push_back('\n');
     }
 
     fwrite(out.data(), 1, out.size(), stdout);

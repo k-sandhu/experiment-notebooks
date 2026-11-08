@@ -1,130 +1,162 @@
 #include <cstdio>
-#include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <vector>
-#include <algorithm>
+#include <io.h>
+#include <fcntl.h>
 
 using std::vector;
 
+static vector<char> readAll(const char* path) {
+    FILE* f = nullptr;
+    if (fopen_s(&f, path, "rb") != 0 || !f) {
+        std::fprintf(stderr, "cannot open input\n");
+        std::exit(1);
+    }
+    std::fseek(f, 0, SEEK_END);
+    long sz = std::ftell(f);
+    std::fseek(f, 0, SEEK_SET);
+    vector<char> buf((size_t)sz);
+    if (sz > 0 && std::fread(buf.data(), 1, (size_t)sz, f) != (size_t)sz) {
+        std::fclose(f);
+        std::fprintf(stderr, "read error\n");
+        std::exit(1);
+    }
+    std::fclose(f);
+    return buf;
+}
+
 static inline bool isWs(unsigned char c) {
-    return c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '\v' || c == '\f';
+    return c == ' ' || c == '\n' || c == '\r' || c == '\t';
 }
 
-// Returns pointer to next token, sets len. Advances p. Returns nullptr at EOF.
-static inline char* nextTok(char*& p, char* end, int& len) {
-    while (p < end && isWs((unsigned char)*p)) ++p;
-    if (p >= end) return nullptr;
-    char* start = p;
-    while (p < end && !isWs((unsigned char)*p)) ++p;
-    len = (int)(p - start);
-    return start;
-}
+struct Scanner {
+    const char* p;
+    const char* e;
+    const char* tok;
+    int tokLen;
 
-static inline long long toInt(const char* s, int len) {
-    long long v = 0;
-    for (int i = 0; i < len; ++i) v = v * 10 + (s[i] - '0');
-    return v;
-}
-
-static char* outBuf;
-static size_t outPos;
-
-static inline void writeInt(long long v) {
-    char tmp[20];
-    int k = 0;
-    if (v == 0) tmp[k++] = '0';
-    while (v > 0) { tmp[k++] = char('0' + v % 10); v /= 10; }
-    while (k > 0) outBuf[outPos++] = tmp[--k];
-    outBuf[outPos++] = '\n';
-}
+    void skip() {
+        while (p < e && isWs((unsigned char)*p)) ++p;
+    }
+    int64_t nextInt() {
+        skip();
+        bool neg = false;
+        if (p < e && (*p == '-' || *p == '+')) {
+            neg = (*p == '-');
+            ++p;
+        }
+        int64_t v = 0;
+        while (p < e && *p >= '0' && *p <= '9') {
+            v = v * 10 + (*p - '0');
+            ++p;
+        }
+        return neg ? -v : v;
+    }
+    void nextToken() {
+        skip();
+        tok = p;
+        while (p < e && !isWs((unsigned char)*p)) ++p;
+        tokLen = (int)(p - tok);
+    }
+};
 
 int main(int argc, char** argv) {
-    if (argc < 2) return 1;
-    FILE* f = fopen(argv[1], "rb");
-    if (!f) return 1;
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    vector<char> data(sz + 1);
-    size_t rd = fread(data.data(), 1, sz, f);
-    fclose(f);
-    char* end = data.data() + rd;
-
-    char* p = data.data();
-    int len;
-    char* tok = nextTok(p, end, len);
-    int A = len;
-    int charId[128];
-    for (int i = 0; i < 128; ++i) charId[i] = -1;
-    for (int i = 0; i < A; ++i) charId[(unsigned char)tok[i]] = i;
-
-    vector<int> ins(A), del(A), sub(A * A);
-    for (int i = 0; i < A; ++i) { tok = nextTok(p, end, len); ins[i] = (int)toInt(tok, len); }
-    for (int i = 0; i < A; ++i) { tok = nextTok(p, end, len); del[i] = (int)toInt(tok, len); }
-    for (int i = 0; i < A * A; ++i) { tok = nextTok(p, end, len); sub[i] = (int)toInt(tok, len); }
-    tok = nextTok(p, end, len);
-    int P = (int)toInt(tok, len);
-
-    // Output buffer: each line at most ~7 digits; pairs lines + total.
-    outBuf = (char*)malloc((size_t)P * 8 + 32);
-    outPos = 0;
-
-    vector<int> sIds, tIds;
-    sIds.reserve(1100);
-    tIds.reserve(1100);
-    vector<int> prevRow(1101), curRow(1101);
-    int* prev = prevRow.data();
-    int* cur = curRow.data();
-
-    long long total = 0;
-    const int* subp = sub.data();
-    const int* insp = ins.data();
-    const int* delp = del.data();
-
-    for (int q = 0; q < P; ++q) {
-        tok = nextTok(p, end, len);
-        int n = len;
-        sIds.clear();
-        for (int i = 0; i < n; ++i) sIds.push_back(charId[(unsigned char)tok[i]]);
-        tok = nextTok(p, end, len);
-        int m = len;
-        tIds.clear();
-        for (int j = 0; j < m; ++j) tIds.push_back(charId[(unsigned char)tok[j]]);
-        const int* t = tIds.data();
-        const int* s = sIds.data();
-
-        prev[0] = 0;
-        for (int j = 1; j <= m; ++j) prev[j] = prev[j - 1] + insp[t[j - 1]];
-        for (int i = 0; i < n; ++i) {
-            const int si = s[i];
-            const int dc = delp[si];
-            const int* subRow = subp + (size_t)si * A;
-            int left = prev[0] + dc;
-            cur[0] = left;
-            const int* upRow = prev;
-            const int* pv = prev;
-            int diag = prev[0];
-            for (int j = 1; j <= m; ++j) {
-                const int tj = t[j - 1];
-                int best = pv[j] + dc;                 // deletion
-                const int l = left + insp[tj];         // insertion
-                const int d = diag + subRow[tj];       // substitution
-                if (l < best) best = l;
-                if (d < best) best = d;
-                cur[j] = best;
-                left = best;
-                diag = pv[j];
-            }
-            int* tmp = prev; prev = cur; cur = tmp;
-        }
-        long long cost = prev[m];
-        total += cost;
-        writeInt(cost);
+    if (argc < 2) {
+        std::fprintf(stderr, "usage: solution INPUT_PATH\n");
+        return 1;
     }
+    vector<char> buf = readAll(argv[1]);
+    Scanner sc{buf.data(), buf.data() + buf.size(), nullptr, 0};
 
-    memcpy(outBuf + outPos, "total ", 6);
-    outPos += 6;
-    writeInt(total);
-    fwrite(outBuf, 1, outPos, stdout);
+    sc.nextToken();
+    const int A = sc.tokLen;
+    int idx[256];
+    for (int i = 0; i < 256; ++i) idx[i] = -1;
+    for (int i = 0; i < A; ++i) idx[(unsigned char)sc.tok[i]] = i;
+
+    int ins[26], del[26], sub[26][26];
+    for (int i = 0; i < A; ++i) ins[i] = (int)sc.nextInt();
+    for (int i = 0; i < A; ++i) del[i] = (int)sc.nextInt();
+    for (int i = 0; i < A; ++i)
+        for (int j = 0; j < A; ++j) sub[i][j] = (int)sc.nextInt();
+
+    const int64_t P = sc.nextInt();
+    _setmode(_fileno(stdout), _O_BINARY);
+
+    vector<int32_t> tIdx, insT;
+    vector<int32_t> row(1, 0);
+    vector<char> out;
+    out.reserve((size_t)P * 16 + 32);
+    int64_t total = 0;
+
+    char tmp[24];
+    auto appendInt = [&](int64_t v) {
+        int k = 0;
+        if (v < 0) {
+            out.push_back('-');
+            v = -v;
+        }
+        if (v == 0) tmp[k++] = '0';
+        while (v > 0) {
+            tmp[k++] = char('0' + v % 10);
+            v /= 10;
+        }
+        while (k > 0) out.push_back(tmp[--k]);
+    };
+
+    for (int64_t q = 0; q < P; ++q) {
+        sc.nextToken();
+        const char* s = sc.tok;
+        const int n = sc.tokLen;
+        sc.nextToken();
+        const char* t = sc.tok;
+        const int m = sc.tokLen;
+
+        if ((int)row.size() < m + 1) row.resize(m + 1);
+        tIdx.resize(m);
+        insT.resize(m);
+        for (int j = 0; j < m; ++j) {
+            int c = idx[(unsigned char)t[j]];
+            tIdx[j] = (int32_t)c;
+            insT[j] = (int32_t)ins[c];
+        }
+
+        int32_t* r = row.data();
+        r[0] = 0;
+        for (int j = 0; j < m; ++j) r[j + 1] = r[j] + insT[j];
+
+        for (int i = 0; i < n; ++i) {
+            const int si = idx[(unsigned char)s[i]];
+            const int32_t dl = del[si];
+            const int32_t* subr = sub[si];
+            int32_t diag = r[0];
+            r[0] = diag + dl;
+            for (int j = 0; j < m; ++j) {
+                const int32_t up = r[j + 1];
+                int32_t v = up + dl;
+                int32_t x = r[j] + insT[j];
+                if (x < v) v = x;
+                x = diag + subr[tIdx[j]];
+                if (x < v) v = x;
+                r[j + 1] = v;
+                diag = up;
+            }
+        }
+
+        const int64_t cost = row[m];
+        total += cost;
+        appendInt(cost);
+        out.push_back('\n');
+    }
+    out.push_back('t');
+    out.push_back('o');
+    out.push_back('t');
+    out.push_back('a');
+    out.push_back('l');
+    out.push_back(' ');
+    appendInt(total);
+    out.push_back('\n');
+    std::fwrite(out.data(), 1, out.size(), stdout);
     return 0;
 }

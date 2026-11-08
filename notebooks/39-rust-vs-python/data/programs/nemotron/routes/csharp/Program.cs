@@ -1,52 +1,78 @@
-// Routes: shortest road distances from several sources.
-// Multi-source Dijkstra (one run per source) over an undirected graph.
-// C# 12, .NET 8, BCL only.
-//
-// Graph is stored in CSR form: start[node..node+1) indexes into gto/gw.
-// Distances are int: any simple path has at most N-1 edges of weight <= 1000,
-// so a distance never exceeds (N-1)*1000 < 2^31. Totals need long.
-
 using System;
 using System.IO;
 using System.Text;
 
-internal static class Program
+class Program
 {
-    private static byte[] buf;
-    private static int pos;
+    static byte[] data;
+    static int pos;
+    static int len;
 
-    private const int INF = int.MaxValue;
-
-    private static int NextInt()
+    static int ReadInt()
     {
-        while (pos < buf.Length && buf[pos] <= 32) pos++;
-        bool neg = false;
-        if (pos < buf.Length && buf[pos] == 45) { neg = true; pos++; }
-        int v = 0;
-        while (pos < buf.Length && buf[pos] >= 48 && buf[pos] <= 57) {
-            v = v * 10 + (buf[pos] - 48);
+        while (pos < len && (data[pos] < '0' || data[pos] > '9')) pos++;
+        int x = 0;
+        while (pos < len && data[pos] >= '0' && data[pos] <= '9') {
+            x = x * 10 + (data[pos] - '0');
             pos++;
         }
-        return neg ? -v : v;
+        return x;
     }
 
-    private static void Main(string[] args)
+    static void HeapPush(long[] h, ref int n, long x)
     {
-        buf = File.ReadAllBytes(args[0]);
-        pos = 0;
+        if (n == h.Length) {
+            long[] g = new long[n * 2 + 1];
+            Array.Copy(h, 0, g, 0, n);
+            h = g;
+        }
+        int i = n++;
+        while (i > 0) {
+            int p = (i - 1) / 2;
+            if (h[p] <= x) break;
+            h[i] = h[p];
+            i = p;
+        }
+        h[i] = x;
+    }
 
-        int N = NextInt();
-        int M = NextInt();
-        int Q = NextInt();
+    static long HeapPop(long[] h, ref int n)
+    {
+        long top = h[0];
+        long x = h[--n];
+        if (n > 0) {
+            int i = 0;
+            h[0] = x;
+            for (;;) {
+                int c = 2 * i + 1;
+                if (c >= n) break;
+                if (c + 1 < n && h[c + 1] < h[c]) c++;
+                if (h[c] >= x) break;
+                h[i] = h[c];
+                i = c;
+            }
+            h[i] = x;
+        }
+        return top;
+    }
 
-        int[] deg = new int[N + 1];
+    static void Main(string[] args)
+    {
+        data = File.ReadAllBytes(args[0]);
+        len = data.Length;
+
+        int N = ReadInt();
+        int M = ReadInt();
+        int Q = ReadInt();
+
         int[] eu = new int[M];
         int[] ev = new int[M];
         int[] ew = new int[M];
+        int[] deg = new int[N];
         for (int i = 0; i < M; i++) {
-            int u = NextInt();
-            int v = NextInt();
-            int w = NextInt();
+            int u = ReadInt();
+            int v = ReadInt();
+            int w = ReadInt();
             eu[i] = u;
             ev[i] = v;
             ew[i] = w;
@@ -54,106 +80,78 @@ internal static class Program
             deg[v]++;
         }
 
-        int[] start = new int[N + 1];
-        for (int i = 0; i < N; i++) start[i + 1] = start[i] + deg[i];
-
-        int totalEdges = 2 * M;
-        int[] gto = new int[totalEdges];
-        int[] gw = new int[totalEdges];
+        int[] off = new int[N + 1];
+        for (int i = 0; i < N; i++) off[i + 1] = off[i] + deg[i];
+        int[] to = new int[2 * M];
+        int[] wt = new int[2 * M];
         int[] cur = new int[N];
-        Array.Copy(start, cur, N);
+        Array.Copy(off, 0, cur, 0, N);
         for (int i = 0; i < M; i++) {
             int u = eu[i];
             int v = ev[i];
             int w = ew[i];
             int p = cur[u]++;
-            gto[p] = v;
-            gw[p] = w;
-            p = cur[v]++;
-            gto[p] = u;
-            gw[p] = w;
+            to[p] = v;
+            wt[p] = w;
+            int q = cur[v]++;
+            to[q] = u;
+            wt[q] = w;
         }
+
+        int[] sources = new int[Q];
+        for (int i = 0; i < Q; i++) sources[i] = ReadInt();
 
         int[] dist = new int[N];
-        int[] hd = new int[Math.Max(16, M)];
-        int[] hn = new int[Math.Max(16, M)];
-        int hsize = 0;
-
-        void Push(int d, int n)
-        {
-            int i = hsize++;
-            hd[i] = d;
-            hn[i] = n;
-            while (i > 0) {
-                int p = (i - 1) / 2;
-                if (hd[p] <= d) break;
-                hd[i] = hd[p];
-                hn[i] = hn[p];
-                i = p;
-            }
-            hd[i] = d;
-            hn[i] = n;
-        }
-
+        long[] h = new long[Math.Max(M + 1, 1)];
+        int hn = 0;
         var sb = new StringBuilder();
-        for (int q = 0; q < Q; q++) {
-            int s = NextInt();
-            Array.Fill(dist, INF);
+
+        for (int i = 0; i < Q; i++) {
+            int s = sources[i];
+            Array.Fill(dist, int.MaxValue);
             dist[s] = 0;
-            hsize = 0;
-            Push(0, s);
-            while (hsize > 0) {
-                int d = hd[0];
-                int u = hn[0];
-                --hsize;
-                if (hsize > 0) {
-                    int lastD = hd[hsize];
-                    int lastN = hn[hsize];
-                    int i = 0;
-                    for (;;) {
-                        int l = 2 * i + 1;
-                        int r = l + 1;
-                        if (l >= hsize) break;
-                        int child = l;
-                        if (r < hsize && hd[r] < hd[l]) child = r;
-                        if (hd[child] >= lastD) break;
-                        hd[i] = hd[child];
-                        hn[i] = hn[child];
-                        i = child;
-                    }
-                    hd[i] = lastD;
-                    hn[i] = lastN;
-                }
-                if (d > dist[u]) continue;
-                for (int e = start[u]; e < start[u + 1]; e++) {
-                    int v = gto[e];
-                    int nd = d + gw[e];
-                    if (nd < dist[v]) {
-                        dist[v] = nd;
-                        Push(nd, v);
+            hn = 0;
+            HeapPush(h, ref hn, ((long)0 << 32) | (long)(uint)s);
+
+            while (hn > 0) {
+                long packed = HeapPop(h, ref hn);
+                int d = (int)(packed >> 32);
+                int v = (int)(packed & 0xFFFFFFFFL);
+                if (d > dist[v]) continue; // stale entry
+                int e0 = off[v];
+                int e1 = off[v + 1];
+                for (int e = e0; e < e1; e++) {
+                    int t = to[e];
+                    int nd = d + wt[e];
+                    if (nd < dist[t]) {
+                        dist[t] = nd;
+                        HeapPush(h, ref hn, ((long)nd << 32) | (long)(uint)t);
                     }
                 }
             }
 
-            int R = 0;
+            long reach = 0;
             long total = 0;
-            int far = -1;
+            long far = -1;
             int node = -1;
-            for (int i = 0; i < N; i++) {
-                int d = dist[i];
-                if (d != INF) {
-                    R++;
-                    total += d;
-                    if (d > far) {
-                        far = d;
-                        node = i;
+            for (int v = 0; v < N; v++) {
+                int dv = dist[v];
+                if (dv != int.MaxValue) {
+                    reach++;
+                    total += dv;
+                    if (dv > far) {
+                        far = dv;
+                        node = v;
                     }
                 }
             }
-            sb.Append(s).Append(' ').Append(R).Append(' ').Append(total)
-              .Append(' ').Append(far).Append(' ').Append(node).Append('\n');
+
+            sb.Append(s).Append(' ').Append(reach).Append(' ').Append(total).Append(' ').Append(far).Append(' ').Append(node).Append('\n');
         }
 
-        Console.Write(sb.ToString());
+        // Write raw bytes so '\n' stays '\n' regardless of console code page.
+        byte[] outBytes = Encoding.UTF8.GetBytes(sb.ToString());
+        using var stdout = Console.OpenStandardOutput();
+        stdout.Write(outBytes, 0, outBytes.Length);
     }
 }

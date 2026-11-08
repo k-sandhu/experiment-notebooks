@@ -1,66 +1,79 @@
-// Routes: shortest road distances from several sources.
-// Multi-source Dijkstra (one run per source) over an undirected graph.
-// Go 1.27, standard library only.
-//
-// Graph is stored in CSR form: start[node..node+1) indexes into gto/gw.
-// Distances are int: any simple path has at most N-1 edges of weight <= 1000,
-// so a distance never exceeds (N-1)*1000 < 2^31. Totals need int (64-bit here).
-
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"os"
-	"strconv"
-	"strings"
+	"math"
 )
 
-var buf []byte
-var pos int
+var (
+	data []byte
+	pos  int
+	dataLen int
+)
 
-func nextInt() int {
-	for pos < len(buf) && buf[pos] <= 32 {
+func readInt() int {
+	for pos < dataLen && (data[pos] < '0' || data[pos] > '9') {
 		pos++
 	}
-	neg := false
-	if pos < len(buf) && buf[pos] == '-' {
-		neg = true
+	x := 0
+	for pos < dataLen && data[pos] >= '0' && data[pos] <= '9' {
+		x = x*10 + int(data[pos]-'0')
 		pos++
 	}
-	v := 0
-	for pos < len(buf) && buf[pos] >= '0' && buf[pos] <= '9' {
-		v = v*10 + int(buf[pos]-'0')
-		pos++
-	}
-	if neg {
-		v = -v
-	}
-	return v
+	return x
 }
 
-const INF = int(^uint(0) >> 1) // math.MaxInt
-
-var N, M, Q int
-var start, gto, gw []int
+func heapPop(h []uint64, n int) (uint64, int) {
+	top := h[0]
+	n--
+	x := h[n]
+	if n > 0 {
+		i := 0
+		h[0] = x
+		for {
+			c := 2*i + 1
+			if c >= n {
+				break
+			}
+			if c+1 < n && h[c+1] < h[c] {
+				c++
+			}
+			if h[c] >= x {
+				break
+			}
+			h[i] = h[c]
+			i = c
+		}
+		h[i] = x
+	}
+	return top, n
+}
 
 func main() {
-	var err error
-	buf, err = os.ReadFile(os.Args[1])
-	if err != nil {
-		os.Exit(1)
+	if len(os.Args) < 2 {
+		return
 	}
+	var err error
+	data, err = os.ReadFile(os.Args[1])
+	if err != nil {
+		return
+	}
+	dataLen = len(data)
 
-	N = nextInt()
-	M = nextInt()
-	Q = nextInt()
+	N := readInt()
+	M := readInt()
+	Q := readInt()
 
-	deg := make([]int, N+1)
 	eu := make([]int, M)
 	ev := make([]int, M)
 	ew := make([]int, M)
+	deg := make([]int, N)
 	for i := 0; i < M; i++ {
-		u := nextInt()
-		v := nextInt()
-		w := nextInt()
+		u := readInt()
+		v := readInt()
+		w := readInt()
 		eu[i] = u
 		ev[i] = v
 		ew[i] = w
@@ -68,136 +81,105 @@ func main() {
 		deg[v]++
 	}
 
-	start = make([]int, N+1)
+	off := make([]int, N + 1)
 	for i := 0; i < N; i++ {
-		start[i+1] = start[i] + deg[i]
+		off[i+1] = off[i] + deg[i]
 	}
-
-	totalEdges := 2 * M
-	gto = make([]int, totalEdges)
-	gw = make([]int, totalEdges)
+	to := make([]int, 2 * M)
+	wt := make([]int, 2 * M)
 	cur := make([]int, N)
-	copy(cur, start)
+	copy(cur, off[:N])
 	for i := 0; i < M; i++ {
 		u := eu[i]
 		v := ev[i]
 		w := ew[i]
 		p := cur[u]
 		cur[u]++
-		gto[p] = v
-		gw[p] = w
-		p = cur[v]
+		to[p] = v
+		wt[p] = w
+		q := cur[v]
 		cur[v]++
-		gto[p] = u
-		gw[p] = w
+		to[q] = u
+		wt[q] = w
+	}
+
+	sources := make([]int, Q)
+	for i := 0; i < Q; i++ {
+		sources[i] = readInt()
 	}
 
 	dist := make([]int, N)
-	cap := 16
-	if M > cap {
-		cap = M
-	}
-	hd := make([]int, 0, cap)
-	hn := make([]int, 0, cap)
+	const inf = math.MaxInt32
+	h := make([]uint64, 0, M + 1)
+	hn := 0
 
-	push := func(d, n int) {
-		i := len(hd)
-		hd = append(hd, d)
-		hn = append(hn, n)
-		for i > 0 {
-			p := (i - 1) / 2
-			if hd[p] <= d {
-				break
-			}
-			hd[i] = hd[p]
-			hn[i] = hn[p]
-			i = p
-		}
-		hd[i] = d
-		hn[i] = n
-	}
-
-	var sb strings.Builder
-	for q := 0; q < Q; q++ {
-		s := nextInt()
+	w := bufio.NewWriter(os.Stdout)
+	for _, s := range sources {
 		for i := range dist {
-			dist[i] = INF
+			dist[i] = inf
 		}
 		dist[s] = 0
-		hd = hd[:0]
-		hn = hn[:0]
-		push(0, s)
-		for len(hd) > 0 {
-			d := hd[0]
-			u := hn[0]
-			last := len(hd) - 1
-			hd[0] = hd[last]
-			hn[0] = hn[last]
-			hd = hd[:last]
-			hn = hn[:last]
-			if len(hd) > 0 {
-				movedD := hd[0]
-				movedN := hn[0]
-				i := 0
-				for {
-					l := 2*i + 1
-					r := l + 1
-					if l >= len(hd) {
-						break
-					}
-					child := l
-					if r < len(hd) && hd[r] < hd[l] {
-						child = r
-					}
-					if hd[child] >= movedD {
-						break
-					}
-					hd[i] = hd[child]
-					hn[i] = hn[child]
-					i = child
-				}
-				hd[i] = movedD
-				hn[i] = movedN
+		hn = 0
+		h = h[:0]
+		h, hn = heapPushAppend(h[:0], 0, (uint64(0)<<32)|uint64(s))
+
+		for hn > 0 {
+			var packed uint64
+			packed, hn = heapPop(h, hn)
+			d := int(packed >> 32)
+			v := int(packed & 0xFFFFFFFF)
+			if d > dist[v] {
+				continue // stale entry
 			}
-			if d > dist[u] {
-				continue
-			}
-			for e := start[u]; e < start[u+1]; e++ {
-				v := gto[e]
-				nd := d + gw[e]
-				if nd < dist[v] {
-					dist[v] = nd
-					push(nd, v)
+			e0 := off[v]
+			e1 := off[v+1]
+			for e := e0; e < e1; e++ {
+				t := to[e]
+				nd := d + wt[e]
+				if nd < dist[t] {
+					dist[t] = nd
+					h, hn = heapPushAppend(h, hn, (uint64(nd) << 32) | uint64(t))
 				}
 			}
 		}
 
-		R := 0
-		total := int64(0)
+		reach := 0
+		var total int64
 		far := -1
 		node := -1
-		for i := 0; i < N; i++ {
-			d := dist[i]
-			if d != INF {
-				R++
-				total += int64(d)
-				if d > far {
-					far = d
-					node = i
+		for v := 0; v < N; v++ {
+			dv := dist[v]
+			if dv != inf {
+				reach++
+				total += int64(dv)
+				if dv > far {
+					far = dv
+					node = v
 				}
 			}
 		}
-		sb.WriteString(strconv.Itoa(s))
-		sb.WriteByte(' ')
-		sb.WriteString(strconv.Itoa(R))
-		sb.WriteByte(' ')
-		sb.WriteString(strconv.FormatInt(total, 10))
-		sb.WriteByte(' ')
-		sb.WriteString(strconv.Itoa(far))
-		sb.WriteByte(' ')
-		sb.WriteString(strconv.Itoa(node))
-		sb.WriteByte('\n')
-	}
 
-	os.Stdout.WriteString(sb.String())
+		fmt.Fprintf(w, "%d %d %d %d %d\n", s, reach, total, far, node)
+	}
+	w.Flush()
+}
+
+func heapPushAppend(h []uint64, n int, x uint64) ([]uint64, int) {
+	if n == len(h) {
+		g := make([]uint64, n*2+1)
+		copy(g, h[:n])
+		h = g
+	}
+	i := n
+	n++
+	for i > 0 {
+		p := (i - 1) / 2
+		if h[p] <= x {
+			break
+		}
+		h[i] = h[p]
+		i = p
+	}
+	h[i] = x
+	return h, n
 }
