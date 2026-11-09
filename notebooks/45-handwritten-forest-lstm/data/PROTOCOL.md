@@ -73,3 +73,40 @@ Written before any main-collection reply was scored.
 ## Main collection log
 
 Entries are added as the collection runs.
+
+- 9 November, 15:23: repeat 0 of all 48 model and task pairs started.
+- 9 November, 15:46: the first 16 replies (from all four interfaces) showed no harness fault, so repeats 1 and 2
+  started in a second process while repeat 0 finished (at most 8 Claude, 3 Codex, 3 Muse and 10 OpenRouter
+  requests at a time across both processes).
+- 9 November, 16:22: repeat 0 complete (48 replies). To shorten the wait for Muse, whose replies took up to 42
+  minutes, a third process started on repeat 2 for Muse and the three open-weight models (2 Muse and 4 OpenRouter
+  requests at a time). The second process skips any request whose reply file already exists when it reaches it.
+- 9 November, 15:45 (first case) and 16:50 (decision), amendment to the forest loader: Kimi K3.1 Pro's first rules-600 forest points three
+  parents at one shared leaf, and later replies from GPT-6.1 Sol (smooth-600) and Muse Wonder Full (rules-1500) do
+  the same. The pilot's loader rejected any node reached twice, so strictly such a forest is a graph, not a tree.
+  The prompt does not forbid it (its rules are unique integer ids, node 0 as root, every child id present, leaves of
+  four non-negative numbers, the size limits), and the inference code runs it correctly. The main parser now checks
+  exactly the stated rules plus no loops; a forest with shared nodes is flagged (`shared_nodes`) and the notebook
+  also reports every result under the pilot's tree-only rule. Changed after 96 of 144 replies had been collected
+  and some scored; the lenient parser (first complete JSON object anywhere in the reply) is unchanged.
+- Note on stored reasoning text: the OpenRouter streaming reader decoded the event stream as Latin-1, so non-ASCII
+  characters in the stored `reasoning_text` of OpenRouter replies appear garbled (repair with
+  `text.encode("latin-1").decode("utf-8")`). The JSON answers are plain ASCII and are not affected.
+- 9 November, 17:06: 112 of 144 replies collected. A fourth process took Muse's repeat 1 for the two LSTM tasks,
+  which the second process would not reach for at least 40 minutes.
+- 9 November, 17:15, amendment to how a Claude reply is read: Claude Code caps each message (64,000 output tokens
+  for Fable 5.1, 128,000 for Opus and Sonnet) and, when a message reaches the cap, continues the reply in a second
+  message, reporting only the last message as the result. One Fable rules-1500 forest was split this way, so the
+  stored result held only the second half of the JSON and failed to parse. The notebook now joins the text of all
+  the reply's messages. Three Claude replies ran to two messages; two of them used more than the 128,000 output
+  tokens the open-weight models were held to (Fable rules-1500 repeat 2: 138,847; Opus smooth-600 repeat 1:
+  156,993). The notebook reports the effect of counting those as cut off.
+- 9 November, 17:46: all 144 replies collected. The second and third processes overlapped on repeat 2 of the three
+  open-weight models: the second process reached those requests while the third was still running them, so 13
+  requests (5 Kimi, 5 GLM, 3 DeepSeek) were sent twice, at an extra cost of US$5.64. In each pair the reply that
+  finished second overwrote the first in `data/responses/`; that is the reply the notebook scores. The overwritten
+  replies were recovered from the local Langfuse traces into `data/duplicates/` (reply text, status, token counts and
+  times), and the notebook reports the medians with them instead. For two GLM pairs one copy was cut off and the other
+  produced text.
+- Transport errors: 4 attempts, all GLM 5.3 through OpenRouter (504 upstream idle timeout three times, one 502
+  "JSON error injected into SSE stream"); each was retried and the retry completed. 161 attempts in all.
