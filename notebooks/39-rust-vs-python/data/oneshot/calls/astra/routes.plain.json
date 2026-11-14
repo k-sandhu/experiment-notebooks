@@ -1,0 +1,58 @@
+{
+  "cli_cost_usd": null,
+  "cli_version": "codex-cli 0.160.1",
+  "end_utc": "2026-11-12T04:34:26.322557+00:00",
+  "exit_code": 0,
+  "list_cost_usd": 0.193672,
+  "parse": {
+    "blocks": 1,
+    "empty": false,
+    "status": "ok"
+  },
+  "reply": "```python\nimport gc\nimport heapq\nimport sys\n\n\ndef shortest_routes(graph, source, infinity):\n    distances = [infinity] * len(graph)\n    distances[source] = 0\n\n    # Pending distances span at most 1000, so circular buckets cannot collide.\n    buckets = [[] for _ in range(1001)]\n    buckets[0].append(source)\n    queue = [0]\n\n    push = heapq.heappush\n    pop = heapq.heappop\n\n    reachable = 0\n    total = 0\n    farthest = 0\n    farthest_node = source\n    node_count = len(graph)\n\n    while queue:\n        current = pop(queue)\n        index = current % 1001\n        nodes = buckets[index]\n        buckets[index] = []\n\n        count = 0\n        smallest = node_count\n\n        for u in nodes:\n            if distances[u] != current:\n                continue\n\n            count += 1\n            if u < smallest:\n                smallest = u\n\n            for v, weight in graph[u]:\n                candidate = current + weight\n                if candidate < distances[v]:\n                    distances[v] = candidate\n                    bucket = buckets[candidate % 1001]\n                    if not bucket:\n                        push(queue, candidate)\n                    bucket.append(v)\n\n        if count:\n            reachable += count\n            total += current * count\n            farthest = current\n            farthest_node = smallest\n\n    return reachable, total, farthest, farthest_node\n\n\ndef main():\n    gc.disable()\n\n    with open(sys.argv[1], \"rb\") as input_file:\n        readline = input_file.readline\n        n, m, q = map(int, readline().split())\n        graph = [[] for _ in range(n)]\n\n        for _ in range(m):\n            u, v, weight = map(int, readline().split())\n            if u != v:\n                graph[u].append((v, weight))\n                graph[v].append((u, weight))\n\n        sources = list(map(int, readline().split()))\n\n    infinity = n * 1000 + 1\n    results = {}\n    output = []\n\n    for source in sources:\n        result = results.get(source)\n        if result is None:\n            if graph[source]:\n                result = shortest_routes(graph, source, infinity)\n            else:\n                result = (1, 0, 0, source)\n            results[source] = result\n\n        reachable, total, farthest, node = result\n        output.append(f\"{source} {reachable} {total} {farthest} {node}\")\n\n    if output:\n        sys.stdout.write(\"\\n\".join(output) + \"\\n\")\n\n\nif __name__ == \"__main__\":\n    main()\n```",
+  "reported_model": null,
+  "request": {
+    "cli": "codex",
+    "effort": "high",
+    "flags": [
+      "exec",
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=\"high\"",
+      "-c",
+      "model_instructions_file=\"{system_file}\"",
+      "-c",
+      "approval_policy=\"never\"",
+      "--ignore-user-config",
+      "--ephemeral",
+      "--sandbox",
+      "read-only",
+      "--skip-git-repo-check",
+      "-C",
+      "{folder}",
+      "--json",
+      "-o",
+      "{last_file}",
+      "-"
+    ],
+    "model": "gpt-6-astra",
+    "prompt": "Write one complete Python program for the task below. It will be compiled and run automatically with no\nhuman in the loop, and judged first on whether its output is exactly right and then on how fast it runs.\n\n## The program\n\n- File: `plain.py`.\n- Interpreter: CPython 3.13 on Windows.\n- Libraries: the standard library only. No third-party packages (no NumPy).\n\n## How it is run\n\n- Command: `C:\\Python313\\python.exe plain.py INPUT_PATH`. `INPUT_PATH` is the path of the input file.\n- Read the input only from that file. Do not read standard input or any other file, and do not wait for\n  anything.\n- Write the answer to standard output and nothing else: no prompts, labels, debug lines or blank lines.\n  Standard error is ignored. Exit with status 0.\n\n## Output rules that apply to every task\n\n- Print the lines in exactly the order and form the task gives. Each line starts with its keyword (where the\n  task shows one) and its fields are separated by exactly one space, with no spaces at the start or end.\n- End every line with a newline, including the last one. `\\r\\n` line endings are also accepted.\n- Print integers in plain decimal: an optional leading `-` and digits only, with no `+`, no thousands\n  separators, no decimal point and no exponent.\n\n## The task\n\n<task>\n# Routes\n\nFind the shortest road distances from a few starting points in a large road network.\n\n## Input\n\n```\nN M Q\nu v w\n...\ns1 s2 ... sQ\n```\n\nThe first line gives the number of nodes N, the number of roads M and the number of sources Q. Nodes are\nnumbered 0 to N-1. Each of the next M lines is an undirected road between nodes u and v with length w, an\ninteger from 1 to 1000. There can be several roads between the same two nodes, and roads from a node to\nitself. The last line lists the Q source nodes, separated by single spaces. Some nodes cannot be reached from\nsome sources.\n\n## Output\n\nOne line per source, in input order:\n\n```\ns R TOTAL FAR NODE\n```\n\ns is the source. R is the number of nodes reachable from s, counting s itself. TOTAL is the sum of the\nshortest distances from s to all reachable nodes, and FAR is the largest of those distances. NODE is the\nsmallest node number whose shortest distance from s equals FAR. All values fit in a signed 64-bit integer.\n\n## Benchmark size\n\nN = 300,000 nodes, M = 900,000 roads and Q = 6 sources. The samples are smaller.\n</task>\n\n## Exact input and output for this task\n\n- Input: line 1 is `N M Q`. Then exactly M lines `u v w` with 0 <= u, v < N and 1 <= w <= 1000, then one line\n  with Q source node numbers separated by single spaces. Roads are undirected. A road can join a node to\n  itself, and several roads with different lengths can join the same two nodes.\n- Output: exactly Q lines, one per source in input order, `s R TOTAL FAR NODE`, and nothing else.\n- R counts the reachable nodes, including s itself at distance 0. A source with no roads prints `s 1 0 0 s`.\n  Unreachable nodes are left out of R, TOTAL, FAR and NODE.\n- TOTAL can exceed 2^31, so add it up in 64 bits. NODE is the smallest node number whose shortest distance\n  equals FAR.\n\n## Examples\n\nEach example is a complete input file and the exact output your program must print for it.\n\nExample `s1` input:\n\n<input>\n12 36 6\n0 1 5\n0 2 5\n3 4 2\n4 5 2\n6 7 1\n8 9 3\n0 0 1\n6 7 4\n6 7 6\n4 5 2\n8 9 11\n0 2 8\n3 4 9\n8 9 6\n3 4 9\n0 1 9\n0 2 7\n0 1 12\n6 7 6\n0 2 12\n3 4 5\n8 9 9\n4 5 5\n0 1 11\n4 5 6\n0 2 6\n8 9 8\n8 9 7\n4 5 8\n0 2 11\n0 1 11\n8 9 9\n0 1 12\n0 2 13\n0 1 10\n0 1 10\n0 3 6 8 10 11\n</input>\n\nExpected output:\n\n<output>\n0 3 10 5 1\n3 3 6 4 5\n6 2 1 1 7\n8 2 3 3 9\n10 1 0 0 10\n11 1 0 0 11\n</output>\n\n\n## Goals, in order\n\n1. Print the correct output for every valid input the task allows, not only for the examples.\n2. Make the program as fast as you can, written the way a skilled Python developer writes fast code.\n\nUse a single thread and a single process unless the task says otherwise. Do not precompute or embed answers,\nand do not start other programs. The benchmark runs on Windows 11 on a 16-core laptop with the input size\nthe task gives.\n\n## Your reply\n\nReply with the complete contents of `plain.py` in one fenced code block and nothing else. You cannot compile or\nrun the code, so before you reply, check that it compiles with exactly the toolchain above and that it follows\nevery rule under \"Exact input and output for this task\". The examples show the exact output format; you do not\nneed to trace them by hand.\n",
+    "sample_limit": 2000,
+    "system": "You are a programmer. Answer each request in a single reply. You cannot run code or use tools."
+  },
+  "request_hash": "4029a7df909f656936d7af3ec8533f0817120f608d795e4ef072678462912a73",
+  "result_text": "```python\nimport gc\nimport heapq\nimport sys\n\n\ndef shortest_routes(graph, source, infinity):\n    distances = [infinity] * len(graph)\n    distances[source] = 0\n\n    # Pending distances span at most 1000, so circular buckets cannot collide.\n    buckets = [[] for _ in range(1001)]\n    buckets[0].append(source)\n    queue = [0]\n\n    push = heapq.heappush\n    pop = heapq.heappop\n\n    reachable = 0\n    total = 0\n    farthest = 0\n    farthest_node = source\n    node_count = len(graph)\n\n    while queue:\n        current = pop(queue)\n        index = current % 1001\n        nodes = buckets[index]\n        buckets[index] = []\n\n        count = 0\n        smallest = node_count\n\n        for u in nodes:\n            if distances[u] != current:\n                continue\n\n            count += 1\n            if u < smallest:\n                smallest = u\n\n            for v, weight in graph[u]:\n                candidate = current + weight\n                if candidate < distances[v]:\n                    distances[v] = candidate\n                    bucket = buckets[candidate % 1001]\n                    if not bucket:\n                        push(queue, candidate)\n                    bucket.append(v)\n\n        if count:\n            reachable += count\n            total += current * count\n            farthest = current\n            farthest_node = smallest\n\n    return reachable, total, farthest, farthest_node\n\n\ndef main():\n    gc.disable()\n\n    with open(sys.argv[1], \"rb\") as input_file:\n        readline = input_file.readline\n        n, m, q = map(int, readline().split())\n        graph = [[] for _ in range(n)]\n\n        for _ in range(m):\n            u, v, weight = map(int, readline().split())\n            if u != v:\n                graph[u].append((v, weight))\n                graph[v].append((u, weight))\n\n        sources = list(map(int, readline().split()))\n\n    infinity = n * 1000 + 1\n    results = {}\n    output = []\n\n    for source in sources:\n        result = results.get(source)\n        if result is None:\n            if graph[source]:\n                result = shortest_routes(graph, source, infinity)\n            else:\n                result = (1, 0, 0, source)\n            results[source] = result\n\n        reachable, total, farthest, node = result\n        output.append(f\"{source} {reachable} {total} {farthest} {node}\")\n\n    if output:\n        sys.stdout.write(\"\\n\".join(output) + \"\\n\")\n\n\nif __name__ == \"__main__\":\n    main()\n```",
+  "start_utc": "2026-11-12T04:32:38.458672+00:00",
+  "timed_out": false,
+  "tool_calls": 0,
+  "turns": 1,
+  "usage": {
+    "cache_write_input_tokens": 0,
+    "cached_input_tokens": 8832,
+    "input_tokens": 14116,
+    "output_tokens": 2640,
+    "reasoning_output_tokens": 2070
+  },
+  "wall_seconds": 107.86388479999732
+}

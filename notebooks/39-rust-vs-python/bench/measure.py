@@ -1,6 +1,7 @@
 """Resumable build, correctness and timing commands for Windows."""
 
 import argparse
+import datetime as dt
 import ast
 import hashlib
 import io
@@ -48,6 +49,16 @@ POWER_POLL_SECONDS = 30
 SLEEP_TOLERANCE_SECONDS = 2
 SUSPEND_TOLERANCE_SECONDS = 5
 MAX_DISCARDS = 5
+
+
+def is_timed_table(table):
+    return table in TIMED_TABLES or table.startswith("anchor_")
+
+
+def anchor_label(value):
+    if not re.fullmatch(r"[0-9a-z_]+", value):
+        raise argparse.ArgumentTypeError("anchor label must contain only lowercase letters, digits and underscores")
+    return value
 
 
 def fingerprint(folder):
@@ -507,7 +518,7 @@ class Harness:
 
     def guarded_run(self, table, job, launch):
         """Run launch() on mains power without sleep; return (result, start time if a wait or retry made the row's start stale)."""
-        timed, disturbed = table in TIMED_TABLES, False
+        timed, disturbed = is_timed_table(table), False
         for _ in range(MAX_DISCARDS):
             if timed and on_mains() is False:
                 disturbed = True
@@ -647,7 +658,7 @@ class Harness:
                     for author, variant in programs:
                         warm = self.run_one(table + "_warmups", author, task, variant, name, workers, -1, C.MEASURE_TIMEOUT)
                         count = self.repeats or default_repeats
-                        if table == "runs" and self.repeats is None and float(warm["wall_seconds"]) > C.SLOW_SECONDS:
+                        if (table == "runs" or table.startswith("anchor_")) and self.repeats is None and float(warm["wall_seconds"]) > C.SLOW_SECONDS:
                             count = C.SLOW_REPEATS
                         repeats[author, variant, name, workers] = count if warm["status"] == "correct" else 0
             for repeat in range(max(repeats.values(), default=0)):
@@ -659,6 +670,10 @@ class Harness:
 
     def bench(self):
         self.timed("runs", self.tasks, ["full"], [1], C.BENCH_REPEATS)
+
+    def anchor(self, label=None):
+        label = anchor_label(dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d") if label is None else label)
+        self.timed(f"anchor_{label}", self.tasks, ["full"], [1], C.BENCH_REPEATS)
 
     def sweep(self):
         self.timed("sweep", C.SWEEP_TASKS, list(C.SWEEPS), [1], C.OTHER_REPEATS)
@@ -728,11 +743,12 @@ def archive_results(name="results_2026-10-30"):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["machine", "baseline", "build", "loc", "correct", "bench", "sweep", "scaling", "all", "archive-results"])
+    parser.add_argument("command", choices=["machine", "baseline", "build", "loc", "correct", "bench", "anchor", "sweep", "scaling", "all", "archive-results"])
     parser.add_argument("--selftest", action="store_true", help="Use WORK/selftest_programs and WORK/selftest_results only")
     parser.add_argument("--tasks", nargs="+", choices=C.TASKS, default=C.TASKS)
     parser.add_argument("--authors", nargs="+")
     parser.add_argument("--repeats", type=int)
+    parser.add_argument("--anchor-label", type=anchor_label)
     parser.add_argument("--archive-name", default="results_2026-10-30", help="Folder under data/ that archive-results moves the current results into")
     args = parser.parse_args()
     if args.repeats is not None and args.repeats < 1:
@@ -740,7 +756,7 @@ def main():
     if args.command == "archive-results":
         archive_results(args.archive_name)
         return
-    if not args.selftest and args.command in ("machine", "baseline", "build", "loc", "correct", "bench", "sweep", "scaling", "all") and not (C.DATA / "results_2026-10-30").exists() and (list(C.RESULTS.glob("*.csv")) or (C.DATA / "machine.json").exists()):
+    if not args.selftest and args.command in ("machine", "baseline", "build", "loc", "correct", "bench", "anchor", "sweep", "scaling", "all") and not (C.DATA / "results_2026-10-30").exists() and (list(C.RESULTS.glob("*.csv")) or (C.DATA / "machine.json").exists()):
         parser.error("Run archive-results before the first new measurement")
     harness = Harness(selftest=args.selftest, tasks=args.tasks, authors=args.authors, repeats=args.repeats)
     commands = ["machine", "baseline", "build", "loc", "correct", "bench", "sweep", "scaling"] if args.command == "all" else [args.command]
@@ -748,6 +764,8 @@ def main():
         if command == "machine":
             path = harness.results / "machine.json" if args.selftest else C.DATA / "machine.json"
             machine(path)
+        elif command == "anchor":
+            harness.anchor(args.anchor_label)
         else:
             getattr(harness, command)()
 

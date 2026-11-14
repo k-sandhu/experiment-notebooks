@@ -332,6 +332,36 @@ class PowerGuardTests(unittest.TestCase):
     def events(self, h):
         return read_csv(h.results / "power_events.csv")
 
+    def test_anchor_tables_and_validation(self):
+        import argparse
+        from bench.measure import is_timed_table, anchor_label
+        for table in ("runs", "anchor_20261112", "anchor_20261112_warmups"):
+            self.assertTrue(is_timed_table(table))
+        self.assertFalse(is_timed_table("correctness"))
+        with self.assertRaises(argparse.ArgumentTypeError):
+            anchor_label("../x")
+
+    def test_anchor_rows_have_distinct_keys_and_slow_repeats(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            h.verified_inputs.add(("heat", "full"))
+            def fake_run(*args, **kwargs):
+                result = self.fake_run(*args, **kwargs)
+                result["wall_seconds"] = C.SLOW_SECONDS + 1
+                return result
+            with (mock.patch.object(h, "correct_programs", return_value=[("probe", "plain")]),
+                  mock.patch("bench.measure.run", side_effect=fake_run),
+                  mock.patch("bench.measure.compare", return_value=("correct", "")),
+                  mock.patch("bench.measure.sleep_clock", return_value=(0, 0)),
+                  mock.patch("bench.measure.on_mains", return_value=True)):
+                h.bench()
+                h.anchor("20261112")
+            runs, anchors = h.rows("runs"), h.rows("anchor_20261112")
+            self.assertEqual(len(runs), C.SLOW_REPEATS)
+            self.assertEqual(len(anchors), C.SLOW_REPEATS)
+            self.assertTrue((h.results / "anchor_20261112.csv").is_file())
+            self.assertTrue({r["key"] for r in runs}.isdisjoint({r["key"] for r in anchors}))
+
     def test_run_with_a_sleep_is_discarded_logged_and_repeated(self):
         with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
             h = self.harness(Path(folder))

@@ -267,3 +267,64 @@ trust the result. All times are local (EDT, UTC-4) on 2026-10-30 unless marked U
 - Leftover files. Nemotron's walkers JavaScript folder holds five debug scripts it wrote and left (`dbg.js` to
   `dbg5.js`, 9.8 kB). They are part of the saved program, its source hash and its code size; `main.js` does not load
   them. The rerun of that session no longer has the `worker.js` of the failed run, so the file is removed.
+
+## GPT-6.1 Sol and one-reply programs (2026-11-09 to 2026-11-12, UTC)
+
+- Requested by the repo owner after the nine-model timing: GPT-6.1 Sol's sessions for every task, so OpenAI's larger
+  model is measured like Terra; then programs from the remaining top models written in single calls without tools,
+  to keep their cost down.
+- Sol sessions (2026-11-09, 19:58 to 21:32). Author `sol61` (the name `sol` belongs to the heat pilot), `codex exec`
+  with codex-cli 0.160.1, `gpt-6.1-sol`, reasoning effort high, the same prompts, templates and runner as Terra.
+  16 sessions, none ended by a harness failure. 37.7 M input tokens (36.7 M cached) and 0.56 M output tokens, on the
+  Codex subscription; at API list prices (USD 2.00, 0.10 and 10.00 per million input, cached and output tokens) about
+  USD 11.2. Build and correctness checks of its 64 programs started at 21:47; all correct.
+- One-reply test (2026-11-09, 21:05 to 21:26). `bench/oneshot.py` with `bench/ONESHOT_PROMPT.md`: heat and ledger in
+  all eight versions by Claude Haiku 5.5, Claude Sonnet 5.5, GPT-6.1 Sol and GPT-6.1 Terra, 64 calls, tools off and a
+  one-line system prompt ("You are a programmer. Answer each request in a single reply. You cannot run code or use
+  tools."). 8 of 64 programs failed the samples or the build: Haiku heat C++, NumPy and Java (wrong on the samples) and
+  C# (did not compile); Sonnet heat Go and plain Python (wrong) and ledger C# (did not compile); Terra ledger Go (2 of
+  3 samples). Sol passed 16 of 16. Spend at list prices about USD 3.5 (Haiku 0.19, Sonnet 1.50, Sol 1.51, Terra 0.34).
+  Used only to design the next prompt; not in the results (`data/oneshot_test/`).
+- One-reply prompt (`bench/ONESHOT_PROMPT_V2.md`). One prompt per program, with the language's toolchain and build
+  settings (`bench/oneshot_languages_v2.json`), the exact run command and argument list, output rules, the task
+  spec, an exact input and output contract per task written for this design (`bench/oneshot_contracts/`), and every
+  sample of at most 2,000 bytes with its expected output (all four walkers samples). The reply must be one fenced code
+  block holding the whole file. Claude: `claude -p --safe-mode --tools "" --system-prompt <one line>
+  --no-session-persistence`; Codex: `codex exec --ignore-user-config --ephemeral --sandbox read-only` with
+  `model_instructions_file` replacing Codex's own agent instructions. Codex still adds about 12,000 input tokens of
+  its own per call. Every call recorded 0 tool calls.
+- Gemini 4 Carbon and Argon. Both were to run through OpenRouter's Batch API; the batches were refused with HTTP 402
+  (account balance USD 0.46) and Gemini was then left out at the owner's request. No Gemini output exists.
+- One-reply run (2026-11-12, 03:49 to 05:52). `python -m bench.oneshot run --protocol v2`, GPT-6.1 Sol and GPT-6 Astra
+  through `codex exec`, Claude Fable 5.2 through `claude -p` (Claude Code 2.1.296), effort high, 64 calls each. Every
+  reply held one code block; every program built and passed its samples (`data/oneshot/checks.csv`), and the 432
+  hidden-input runs of `python -m bench.oneshot hidden` (t1 and full, walkers also at 1 and 16 workers) all passed
+  (`data/oneshot/checks_hidden.csv`). Tokens and list-price cost: Sol 0.97 M input (0.42 M cached), 0.34 M output
+  (0.24 M reasoning), USD 4.55; Astra 0.96 M input (0.39 M cached), 0.25 M output (0.15 M reasoning), USD 18.41;
+  Fable 0.21 M input, 1.39 M output (1.16 M thinking), USD 58.93 at USD 8 and 40 per million input and output tokens.
+  Claude Code reported USD 36.83 for Fable, priced at older rates of USD 5 and 25. One Fable reply reached 69,339
+  output tokens, past `CLAUDE_CODE_MAX_OUTPUT_TOKENS=64000`, because Claude Code continued it in a second message;
+  the harness joins the text of every assistant message, and the program was complete.
+- Export. `python -m bench.oneshot export` (written by GPT-6.1 Terra) copied each one-reply program with the files an
+  agent session leaves (`Cargo.toml`, `go.mod`, `solution.csproj`) into `data/programs/` as authors `sol61-oneshot`,
+  `astra-oneshot` and `fable-oneshot`, with a `meta.json` naming each program's request hash. A second export
+  changed nothing.
+- Timing (2026-11-12). `bench.measure` build, loc, correct and bench for the four new authors from 15:15:47 to
+  16:31:47, then `anchor` (Opus 5.5's 64 programs re-timed on the full inputs, 1 worker, 5 repeats, into
+  `data/results/anchor_20261112.csv`) to 16:40:25, then sweep and scaling to 16:55:03. Mains power, lid open, the
+  desktop app's keep-awake on and a helper holding `ES_SYSTEM_REQUIRED`; no `power_events.csv` was written. Rows:
+  192 builds, 1,440 correctness runs (from 2026-11-09 on), 1,280 timed runs, 320 anchor runs, 1,152 size-sweep runs
+  and 480 scaling runs, all correct. Every timed program got 5 repeats.
+- Drift between the two timing days. Opus 5.5's re-timed programs took 0.938 times their 2026-11-08 medians
+  (geometric mean of 64 per-program ratios; range 0.78 to 1.10; 19 more than 10% from 1.0, none more than 25%). Other
+  programs kept a median of 6.4 logical processors busy during the 2026-11-12 runs against 9.7 on 2026-11-08. The
+  notebook divides every 2026-11-12 run time by the measured factor before comparing it with the first day.
+  The correction was chosen after the anchor and the new authors' times had been seen. A per-program correction
+  (each new program divided by the ratio of Opus's program for the same task and language) gives exactly the same
+  overall speed indices, because the geometric mean of the 64 per-program factors is the global factor; only the
+  breakdowns by task and version differ. Both are in `data/results/derived/model_speed_drift_variants.csv`.
+- Analysis changes (2026-11-12). The notebook code was written by Claude Sonnet 5.5, because GPT-6.1 Terra's Codex
+  sandbox could not write to the notebook file: Sol joins the agent-session models, so the speed index's
+  reference is the geometric mean of ten models instead of nine, which moves every model's index slightly; the
+  language-and-model split now uses ten models. The one-reply authors are scored on the same scale but kept out of
+  the split and the run-time and language summaries.
