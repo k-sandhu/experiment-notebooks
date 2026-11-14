@@ -1,0 +1,80 @@
+{
+  "cli_cost_usd": 0.25589,
+  "cli_version": "2.1.296 (Claude Code)",
+  "end_utc": "2026-11-12T05:27:12.634478+00:00",
+  "exit_code": 0,
+  "list_cost_usd": 0.409424,
+  "parse": {
+    "blocks": 1,
+    "empty": false,
+    "status": "ok"
+  },
+  "reply": "```python\nimport sys\nimport numpy as np\n\n\ndef main():\n    with open(sys.argv[1], 'rb') as f:\n        data = f.read()\n    tok = data.split()\n    H = int(tok[0])\n    W = int(tok[1])\n    S = int(tok[2])\n    g = np.frombuffer(b''.join(tok[3:3 + H]), dtype=np.uint8).reshape(H, W)\n\n    Wp = W + 1                 # one shared pad column per row\n    N = (H + 2) * Wp           # pad row on top and bottom\n    lo = Wp\n    hi = (H + 1) * Wp\n    n_in = hi - lo\n\n    openg = g == 46\n\n    # Value array (flat, padded). Walls / pads hold 0, sources hold 1000*d.\n    A = np.zeros(N, dtype=np.int32)\n    A.reshape(H + 2, Wp)[1:H + 1, :W] = np.where(\n        g >= 48, (g.astype(np.int32) - 48) * 1000, 0)\n\n    # Wall indicator (pads count as walls).\n    wl = np.ones(N, dtype=np.int32)\n    wl.reshape(H + 2, Wp)[1:H + 1, :W] = (g == 35)\n\n    coef = wl[0:hi - Wp] + wl[lo + Wp:hi + Wp]\n    coef += wl[lo - 1:hi - 1]\n    coef += wl[lo + 1:hi + 1]\n    coef += 4\n\n    open_p = np.zeros(N, dtype=np.bool_)\n    open_p.reshape(H + 2, Wp)[1:H + 1, :W] = openg\n    oin = open_p[lo:hi]\n\n    src = A[lo:hi].copy()\n    B = A.copy()\n    t = np.empty(n_in, dtype=np.int32)\n\n    def views(X):\n        return (X[0:hi - Wp], X[lo + Wp:hi + Wp], X[lo - 1:hi - 1],\n                X[lo + 1:hi + 1], X[lo:hi])\n\n    cur = views(A)\n    nxt = views(B)\n\n    add = np.add\n    multiply = np.multiply\n    right_shift = np.right_shift\n    bitwise_and = np.bitwise_and\n\n    nfix = n_in - int(np.count_nonzero(oin))\n\n    if nfix * 20 <= n_in:\n        fidx = np.flatnonzero(~oin)\n        fval = src[fidx]\n        for _ in range(S):\n            up, dn, lf, rt, ce = cur\n            out = nxt[4]\n            add(up, dn, out=out)\n            add(out, lf, out=out)\n            add(out, rt, out=out)\n            multiply(ce, coef, out=t)\n            add(out, t, out=out)\n            right_shift(out, 3, out=out)\n            out[fidx] = fval\n            cur, nxt = nxt, cur\n    else:\n        mask = -(oin.astype(np.int32))\n        for _ in range(S):\n            up, dn, lf, rt, ce = cur\n            out = nxt[4]\n            add(up, dn, out=out)\n            add(out, lf, out=out)\n            add(out, rt, out=out)\n            multiply(ce, coef, out=t)\n            add(out, t, out=out)\n            right_shift(out, 3, out=out)\n            bitwise_and(out, mask, out=out)\n            add(out, src, out=out)\n            cur, nxt = nxt, cur\n\n    fin = cur[4].reshape(H, Wp)[:, :W]\n\n    vo = np.where(openg, fin, 0).astype(np.int64)\n    T = int(vo.sum(dtype=np.int64))\n\n    vm = np.where(openg, fin, -1)\n    idx = int(vm.argmax())\n    V = int(vm.ravel()[idx])\n    R, C = divmod(idx, W)\n\n    weights = np.arange(1, H * W + 1, dtype=np.int64)\n    K = int(np.dot(vo.ravel(), weights))\n\n    sys.stdout.write(f\"sum {T}\\nmax {V} {R} {C}\\nchecksum {K}\\n\")\n    sys.stdout.flush()\n\n\nmain()\n```",
+  "reported_model": "claude-fable-5-2",
+  "request": {
+    "cli": "claude",
+    "effort": "high",
+    "flags": [
+      "-p",
+      "--safe-mode",
+      "--model",
+      "claude-fable-5-2",
+      "--effort",
+      "high",
+      "--tools",
+      "",
+      "--system-prompt",
+      "You are a programmer. Answer each request in a single reply. You cannot run code or use tools.",
+      "--no-session-persistence",
+      "--output-format",
+      "stream-json",
+      "--verbose"
+    ],
+    "model": "claude-fable-5-2",
+    "prompt": "Write one complete Python program for the task below. It will be compiled and run automatically with no\nhuman in the loop, and judged first on whether its output is exactly right and then on how fast it runs.\n\n## The program\n\n- File: `fast.py`.\n- Interpreter: CPython 3.13 on Windows.\n- Libraries: the standard library plus NumPy 2.2 (`import numpy as np`). No other packages. Names removed in NumPy 2.0, such as `np.float_`, `np.int0` and `np.in1d`, do not exist.\n\n## How it is run\n\n- Command: `C:\\Python313\\python.exe fast.py INPUT_PATH`. `INPUT_PATH` is the path of the input file.\n- Read the input only from that file. Do not read standard input or any other file, and do not wait for\n  anything.\n- Write the answer to standard output and nothing else: no prompts, labels, debug lines or blank lines.\n  Standard error is ignored. Exit with status 0.\n\n## Output rules that apply to every task\n\n- Print the lines in exactly the order and form the task gives. Each line starts with its keyword (where the\n  task shows one) and its fields are separated by exactly one space, with no spaces at the start or end.\n- End every line with a newline, including the last one. `\\r\\n` line endings are also accepted.\n- Print integers in plain decimal: an optional leading `-` and digits only, with no `+`, no thousands\n  separators, no decimal point and no exponent.\n\n## The task\n\n<task>\n# Heat on a grid\n\nSpread heat across a floor plan with walls and fixed heat sources, in exact integer steps.\n\n## Input\n\n```\nH W S\nrow_0\n...\nrow_(H-1)\n```\n\nThe first line gives the number of rows H, the number of columns W and the number of steps S. Then H lines\nof exactly W characters each: `.` is an open cell, `#` is a wall, and a digit `1`-`9` is a heat source. The\ngrid contains at least one open cell.\n\n## Simulation\n\nOpen cells start at value 0. A source with digit d has the fixed value 1000 * d at all times. Walls have no\nvalue.\n\nIn each of the S steps, every open cell gets a new value computed from the values at the start of the step:\n\n```\nnew = (4 * old + n_up + n_down + n_left + n_right) // 8\n```\n\nn_up is the value of the cell above if that cell is open or a source, and the cell's own old value if the\ncell above is a wall or lies outside the grid. n_down, n_left and n_right are defined the same way for the\nother three neighbours. `//` is integer division rounding down. All open cells update at the same time.\nSources and walls never change.\n\n## Output\n\n```\nsum T\nmax V R C\nchecksum K\n```\n\nAfter S steps, T is the sum of the values of all open cells. V is the largest open-cell value, found at row\nR and column C (both 0-based, row 0 at the top); on a tie, report the first such cell in row-major order\n(smallest R, then smallest C). K is the sum over all open cells of `value * (R * W + C + 1)`. All values fit\nin a signed 64-bit integer.\n\n## Benchmark size\n\nH = 400 rows, W = 400 columns and S = 250 steps (about 40 million cell updates). The samples are smaller.\n</task>\n\n## Exact input and output for this task\n\n- Input: line 1 is `H W S`. Then exactly H lines of exactly W characters, each `.` (open cell), `#` (wall) or a\n  digit `1`-`9` (heat source), each line ending in `\\n`.\n- Only open cells (`.`) change, and only open cells count in the output. Heat sources and walls are not open\n  cells: leave them out of the sum T, the maximum V and its position R C, and the checksum K, even though a\n  source has a value.\n- In the update, a neighbour that is an open cell or a source contributes its value at the start of the step\n  (a source always contributes `1000 * d`). A neighbour that is a wall, or that lies outside the grid,\n  contributes the updating cell's own old value. Values are never negative, so `//` is ordinary integer\n  division.\n- Output: exactly three lines, `sum T`, `max V R C` and `checksum K`. R and C are 0-based; on a tie for the\n  maximum, take the first open cell in row-major order. Compute T and K in 64 bits.\n\n## Examples\n\nEach example is a complete input file and the exact output your program must print for it.\n\nExample `s1` input:\n\n<input>\n7 9 4\n#9.9.9#.#\n#####.#..\n..1..#...\n.....#...\n##.###...\n.....#...\n.#2..#..3\n</input>\n\nExpected output:\n\n<output>\nsum 21557\nmax 6151 0 2\nchecksum 369130\n</output>\n\nExample `s2` input:\n\n<input>\n13 13 250\n#9....#......\n.............\n........6....\n......#......\n......#......\n##..#########\n....3.#......\n......#......\n......#......\n......#......\n.........3...\n.............\n......#....1#\n</input>\n\nExpected output:\n\n<output>\nsum 519540\nmax 7440 0 2\nchecksum 33357316\n</output>\n\n\n## Goals, in order\n\n1. Print the correct output for every valid input the task allows, not only for the examples.\n2. Make the program as fast as you can, written the way a skilled Python developer writes fast code.\n\nUse a single thread and a single process unless the task says otherwise. Do not precompute or embed answers,\nand do not start other programs. The benchmark runs on Windows 11 on a 16-core laptop with the input size\nthe task gives.\n\n## Your reply\n\nReply with the complete contents of `fast.py` in one fenced code block and nothing else. You cannot compile or\nrun the code, so before you reply, check that it compiles with exactly the toolchain above and that it follows\nevery rule under \"Exact input and output for this task\". The examples show the exact output format; you do not\nneed to trace them by hand.\n",
+    "sample_limit": 2000,
+    "system": "You are a programmer. Answer each request in a single reply. You cannot run code or use tools."
+  },
+  "request_hash": "079fc5aec162da590a6ebb3051490d5fd39781d7fe0f36a30cc038bb1bd09b35",
+  "result_events": 1,
+  "result_text": "```python\nimport sys\nimport numpy as np\n\n\ndef main():\n    with open(sys.argv[1], 'rb') as f:\n        data = f.read()\n    tok = data.split()\n    H = int(tok[0])\n    W = int(tok[1])\n    S = int(tok[2])\n    g = np.frombuffer(b''.join(tok[3:3 + H]), dtype=np.uint8).reshape(H, W)\n\n    Wp = W + 1                 # one shared pad column per row\n    N = (H + 2) * Wp           # pad row on top and bottom\n    lo = Wp\n    hi = (H + 1) * Wp\n    n_in = hi - lo\n\n    openg = g == 46\n\n    # Value array (flat, padded). Walls / pads hold 0, sources hold 1000*d.\n    A = np.zeros(N, dtype=np.int32)\n    A.reshape(H + 2, Wp)[1:H + 1, :W] = np.where(\n        g >= 48, (g.astype(np.int32) - 48) * 1000, 0)\n\n    # Wall indicator (pads count as walls).\n    wl = np.ones(N, dtype=np.int32)\n    wl.reshape(H + 2, Wp)[1:H + 1, :W] = (g == 35)\n\n    coef = wl[0:hi - Wp] + wl[lo + Wp:hi + Wp]\n    coef += wl[lo - 1:hi - 1]\n    coef += wl[lo + 1:hi + 1]\n    coef += 4\n\n    open_p = np.zeros(N, dtype=np.bool_)\n    open_p.reshape(H + 2, Wp)[1:H + 1, :W] = openg\n    oin = open_p[lo:hi]\n\n    src = A[lo:hi].copy()\n    B = A.copy()\n    t = np.empty(n_in, dtype=np.int32)\n\n    def views(X):\n        return (X[0:hi - Wp], X[lo + Wp:hi + Wp], X[lo - 1:hi - 1],\n                X[lo + 1:hi + 1], X[lo:hi])\n\n    cur = views(A)\n    nxt = views(B)\n\n    add = np.add\n    multiply = np.multiply\n    right_shift = np.right_shift\n    bitwise_and = np.bitwise_and\n\n    nfix = n_in - int(np.count_nonzero(oin))\n\n    if nfix * 20 <= n_in:\n        fidx = np.flatnonzero(~oin)\n        fval = src[fidx]\n        for _ in range(S):\n            up, dn, lf, rt, ce = cur\n            out = nxt[4]\n            add(up, dn, out=out)\n            add(out, lf, out=out)\n            add(out, rt, out=out)\n            multiply(ce, coef, out=t)\n            add(out, t, out=out)\n            right_shift(out, 3, out=out)\n            out[fidx] = fval\n            cur, nxt = nxt, cur\n    else:\n        mask = -(oin.astype(np.int32))\n        for _ in range(S):\n            up, dn, lf, rt, ce = cur\n            out = nxt[4]\n            add(up, dn, out=out)\n            add(out, lf, out=out)\n            add(out, rt, out=out)\n            multiply(ce, coef, out=t)\n            add(out, t, out=out)\n            right_shift(out, 3, out=out)\n            bitwise_and(out, mask, out=out)\n            add(out, src, out=out)\n            cur, nxt = nxt, cur\n\n    fin = cur[4].reshape(H, Wp)[:, :W]\n\n    vo = np.where(openg, fin, 0).astype(np.int64)\n    T = int(vo.sum(dtype=np.int64))\n\n    vm = np.where(openg, fin, -1)\n    idx = int(vm.argmax())\n    V = int(vm.ravel()[idx])\n    R, C = divmod(idx, W)\n\n    weights = np.arange(1, H * W + 1, dtype=np.int64)\n    K = int(np.dot(vo.ravel(), weights))\n\n    sys.stdout.write(f\"sum {T}\\nmax {V} {R} {C}\\nchecksum {K}\\n\")\n    sys.stdout.flush()\n\n\nmain()\n```",
+  "start_utc": "2026-11-12T05:25:36.210922+00:00",
+  "timed_out": false,
+  "tool_calls": 0,
+  "turns": 1,
+  "usage": {
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 2493,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "cache_creation_input_tokens": 2493,
+    "cache_read_input_tokens": 0,
+    "fallback_credit": null,
+    "inference_geo": "global",
+    "input_tokens": 2,
+    "iterations": [
+      {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 2493,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 2493,
+        "cache_read_input_tokens": 0,
+        "input_tokens": 2,
+        "output_tokens": 9238,
+        "type": "message"
+      }
+    ],
+    "output_tokens": 9238,
+    "output_tokens_details": {
+      "thinking_tokens": 7825
+    },
+    "server_tool_use": {
+      "web_fetch_requests": 0,
+      "web_search_requests": 0
+    },
+    "service_tier": "standard",
+    "speed": "standard"
+  },
+  "wall_seconds": 96.42355780000798
+}

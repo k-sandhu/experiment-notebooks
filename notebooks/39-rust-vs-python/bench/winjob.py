@@ -5,6 +5,7 @@ from ctypes import wintypes as wt
 import os
 import struct
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -59,6 +60,9 @@ def api():
         "TerminateJobObject": ([HANDLE, wt.UINT], wt.BOOL),
         "CloseHandle": ([HANDLE], wt.BOOL),
         "GetSystemCpuSetInformation": ([ct.c_void_p, wt.ULONG, ct.POINTER(wt.ULONG), HANDLE, wt.ULONG], wt.BOOL),
+        "GetSystemPowerStatus": ([ct.c_void_p], wt.BOOL),
+        "GetTickCount64": ([], U64),
+        "QueryUnbiasedInterruptTime": ([ct.POINTER(U64)], wt.BOOL),
     }
     for name, (args, result) in declarations.items():
         function = getattr(kernel, name)
@@ -102,6 +106,59 @@ def cpu_sets():
     except (OSError, ValueError) as exc:
         fallback["affinity_detection"] += f" ({exc})"
         return fallback
+
+
+class PowerStatus(ct.Structure):
+    _fields_ = [("ACLineStatus", ct.c_ubyte), ("BatteryFlag", ct.c_ubyte), ("BatteryLifePercent", ct.c_ubyte),
+                ("SystemStatusFlag", ct.c_ubyte), ("BatteryLifeTime", wt.DWORD), ("BatteryFullLifeTime", wt.DWORD)]
+
+
+def on_mains():
+    """True on mains power, False on battery, None when Windows does not know."""
+    status = PowerStatus()
+    checked(api().GetSystemPowerStatus(ct.byref(status)))
+    return {1: True, 0: False}.get(status.ACLineStatus)
+
+
+def sleep_clock():
+    """(milliseconds including time asleep, 100 ns units excluding it)."""
+    kernel = api()
+    unbiased = U64()
+    checked(kernel.QueryUnbiasedInterruptTime(ct.byref(unbiased)))
+    return kernel.GetTickCount64(), unbiased.value
+
+
+def slept_seconds(before, after):
+    return max(0.0, (after[0] - before[0]) / 1e3 - (after[1] - before[1]) / 1e7)
+
+
+class Heartbeat:
+    """Keeps the largest gap between consecutive perf_counter readings, taken by a daemon thread that wakes every `interval`
+    seconds. A gap far above the interval means the whole process was suspended (system sleep or Modern Standby)."""
+
+    def __init__(self, interval=0.5):
+        self.interval, self.max_gap = interval, 0.0
+        self.last = 0.0
+        self.stopped = threading.Event()
+        self.thread = threading.Thread(target=self.beat, daemon=True)
+
+    def beat(self):
+        while not self.stopped.wait(self.interval):
+            self.reading()
+        self.reading()
+
+    def reading(self):
+        now = time.perf_counter()
+        self.max_gap, self.last = max(self.max_gap, now - self.last), now
+
+    def __enter__(self):
+        self.last = time.perf_counter()
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.stopped.set()
+        self.thread.join()
 
 
 class Job:

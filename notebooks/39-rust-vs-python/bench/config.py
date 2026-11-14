@@ -61,23 +61,61 @@ TINY = {
     "walkers": {"s1a": dict(J=4, L=12, B=1), "s1b": dict(J=4, L=15, B=2)},
 }
 
-AUTHORS = {
-    "sonnet": dict(cli="claude", model="claude-sonnet-5-5", effort="high", flags=[
-        "-p", "--safe-mode", "--model", "claude-sonnet-5-5", "--effort", "high",
-        "--permission-mode", "bypassPermissions", "--tools", "Bash,Read,Write,Edit,Glob,Grep",
-        "--output-format", "stream-json", "--verbose"]),
-    "terra": dict(cli="codex", model="gpt-6.1-terra", effort="high", flags=[
-        "exec", "-m", "gpt-6.1-terra", "-c", 'model_reasoning_effort="high"',
+def claude_flags(model):
+    return ["-p", "--safe-mode", "--model", model, "--effort", "high",
+            "--permission-mode", "bypassPermissions", "--tools", "Bash,Read,Write,Edit,Glob,Grep",
+            "--output-format", "stream-json", "--verbose"]
+
+
+def claude_author(model, **route):
+    return dict(cli="claude", model=model, effort="high", flags=claude_flags(model), **route)
+
+
+def openrouter_author(model, provider, permaslug):
+    return claude_author(model, route="openrouter", provider=provider, permaslug=permaslug, reasoning_effort="high")
+
+
+def codex_author(model):
+    return dict(cli="codex", model=model, effort="high", flags=[
+        "exec", "-m", model, "-c", 'model_reasoning_effort="high"',
         # --ignore-user-config drops the user's approval policy and Windows sandbox, which commands need.
         "-c", 'approval_policy="never"', "-c", 'windows.sandbox="elevated"',
         "--ignore-user-config", "--ephemeral", "--sandbox", "workspace-write",
-        "--skip-git-repo-check", "-C", "{session}", "--json", "-o", "{last}", "-"]),
+        "--skip-git-repo-check", "-C", "{session}", "--json", "-o", "{last}", "-"])
+
+
+def muse_author(model):
+    # --yolo turns off approvals and the sandbox (like bypassPermissions); web tools are off because no other author has them.
+    return dict(cli="muse", model=model, effort="high", flags=[
+        "exec", "--model", model, "--reasoning-effort", "high", "--workspace", "{session}", "--yolo",
+        "--disable-web-tools", "--no-foreign-personal-context", "--json", "--prompt-file", "{prompt}"])
+
+
+AUTHORS = {
+    "sonnet": claude_author("claude-sonnet-5-5"),
+    "terra": codex_author("gpt-6.1-terra"),
+    "opus55": claude_author("claude-opus-5-5"),
+    "haiku": claude_author("claude-haiku-5-5"),
+    "deepseek": openrouter_author("deepseek/deepseek-v4.1-flash-1017", "DeepSeek", "deepseek/deepseek-v4.1-flash-20261017"),
+    "glm": openrouter_author("z-ai/glm-5.3-flash", "Z.AI", "z-ai/glm-5.3-flash-20260826"),
+    "nemotron": openrouter_author("nvidia/nemotron-3.5-super-vl:free", "Nvidia", "nvidia/nemotron-3.5-super-vl-20261015"),
+    "wonder": muse_author("muse-wonder-1.0"),
+    "wonder-full": muse_author("muse-wonder-full-1.0"),
+    # "sol" is taken by the heat pilot (PILOT_AUTHORS), so the full GPT-6.1 Sol run is "sol61".
+    "sol61": codex_author("gpt-6.1-sol"),
 }
+# Models Claude Code may call through the local proxy (bench/openrouter_proxy.py); anything else is rejected there.
+OPENROUTER_ROUTES = {a["model"]: dict(author=name, provider=a["provider"], permaslug=a["permaslug"], reasoning_effort=a["reasoning_effort"])
+                     for name, a in AUTHORS.items() if a.get("route") == "openrouter"}
+OPENROUTER_PROXY_PORT = 8739
 # Heat-only pilot sessions by Claude Opus 5.5 and GPT-6.1 Sol, kept under data/programs/{opus,sol}/heat.
 PILOT_AUTHORS = ("opus", "sol")
 SOL_PRIVATE_CARGO_HOME = False  # Sandbox feasibility requires a model call; deliberately untested.
 SESSION_TIMEOUT = 75 * 60
+MUSE_EXPORT_TIMEOUT = 120
 SESSION_JOBS_PER_AUTHOR = 3
+SESSION_JOBS = {"nemotron": 2, "wonder": 2, "wonder-full": 2}
+SESSION_JOBS_TOTAL = 10  # 22 logical processors and 31 GB; sessions build and benchmark
 CORRECT_TIMEOUT = 900
 BUILD_TIMEOUT = 900
 MEASURE_TIMEOUT = 900
@@ -129,16 +167,71 @@ def input_path(task, name):
     return (DATA / "samples" if name.startswith("s") and not name.startswith("sweep") else INPUTS) / task / f"{name}.in"
 
 
+# A short, fixed PATH for author sessions and measurements. Visual Studio's vcvars64.bat fails with "The input line is
+# too long" when the inherited PATH nears cmd's 8,191-character limit, which happened after a desktop-app restart on
+# 2026-11-05 (the inherited PATH grew to 7,921 characters). Language sessions and builds add their toolchains in front.
+BASE_PATH = os.pathsep.join([
+    r"C:\Windows\system32", r"C:\Windows", r"C:\Windows\System32\Wbem", r"C:\Windows\System32\WindowsPowerShell\v1.0",
+    r"C:\Windows\System32\OpenSSH", str(PYTHON.parent), str(PYTHON.parent / "Scripts"), str(Path.home() / ".cargo" / "bin"),
+    r"C:\Program Files\Git\cmd", r"C:\Program Files\Git\usr\bin", r"C:\Program Files\nodejs", r"C:\Program Files\Java\jdk-23\bin",
+    r"C:\Program Files (x86)\Microsoft Visual Studio\Installer",
+    str(Path.home() / ".local" / "bin"), str(Path.home() / "AppData" / "Local" / "Programs" / "muse"),
+])
+
+
 def environment():
     env = os.environ.copy()
     env.pop("FORCE_COLOR", None)
-    env.update(THREAD_ENV)
+    env.update(THREAD_ENV, PATH=BASE_PATH)
     return env
 
 
 def session_environment():
     """Environment for model sessions: none of the launching agent's Claude Code or API settings."""
     env = {k: v for k, v in os.environ.items()
-           if not k.upper().startswith(("CLAUDE", "ANTHROPIC_", "OPENAI_", "CODEX_")) and k.upper() != "FORCE_COLOR"}
+           if not k.upper().startswith(("CLAUDE", "ANTHROPIC_", "OPENAI_", "OPENROUTER_", "CODEX_")) and k.upper() != "FORCE_COLOR"}
     env["NO_COLOR"] = "1"
+    env["PATH"] = BASE_PATH
     return env
+
+ONESHOT = DATA / "oneshot_test"
+ONESHOT_WORK = WORK.resolve() / "oneshot"
+ONESHOT_TASKS = ("heat", "ledger")
+ONESHOT_VARIANTS = VARIANTS
+ONESHOT_SAMPLE_LIMIT = 20_000
+ONESHOT_TIMEOUT = 30 * 60
+ONESHOT_JOBS_PER_MODEL = 2
+ONESHOT_SYSTEM = "You are a programmer. Answer each request in a single reply. You cannot run code or use tools."
+ONESHOT_MODELS = {
+    "haiku": dict(cli="claude", model="claude-haiku-5-5", effort="high"),
+    "sonnet": dict(cli="claude", model="claude-sonnet-5-5", effort="high"),
+    "sol": dict(cli="codex", model="gpt-6.1-sol", effort="high"),
+    "terra": dict(cli="codex", model="gpt-6.1-terra", effort="high"),
+}
+
+ONESHOT_V2 = DATA / "oneshot"
+ONESHOT_V2_SAMPLE_LIMIT = 2_000
+ONESHOT_V2_TASKS = TASKS
+ONESHOT_V2_VARIANTS = VARIANTS
+ONESHOT_V2_MODELS = {
+    "sol": dict(cli="codex", model="gpt-6.1-sol", effort="high"),
+    "astra": dict(cli="codex", model="gpt-6-astra", effort="high"),
+    "fable": dict(cli="claude", model="claude-fable-5-2", effort="high"),
+}
+ONESHOT_AUTHORS = {"sol61-oneshot": "sol", "astra-oneshot": "astra", "fable-oneshot": "fable"}
+ONESHOT_V2_EXTRA_MODELS = {
+    "haiku": dict(cli="claude", model="claude-haiku-5-5", effort="high"),
+    "sonnet": dict(cli="claude", model="claude-sonnet-5-5", effort="high"),
+    "opus": dict(cli="claude", model="claude-opus-5-5", effort="high"),
+    "terra": dict(cli="codex", model="gpt-6.1-terra", effort="high"),
+}
+ONESHOT_BATCH = dict(provider={"only": ["google-vertex"], "allow_fallbacks": False}, completion_window="24h", max_tokens=65_536, poll_seconds=60)
+ONESHOT_PRICES = {
+    "claude-fable-5-2": dict(input=8.0, cache_write=16.0, cache_read=0.20, output=40.0),
+    "claude-opus-5-5": dict(input=4.0, cache_write=8.0, cache_read=0.20, output=20.0),
+    "claude-sonnet-5-5": dict(input=2.0, cache_write=4.0, cache_read=0.20, output=10.0),
+    "claude-haiku-5-5": dict(input=0.10, cache_write=0.20, cache_read=0.01, output=0.50),
+    "gpt-6.1-sol": dict(input=2.0, cache_read=0.10, output=10.0),
+    "gpt-6.1-terra": dict(input=1.0, cache_read=0.05, output=5.0),
+    "gpt-6-astra": dict(input=10.0, cache_read=1.0, output=50.0),
+}

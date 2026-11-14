@@ -1,9 +1,11 @@
 """Focused regression checks for grammars, isolation and Windows accounting."""
 
 import gzip
+import itertools
 import json
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -11,19 +13,19 @@ from unittest import mock
 import psutil
 
 from bench import config as C
-from bench.common import manifest, sha256, shim_command, write_json, write_text
+from bench.common import manifest, read_csv, read_json, sha256, shim_command, write_json, write_text
 from bench.compare import Unreadable, compare, parse
 from bench.generate import generate
-from bench.measure import Harness, dependencies, python_code_lines, rust_without_comments, toml_value, c_code_lines, build_rule
-from bench.sessions import event_metadata, prepare, request_hash, render_template, harvest_files
-from bench.winjob import Job, cpu_sets, run
+from bench.measure import ACCOUNT_FIELDS, Harness, dependencies, python_code_lines, rust_without_comments, toml_value, c_code_lines, build_rule
+from bench.sessions import event_metadata, prepare, refresh_metadata, request_hash, render_template, harvest_files
+from bench.winjob import Heartbeat, Job, cpu_sets, on_mains, run, sleep_clock, slept_seconds
 
 
 class LanguageTests(unittest.TestCase):
     def test_main_hashes(self):
         ledger = {(r["author"], r["task"]): r["request_hash"] for r in json.loads((C.DATA / "preparation_hashes.json").read_text())}
         self.assertEqual(len(ledger), 16)
-        for author in C.AUTHORS:
+        for author in sorted({a for a, _ in ledger}):  # authors added later have no ledger rows
             for task in C.TASKS:
                 with self.subTest(author=author, task=task):
                     self.assertEqual(request_hash(author, task), ledger[author, task])
@@ -148,6 +150,67 @@ class HarnessTests(unittest.TestCase):
                 f.write(json.dumps(dict(type="result", total_cost_usd=1.25, usage={"input_tokens": 10}, num_turns=3, result="done")))
             self.assertEqual(event_metadata(path)["cost_usd"], 1.25)
 
+    @staticmethod
+    def write_events(path, events):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with gzip.open(path, "wt") as f:
+            f.write("\n".join(map(json.dumps, events)))
+
+    def test_several_result_events_are_added_up(self):
+        first = dict(type="result", total_cost_usd=2.5, num_turns=67, result="answer",
+                     usage={"input_tokens": 100, "output_tokens": 68806, "service_tier": "standard",
+                            "cache_creation": {"ephemeral_5m_input_tokens": 7, "ephemeral_1h_input_tokens": 0}})
+        second = dict(type="result", total_cost_usd=2.9, num_turns=2, result="after",
+                      usage={"input_tokens": 5, "output_tokens": 385, "service_tier": "batch",
+                             "cache_creation": {"ephemeral_5m_input_tokens": 3}, "output_tokens_details": {"thinking": 1}})
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            path = Path(folder) / "events.gz"
+            self.write_events(path, [dict(type="assistant", message=dict(content=[dict(type="tool_use")])), first, second])
+            meta = event_metadata(path)
+            self.assertEqual(meta["turns"], 69)
+            self.assertEqual(meta["usage"], dict(input_tokens=105, output_tokens=69191, service_tier="batch",
+                                                 cache_creation=dict(ephemeral_5m_input_tokens=10, ephemeral_1h_input_tokens=0),
+                                                 output_tokens_details=dict(thinking=1)))
+            self.assertEqual(meta["cost_usd"], 2.9)
+            self.assertEqual((meta["result_events"], meta["tool_calls"], meta["final_message"]), (2, 1, "after"))
+            self.write_events(path, [first])
+            meta = event_metadata(path)
+            self.assertEqual((meta["turns"], meta["usage"], meta["cost_usd"], meta["result_events"]), (67, first["usage"], 2.5, 1))
+
+    def test_refresh_metadata_changes_only_the_listed_fields(self):
+        first = dict(type="result", total_cost_usd=1.0, num_turns=10, usage={"output_tokens": 100}, result="a")
+        second = dict(type="result", total_cost_usd=1.5, num_turns=2, usage={"output_tokens": 20}, result="b")
+        old = dict(author="x", task="heat", request_hash="abc", request={"k": 1}, files=[{"path": "p"}], wall_seconds=3.5,
+                   start_utc="s", turns=2, usage={"output_tokens": 20}, tool_calls=0, cost_usd=1.5, final_message="b")
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            data = Path(folder)
+            self.write_events(data / "sessions" / "x" / "heat.jsonl.gz", [first, second])
+            self.write_events(data / "sessions" / "x" / "heat.langs.jsonl.gz", [first])
+            self.write_events(data / "failed_sessions" / "x" / "heat.main.jsonl.gz", [first, second])
+            self.write_events(data / "sessions" / "y" / "heat.jsonl.gz", [first, second])
+            for path, meta in {data / "programs" / "x" / "heat" / "meta.json": old,
+                               data / "programs" / "x" / "heat" / "meta_langs.json": dict(old, turns=10, usage=first["usage"], cost_usd=1.0),
+                               data / "failed_sessions" / "x" / "heat.main.meta.json": old,
+                               data / "programs" / "y" / "heat" / "meta.json": dict(old, openrouter={"cost_usd": 0.01}, cost_usd=0.01,
+                                                                                       claude_code_reported_cost_usd=1.5)}.items():
+                write_json(path, meta)
+            main_path = data / "programs" / "x" / "heat" / "meta.json"
+            snapshot = main_path.read_text(encoding="utf-8")
+            with mock.patch("builtins.print"):
+                refresh_metadata(data, dry_run=True)
+            self.assertEqual(main_path.read_text(encoding="utf-8"), snapshot)
+            with mock.patch("builtins.print"):
+                changed = refresh_metadata(data)
+                self.assertEqual(len(changed), 4)
+                self.assertEqual(refresh_metadata(data), [])  # nothing left to change
+            expected = dict(old, turns=12, usage={"output_tokens": 120}, result_events=2)
+            self.assertEqual(read_json(main_path), expected)
+            self.assertEqual(main_path.read_text(encoding="utf-8"), json.dumps(expected, ensure_ascii=True, indent=2, sort_keys=True) + "\n")
+            self.assertEqual(read_json(data / "failed_sessions" / "x" / "heat.main.meta.json"), expected)
+            self.assertEqual(read_json(data / "programs" / "x" / "heat" / "meta_langs.json"), dict(old, turns=10, usage=first["usage"], cost_usd=1.0, result_events=1))
+            routed = read_json(data / "programs" / "y" / "heat" / "meta.json")
+            self.assertEqual((routed["cost_usd"], routed["claude_code_reported_cost_usd"], routed["turns"]), (0.01, 1.5, 12))
+
     def test_cmd_shim_preserves_quotes_and_spaces(self):
         with tempfile.TemporaryDirectory(prefix="shim with spaces ", dir=C.WORK) as folder:
             folder = Path(folder)
@@ -225,6 +288,179 @@ class HarnessTests(unittest.TestCase):
             with mock.patch("bench.measure.run", side_effect=AssertionError("Cached build repeated")):
                 h.build()
             self.assertEqual(len(h.rows("builds")), 1)
+
+
+class PowerGuardTests(unittest.TestCase):
+    def harness(self, folder):
+        h = Harness(selftest=True, tasks=["heat"], authors=["probe"])
+        h.programs, h.results = folder / "programs", folder / "results"
+        h.build_root, h.run_root = folder / "build", folder / "runs"
+        write_text(h.programs / "probe/heat/plain.py", "print('probe')\n")
+        h.verified_inputs.add(("heat", "t1"))
+        return h
+
+    def fake_run(self, command, scratch, stdout, stderr, timeout, **kwargs):
+        stdout.parent.mkdir(parents=True, exist_ok=True)
+        stdout.write_bytes((C.DATA / "expected/heat/t1.out").read_bytes())
+        stderr.write_bytes(b"")
+        return dict.fromkeys(ACCOUNT_FIELDS, 0) | dict(wall_seconds=0.25, timed_out=False)
+
+    def fake_heartbeat(self, gaps):
+        """A Heartbeat stand-in that reports the next largest gap from `gaps` for each guarded run."""
+        gaps = iter(gaps)
+
+        class FakeHeartbeat:
+            def __enter__(self):
+                self.max_gap = next(gaps)
+                return self
+
+            def __exit__(self, *exc):
+                pass
+
+        return FakeHeartbeat
+
+    def guarded_run_one(self, h, table, clocks, mains, sleeper=None, gaps=None):
+        """Run one job with fake clocks, power state and heartbeat gaps; returns the mock standing in for the real run."""
+        with (mock.patch("bench.measure.run", side_effect=self.fake_run) as launched,
+              mock.patch("bench.measure.sleep_clock", side_effect=clocks),
+              mock.patch("bench.measure.on_mains", side_effect=mains),
+              mock.patch("bench.measure.time.sleep", sleeper or mock.Mock()),
+              mock.patch("bench.measure.Heartbeat", self.fake_heartbeat(gaps) if gaps else Heartbeat)):
+            h.run_one(table, "probe", "heat", "plain", "t1", 1, 0, 10)
+        return launched
+
+    def events(self, h):
+        return read_csv(h.results / "power_events.csv")
+
+    def test_anchor_tables_and_validation(self):
+        import argparse
+        from bench.measure import is_timed_table, anchor_label
+        for table in ("runs", "anchor_20261112", "anchor_20261112_warmups"):
+            self.assertTrue(is_timed_table(table))
+        self.assertFalse(is_timed_table("correctness"))
+        with self.assertRaises(argparse.ArgumentTypeError):
+            anchor_label("../x")
+
+    def test_anchor_rows_have_distinct_keys_and_slow_repeats(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            h.verified_inputs.add(("heat", "full"))
+            def fake_run(*args, **kwargs):
+                result = self.fake_run(*args, **kwargs)
+                result["wall_seconds"] = C.SLOW_SECONDS + 1
+                return result
+            with (mock.patch.object(h, "correct_programs", return_value=[("probe", "plain")]),
+                  mock.patch("bench.measure.run", side_effect=fake_run),
+                  mock.patch("bench.measure.compare", return_value=("correct", "")),
+                  mock.patch("bench.measure.sleep_clock", return_value=(0, 0)),
+                  mock.patch("bench.measure.on_mains", return_value=True)):
+                h.bench()
+                h.anchor("20261112")
+            runs, anchors = h.rows("runs"), h.rows("anchor_20261112")
+            self.assertEqual(len(runs), C.SLOW_REPEATS)
+            self.assertEqual(len(anchors), C.SLOW_REPEATS)
+            self.assertTrue((h.results / "anchor_20261112.csv").is_file())
+            self.assertTrue({r["key"] for r in runs}.isdisjoint({r["key"] for r in anchors}))
+
+    def test_run_with_a_sleep_is_discarded_logged_and_repeated(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            # First run: 10 s of ticks but no unbiased time, i.e. asleep. Second run: 0.5 s of both.
+            clocks = [(0, 0), (10_000, 0), (10_000, 0), (10_500, 5_000_000)]
+            launched = self.guarded_run_one(h, "runs", clocks, itertools.repeat(True))
+            self.assertEqual(launched.call_count, 2)
+            self.assertEqual(len(h.rows("runs")), 1)
+            events = self.events(h)
+            self.assertEqual([e["event"] for e in events], ["discarded"])
+            self.assertEqual((events[0]["reason"], float(events[0]["slept_seconds"])), ("slept", 10.0))
+            self.assertEqual((events[0]["table"], events[0]["author"], events[0]["task"], events[0]["workers"]), ("runs", "probe", "heat", "1"))
+
+    def test_heartbeat_gap_discards_the_run_as_suspended(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            # The unbiased clock saw nothing (Modern Standby), but the heartbeat saw a 30 s gap in the first run only.
+            launched = self.guarded_run_one(h, "runs", itertools.repeat((0, 0)), itertools.repeat(True), gaps=[30.0, 0.5])
+            self.assertEqual(launched.call_count, 2)
+            self.assertEqual(len(h.rows("runs")), 1)
+            events = self.events(h)
+            self.assertEqual([e["event"] for e in events], ["discarded"])
+            self.assertEqual((events[0]["reason"], float(events[0]["max_heartbeat_gap"])), ("suspended", 30.0))
+
+    def test_slept_takes_precedence_over_suspended(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            clocks = [(0, 0), (10_000, 0), (10_000, 0), (10_500, 5_000_000)]
+            self.guarded_run_one(h, "runs", clocks, itertools.repeat(True), gaps=[30.0, 0.5])
+            events = self.events(h)
+            self.assertEqual((events[0]["reason"], float(events[0]["slept_seconds"]), float(events[0]["max_heartbeat_gap"])),
+                             ("slept", 10.0, 30.0))
+
+    def test_small_heartbeat_gap_is_kept(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            launched = self.guarded_run_one(h, "runs", itertools.repeat((0, 0)), itertools.repeat(True), gaps=[1.0])
+            self.assertEqual(launched.call_count, 1)
+            self.assertEqual(len(h.rows("runs")), 1)
+            self.assertEqual(self.events(h), [])
+
+    def test_heartbeat_records_the_largest_gap(self):
+        with Heartbeat(interval=0.01) as quiet:
+            time.sleep(0.1)
+        self.assertLess(quiet.max_gap, 1)
+        self.assertFalse(quiet.thread.is_alive())
+        # Jump the clock by 30 s after the first reading, as a suspend would.
+        readings = itertools.chain([100.0], itertools.count(130.0, 0.01))
+        with mock.patch("bench.winjob.time.perf_counter", side_effect=lambda: next(readings)):
+            with Heartbeat(interval=0.01) as jumped:
+                time.sleep(0.1)
+        self.assertGreaterEqual(jumped.max_gap, 30)
+
+    def test_timed_run_on_battery_waits_for_mains(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            sleeper = mock.Mock()
+            launched = self.guarded_run_one(h, "runs_warmups", itertools.repeat((0, 0)),
+                                            itertools.chain([False, False], itertools.repeat(True)), sleeper)
+            sleeper.assert_called_once_with(30)
+            self.assertEqual(launched.call_count, 1)
+            self.assertEqual(len(h.rows("runs_warmups")), 1)
+            self.assertEqual([e["event"] for e in self.events(h)], ["wait_start", "wait_end"])
+
+    def test_mains_lost_discards_timed_runs_but_not_correctness_runs(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            # Timed: mains before the run, battery after it. The repeat is clean.
+            launched = self.guarded_run_one(h, "sweep", itertools.repeat((0, 0)),
+                                            itertools.chain([True, True, False], itertools.repeat(True)))
+            self.assertEqual(launched.call_count, 2)
+            self.assertEqual(len(h.rows("sweep")), 1)
+            events = self.events(h)
+            self.assertEqual([(e["event"], e["reason"], e["mains_before"], e["mains_after"]) for e in events],
+                             [("discarded", "mains_lost", "True", "False")])
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            launched = self.guarded_run_one(h, "correctness", itertools.repeat((0, 0)), itertools.repeat(False))
+            self.assertEqual(launched.call_count, 1)
+            self.assertEqual(len(h.rows("correctness")), 1)
+            self.assertEqual(self.events(h), [])
+
+    def test_gives_up_after_five_discards(self):
+        with tempfile.TemporaryDirectory(dir=C.WORK) as folder:
+            h = self.harness(Path(folder))
+            clocks = itertools.accumulate(itertools.repeat((10_000, 0)), lambda a, b: (a[0] + b[0], a[1] + b[1]), initial=(0, 0))
+            with self.assertRaisesRegex(RuntimeError, "5 runs discarded"):
+                self.guarded_run_one(h, "correctness", clocks, itertools.repeat(True))
+            self.assertEqual(len(self.events(h)), 5)
+            self.assertEqual(h.rows("correctness"), [])
+
+    def test_slept_seconds(self):
+        self.assertEqual(slept_seconds((0, 0), (10_000, 0)), 10)
+        self.assertEqual(slept_seconds((5_000, 100), (8_500, 100 + 10_000_000)), 2.5)
+        self.assertEqual(slept_seconds((0, 0), (5_000, 50_000_000)), 0)
+        self.assertEqual(slept_seconds((0, 0), (1_000, 20_000_000)), 0)  # never negative
+        self.assertIn(on_mains(), (True, False, None))
+        before = sleep_clock()
+        self.assertLess(slept_seconds(before, sleep_clock()), 2)
 
 
 if __name__ == "__main__":
