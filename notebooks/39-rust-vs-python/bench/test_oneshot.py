@@ -8,6 +8,15 @@ from unittest.mock import patch
 from bench import config as C
 from bench import oneshot as O
 
+
+def setUpModule():
+    # The tests use fake replies, so none of them may send a trace to the local Langfuse.
+    # oneshot_v2 imports trace_call from oneshot, so this one switch covers both runners.
+    patcher = patch.object(O, "LANGFUSE_ON", False)
+    patcher.start()
+    unittest.addModuleCleanup(patcher.stop)
+
+
 class OneShotTests(unittest.TestCase):
     def test_prompt(self):
         text = O.prompt_for("heat", "plain")
