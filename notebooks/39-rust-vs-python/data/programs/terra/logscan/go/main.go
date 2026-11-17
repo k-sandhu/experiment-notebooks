@@ -1,0 +1,9 @@
+﻿package main
+import("bufio";"fmt";"os";"regexp";"sort";"strings")
+var lineRE=regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z [a-z]+-[0-9]+ (?:GET|POST|PUT|DELETE|PATCH) (/[A-Za-z0-9_/-]*)(?:\?[^ ]*)? ([0-9])[0-9]{2} [0-9]+B ([0-9]+)\.([0-9])ms "[^"]*"$`)
+func template(s string) string {var b strings.Builder;b.Grow(len(s));for i:=0;i<len(s);{b.WriteByte('/');i++;start:=i;num:=true;for i<len(s)&&s[i]!='/'{if s[i]<'0'||s[i]>'9'{num=false};i++};if i>start&&num{b.WriteString("{id}")}else{b.WriteString(s[start:i])}};return b.String()}
+func format(s string)string{if len(s)==1{return "0."+s};return s[:len(s)-1]+"."+s[len(s)-1:]}
+type entry struct{path string; values []string}
+func main(){f,_:=os.Open(os.Args[1]);defer f.Close();r:=bufio.NewReaderSize(f,1<<20);paths:=make(map[string][]string);var statuses [10]int;lines,bad:=0,0
+ for {line,err:=r.ReadString('\n');if len(line)>0 {lines++;line=strings.TrimSuffix(line,"\n");m:=lineRE.FindStringSubmatch(line);if m==nil{bad++}else{p:=template(m[1]);w:=strings.TrimLeft(m[3],"0");paths[p]=append(paths[p],w+m[4]);statuses[int(m[2][0]-'0')]++}};if err!=nil{break}}
+ var out strings.Builder;fmt.Fprintf(&out,"lines %d\nmalformed %d\n",lines,bad);for i,n:=range statuses{if n>0{fmt.Fprintf(&out,"status %dxx %d\n",i,n)}};top:=make([]entry,0,len(paths));for p,v:=range paths{top=append(top,entry{p,v})};sort.Slice(top,func(i,j int)bool{if len(top[i].values)!=len(top[j].values){return len(top[i].values)>len(top[j].values)};return top[i].path<top[j].path});if len(top)>10{top=top[:10]};for _,e:=range top{v:=e.values;sort.Slice(v,func(i,j int)bool{if len(v[i])!=len(v[j]){return len(v[i])<len(v[j])};return v[i]<v[j]});n:=len(v);fmt.Fprintf(&out,"path %s %d %s %s %s\n",e.path,n,format(v[(n-1)/2]),format(v[n-n/20-1]),format(v[n-1]))};fmt.Print(out.String())}
