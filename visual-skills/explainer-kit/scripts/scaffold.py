@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+"""Start a new explainer as one self-contained HTML file with explainer-kit already inlined.
+
+The model then edits only the SCENE block at the bottom. Nothing is fetched at run time except
+an optional Google Font, so the file works as a local page, a published artifact or a GIF source.
+
+usage:
+  python scaffold.py OUT.html --kind stepper|player|explorable [--style chalkboard|paper|editorial|blueprint]
+                     [--title "Short name"] [--fragment] [--viewbox 380x300]
+
+--fragment writes a widget fragment (no <html>/<head>/<body>) for chat surfaces that render
+HTML snippets inline, such as claude.ai's visualize/show_widget tool.
+"""
+import argparse
+import pathlib
+import sys
+
+HERE = pathlib.Path(__file__).resolve().parent
+KIT = (HERE.parent / "assets" / "kit.js").read_text(encoding="utf-8")
+
+PAGE_BG = {"chalkboard": "#141517", "paper": "#EFE9DC", "editorial": "#F2F2EE", "blueprint": "#0A1826"}
+DARK = {"chalkboard": True, "paper": False, "editorial": False, "blueprint": True}
+
+SCENES = {
+    "stepper": r"""
+const {P, T, F, line, rect, ellipse, arrow, curve, poly, C} = K;
+// Coordinates are viewBox units. Keep text >= 11 units and inside the box.
+K.stepper({
+  root: '#x', style: '__STYLE__', viewBox: [__W__, __H__],
+  title: 'One sentence that describes the whole lesson for screen readers.',
+  legend: [  // one entry per colour meaning, used the same way in every step
+    {key: 'you', label: 'You', color: 'amber'},
+    {key: 'work', label: 'Work done', color: 'blue'},
+  ],
+  steps: [
+    { title: '1. The ordinary case', keys: ['you', 'work'],
+      cap: 'One or two sentences that say what this step shows and what to watch for.',
+      draw: () =>
+        T(20, 40, 'Heading for this idea', {h: 1, z: 24, a: 'start'}) +
+        P(rect(40, 90, 130, 70, 1), 'blue', 300, 700) +
+        T(105, 130, 'A box', {h: 1, z: 18, t: 800}) +
+        P(line(180, 125, 250, 125, 2), 'mut', 1100, 400) + P(arrow(180, 125, 250, 125, 3), 'mut', 1450, 150) +
+        `<rect id="bar" x="40" y="200" width="300" height="14" rx="2" fill="${C.fill.blue}"/>` +
+        P(rect(40, 200, 300, 14, 4), 'faint', 900, 500, 1.1),
+      start(s) {                      // runtime animation, cancelled automatically when the step changes
+        s.bar('#bar', 0, 0);
+        s.at(1600, () => s.bar('#bar', .7, 1200));
+        s.at(2900, () => s.write(345, 196, '70%', {h: 1, z: 18, a: 'end'}));
+      },
+      duration: 3400 },
+    { title: '2. Your turn', keys: ['work'],
+      cap: 'A hands-on step: say exactly what to tap and what will change.',
+      draw: () => T(20, 40, 'Try it', {h: 1, z: 24, a: 'start'}) + T(190, 150, 'taps: 0', {id: 'n', h: 1, z: 30}),
+      start(s) {
+        let n = 0;
+        s.btn('play', 'Tap me', () => { n++; s.swap('#n', 'taps: ' + n); s.float(190, 120, '+1', 'green'); }, {primary: true});
+      },
+      demo: async s => { for (let i = 0; i < 3; i++) { s.tap(s.act.querySelector('button')); await s.wait(700); } },
+      idleDemo: 5000, demoDuration: 2600, duration: 800 },
+  ],
+});
+""",
+    "player": r"""
+const {P, T, F, line, rect, ellipse, arrow, curve, poly, C, lerp, clamp} = K;
+// A player redraws the whole moving layer from the time t (ms). Never keep state between frames:
+// pause, scrub, replay and GIF recording all depend on frame(t) being a pure function of t.
+const D = 12000;
+const LANES = ['Planner', 'Helper A', 'Helper B'];
+K.player({
+  root: '#x', style: '__STYLE__', viewBox: [__W__, __H__], duration: D,
+  title: 'One sentence that describes the whole replay for screen readers.',
+  legend: [{key: 'busy', label: 'Working', color: 'fill.blue'}, {key: 'wait', label: 'Waiting', color: 'fill.amber'}],
+  chapters: [
+    {at: 0, title: 'The setup', cap: 'What the reader is looking at, and what to watch.'},
+    {at: 4000, title: 'The handoff', cap: 'The planner sends work out and waits.'},
+    {at: 8000, title: 'The result', cap: 'What the timing shows, with the real number.'},
+  ],
+  log: [{t: 500, text: '• planner starts', c: 'violet'}, {t: 4200, text: '→ send task to Helper A', c: 'green'}],
+  clock: t => (t / 1000 * 10).toFixed(0) + ' s of the real run',   // say how compressed time is
+  scene: () => LANES.map((n, i) => T(16, 64 + i * 50, n, {a: 'start', z: 13, c: 'mut'}) + P(line(90, 60 + i * 50, 364, 60 + i * 50, 10 + i), 'faint', 200 * i, 600, 1)).join(''),
+  frame(t, s) {
+    s.dyn.innerHTML = '';                 // redraw the moving layer from scratch
+    const x = v => 90 + v / D * 274;
+    const bars = [[0, 0, 4000, 'fill.blue'], [0, 4000, 8000, 'fill.amber'], [1, 4200, 7600, 'fill.blue'], [2, 4300, 9000, 'fill.blue']];
+    bars.forEach(([lane, a, b, c]) => { if (t <= a) return; const e = Math.min(t, b);
+      s.el('rect', {x: x(a), y: 52 + lane * 50, width: Math.max(0, x(e) - x(a)), height: 16, rx: 3, fill: C.fill[c.slice(5)]}); });
+    s.el('line', {x1: x(t), x2: x(t), y1: 40, y2: 200, stroke: C.ink, 'stroke-opacity': .5});
+  },
+});
+""",
+    "explorable": r"""
+const {P, T, F, line, rect, ellipse, arrow, curve, poly, C, scale, fmt} = K;
+// An explorable is a live model: every control change recomputes the model and redraws.
+// Put the model in one pure function so the drawing can never disagree with the numbers.
+function model(p) { const cost = p.a * p.b; return {cost}; }
+K.stepper({
+  root: '#x', style: '__STYLE__', viewBox: [__W__, __H__],
+  title: 'One sentence that describes the explorable for screen readers.',
+  actHeight: 76,   // reserve room for the slider so the controls below never move
+  legend: [{key: 'a', label: 'Option A', color: 'fill.blue'}, {key: 'b', label: 'Option B', color: 'fill.amber'}],
+  steps: [
+    { title: '1. The question', keys: ['a', 'b'], cap: 'Set up the decision the reader will explore.',
+      draw: () => T(20, 40, 'What changes the answer?', {h: 1, z: 24, a: 'start'}), duration: 1200 },
+    { title: '2. Try it', keys: ['a', 'b'], cap: 'Move the slider. Say what to look for and where the answer flips.',
+      draw: () => T(20, 40, 'Move the price', {h: 1, z: 24, a: 'start'}) + `<rect id="b1" x="40" y="80" width="300" height="20" fill="${C.fill.blue}"/>` + T(40, 125, '', {id: 'v', a: 'start', z: 13}),
+      start(s) {
+        const draw = v => { const m = model({a: v, b: 2}); s.bar('#b1', m.cost / 20, 150); s.q('#v').textContent = 'cost ' + fmt.usd(m.cost); };
+        K.slider(s.act, {label: 'Price', min: 0, max: 10, step: .1, value: 3, fmt: v => fmt.usd(v), oninput: v => { s.touched(); draw(v); }});
+      },
+      demo: async s => { const inp = s.act.querySelector('input'); for (let v = 3; v <= 9; v += .25) { inp.value = v; inp.dispatchEvent(new Event('input')); await s.wait(60); } },
+      idleDemo: 5000, demoDuration: 2200, duration: 800 },
+  ],
+});
+""",
+}
+
+PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>:root{color-scheme:__SCHEME__}html,body{margin:0;background:__PAGEBG__}body{padding:16px;min-height:100vh;box-sizing:border-box}</style>
+</head><body>
+<div id="x"></div>
+<script>
+__KIT__
+</script>
+<script>
+/* ===== SCENE: everything below is the explainer itself. Edit freely. ===== */
+__SCENE__
+</script>
+</body></html>
+"""
+
+FRAGMENT = """<div id="x"></div>
+<script>
+__KIT__
+</script>
+<script>
+__SCENE__
+</script>
+"""
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("out")
+    ap.add_argument("--kind", choices=sorted(SCENES), default="stepper")
+    ap.add_argument("--style", choices=sorted(PAGE_BG), default="chalkboard")
+    ap.add_argument("--title", default="Explainer")
+    ap.add_argument("--viewbox", default="380x300")
+    ap.add_argument("--fragment", action="store_true")
+    a = ap.parse_args()
+    w, h = (int(v) for v in a.viewbox.lower().split("x"))
+    scene = SCENES[a.kind].replace("__STYLE__", a.style).replace("__W__", str(w)).replace("__H__", str(h)).strip()
+    tpl = FRAGMENT if a.fragment else PAGE
+    html = (tpl.replace("__TITLE__", a.title).replace("__SCHEME__", "dark" if DARK[a.style] else "light")
+               .replace("__PAGEBG__", PAGE_BG[a.style]).replace("__KIT__", KIT.strip()).replace("__SCENE__", scene))
+    out = pathlib.Path(a.out)
+    if out.exists():
+        sys.exit(f"{out} exists; refusing to overwrite. Delete it first or choose another name.")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    print(f"wrote {out} ({len(html):,} bytes, kind={a.kind}, style={a.style}). Edit the SCENE block at the bottom.")
+
+
+if __name__ == "__main__":
+    main()

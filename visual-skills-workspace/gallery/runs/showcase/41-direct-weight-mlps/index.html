@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Networks written as text</title>
+<style>:root{color-scheme:dark}html,body{margin:0;background:#141517}body{padding:16px;min-height:100vh;box-sizing:border-box}</style>
+</head><body>
+<div id="x"></div>
+<script>
+/* explainer-kit v1. A small engine for animated, stepwise SVG explainers. No dependencies.
+   Exposes window.K. Read explainer-kit/SKILL.md for the API and the rules it encodes.
+   Every animation is tied to a "generation": moving to another step cancels all timers,
+   loops and tweens of the old step, so steps can never bleed into each other. */
+(function () {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const QS = new URLSearchParams(location.search);
+const REC = QS.has('record');
+const f = n => (+n).toFixed(1);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = { inOut: k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, out: k => 1 - Math.pow(1 - k, 3), linear: k => k };
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- styles: one object per look. ink colours draw lines and text; fill colours encode data
+   (fills were checked for colour-blind separation against their background). */
+const STYLES = {
+  chalkboard: { dark: 1, bg: '#1E2023', panel: '#17191B', ink: '#ECE7DA', mut: '#9A9A93', faint: '#55585E', line: '#4A4D53',
+    blue: '#9CC3E6', green: '#A8DDC3', amber: '#F2D98B', violet: '#C3B5E8', red: '#EBA494',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 1, texture: 1, hand: "'Caveat', cursive", handSize: 1.12, font: 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap' },
+  paper: { dark: 0, bg: '#FBF8F1', panel: '#F3EEE3', ink: '#22252A', mut: '#5F6368', faint: '#C9C3B6', line: '#BDB6A8',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: .7, texture: 0, hand: "'Kalam', cursive", handSize: 1, font: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap' },
+  editorial: { dark: 0, bg: '#FFFFFF', panel: '#F5F5F2', ink: '#1A1A1A', mut: '#5C5C5C', faint: '#D6D6D0', line: '#C4C4BE',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: 0, texture: 0, hand: "'Source Serif 4', Georgia, serif", handSize: .9, font: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap' },
+  blueprint: { dark: 1, bg: '#10243A', panel: '#0C1C2E', ink: '#E6EEF5', mut: '#93A8BC', faint: '#3A5672', line: '#4A6A89',
+    blue: '#8EC5F0', green: '#9BE0C0', amber: '#F5D58A', violet: '#C9B8F2', red: '#F2A08F',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 0, texture: 0, grid: 1, hand: "'IBM Plex Mono', ui-monospace, monospace", handSize: .78, font: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap' },
+};
+let ST = STYLES.chalkboard, ROUGH = 1;
+const C = {};                                   // active colours, e.g. K.C.ink, K.C.fill.blue
+function col(c) { if (!c) return C.ink; if (c[0] === '#' || c.startsWith('rgb') || c === 'none' || c === 'transparent') return c; if (c.startsWith('fill.')) return C.fill[c.slice(5)] || c; return C[c] || c; }
+function useStyle(name, root) {
+  ST = STYLES[name] || STYLES.chalkboard; ROUGH = ST.rough;
+  Object.keys(C).forEach(k => delete C[k]); Object.assign(C, ST, { fill: { ...ST.fill } });
+  injectCSS();
+  if (ST.font && !document.querySelector(`link[href="${ST.font}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ST.font; document.head.appendChild(l); }
+  if (root) {
+    const v = { bg: ST.bg, panel: ST.panel, ink: ST.ink, mut: ST.mut, faint: ST.faint, line: ST.line, blue: ST.blue, green: ST.green, amber: ST.amber, violet: ST.violet, red: ST.red, hand: ST.hand };
+    for (const k in v) root.style.setProperty('--k-' + k, v[k]);
+    root.classList.add('kx', 'kx-' + (name in STYLES ? name : 'chalkboard'));
+    if (ST.texture) { const r = rng(9); let s = ''; for (let i = 0; i < 140; i++) s += `<circle cx='${(r() * 240).toFixed(1)}' cy='${(r() * 240).toFixed(1)}' r='${(.4 + r() * .8).toFixed(2)}' fill='%23ffffff' fill-opacity='${(.02 + r() * .045).toFixed(3)}'/>`; root.style.backgroundImage = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>${s}</svg>")`; }
+    if (ST.grid) root.style.backgroundImage = `linear-gradient(${ST.faint}55 1px,transparent 1px),linear-gradient(90deg,${ST.faint}55 1px,transparent 1px)`, root.style.backgroundSize = '20px 20px';
+  }
+  return ST;
+}
+function fontsReady(ms = 1500) { return Promise.race([document.fonts ? document.fonts.ready.then(() => document.fonts.load(`20px ${ST.hand.split(',')[0]}`)) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
+
+/* ---------- hand-drawn geometry. Each shape takes a seed so its wobble is identical on every frame. */
+const J = (r, a) => (r() - .5) * 2 * a * ROUGH;
+function line(x1, y1, x2, y2, seed = 1, bow = 1.6) { const r = rng(seed); return `M${f(x1 + J(r, .5))} ${f(y1 + J(r, .5))} Q${f((x1 + x2) / 2 + J(r, bow))} ${f((y1 + y2) / 2 + J(r, bow))} ${f(x2)} ${f(y2)}`; }
+function rect(x, y, w, h, seed = 1) {
+  if (!ROUGH) return `M${f(x)} ${f(y)}H${f(x + w)}V${f(y + h)}H${f(x)}Z`;
+  const r = rng(seed), p = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(q => [q[0] + J(r, 1.3), q[1] + J(r, 1.3)]);
+  let d = `M${f(p[0][0])} ${f(p[0][1])}`;
+  for (let i = 0; i < 4; i++) { const A = p[i], B = p[(i + 1) % 4]; d += ` Q${f((A[0] + B[0]) / 2 + J(r, 1.5))} ${f((A[1] + B[1]) / 2 + J(r, 1.5))} ${f(B[0])} ${f(B[1])}`; }
+  return d + ` L${f(p[0][0] + (p[1][0] - p[0][0]) * .08)} ${f(p[0][1] + J(r, 1))}`;
+}
+function ellipse(cx, cy, rx, ry = rx, seed = 1) { const r = rng(seed); return `M${f(cx - rx)} ${f(cy)} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx + rx)} ${f(cy + J(r, .6))} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx - rx + 1.5 * ROUGH)} ${f(cy + .6 * ROUGH)}`; }
+function arrow(fx, fy, x, y, seed = 1, L = 8) { const a = Math.atan2(y - fy, x - fx), r = rng(seed), k = .5 + J(r, .06); return `M${f(x - L * Math.cos(a - k))} ${f(y - L * Math.sin(a - k))} L${f(x)} ${f(y)} L${f(x - L * Math.cos(a + k))} ${f(y - L * Math.sin(a + k))}`; }
+function poly(pts, seed = 1) { const r = rng(seed); return 'M' + pts.map((p, i) => `${f(p[0] + (i ? J(r, .6) : 0))} ${f(p[1] + (i ? J(r, .6) : 0))}`).join(' L'); }
+function curve(x1, y1, x2, y2, bend = .3) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1; return `M${f(x1)} ${f(y1)} Q${f(mx - dy * bend)} ${f(my + dx * bend)} ${f(x2)} ${f(y2)}`; }
+
+/* ---------- markup builders. Elements carry data-k (draw|fade), data-t (delay ms) and data-d (duration ms);
+   the engine reveals them in that order when a step opens, and shows them at once with reduced motion. */
+function P(d, c, t = 0, du = 600, w = 1.5, extra = '') { return `<path d="${d}" fill="none" stroke="${col(c)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" data-k="draw" data-t="${t}" data-d="${du}" ${extra}/>`; }
+function T(x, y, s, o = {}) {
+  const fam = o.h ? 'var(--k-hand)' : o.m ? 'var(--font-mono, ui-monospace, Menlo, monospace)' : 'var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)';
+  const z = (o.z || 12) * (o.h ? ST.handSize : 1);
+  return `<text${o.id ? ` id="${o.id}"` : ''} x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${f(z)}"${o.w ? ` font-weight="${o.w}"` : ''} fill="${col(o.c)}" style="font-family:${fam};font-variant-numeric:tabular-nums" data-k="fade" data-t="${o.t || 0}" data-d="${o.d || 450}"${o.extra ? ' ' + o.extra : ''}>${o.raw ? s : esc(s)}</text>`;
+}
+function F(shape, c, t = 0, o = {}) { return `<path d="${shape}" fill="${col(c)}" fill-opacity="${o.op == null ? .85 : o.op}" stroke="none" data-k="fade" data-t="${t}" data-d="${o.d || 450}"${o.id ? ` id="${o.id}"` : ''}/>`; }
+function reveal(svg) {
+  const els = [...svg.querySelectorAll('[data-k]')];
+  if (RM) { els.forEach(e => { e.style.opacity = 1; e.style.strokeDashoffset = 0; }); return 0; }
+  let end = 0;
+  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (e.dataset.k === 'draw') { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
+  svg.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (e.dataset.k === 'draw') { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
+  return end;
+}
+function finish(svg) { svg.querySelectorAll('[data-k]').forEach(e => { e.style.transition = 'none'; e.style.strokeDashoffset = 0; e.style.opacity = 1; }); }
+
+/* ---------- small DOM helpers */
+function mk(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const ICON = {
+  left: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  right: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
+  replay: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+let cssDone = false;
+function injectCSS() {
+  if (cssDone) return; cssDone = true;
+  const s = document.createElement('style');
+  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
+.kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
+.kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
+.kx-count{font-size:11px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kx-cap{font-size:13.5px;line-height:1.55;margin:6px 8px 8px;color:var(--k-ink)}
+.kx-act{display:flex;justify-content:center;align-items:center;gap:8px;min-height:44px;flex-wrap:wrap;margin:0 4px 4px}
+.kx-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--k-mut);margin:6px 8px 8px}.kx-legend>span{transition:opacity .4s}
+.kx-sw{display:inline-block;width:12px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.kx-nav{display:flex;align-items:center;gap:8px}.kx button.kx-next{min-width:112px}.kx-act .kx-ctl{flex:1 1 100%}
+@media (max-width:480px){.kx{padding:12px 8px 10px}.kx button.kx-next{min-width:96px;padding:0 8px}.kx button.kx-dot{padding:10px 3px}.kx-nav{gap:6px}}
+.kx button{background:transparent;border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:0 12px;font:inherit;font-size:13px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.kx button:hover{border-color:var(--k-mut)}.kx button:focus-visible,.kx [role=button]:focus-visible{outline:2px solid var(--k-violet);outline-offset:2px}
+.kx button.pri{border-color:var(--k-violet);color:var(--k-violet)}.kx button[aria-pressed=true]{background:color-mix(in srgb,var(--k-violet) 18%,transparent)}
+.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
+.kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
+.kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
+.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:11px;line-height:17px;height:92px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
+.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1}
+.kx-time{font-size:11px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
+.kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
+.kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
+.kx-ripple{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid var(--k-ink);pointer-events:none;animation:kxrp .6s ease-out forwards}@keyframes kxrp{from{transform:scale(.3);opacity:.9}to{transform:scale(1.4);opacity:0}}
+.kx-recording .kx-nav button:not(.kx-dot),.kx-recording .kx-scrub button{visibility:hidden}
+.kx .sr-only,.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.kx *{transition:none!important;animation:none!important}}`;
+  document.head.appendChild(s);
+}
+
+/* ---------- step context: everything a step needs, bound to its generation */
+function makeCtx(eng, svg, i) {
+  const g = eng.gen, alive = () => g === eng.gen, dyn = svg.querySelector('.kx-dyn');
+  const q = s => svg.querySelector(s);
+  const pick = e => typeof e === 'string' ? q(e) : e;
+  const s = {
+    i, svg, dyn, q, alive, C, RM, root: eng.root, act: eng.act,
+    at(ms, fn) { const id = setTimeout(() => { if (alive()) fn(); }, ms); eng.timers.push(id); return id; },
+    wait(ms) { return new Promise(r => s.at(ms, () => { if (!(eng.inDemo && eng.touched)) r(); })); },   // an idle demo stops for good once the reader acts
+    loop(delay, fn) { s.at(delay, () => { let last = performance.now(); const t0 = last, st = {}; const k = n => { if (!alive()) return; st.dt = Math.min(.05, Math.max(0, (n - last) / 1000)); last = n; st.e = n - t0; if (fn(st) !== false) requestAnimationFrame(k); }; requestAnimationFrame(k); }); },
+    tween(du, fn, o = {}) { const ez = ease[o.ease || 'inOut']; return new Promise(res => s.at(o.delay || 0, () => { if (RM || du <= 0) { fn(1); res(); return; } const t0 = performance.now(); const k = n => { if (!alive()) return; const p = clamp((n - t0) / du); fn(ez(p)); if (p < 1) requestAnimationFrame(k); else res(); }; requestAnimationFrame(k); })); },
+    el(tag, attrs, parent) { return mk(tag, attrs, parent || dyn); },
+    drawIn(e, du = 500, delay = 0) { e = pick(e); if (!e || RM) return; const L = e.getTotalLength() + 1; e.style.transition = 'none'; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; e.getBoundingClientRect(); e.style.transition = `stroke-dashoffset ${du}ms cubic-bezier(.45,0,.55,1) ${delay}ms`; e.style.strokeDashoffset = 0; },
+    fadeIn(e, du = 400, delay = 0) { e = pick(e); if (!e) return; e.style.transition = 'none'; e.style.opacity = 0; e.getBoundingClientRect(); e.style.transition = `opacity ${du}ms ease ${delay}ms`; e.style.opacity = 1; },
+    fadeOut(e, du = 400, remove = true) { e = pick(e); if (!e) return; e.style.transition = `opacity ${du}ms`; e.style.opacity = 0; if (remove) setTimeout(() => e.remove(), du + 50); },
+    travel(path, du = 600, c = 'ink', o = {}) {   // a dot that moves along a path element or a list of points
+      let p = pick(path), temp = false;
+      if (Array.isArray(path)) { p = mk('path', { d: 'M' + path.map(q => q.join(' ')).join(' L'), fill: 'none', stroke: col(c), 'stroke-width': 1.6, 'stroke-opacity': o.trail === false ? 0 : .5, 'stroke-linecap': 'round' }, dyn); temp = true; if (o.trail !== false) s.drawIn(p, du); }
+      const d = mk('circle', { r: o.r || 3.6, fill: col(c) }, dyn), L = p.getTotalLength();
+      const done = () => { s.fadeOut(d, 300); if (temp && !o.keep) setTimeout(() => s.fadeOut(p, 450), 200); };
+      if (RM) { const e = p.getPointAtLength(L); d.setAttribute('cx', e.x); d.setAttribute('cy', e.y); done(); return Promise.resolve(); }
+      return s.tween(du, k => { const e = p.getPointAtLength(k * L); d.setAttribute('cx', f(e.x)); d.setAttribute('cy', f(e.y)); }, { delay: o.delay || 0 }).then(done);
+    },
+    ring(x, y, w, h, c = 'ink', o = {}) { const p = mk('path', { d: rect(x, y, w, h, Math.round(x * 7 + y)), fill: 'none', stroke: col(c), 'stroke-width': o.w || 2.4, 'stroke-linecap': 'round', class: 'pulse' }, dyn); p.style.opacity = 0; setTimeout(() => p.remove(), 1400); return p; },
+    write(x, y, text, o = {}) { const w = document.createElementNS(NS, 'g'); w.innerHTML = T(x, y, text, o); const t = w.firstChild; dyn.appendChild(t); t.removeAttribute('data-k'); s.fadeIn(t, o.d || 450, o.t || 0); return t; },
+    float(x, y, text, c = 'ink', z = 16) { const t = s.write(x, y, text, { h: 1, z, c }); if (!RM) { t.style.transition = 'transform 1.1s ease-out, opacity 1.1s ease-out'; requestAnimationFrame(() => requestAnimationFrame(() => { t.style.transform = 'translateY(-18px)'; t.style.opacity = 0; })); } setTimeout(() => t.remove(), 1200); },
+    swap(e, text, c) { e = pick(e); if (!e) return; e.style.transition = 'opacity .15s'; e.style.opacity = 0; s.at(160, () => { e.textContent = text; if (c) e.setAttribute('fill', col(c)); e.style.opacity = 1; }); },
+    count(e, to, o = {}) { e = pick(e); if (!e) return; const from = o.from != null ? o.from : (+e.dataset.v || 0), fmt = o.fmt || (v => Math.round(v).toLocaleString()); e.dataset.v = to; return s.tween(o.du || 900, k => { e.textContent = (o.pre || '') + fmt(lerp(from, to, k)) + (o.post || ''); }, { delay: o.delay || 0 }); },
+    bar(e, frac, du = 600, axis = 'x') { e = pick(e); if (!e) return; e.style.transformBox = 'fill-box'; e.style.transformOrigin = axis === 'x' ? '0 50%' : '50% 100%'; e.style.transition = RM ? 'none' : `transform ${du}ms cubic-bezier(.45,0,.55,1)`; e.style.transform = axis === 'x' ? `scaleX(${clamp(frac).toFixed(4)})` : `scaleY(${clamp(frac).toFixed(4)})`; },
+    btn(icon, label, fn, o = {}) { const b = document.createElement('button'); if (o.primary) b.className = 'pri'; b.innerHTML = (ICON[icon] || '') + esc(label); b.type = 'button'; b.onclick = e => { if (e.isTrusted) s.touched(); fn(b); }; eng.act.appendChild(b); return b; },
+    on(e, fn, label) { e = pick(e); e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0'); if (label) e.setAttribute('aria-label', label); e.style.cursor = 'pointer'; const h = ev => { if (ev.isTrusted) s.touched(); fn(ev); }; e.addEventListener('click', h); e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); h(ev); } }); return e; },
+    point(ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 }; },
+    drag(e, o) { e = pick(e); e.style.touchAction = 'none'; e.style.cursor = 'grab'; let on = false; e.addEventListener('pointerdown', ev => { on = true; e.setPointerCapture(ev.pointerId); s.touched(); o.move && o.move(s.point(ev), ev); }); e.addEventListener('pointermove', ev => { if (on && alive()) o.move && o.move(s.point(ev), ev); }); const up = ev => { if (!on) return; on = false; o.end && o.end(s.point(ev), ev); }; e.addEventListener('pointerup', up); e.addEventListener('pointercancel', up); return e; },
+    cap(text) { eng.cap.textContent = text; },
+    touched() { eng.touched = true; if (eng.stopAuto && !REC) eng.stopAuto(); },   // a reader who acts takes over from autoplay
+    tap(e) { e = pick(e); if (!e || !alive() || (eng.inDemo && eng.touched)) return; const r = e.getBoundingClientRect(), R = eng.root.getBoundingClientRect(), d = document.createElement('div'); d.className = 'kx-ripple'; d.style.left = (r.left + r.width / 2 - R.left) + 'px'; d.style.top = (r.top + r.height / 2 - R.top) + 'px'; eng.root.appendChild(d); setTimeout(() => d.remove(), 650); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); },
+    /* unit charts: one circle per item, keyed, so items keep their identity when they move */
+    units(items, o = {}) { const gU = mk('g', { class: 'kx-units' }, o.parent || dyn); s._units = items.map((it, j) => { const c = mk('circle', { cx: o.x0 || 0, cy: o.y0 || 0, r: o.r || 4, fill: col(o.fill || 'fill.blue') }, gU); c.style.transition = 'fill .5s, opacity .5s'; return { it, c, x: o.x0 || 0, y: o.y0 || 0, r: o.r || 4, j }; }); return s._units; },
+    arrange(layout, o = {}) { const U = s._units || [], du = o.du || 900, stg = o.stagger == null ? 4 : o.stagger, ez = ease[o.ease || 'inOut'];
+      const tg = U.map((u, j) => { const L = layout(u.it, j) || {}; if (L.fill) u.c.style.fill = col(L.fill); if (L.opacity != null) u.c.style.opacity = L.opacity; return { x0: u.x, y0: u.y, r0: u.r, x: L.x == null ? u.x : L.x, y: L.y == null ? u.y : L.y, r: L.r == null ? u.r : L.r, dl: (L.order == null ? j : L.order) * stg }; });
+      const tot = du + Math.max(0, ...tg.map(t => t.dl));
+      return s.tween(tot, k => { const ms = k * tot; U.forEach((u, j) => { const t = tg[j], p = ez(clamp((ms - t.dl) / du)); u.x = lerp(t.x0, t.x, p); u.y = lerp(t.y0, t.y, p); u.r = lerp(t.r0, t.r, p); u.c.setAttribute('cx', f(u.x)); u.c.setAttribute('cy', f(u.y)); u.c.setAttribute('r', f(u.r)); }); }, { ease: 'linear', delay: o.delay || 0 }); },
+  };
+  return s;
+}
+
+/* ---------- stepper: a lesson that moves one idea at a time, with fixed controls */
+const ALL = (window.EXPLAINERS = window.EXPLAINERS || []);
+function frame(root, o, kind) {
+  root = typeof root === 'string' ? document.querySelector(root) : root;
+  useStyle(o.style || 'chalkboard', root);
+  const [W, H] = o.viewBox || [380, 300];
+  const legend = (o.legend || []).map(l => `<span data-l="${l.key}"><span class="kx-sw" style="background:${col(l.color)}"></span>${esc(l.label)}</span>`).join('');
+  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div>
+<svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
+${kind === 'player' ? '<div class="kx-scrub"><button class="kx-pp" type="button"></button><input type="range" min="0" step="1" aria-label="Scrub the timeline"><span class="kx-time"></span></div>' : '<div class="kx-act"></div>'}
+${legend ? `<div class="kx-legend">${legend}</div>` : ''}<div class="kx-nav"><button class="kx-back" type="button" aria-label="Previous">${ICON.left}</button><div class="kx-dots"></div>${kind === 'stepper' ? `<button class="kx-replay" type="button" aria-label="Replay this step" title="Replay this step">${ICON.replay}</button>` : ''}<button class="kx-next" type="button"></button></div>`;
+  if (REC) root.classList.add('kx-recording');
+  const $ = s => root.querySelector(s);
+  return { root, W, H, svg: $('.kx-stage'), cap: $('.kx-cap'), act: $('.kx-act'), title: $('.kx-title'), count: $('.kx-count'), dots: $('.kx-dots'), next: $('.kx-next'), back: $('.kx-back'), replay: $('.kx-replay'), log: $('.kx-log'), $ };
+}
+function fixCaptionHeight(fr, texts) {   // reserve the tallest caption so nothing below it ever moves
+  const m = fr.cap.cloneNode(); m.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;min-height:0;width:${fr.cap.clientWidth}px`; m.removeAttribute('aria-live'); fr.cap.parentNode.appendChild(m);
+  let h = 0; texts.forEach(t => { m.textContent = t; h = Math.max(h, m.offsetHeight); }); m.remove(); fr.cap.style.minHeight = h + 'px';
+}
+function stepper(o) {
+  const fr = frame(o.root, o, 'stepper'), S = o.steps;
+  if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
+  const eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
+  let cur = 0, first = true, auto = null, ends = [];
+  eng.stopAuto = () => { auto = null; };
+  S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
+  const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
+  fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
+  function build(i) {
+    cur = i; eng.touched = false; const st = S[i], s = {};
+    fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
+    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = `Step ${i + 1} of ${S.length}`;
+    fr.svg.setAttribute('aria-label', (st.title || '') + '. ' + (st.alt || st.cap || ''));
+    [...fr.dots.children].forEach((d, j) => j === i ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current'));
+    fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !st.keys || st.keys.includes(e.dataset.l) ? 1 : .3);
+    fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : 'Next' + ICON.right;
+    fr.cap.style.transition = 'none'; fr.cap.style.opacity = 0; fr.cap.textContent = st.cap || '';
+    const revealEnd = reveal(fr.svg);
+    const ctx = makeCtx(eng, fr.svg, i);
+    ctx.at(st.capDelay == null ? 300 : st.capDelay, () => { fr.cap.style.transition = 'opacity .6s'; fr.cap.style.opacity = 1; });
+    if (st.start) st.start(ctx);
+    eng.inDemo = false;
+    if (st.demo && st.idleDemo && !REC) ctx.at(st.idleDemo, () => { if (!eng.touched) { eng.inDemo = true; Promise.resolve(st.demo(ctx)).finally(() => { eng.inDemo = false; }); } });
+    ends[i] = st.duration || revealEnd + 600;
+    eng.ctx = ctx;
+  }
+  function go(i, keepAuto) {
+    if (!keepAuto) auto = null;
+    eng.gen++; eng.timers.forEach(clearTimeout); eng.timers = [];
+    i = Math.max(0, Math.min(S.length - 1, i));
+    const g = eng.gen;
+    if (first || RM) { first = false; build(i); fr.svg.style.opacity = 1; }
+    else { fr.svg.style.opacity = 0; setTimeout(() => { if (g === eng.gen) { build(i); fr.svg.style.opacity = 1; } }, 230); }
+  }
+  fr.back.onclick = () => go(cur - 1);
+  fr.next.onclick = () => go(cur < S.length - 1 ? cur + 1 : 0);
+  fr.replay.onclick = () => go(cur);
+  document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('[role=button],input,button,textarea,select')) return; if (ALL.length > 1 && !fr.root.contains(document.activeElement)) return; if (e.key === 'ArrowRight') go(cur + 1); if (e.key === 'ArrowLeft') go(cur - 1); });
+  const api = {
+    kind: 'stepper', root: fr.root, get count() { return S.length; }, get current() { return cur; },
+    go: i => go(i), duration: i => S[i].duration || ends[i] || 4000, hasDemo: i => !!S[i].demo,
+    demo: i => { const c = eng.ctx; return c && c.i === i && S[i].demo ? Promise.resolve(S[i].demo(c)) : Promise.resolve(); },
+    demoDuration: i => S[i].demoDuration || 0,
+    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(hold); } },
+  };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { go(+(QS.get('step') || 1) - 1); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; });
+    else if (o.autoplay && !RM && !QS.has('step') && !QS.has('static')) { const run = () => api.autoplay().then(() => { if (o.autoplay === 'loop' && auto) run(); }); run(); } });
+  return api;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
+   so pause, scrub, replay and recording all work for free. Chapters label stretches of the timeline. */
+function player(o) {
+  const fr = frame(o.root, o, 'player'), eng = { gen: 0, timers: [], root: fr.root, act: null, cap: fr.cap, touched: false };
+  const CH = o.chapters || [{ at: 0, title: o.title || '', cap: '' }], D = o.duration;
+  const range = fr.$('.kx-scrub input'), pp = fr.$('.kx-pp'), tm = fr.$('.kx-time');
+  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1;
+  fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
+  const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
+  CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
+  fixCaptionHeight(fr, CH.map(c => c.cap || ''));
+  const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
+  function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !c.keys || c.keys.includes(e.dataset.l) ? 1 : .3); }
+  function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
+  function draw() { range.value = t; tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
+  function seek(x) { t = clamp(x, 0, D); draw(); }
+  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n; t += dt * speed; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
+  function play() { if (t >= D) t = 0; if (RM) { seek(end(chapterAt(t)) - 1); return; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }  // reduced motion: jump to the end state of the chapter instead of animating
+  function pause() { playing = false; updPP(); }
+  function updPP() { pp.innerHTML = playing ? ICON.pause + 'Pause' : t >= D ? ICON.replay + 'Replay' : ICON.play + 'Play'; pp.setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  pp.onclick = () => playing ? pause() : play();
+  range.oninput = () => { pause(); seek(+range.value); };
+  fr.back.onclick = () => { seek(CH[Math.max(0, chapterAt(t) - (t - CH[chapterAt(t)].at < 600 ? 1 : 0))].at); };
+  fr.next.innerHTML = 'Next' + ICON.right; fr.next.onclick = () => { const k = chapterAt(t); seek(k < CH.length - 1 ? CH[k + 1].at : 0); play(); };
+  const end = i => i < CH.length - 1 ? CH[i + 1].at : D;
+  const api = { kind: 'player', root: fr.root, get count() { return CH.length; }, get current() { return chapterAt(t); }, go: i => { seek(CH[i].at); play(); }, duration: i => (end(i) - CH[i].at) / speed, hasDemo: () => false, demo: () => Promise.resolve(), seek, play, pause, get time() { return t; },
+    async autoplay() { seek(0); play(); while (t < D) await sleep(200); await sleep(o.hold || 2000); } };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if (o.autoplay !== false && !QS.has('static')) play(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  return api;
+}
+
+/* ---------- controls for explorables */
+let uid = 0;
+function slider(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent; const id = 'kx' + (++uid);
+  const w = document.createElement('div'); w.className = 'kx-ctl';
+  w.innerHTML = `<label for="${id}">${esc(o.label)}</label><output for="${id}"></output><input id="${id}" type="range" min="${o.min}" max="${o.max}" step="${o.step || 'any'}" value="${o.value}">`;
+  parent.appendChild(w); const inp = w.querySelector('input'), out = w.querySelector('output'), fmt = o.fmt || (v => v);
+  const upd = () => { out.textContent = fmt(+inp.value); o.oninput && o.oninput(+inp.value); };
+  inp.addEventListener('input', upd); upd();
+  return { el: w, input: inp, get value() { return +inp.value; }, set(v) { inp.value = v; upd(); } };
+}
+function toggle(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent;
+  const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', o.value ? 'true' : 'false'); b.innerHTML = esc(o.label); parent.appendChild(b);
+  b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', v); o.onchange && o.onchange(v); };
+  return b;
+}
+
+/* ---------- layout and number helpers */
+const grid = (j, o) => ({ x: (o.x0 || 0) + (j % o.cols) * (o.gap || 10), y: (o.y0 || 0) + Math.floor(j / o.cols) * (o.gapY || o.gap || 10) });
+function scale(d0, d1, r0, r1) { const s = v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0); s.invert = p => d0 + (p - r0) / (r1 - r0 || 1) * (d1 - d0); return s; }
+const fmt = {
+  int: v => Math.round(v).toLocaleString('en-US'),
+  pct: (v, d = 0) => (v * 100).toFixed(d) + '%',
+  usd: (v, d = 2) => (v < 0 ? '−' : '') + '$' + Math.abs(v).toFixed(d),
+  sec: v => v < 60 ? v.toFixed(0) + ' s' : Math.floor(v / 60) + ' min ' + Math.round(v % 60) + ' s',
+};
+/* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
+function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
+
+const K = { version: '1.0', NS, RM, C, STYLES, useStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
+window.K = K;
+})();
+</script>
+<script>
+/* ===== SCENE: everything below is the explainer itself. Edit freely. ===== */
+const {P, T, F, line, rect, ellipse, arrow, curve, poly, C} = K;
+
+/* All numbers come from notebooks/41-direct-weight-mlps (README.md and data/). Sources per value in notes.md. */
+const DATA = {
+  nTest: 1797,                // README study summary; data/study_summary.json n_test
+  nVisible: 2048,             // README section 1; data/dataset.npz visible
+  nParams: 6570,              // README section 2 tensor table
+  layers: [4160, 2080, 330],  // W1+b1 = 4,096+64; W2+b2 = 2,048+32; W3+b3 = 320+10 (README section 2)
+  chance: 180,                // README section 5: "about 180 expected from guessing" (10% of 1,797)
+  lookup: 1750,               // nearest-neighbour reference, data/nearest_neighbour_baseline.json
+  // Four real visible digits (data/dataset.npz 'visible', first of each label; official training rows 2136, 541, 1525, 60)
+  digits: [
+    {label: 0, px: [0,0,1,13,13,0,0,0,0,0,11,14,15,11,0,0,0,4,16,4,2,15,5,0,0,8,9,0,0,12,7,0,0,5,10,0,0,12,7,0,0,5,14,1,2,15,1,0,0,1,14,15,12,12,0,0,0,0,2,13,12,3,0,0]},
+    {label: 6, px: [0,0,2,13,6,0,0,0,0,0,11,11,3,0,0,0,0,1,16,3,0,0,0,0,0,3,16,11,5,0,0,0,0,3,16,15,4,6,3,0,0,2,16,4,0,7,10,0,0,0,13,8,0,8,13,0,0,0,3,12,16,16,6,0]},
+    {label: 1, px: [0,0,0,0,15,16,3,0,0,0,0,0,15,16,2,0,0,0,0,4,16,16,2,0,0,0,8,16,16,13,0,0,0,8,16,16,16,9,0,0,0,1,8,6,16,12,0,0,0,0,0,3,16,13,0,0,0,0,0,0,13,13,0,0]},
+    {label: 7, px: [0,0,5,12,14,16,5,0,0,6,16,15,10,16,6,0,0,0,3,0,3,16,2,0,0,0,1,4,14,13,2,0,0,7,16,16,16,16,11,0,0,4,9,14,12,1,1,0,0,0,0,16,8,0,0,0,0,0,4,16,5,0,0,0]},
+  ],
+  // First values of GPT-6 Astra's reply, data/responses/astra/weights_output.json
+  astraStart: '{"weights":[0,0,1,0,0,0,0,0,0,0,2,-1,0,0,…',
+  // GPT-6 Astra's network on the 1,797 official test digits, in test order: 1 = right (data/responses/astra/predictions.npz vs dataset.npz labels)
+  astra: '110110111111111111101111111110111111101111111111111111011111111111111011111110111111111111111111111111101111111111111111111011111111111111111111111111111101111111111111111011111111111111111111111111011111111111111111111111111011011111111100110101110001111111111111111111111110111111110111111111111111111111111111111111111111111110111111111111111111111111111111111011111111111111011111111111111011111111101011101110101111001111111111111111001111111110111111101111111111111111111111011111111111111101011111111111011111111011111111111111111110111110101010111011111011111111111110110011111111110111111110111110101111111111111011111111111111111111111111111111111110111111111111111110111110111111111111111111111111111111111110111011111110111101011111110111101111011111111111111111111111011101111111010111111111111101111011010111111111101111111111111011111111111101111111111111111111011111111111111011111111111111111111010111111111111111111111111111111111111111111111111101111110111011111111101111111111101111111101111111111111111111111111111111011111111101111111110111111101011111111111111011111111111101111111111111111111110011111111111111111111111111111011011111111111111111111111111111111111111111111011110111111111111101111111111111111011111111111111111111111111111111111111111111111111111101111111111110111111111111111111111111111111111111111111111110111111111110111111111111111111111111111111111111111111111111111111111111101111111111111111111111111111111111101111111101111111111111111111111011101111011111111110111111111110111110111111101111011111111010111111111111111111101111111101111101111111111111001001111011111011111111110111011111111111111111111111110101011001011111111110011111111101111111111111111110110111111111111100100111111111111111111111111111111110101111111111111111111111110111111',
+  // Thirteen first requests (README section 5 tables; data/study_summary.json results)
+  first: [
+    {name: 'GPT-6 Astra', n: 1645},
+    {name: 'Claude Fable 5.1', n: 1628},
+    {name: 'GPT-6.1 Sol', n: 1422},
+    {name: 'Muse Wonder', n: 606},
+    {name: 'DeepSeek V4.1 Flash', n: 379},
+    {name: 'MiMo-V2.6-Pro', n: 335},
+    {name: 'GLM-5.3', n: 194},
+    {name: 'Opus 5.5 xhigh', why: 'thought until out of room', retry: {why: 'retry refused'}},
+    {name: 'Opus 5.5 high', why: 'miscounted: 6,378 numbers', retry: {n: 1580}},
+    {name: 'Sonnet 5.5', why: 'miscounted: 6,624 numbers', retry: {n: 1214}},
+    {name: 'Haiku 5.5', why: 'wrote zeros until cut off', retry: {why: 'declined on retry'}},
+    {name: 'Gemini 4 Argon', why: 'format rejected by provider', retry: {n: 1091}},
+    {name: 'Nemotron 3.5', why: 'ran out of room thinking', retry: {why: 'retry: 3 provider timeouts'}},
+  ],
+  // Sonnet 5.5 flat reply layout, README section 6 table (data/claude_family/sonnet/weights_output.json)
+  sonnetNeed: [['W1', 64, 64], ['b1', 1, 64], ['W2', 32, 64], ['b2', 1, 32], ['W3', 10, 32], ['b3', 1, 10]],
+  // GLM-5.3 predictions per digit and how many were right (data/open_models/glm/predictions.npz)
+  glmPred: [1670, 0, 0, 127, 0, 0, 0, 0, 0, 0],
+  glmRight: [178, 0, 0, 16, 0, 0, 0, 0, 0, 0],
+  testPerDigit: [178, 182, 177, 183, 181, 182, 181, 179, 174, 180],  // official test labels
+  deepseekOnes: 1388, mimoOnes: 1546,                                // README section 6 collapse table
+};
+const fmt = v => Math.round(v).toLocaleString('en-US');
+const pct = v => (100 * v / DATA.nTest).toFixed(1) + '%';
+const BEST = DATA.first[0].n;
+let GUESS = null;   // the reader's guess; stored apart from the data and drawn dashed in amber
+
+/* ---------- step 1: digits as numbers */
+function digitGrid(d, x, y, cell, id) {
+  let s = `<g id="${id}">`;
+  d.px.forEach((v, j) => { if (v) s += `<rect x="${(x + (j % 8) * cell).toFixed(1)}" y="${(y + Math.floor(j / 8) * cell).toFixed(1)}" width="${cell}" height="${cell}" fill="${C.ink}" fill-opacity="${(v / 16).toFixed(3)}"/>`; });
+  return s + '</g>';
+}
+const GX = [26, 110, 194, 278], GY = 34, CELL = 9.5;
+
+/* ---------- step 3: guess scale */
+const SX0 = 30, SX1 = 350, SY = 296;
+const sx = v => SX0 + (SX1 - SX0) * v / DATA.nTest;
+const DOT = {cols: 60, gap: 5.3, x0: 190 - 59 * 5.3 / 2, y0: 52};
+const dotXY = j => ({x: DOT.x0 + (j % DOT.cols) * DOT.gap, y: DOT.y0 + Math.floor(j / DOT.cols) * DOT.gap});
+
+/* ---------- steps 4-5: results chart */
+const BX0 = 144, BW = 186, ROW0 = 58, ROWH = 21;
+const bx = v => BX0 + BW * v / DATA.nTest;
+const rowY = i => ROW0 + (i < 7 ? i : i + 1) * ROWH;
+const AXY = ROW0 + 14 * ROWH - 6;
+
+function chart(final, withRetry) {
+  let s = '';
+  s += T(136, 36, 'first reply from', {z: 12, a: 'end', c: 'mut'});
+  // reference lines: guessing and nearest-sample lookup
+  [[DATA.chance, 'gx'], [DATA.lookup, 'lx']].forEach(([v]) => {
+    s += `<line x1="${bx(v)}" x2="${bx(v)}" y1="44" y2="${AXY}" stroke="${C.mut}" stroke-width="1" stroke-dasharray="2 3" opacity=".7"/>`;
+  });
+  s += `<line x1="${BX0}" x2="${BX0 + BW}" y1="${AXY}" y2="${AXY}" stroke="${C.mut}" stroke-width="1"/>`;
+  [[0, '0'], [900, '900'], [DATA.nTest, '1,797']].forEach(([v, l]) => {
+    s += `<line x1="${bx(v)}" x2="${bx(v)}" y1="${AXY}" y2="${AXY + 4}" stroke="${C.mut}"/>` + T(bx(v), AXY + 16, l, {z: 12, c: 'mut'});
+  });
+  s += T(bx(DATA.chance) - 6, AXY + 34, '↑ guessing ≈180', {z: 12, a: 'start', c: 'mut'});
+  s += T(bx(DATA.lookup) + 10, AXY + 34, 'lookup 1,750 ↑', {z: 12, a: 'end', c: 'mut'});
+  // separator for the replies that gave no network
+  const sy = ROW0 + 7 * ROWH;
+  s += `<line x1="12" x2="368" y1="${sy - 10}" y2="${sy - 10}" stroke="${C.faint}" stroke-dasharray="3 3"/>`;
+  s += T(12, sy + 4, 'no usable network on the first reply:', {z: 12, a: 'start', c: 'red', id: 'sep'});
+  DATA.first.forEach((r, i) => {
+    const y = rowY(i);
+    s += T(136, y + 4, r.name, {z: 12, a: 'end', c: r.n ? 'ink' : 'mut'});
+    if (r.n) {
+      s += `<rect id="b${i}" x="${BX0}" y="${y - 6}" width="${bx(r.n) - BX0}" height="12" rx="1.5" fill="${C.fill.blue}" style="transform-box:fill-box;transform-origin:0 50%;transform:scaleX(${final ? 1 : 0})"/>`;
+      const w = bx(r.n) - BX0, inside = w > 60;
+      s += `<text id="n${i}" x="${inside ? bx(r.n) - 4 : bx(r.n) + 4}" y="${y + 4}" text-anchor="${inside ? 'end' : 'start'}" font-size="12" font-weight="600" ${inside ? '' : 'stroke="' + C.bg + '" stroke-width="3" paint-order="stroke" '}fill="${inside ? C.bg : C.ink}" style="opacity:${final ? 1 : 0}">${fmt(r.n)}</text>`;
+    } else {
+      s += `<text id="w${i}" x="${BX0}" y="${y + 4}" font-size="12" stroke="${C.bg}" stroke-width="3" paint-order="stroke" fill="${C.red}" style="opacity:${final ? 1 : 0};transition:opacity .4s">✗ ${r.why}</text>`;
+      if (withRetry) {
+        const rn = r.retry.n;
+        if (rn) {
+          s += `<rect id="rb${i}" x="${BX0}" y="${y - 6}" width="${bx(rn) - BX0}" height="12" rx="1.5" fill="${C.fill.violet}" style="transform-box:fill-box;transform-origin:0 50%;transform:scaleX(0)"/>`;
+          s += `<text id="rn${i}" x="${bx(rn) - 4}" y="${y + 4}" text-anchor="end" font-size="12" font-weight="600" fill="${C.bg}" style="opacity:0;transition:opacity .4s">${fmt(rn)}</text>`;
+        } else {
+          s += `<text id="rw${i}" x="${BX0}" y="${y + 4}" font-size="12" stroke="${C.bg}" stroke-width="3" paint-order="stroke" fill="${C.red}" style="opacity:0;transition:opacity .4s">✗ ${r.retry.why}</text>`;
+        }
+      }
+    }
+  });
+  if (GUESS != null) {
+    const gx = bx(GUESS), right = gx > 300;
+    s += `<line x1="${gx}" x2="${gx}" y1="44" y2="${AXY}" stroke="${C.amber}" stroke-width="1.6" stroke-dasharray="5 4"/>`;
+    s += T(right ? gx - 4 : gx + 4, 36, 'your guess', {z: 12, a: right ? 'end' : 'start', c: 'amber'});
+  }
+  return s;
+}
+
+/* ---------- step 6: Sonnet's flat reply */
+const LH = 2.3, LY0 = 56;
+function replyColumn(x, rows, id) {
+  let s = `<g id="${id}">`;
+  rows.forEach((r, j) => {
+    const w = 80 * r.v / 64;
+    s += `<rect x="${x}" y="${(LY0 + j * LH).toFixed(1)}" width="${w.toFixed(1)}" height="${(LH - .7).toFixed(1)}" fill="${r.bad ? C.fill.red : C.mut}" opacity="${r.bad ? 1 : .75}"/>`;
+  });
+  return s + '</g>';
+}
+function expandRows(spec) { const out = []; spec.forEach(([, lines, v]) => { for (let k = 0; k < lines; k++) out.push({v}); }); return out; }
+const NEED = expandRows(DATA.sonnetNeed);
+const WROTE = (() => {
+  const r = expandRows(DATA.sonnetNeed);
+  r[97] = {v: 30, bad: true};            // b2: 30 of 32 values (line 99 of the reply)
+  r.splice(65, 0, {v: 56, bad: true});   // line 66: 56 extra zeros
+  return r;
+})();
+
+const CAP3_GUESS = g => `You guessed ${fmt(g)}. The best network, from GPT-6 Astra, got ${fmt(BEST)} of ${fmt(DATA.nTest)} right (${pct(BEST)}): ${g > BEST ? 'about ' + fmt(g - BEST) + ' fewer' : fmt(BEST - g) + ' more'} than your guess. Grey dots are its ${fmt(DATA.nTest - BEST)} mistakes.`;
+const CAP3_SKIP = `The best network, from GPT-6 Astra, got ${fmt(BEST)} of ${fmt(DATA.nTest)} test digits right (${pct(BEST)}). Grey dots are its ${fmt(DATA.nTest - BEST)} mistakes, in test order.`;
+const CAP3_DEMO = g => `Example guess: ${fmt(g)}. The best network, from GPT-6 Astra, got ${fmt(BEST)} of ${fmt(DATA.nTest)} right (${pct(BEST)}). Grey dots are its ${fmt(DATA.nTest - BEST)} mistakes. Try your own guess.`;
+
+const EX = K.stepper({
+  root: '#x', style: 'chalkboard', viewBox: [380, 400],
+  title: 'Language models wrote all 6,570 weights of a small digit classifier as plain numbers. Guess how many of 1,797 test digits the best network got right, then see every model.',
+  legend: [
+    {key: 'you', label: 'Your guess', color: 'amber'},
+    {key: 'right', label: 'Digits right', color: 'fill.blue'},
+    {key: 'retry', label: 'Right after a numbered retry', color: 'fill.violet'},
+    {key: 'none', label: 'No usable network', color: 'red'},
+  ],
+  actHeight: 44,
+  extraCaptions: [CAP3_GUESS(1797), CAP3_GUESS(1000), CAP3_SKIP, CAP3_DEMO(1000)],
+  steps: [
+    { title: '1. Digits, typed as numbers', keys: [],
+      cap: 'Each handwritten digit is an 8×8 grid of ink counts from 0 to 16. Every model got the same 2,048 labelled digits as lines of numbers like the one above, never as pictures.',
+      draw: () => {
+        let s = '';
+        DATA.digits.forEach((d, k) => {
+          s += P(rect(GX[k] - 3, GY - 3, 8 * CELL + 6, 8 * CELL + 6, 11 + k), 'faint', 100 + k * 150, 500, 1.2);
+          s += digitGrid(d, GX[k], GY, CELL, 'g' + k);
+          s += T(GX[k] + 4 * CELL, GY + 8 * CELL + 22, 'a ' + d.label, {h: 1, z: 18, t: 500 + k * 150});
+        });
+        const z = DATA.digits[0].px;
+        s += T(24, 166, 'the 0, as the model read it:', {h: 1, z: 15, a: 'start', t: 1400});
+        for (let r = 0; r < 8; r++) {
+          s += T(24, 188 + r * 16, z.slice(r * 8, r * 8 + 8).join(',') + ',', {m: 1, z: 12, a: 'start', t: 1600 + r * 90, id: 'ln' + r});
+        }
+        s += T(24 + 18 * 7.2 + 2, 188 + 7 * 16, '0', {m: 1, z: 12, a: 'start', t: 2400, c: 'blue', w: 700});
+        s += T(178, 188 + 7 * 16, '← its label', {h: 1, z: 15, a: 'start', t: 2500, c: 'blue'});
+        s += T(24, 330, '(one line of text, wrapped here by row)', {z: 12, a: 'start', c: 'mut', t: 2600});
+        s += T(258, 214, '× 2,048', {h: 1, z: 32, t: 2900});
+        s += T(258, 240, 'labelled digits', {h: 1, z: 16, t: 3100});
+        s += T(258, 260, 'sent this way', {h: 1, z: 16, t: 3200});
+        s += T(190, 372, '1,797 more digits are kept hidden for the test', {z: 13, c: 'mut', t: 3500});
+        return s;
+      },
+      start(s) {
+        DATA.digits.forEach((d, k) => s.fadeIn('#g' + k, 500, 200 + k * 150));
+        s.at(2700, () => { s.ring(GX[0] - 4, GY + 2 * CELL - 2, 8 * CELL + 8, CELL + 4, 'amber'); s.ring(18, 188 + 2 * 16 - 13, 156, 18, 'amber'); });
+      },
+      duration: 4200 },
+
+    { title: '2. 6,570 numbers to write', keys: [],
+      cap: 'The model had to type every weight of this network as one list: 6,570 numbers in a fixed order. No calculator, no code, no training run. The tester runs the list unchanged on 1,797 hidden digits.',
+      draw: () => {
+        const cols = [{x: 40, n: 8, lab: '64 pixels'}, {x: 136, n: 8, lab: '64'}, {x: 232, n: 6, lab: '32'}, {x: 328, n: 10, lab: '10 scores'}];
+        const ys = c => Array.from({length: c.n}, (_, j) => 108 - (c.n - 1) * 7 + j * 14);
+        let e = '';
+        for (let a = 0; a < 3; a++) ys(cols[a]).forEach(y1 => ys(cols[a + 1]).forEach(y2 => { e += `M${cols[a].x} ${y1}L${cols[a + 1].x} ${y2}`; }));
+        let s = `<path id="edges" d="${e}" stroke="${C.faint}" stroke-width=".6" fill="none" opacity="0"/>`;
+        cols.forEach((c, k) => {
+          ys(c).forEach((y, j) => { s += P(ellipse(c.x, y, 4, 4, 30 + k * 10 + j), 'ink', 100 + k * 200 + j * 25, 300, 1.3); });
+          s += T(c.x, 194, c.lab, {z: 13, t: 200 + k * 200, c: 'mut'});
+        });
+        ys(cols[3]).forEach((y, j) => { s += T(cols[3].x + 12, y + 4, String(j), {z: 12, a: 'start', c: 'mut', t: 900}); });
+        DATA.layers.forEach((v, k) => { s += T((cols[k].x + cols[k + 1].x) / 2, 30, fmt(v), {h: 1, z: 18, t: 1500 + k * 250}); });
+        s += T(190, 216, 'weights and biases to write, per layer (top)', {z: 12, c: 'mut', t: 2200});
+        s += P(rect(14, 240, 352, 28, 71), 'faint', 2500, 500, 1.1);
+        s += T(22, 259, DATA.astraStart, {m: 1, z: 12, a: 'start', t: 2700});
+        s += T(22, 284, 'start of GPT-6 Astra’s real reply', {z: 12, a: 'start', c: 'mut', t: 2800});
+        s += `<text id="cnt" x="190" y="328" text-anchor="middle" style="font-family:var(--k-hand)" font-size="36" fill="${C.ink}">0 numbers</text>`;
+        s += T(190, 364, 'no calculator · no code · no training run', {z: 13, t: 4300});
+        return s;
+      },
+      start(s) {
+        s.at(1100, () => { const e = s.q('#edges'); e.style.transition = 'opacity .8s'; e.style.opacity = .5; });
+        s.at(3000, () => s.count('#cnt', DATA.nParams, {from: 0, du: 1300, post: ' numbers'}));
+      },
+      duration: 4800 },
+
+    { title: '3. Your guess', keys: ['you', 'right'],
+      cap: 'Each dot is one hidden test digit. How many did the best model-written network label correctly? Random guessing gets about 180. Drag the marker, then tap Reveal.',
+      draw: () => {
+        let s = T(190, 34, '1,797 hidden test digits', {h: 1, z: 18});
+        s += `<g id="dots"></g>`;
+        s += `<line x1="${SX0}" x2="${SX1}" y1="${SY}" y2="${SY}" stroke="${C.mut}" stroke-width="1.4"/>`;
+        [0, 500, 1000, 1500].forEach(v => { s += `<line x1="${sx(v)}" x2="${sx(v)}" y1="${SY}" y2="${SY + 5}" stroke="${C.mut}"/>` + T(sx(v), SY + 19, fmt(v), {z: 12, c: 'mut'}); });
+        s += `<line x1="${sx(DATA.nTest)}" x2="${sx(DATA.nTest)}" y1="${SY}" y2="${SY + 5}" stroke="${C.mut}"/>` + T(sx(DATA.nTest) - 2, SY + 19, '1,797', {z: 12, c: 'mut'});
+        s += `<line x1="${sx(DATA.chance)}" x2="${sx(DATA.chance)}" y1="${SY - 8}" y2="${SY}" stroke="${C.mut}" stroke-width="2"/>`;
+        s += T(sx(DATA.chance) - 4, SY + 38, '↑ guessing at random ≈ 180', {z: 12, a: 'start', c: 'mut'});
+        s += `<text id="ro" x="190" y="232" text-anchor="middle" style="font-family:var(--k-hand)" font-size="24" fill="${C.amber}">drag the marker ↓</text>`;
+        s += `<text id="ro2" x="190" y="252" text-anchor="middle" font-size="12" fill="${C.mut}"> </text>`;
+        s += `<g id="truth" style="opacity:0"></g><g id="brk"></g>`;
+        s += `<g id="hdl" transform="translate(${SX0} 0)"><line x1="0" x2="0" y1="${SY - 18}" y2="${SY + 2}" stroke="${C.amber}" stroke-width="2" stroke-dasharray="4 3"/><path id="tri" d="M-7 ${SY - 26} L7 ${SY - 26} L0 ${SY - 16} Z" fill="${C.amber}"/></g>`;
+        s += `<rect id="hit" x="14" y="212" width="352" height="110" fill="transparent"/>`;
+        return s;
+      },
+      start(s) {
+        GUESS = null;
+        let g = null, locked = false;
+        const box = s.q('#dots'), D = [];
+        for (let j = 0; j < DATA.nTest; j++) { const p = dotXY(j); D.push(s.el('circle', {cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: 1.9, fill: C.faint}, box)); }
+        box.style.opacity = 0; s.fadeIn(box, 700, 200);
+        const paint = v => { const n = Math.round(v); D.forEach((d, j) => d.setAttribute('fill', j < n ? C.amber : C.faint)); };
+        const set = v => {
+          if (locked) return;
+          g = Math.round(K.clamp(v, 0, DATA.nTest));
+          s.q('#hdl').setAttribute('transform', `translate(${sx(g).toFixed(1)} 0)`);
+          s.q('#ro').textContent = `Your guess: ${fmt(g)} right`;
+          s.q('#ro2').textContent = `of ${fmt(DATA.nTest)} (${pct(g)})`;
+          paint(g); rev.disabled = false;
+        };
+        const fromX = p => (p.x - SX0) / (SX1 - SX0) * DATA.nTest;
+        s.drag('#hit', {move: p => { if (!locked) set(fromX(p)); }});
+        const reveal = async (mode) => {
+          if (locked) return; locked = true; GUESS = mode === 'skip' ? null : g;
+          rev.disabled = true; skip.disabled = true; s.q('#hit').style.cursor = 'default';
+          if (GUESS == null) { s.q('#ro').textContent = 'No guess'; s.q('#ro2').textContent = ' '; s.q('#hdl').style.opacity = 0; }
+          // sweep: recolour every dot by whether Astra's network got that digit right
+          const N = DATA.nTest;
+          let done = 0;
+          await s.tween(1300, k => { const upto = Math.round(k * N); for (; done < upto; done++) D[done].setAttribute('fill', DATA.astra[done] === '1' ? C.fill.blue : C.faint); }, {ease: 'linear', delay: 200});
+          await s.wait(450);
+          const t = s.q('#truth'), tx = sx(BEST);
+          s.q('#tri').style.opacity = 0;
+          s.el('line', {x1: tx, x2: tx, y1: SY - 22, y2: SY + 6, stroke: C.fill.blue, 'stroke-width': 3}, t);
+          t.style.opacity = 1; s.fadeIn(t, 500);
+          s.write(tx + 6, SY - 28, `best network: ${fmt(BEST)}`, {z: 13, a: 'end', c: 'blue', w: 700});
+          if (GUESS != null && Math.abs(sx(GUESS) - tx) > 6) {
+            const a = Math.min(sx(GUESS), tx), b = Math.max(sx(GUESS), tx), y = SY + 52;
+            s.q('#brk').innerHTML = `<path d="M${a} ${y - 6} L${a} ${y} L${b} ${y} L${b} ${y - 6}" fill="none" stroke="${C.ink}" stroke-width="1.3"/>`;
+            s.fadeIn('#brk', 400, 300);
+            s.write((a + b) / 2, y + 18, `off by ${fmt(Math.abs(BEST - GUESS))}`, {h: 1, z: 17, t: 500});
+          } else if (GUESS != null) {
+            s.write(190, SY + 70, 'right on it', {h: 1, z: 17, t: 500});
+          }
+          s.at(600, () => s.cap(mode === 'demo' ? CAP3_DEMO(GUESS) : GUESS == null ? CAP3_SKIP : CAP3_GUESS(GUESS)));
+          skip.style.display = 'none'; again.style.display = '';
+        };
+        const rev = s.btn('check', 'Reveal', () => reveal('guess'), {primary: true}); rev.disabled = true;
+        const skip = s.btn('', 'Skip, just show me', () => reveal('skip'));
+        const again = s.btn('restart', 'Try again', () => EX.go(2)); again.style.display = 'none';
+        s._demo = async () => {
+          if (locked) return;
+          await s.tween(1200, k => set(K.lerp(0, 1000, k)));
+          await s.wait(700);
+          s.tap(rev); // tap fires the click; flag the mode for the caption
+        };
+        s._revealDemo = () => reveal('demo');
+        rev.onclick = e => { if (e.isTrusted) { s.touched(); reveal('guess'); } else reveal('demo'); };
+      },
+      demo: async s => { await s._demo(); },
+      idleDemo: 7000, demoDuration: 5600, duration: 1200 },
+
+    { title: '4. Every first reply', keys: ['you', 'right', 'none'],
+      cap: 'Thirteen first requests to twelve models (Opus twice). Seven ran as networks; six gave nothing to test, mostly lists cut short or miscounted. Copying the label of the most similar sample digit gets 1,750.',
+      draw: () => chart(false, false),
+      start(s) {
+        DATA.first.forEach((r, i) => {
+          if (r.n) { s.at(400 + i * 160, () => s.bar('#b' + i, 1, 700)); s.at(1100 + i * 160, () => { const e = s.q('#n' + i); e.style.transition = 'opacity .4s'; e.style.opacity = 1; }); }
+          else s.at(2600 + (i - 7) * 220, () => { s.q('#w' + i).style.opacity = 1; });
+        });
+      },
+      duration: 4400 },
+
+    { title: '5. A second try, numbered', keys: ['you', 'right', 'retry', 'none'],
+      cap: 'The failed requests got another try, mostly with every number tagged by its position. Opus 5.5, Sonnet 5.5 and Gemini then delivered networks that ran. Ten networks ran in all; 11 submissions never gave one.',
+      draw: () => chart(true, true),
+      start(s) {
+        DATA.first.forEach((r, i) => {
+          if (r.n) return;
+          const k = i - 7;
+          s.at(700 + k * 350, () => {
+            s.q('#w' + i).style.opacity = 0;
+            if (r.retry.n) { s.bar('#rb' + i, 1, 800); s.at(800, () => { s.q('#rn' + i).style.opacity = 1; }); }
+            else s.at(300, () => { s.q('#rw' + i).style.opacity = 1; });
+          });
+        });
+      },
+      duration: 4000 },
+
+    { title: '6. Right idea, wrong count', keys: ['none', 'retry'],
+      cap: 'Sonnet 5.5’s first list had one stray line of 56 zeros and a bias row two numbers short. Every number from line 66 on lands in the wrong slot, and the tester never repairs a reply, so it could not run.',
+      draw: () => {
+        let s = T(110, 40, 'needed', {h: 1, z: 17}) + T(250, 40, 'Sonnet wrote', {h: 1, z: 17});
+        s += replyColumn(70, NEED, 'colA') + replyColumn(210, WROTE, 'colB');
+        const mid = (a, b) => LY0 + ((a + b) / 2) * LH;
+        [['W1', 0, 63], ['b1', 64, 64], ['W2', 65, 96], ['b2', 97, 97], ['W3, b3', 98, 108]].forEach(([l, a, b]) => { s += T(62, mid(a, b) + 4, l, {m: 1, z: 12, a: 'end', c: 'mut', t: 600}); });
+        const yExtra = LY0 + 65 * LH, yB2 = LY0 + 98 * LH;
+        s += P(line(296, yExtra + 1, 314, yExtra - 8, 81, .5), 'red', 1500, 300, 1.3);
+        s += T(318, yExtra - 14, 'line 66:', {z: 12, a: 'start', c: 'red', t: 1600}) + T(318, yExtra, '56 extra', {z: 12, a: 'start', c: 'red', t: 1650}) + T(318, yExtra + 14, 'zeros', {z: 12, a: 'start', c: 'red', t: 1700});
+        s += P(line(262, yB2 + 1, 314, yB2 + 1, 82, .5), 'red', 2100, 300, 1.3);
+        s += T(318, yB2 - 2, 'b2: 30', {z: 12, a: 'start', c: 'red', t: 2200}) + T(318, yB2 + 12, 'of 32', {z: 12, a: 'start', c: 'red', t: 2250});
+        s += T(250, 336, '6,624 numbers: unusable', {z: 13, c: 'red', w: 700, t: 2700});
+        s += T(110, 336, '6,570 numbers', {z: 13, c: 'mut', t: 2600});
+        s += T(190, 370, 'numbered retry, same design: 1,214 right', {z: 13, c: 'violet', w: 700, t: 3300});
+        return s;
+      },
+      start(s) { s.fadeIn('#colA', 600, 200); s.fadeIn('#colB', 600, 600); },
+      duration: 3800 },
+
+    { title: '7. It ran, but one digit wins', keys: ['right'],
+      cap: 'GLM-5.3’s network ran, but its ten digit scores sat on different scales, so “0” won almost every image. Weights written as text can work (91.5% at best), but only if the list is complete and the scores are balanced.',
+      draw: () => {
+        const X0 = 54, BWd = 22, GAP = 7.5, YB = 236, YT = 70, MAX = 1797;
+        const yv = v => YB - (YB - YT) * v / MAX;
+        let s = T(190, 34, 'what GLM-5.3’s network answered', {h: 1, z: 18});
+        s += T(190, 54, 'for the 1,797 test digits', {z: 12, c: 'mut'});
+        s += `<line x1="${X0 - 6}" x2="${X0 + 10 * (BWd + GAP)}" y1="${YB}" y2="${YB}" stroke="${C.mut}"/>`;
+        DATA.glmPred.forEach((v, d) => {
+          const x = X0 + d * (BWd + GAP), r = DATA.glmRight[d];
+          if (v) {
+            s += `<rect class="gb" x="${x}" y="${yv(v)}" width="${BWd}" height="${YB - yv(v)}" fill="${C.faint}" style="transform-box:fill-box;transform-origin:50% 100%;transform:scaleY(0)"/>`;
+            s += `<rect class="gb" x="${x}" y="${yv(r)}" width="${BWd}" height="${YB - yv(r)}" fill="${C.fill.blue}" style="transform-box:fill-box;transform-origin:50% 100%;transform:scaleY(0)"/>`;
+            s += v > 400 ? T(x + BWd / 2, yv(v) - 6, fmt(v), {z: 12, w: 700, t: 1300}) : T(x + BWd + 3, yv(v) + 10, fmt(v), {z: 12, w: 700, a: 'start', t: 1300});
+          }
+          s += T(x + BWd / 2, YB + 16, String(d), {z: 13, c: 'mut', t: 200});
+        });
+        const yr = yv(180);
+        s += `<line id="even" x1="${X0 - 6}" x2="${X0 + 10 * (BWd + GAP)}" y1="${yr}" y2="${yr}" stroke="${C.ink}" stroke-width="1.2" stroke-dasharray="4 3" style="opacity:0;transition:opacity .5s"/>`;
+        s += T(X0 + 10 * (BWd + GAP) - 4, yr - 6, 'real count: about 180 per digit', {z: 12, a: 'end', c: 'ink', t: 2100});
+        s += T(X0 + BWd + 6, YB - 4, '← 178 right', {z: 12, a: 'start', c: 'blue', t: 1800});
+        s += T(190, YB + 36, 'digit answered', {z: 12, c: 'mut', t: 300});
+        s += T(24, 300, `DeepSeek V4.1 Flash said “1” for ${fmt(DATA.deepseekOnes)}`, {z: 13, a: 'start', t: 2600});
+        s += T(24, 320, `MiMo-V2.6-Pro said “1” for ${fmt(DATA.mimoOnes)}`, {z: 13, a: 'start', t: 2800});
+        s += T(190, 356, 'check the count, then the idea', {h: 1, z: 22, t: 3300});
+        s += T(190, 384, 'one network per model, on 1998 data: not a ranking', {z: 12, c: 'mut', t: 3600});
+        return s;
+      },
+      start(s) {
+        s.svg.querySelectorAll('.gb').forEach((e, j) => s.at(400 + j * 120, () => s.bar(e, 1, 800, 'y')));
+        s.at(2000, () => { s.q('#even').style.opacity = .8; });
+      },
+      duration: 3900 },
+  ],
+});
+
+</script>
+</body></html>

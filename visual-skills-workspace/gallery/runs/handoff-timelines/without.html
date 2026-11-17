@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who waited for whom</title>
+<style>
+:root{
+  --bg:#f7f6f2; --panel:#ffffff; --ink:#1d2129; --muted:#5d6470; --faint:#9aa0a8; --rule:#e2e0da; --lane:#f1f0eb; --lane-hi:#fbecc8;
+  --think:#3f6fd1; --search:#e0891f; --wait:#7b818b; --wait-bg:#e4e5e8; --answer:#23905a; --alert:#cf3a3a; --instr:#8248c9; --handoff:#1d2129;
+  --accent:#3f6fd1;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15171b; --panel:#1d2026; --ink:#e9eaee; --muted:#a6acb6; --faint:#6f7680; --rule:#30343c; --lane:#23272e; --lane-hi:#4a3d1c;
+    --think:#6e98ff; --search:#f2a548; --wait:#9aa1ab; --wait-bg:#33373f; --answer:#4cc285; --alert:#ff6b6b; --instr:#b388ff; --handoff:#e9eaee;
+    --accent:#6e98ff;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15171b; --panel:#1d2026; --ink:#e9eaee; --muted:#a6acb6; --faint:#6f7680; --rule:#30343c; --lane:#23272e; --lane-hi:#4a3d1c;
+  --think:#6e98ff; --search:#f2a548; --wait:#9aa1ab; --wait-bg:#33373f; --answer:#4cc285; --alert:#ff6b6b; --instr:#b388ff; --handoff:#e9eaee;
+  --accent:#6e98ff;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 40px}
+header h1{font-size:26px;line-height:1.2;margin:0 0 6px}
+header p{margin:0;color:var(--muted);max-width:760px}
+nav.steps{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 12px}
+nav.steps button{font:inherit;font-size:14px;border:1px solid var(--rule);background:var(--panel);color:var(--muted);border-radius:999px;padding:5px 12px;cursor:pointer}
+nav.steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:18px 18px 14px}
+#sceneTitle{font-size:21px;margin:0 0 4px}
+#sceneLede{margin:0 0 12px;color:var(--muted);max-width:820px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:4px 0 8px}
+.controls button,.controls select{font:inherit;font-size:14px;border:1px solid var(--rule);background:var(--bg);color:var(--ink);border-radius:8px;padding:5px 10px;cursor:pointer}
+.controls input[type=range]{flex:1 1 220px;accent-color:var(--accent)}
+#clock{font-variant-numeric:tabular-nums;font-weight:600;min-width:92px}
+.chartbox{overflow-x:auto}
+#chart{display:block;width:100%;min-width:720px;height:auto}
+#caption{min-height:3.2em;margin:8px 0 4px;padding:10px 12px;border-left:4px solid var(--accent);background:var(--bg);border-radius:0 8px 8px 0}
+#stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{border:1px solid var(--rule);border-radius:8px;padding:6px 10px;font-size:14px;background:var(--bg)}
+.chip b{font-variant-numeric:tabular-nums;font-size:16px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13.5px;color:var(--muted);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:22px;height:12px;border-radius:2px;display:inline-block}
+.sw.think{background:var(--think)} .sw.search{background:var(--search)}
+.sw.wait{background:repeating-linear-gradient(45deg,var(--wait) 0 2px,var(--wait-bg) 2px 5px)}
+.ln{width:22px;height:0;border-top:2.5px solid;display:inline-block}
+.bottomnav{display:flex;justify-content:space-between;margin-top:14px}
+.bottomnav button{font:inherit;font-size:15px;border:1px solid var(--rule);background:var(--panel);color:var(--ink);border-radius:8px;padding:7px 14px;cursor:pointer}
+.bottomnav button:disabled{opacity:.4;cursor:default}
+#textScene{display:none}
+#textScene h3{font-size:17px;margin:16px 0 6px}
+#textScene ul{margin:6px 0;padding-left:20px}
+#textScene li{margin:4px 0}
+table.lv{border-collapse:collapse;font-size:14px;margin-top:6px;width:100%;max-width:640px}
+table.lv td,table.lv th{padding:4px 8px;border-bottom:1px solid var(--rule);text-align:left;font-variant-numeric:tabular-nums}
+table.lv td.n{text-align:right}
+.barcell{width:45%}
+.minibar{height:10px;border-radius:2px;background:var(--think)}
+.minibar.slow{background:var(--alert)}
+footer{margin-top:18px;font-size:13px;color:var(--muted)}
+svg text{fill:var(--ink);font-family:inherit}
+svg .muted{fill:var(--muted)} svg .faint{fill:var(--faint)}
+svg .lane{fill:var(--lane)} svg .lanehi{fill:var(--lane-hi)}
+svg .think{fill:var(--think)} svg .search{fill:var(--search)} svg .waitfill{fill:url(#hatch)}
+svg .waitstroke{fill:none;stroke:var(--wait);stroke-width:1}
+svg .hatchbg{fill:var(--wait-bg)} svg .hatchln{stroke:var(--wait);stroke-width:2.4}
+svg .axis{stroke:var(--rule);stroke-width:1} svg .grid{stroke:var(--rule);stroke-width:1;stroke-dasharray:2 4}
+svg .play{stroke:var(--ink);stroke-width:1.5} svg .ref{stroke:var(--muted);stroke-width:1.2;stroke-dasharray:5 4}
+svg .m-spawn{stroke:var(--handoff);fill:var(--handoff)} svg .m-result{stroke:var(--answer);fill:var(--answer)}
+svg .m-progress{stroke:var(--faint);fill:var(--faint)} svg .m-alert{stroke:var(--alert);fill:var(--alert)}
+svg .m-instruction{stroke:var(--instr);fill:var(--instr)} svg .m-question{stroke:var(--instr);fill:var(--instr)}
+svg .t-answer{fill:var(--answer)} svg .t-alert{fill:var(--alert)} svg .t-instr{fill:var(--instr)} svg .t-wait{fill:var(--muted)}
+svg .barlabel{fill:#fff;font-size:11px;font-weight:600}
+svg .tick{cursor:pointer} svg .tick circle{fill:var(--panel);stroke:var(--accent);stroke-width:1.5}
+svg .tick.past circle{fill:var(--accent)}
+svg .unread{fill:none;stroke:var(--alert);stroke-width:2}
+svg .fail{stroke:var(--alert);stroke-width:2.2}
+svg .onhatch{stroke:var(--panel);stroke-width:4px;paint-order:stroke;stroke-linejoin:round}
+svg .outline{fill:none;stroke:var(--ink);stroke-width:1.2;stroke-dasharray:4 3}
+.swipe{display:none;font-size:13px;color:var(--muted);margin:0 0 4px}
+@media (max-width:760px){.swipe{display:block}}
+@media (max-width:600px){ header h1{font-size:22px} #sceneTitle{font-size:18px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Who waited for whom: replaying a planner and its helpers</h1>
+  <p>A planner agent split a three-city trip among helper agents. This replays the recorded runs from notebook 07, second by second, to show why handing work off one city at a time took 120 s while starting all helpers at once took 57 s, and where one message arrived too late to be read.</p>
+</header>
+
+<nav class="steps" id="steps" aria-label="Scenes"></nav>
+
+<main class="card">
+  <h2 id="sceneTitle"></h2>
+  <p id="sceneLede"></p>
+  <div id="chartScene">
+    <div class="controls" id="controls">
+      <button id="playBtn" type="button" aria-label="Play or pause">Pause</button>
+      <button id="restartBtn" type="button">Restart</button>
+      <span id="clock">0.0 s</span>
+      <input id="scrub" type="range" min="0" max="100" step="0.01" value="0" aria-label="Recorded time">
+      <label style="font-size:14px;color:var(--muted)">Speed
+        <select id="speed"><option value="5">5x</option><option value="10" selected>10x</option><option value="20">20x</option></select>
+      </label>
+    </div>
+    <p class="swipe">Swipe the chart sideways to see the full timeline.</p><div class="chartbox"><svg id="chart" viewBox="0 0 1000 300" role="img" aria-labelledby="sceneTitle"></svg></div>
+    <div id="caption" aria-live="polite"></div>
+    <div id="stats"></div>
+    <div class="legend" id="legend">
+      <span><i class="sw think"></i>model call (one <code>claude -p</code> step)</span>
+      <span><i class="sw search"></i>simulated search (flights 3 s, hotels 4 s, backup 5 s, weather 2 s)</span>
+      <span data-not="cast"><i class="sw wait"></i>planner waiting, doing nothing</span>
+      <span data-not="cast"><i class="ln" style="border-color:var(--handoff)"></i>task sent to helper</span>
+      <span data-not="cast"><i class="ln" style="border-color:var(--answer)"></i>answer returned</span>
+      <span data-only="late"><i class="ln" style="border-color:var(--alert)"></i>urgent report</span>
+      <span data-only="late"><i class="ln" style="border-color:var(--instr)"></i>instruction from planner</span>
+      <span data-only="late"><i class="ln" style="border-color:var(--faint)"></i>progress report</span>
+    </div>
+  </div>
+  <div id="textScene"></div>
+  <div class="bottomnav">
+    <button id="prevBtn" type="button">Back</button>
+    <button id="nextBtn" type="button">Next</button>
+  </div>
+</main>
+
+<footer>
+  Data: the recorded runs of notebook 07 (subagent handoff harness), one run per coordination pattern; every bar, arrow and number above is drawn from the run files' timed spans and messages. Planner: Claude Sonnet 5.5. Helpers: Claude Haiku 5.5. Searches are simulated with fixed delays. One run each, so differences of a few seconds may not repeat.
+</footer>
+</div>
+
+<script>
+const D = {"runs":{"L0":{"level":"L0_single_agent","wall":82.06,"blocked":0,"calls":{"llm":11,"tool":10},"agents":[{"id":"main","role":"planner","parent":null,"model":"claude-sonnet-5-5","status":"done"}],"spans":[{"agent":"main","kind":"llm","label":"think","start":0.0,"end":3.76},{"agent":"main","kind":"tool","label":"search_flights","start":3.76,"end":6.77},{"agent":"main","kind":"llm","label":"think","start":6.77,"end":11.14},{"agent":"main","kind":"tool","label":"search_flights","start":11.14,"end":14.16},{"agent":"main","kind":"llm","label":"think","start":14.16,"end":17.94},{"agent":"main","kind":"tool","label":"search_flights","start":17.94,"end":20.95},{"agent":"main","kind":"llm","label":"think","start":20.95,"end":24.94},{"agent":"main","kind":"tool","label":"search_flights","start":24.94,"end":27.95},{"agent":"main","kind":"llm","label":"think","start":27.95,"end":32.07},{"agent":"main","kind":"tool","label":"search_hotels","start":32.07,"end":36.07},{"agent":"main","kind":"llm","label":"think","start":36.07,"end":41.79},{"agent":"main","kind":"tool","label":"search_hotels","start":41.79,"end":45.8},{"agent":"main","kind":"llm","label":"think","start":45.8,"end":49.95},{"agent":"main","kind":"tool","label":"search_hotels","start":49.95,"end":53.96},{"agent":"main","kind":"llm","label":"think","start":53.96,"end":58.22},{"agent":"main","kind":"tool","label":"get_weather","start":58.22,"end":60.26},{"agent":"main","kind":"llm","label":"think","start":60.26,"end":64.62},{"agent":"main","kind":"tool","label":"get_weather","start":64.62,"end":66.62},{"agent":"main","kind":"llm","label":"think","start":66.62,"end":70.46},{"agent":"main","kind":"tool","label":"get_weather","start":70.46,"end":72.47},{"agent":"main","kind":"llm","label":"think","start":72.47,"end":82.06}],"events":[],"correct":true},"L1":{"level":"L1_sync_handoff","wall":120.21,"blocked":66.3,"calls":{"llm":17,"tool":10},"agents":[{"id":"main","role":"planner","parent":null,"model":"claude-sonnet-5-5","status":"done"},{"id":"city_researcher#2","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"city_researcher#3","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"city_researcher#4","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"}],"spans":[{"agent":"main","kind":"llm","label":"think","start":0.0,"end":5.57},{"agent":"city_researcher#2","kind":"llm","label":"think","start":5.57,"end":12.39},{"agent":"city_researcher#2","kind":"tool","label":"search_hotels","start":12.39,"end":16.4},{"agent":"city_researcher#2","kind":"llm","label":"think","start":16.4,"end":20.31},{"agent":"city_researcher#2","kind":"tool","label":"get_weather","start":20.31,"end":22.32},{"agent":"city_researcher#2","kind":"llm","label":"think","start":22.32,"end":30.59},{"agent":"main","kind":"blocked","label":"handoff to city_researcher#2","start":5.57,"end":30.59},{"agent":"main","kind":"llm","label":"think","start":30.59,"end":36.46},{"agent":"city_researcher#3","kind":"llm","label":"think","start":36.46,"end":40.21},{"agent":"city_researcher#3","kind":"tool","label":"search_hotels","start":40.21,"end":44.22},{"agent":"city_researcher#3","kind":"llm","label":"think","start":44.22,"end":48.53},{"agent":"city_researcher#3","kind":"tool","label":"get_weather","start":48.53,"end":50.54},{"agent":"city_researcher#3","kind":"llm","label":"think","start":50.54,"end":57.73},{"agent":"main","kind":"blocked","label":"handoff to city_researcher#3","start":36.46,"end":57.73},{"agent":"main","kind":"llm","label":"think","start":57.73,"end":63.16},{"agent":"city_researcher#4","kind":"llm","label":"think","start":63.16,"end":67.11},{"agent":"city_researcher#4","kind":"tool","label":"search_hotels","start":67.11,"end":71.12},{"agent":"city_researcher#4","kind":"llm","label":"think","start":71.13,"end":74.5},{"agent":"city_researcher#4","kind":"tool","label":"get_weather","start":74.5,"end":76.5},{"agent":"city_researcher#4","kind":"llm","label":"think","start":76.5,"end":83.17},{"agent":"main","kind":"blocked","label":"handoff to city_researcher#4","start":63.16,"end":83.17},{"agent":"main","kind":"llm","label":"think","start":83.17,"end":87.64},{"agent":"main","kind":"tool","label":"search_flights","start":87.64,"end":90.65},{"agent":"main","kind":"llm","label":"think","start":90.65,"end":94.79},{"agent":"main","kind":"tool","label":"search_flights","start":94.79,"end":97.8},{"agent":"main","kind":"llm","label":"think","start":97.8,"end":102.22},{"agent":"main","kind":"tool","label":"search_flights","start":102.22,"end":105.22},{"agent":"main","kind":"llm","label":"think","start":105.22,"end":109.12},{"agent":"main","kind":"tool","label":"search_flights","start":109.12,"end":112.12},{"agent":"main","kind":"llm","label":"think","start":112.12,"end":120.21}],"events":[{"t":5.57,"kind":"spawn","from":"main","to":"city_researcher#2","text":"Research Lisbon for a May trip: 2 travellers sharing one room, 2 nights. Find the cheapest hotel rat"},{"t":30.59,"kind":"result","from":"city_researcher#2","to":"main","text":"Chosen hotel: Baixa Rooms. Rating 4.1. Price EUR 96 per room per night (EUR 192 for 2 nights). Centr"},{"t":36.46,"kind":"spawn","from":"main","to":"city_researcher#3","text":"Research Rome for a May trip: 2 travellers sharing one room, 2 nights. Find the cheapest hotel rated"},{"t":57.73,"kind":"result","from":"city_researcher#3","to":"main","text":"Recommendation: Termini Inn (central, rated 4.0), EUR 104 per room per night, EUR 208 total for 2 ni"},{"t":63.16,"kind":"spawn","from":"main","to":"city_researcher#4","text":"Research Prague for a May trip: 2 travellers sharing one room, 2 nights. Find the cheapest hotel rat"},{"t":83.17,"kind":"result","from":"city_researcher#4","to":"main","text":"Prague, May, 2 travellers, 1 room, 2 nights.\n\nCheapest hotel rated 4.0+: Old Town Loft (4.7, central"}],"correct":true},"L2":{"level":"L2_async_spawn","wall":56.76,"blocked":0,"calls":{"llm":18,"tool":10},"agents":[{"id":"main","role":"planner","parent":null,"model":"claude-sonnet-5-5","status":"done"},{"id":"city_researcher#2","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"city_researcher#3","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"city_researcher#4","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"}],"spans":[{"agent":"main","kind":"llm","label":"think","start":0.0,"end":5.03},{"agent":"city_researcher#2","kind":"llm","label":"think","start":5.03,"end":8.41},{"agent":"main","kind":"llm","label":"think","start":5.03,"end":10.5},{"agent":"city_researcher#2","kind":"tool","label":"search_hotels","start":8.41,"end":12.42},{"agent":"city_researcher#3","kind":"llm","label":"think","start":10.5,"end":14.5},{"agent":"main","kind":"llm","label":"think","start":10.5,"end":15.13},{"agent":"city_researcher#2","kind":"llm","label":"think","start":12.42,"end":16.45},{"agent":"city_researcher#4","kind":"llm","label":"think","start":15.13,"end":18.37},{"agent":"city_researcher#2","kind":"tool","label":"get_weather","start":16.45,"end":18.45},{"agent":"city_researcher#3","kind":"tool","label":"search_hotels","start":14.5,"end":18.51},{"agent":"main","kind":"llm","label":"think","start":15.13,"end":19.25},{"agent":"city_researcher#3","kind":"llm","label":"think","start":18.51,"end":21.83},{"agent":"main","kind":"tool","label":"search_flights","start":19.25,"end":22.26},{"agent":"city_researcher#4","kind":"tool","label":"search_hotels","start":18.37,"end":22.38},{"agent":"city_researcher#3","kind":"tool","label":"get_weather","start":21.83,"end":23.83},{"agent":"city_researcher#2","kind":"llm","label":"think","start":18.45,"end":25.27},{"agent":"main","kind":"llm","label":"think","start":22.26,"end":26.3},{"agent":"city_researcher#4","kind":"llm","label":"think","start":22.38,"end":26.6},{"agent":"city_researcher#4","kind":"tool","label":"get_weather","start":26.6,"end":28.6},{"agent":"main","kind":"tool","label":"search_flights","start":26.3,"end":29.3},{"agent":"city_researcher#3","kind":"llm","label":"think","start":23.83,"end":30.6},{"agent":"main","kind":"llm","label":"think","start":29.3,"end":33.32},{"agent":"city_researcher#4","kind":"llm","label":"think","start":28.61,"end":34.52},{"agent":"main","kind":"tool","label":"search_flights","start":33.32,"end":36.34},{"agent":"main","kind":"llm","label":"think","start":36.34,"end":40.93},{"agent":"main","kind":"tool","label":"search_flights","start":40.93,"end":43.94},{"agent":"main","kind":"llm","label":"think","start":43.94,"end":48.02},{"agent":"main","kind":"llm","label":"think","start":48.02,"end":56.76}],"events":[{"t":5.03,"kind":"spawn","from":"main","to":"city_researcher#2","text":"City: Lisbon. May trip, 2 nights, 2 travellers sharing one room. Find the cheapest hotel rated 4.0 o"},{"t":10.5,"kind":"spawn","from":"main","to":"city_researcher#3","text":"City: Rome. May trip, 2 nights, 2 travellers sharing one room. Find the cheapest hotel rated 4.0 or "},{"t":15.13,"kind":"spawn","from":"main","to":"city_researcher#4","text":"City: Prague. May trip, 2 nights, 2 travellers sharing one room. Find the cheapest hotel rated 4.0 o"},{"t":25.27,"kind":"result","from":"city_researcher#2","to":"main","text":"Cheapest hotel rated 4.0+: Baixa Rooms (4.1, central), €96 per room per night, €192 for 2 nights. Ch"},{"t":30.6,"kind":"result","from":"city_researcher#3","to":"main","text":"Rome, May, 2 nights, 1 room, 2 travellers (EUR, per room per night). Cheapest hotel rated 4.0+: Via "},{"t":34.52,"kind":"result","from":"city_researcher#4","to":"main","text":"Prague, May, 2 nights, 1 room shared by 2 travellers. Cheapest hotel rated 4.0+: Old Town Loft (4.7,"}],"correct":true},"L3":{"level":"L3_progress_and_redirect","wall":68.77,"blocked":0.0,"calls":{"llm":25,"tool":12},"agents":[{"id":"main","role":"planner","parent":null,"model":"claude-sonnet-5-5","status":"done"},{"id":"city_researcher#2","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"city_researcher#3","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"city_researcher#4","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"}],"spans":[{"agent":"main","kind":"llm","label":"think","start":0.0,"end":5.65},{"agent":"city_researcher#2","kind":"llm","label":"think","start":5.65,"end":8.75},{"agent":"main","kind":"llm","label":"think","start":5.65,"end":10.9},{"agent":"city_researcher#2","kind":"tool","label":"search_hotels","start":8.75,"end":12.75},{"agent":"city_researcher#3","kind":"llm","label":"think","start":10.9,"end":14.52},{"agent":"main","kind":"llm","label":"think","start":10.9,"end":16.14},{"agent":"city_researcher#2","kind":"llm","label":"think","start":12.75,"end":18.08},{"agent":"city_researcher#3","kind":"tool","label":"search_hotels","start":14.52,"end":18.53},{"agent":"city_researcher#4","kind":"llm","label":"think","start":16.14,"end":19.97},{"agent":"main","kind":"llm","label":"think","start":16.14,"end":20.01},{"agent":"city_researcher#2","kind":"llm","label":"think","start":18.08,"end":22.2},{"agent":"city_researcher#3","kind":"llm","label":"think","start":18.53,"end":22.29},{"agent":"main","kind":"tool","label":"search_flights","start":20.01,"end":23.02},{"agent":"city_researcher#4","kind":"tool","label":"search_hotels","start":19.97,"end":23.97},{"agent":"city_researcher#2","kind":"tool","label":"get_weather","start":22.2,"end":24.21},{"agent":"city_researcher#3","kind":"tool","label":"search_hotels","start":22.29,"end":26.3},{"agent":"main","kind":"llm","label":"think","start":23.02,"end":27.45},{"agent":"city_researcher#4","kind":"llm","label":"think","start":23.97,"end":27.58},{"agent":"city_researcher#2","kind":"llm","label":"think","start":24.21,"end":30.3},{"agent":"main","kind":"tool","label":"search_flights","start":27.45,"end":30.45},{"agent":"city_researcher#3","kind":"llm","label":"think","start":26.3,"end":32.53},{"agent":"city_researcher#4","kind":"tool","label":"search_hotels_backup","start":27.58,"end":32.59},{"agent":"main","kind":"llm","label":"think","start":30.45,"end":34.69},{"agent":"main","kind":"tool","label":"search_flights","start":34.69,"end":37.7},{"agent":"city_researcher#3","kind":"llm","label":"think","start":32.53,"end":38.02},{"agent":"city_researcher#4","kind":"llm","label":"think","start":32.59,"end":39.97},{"agent":"city_researcher#3","kind":"tool","label":"get_weather","start":38.02,"end":40.03},{"agent":"main","kind":"llm","label":"think","start":37.7,"end":41.64},{"agent":"main","kind":"tool","label":"search_flights","start":41.64,"end":44.64},{"agent":"city_researcher#4","kind":"llm","label":"think","start":39.97,"end":44.85},{"agent":"city_researcher#3","kind":"llm","label":"think","start":40.03,"end":46.29},{"agent":"city_researcher#4","kind":"tool","label":"get_weather","start":44.85,"end":46.86},{"agent":"main","kind":"llm","label":"think","start":44.64,"end":49.83},{"agent":"city_researcher#4","kind":"llm","label":"think","start":46.86,"end":53.7},{"agent":"main","kind":"llm","label":"think","start":49.83,"end":54.34},{"agent":"main","kind":"blocked","label":"wait city_researcher#4","start":54.34,"end":54.34},{"agent":"main","kind":"llm","label":"think","start":54.34,"end":59.74},{"agent":"main","kind":"llm","label":"think","start":59.74,"end":68.77}],"events":[{"t":5.65,"kind":"spawn","from":"main","to":"city_researcher#2","text":"Research Lisbon for a May stay of 2 nights for 2 travellers sharing one room. Find the cheapest hote"},{"t":10.9,"kind":"spawn","from":"main","to":"city_researcher#3","text":"Research Rome for a May stay of 2 nights for 2 travellers sharing one room. Find the cheapest hotel "},{"t":16.14,"kind":"spawn","from":"main","to":"city_researcher#4","text":"Research Prague for a May stay of 2 nights for 2 travellers sharing one room. Find the cheapest hote"},{"t":18.08,"kind":"progress","from":"city_researcher#2","to":"main","text":"Lisbon search_hotels returned 3 hotels. Cheapest rated 4.0+ is Baixa Rooms (4.1, EUR 96/night, centr"},{"t":30.3,"kind":"result","from":"city_researcher#2","to":"main","text":"Chosen hotel: Baixa Rooms, Lisbon. Rating 4.1. Price EUR 96 per room per night, for 2 nights and 2 t"},{"t":32.53,"kind":"progress","from":"city_researcher#3","to":"main","text":"Hotel search done. Cheapest 4.0+: Via Appia Lodge, 4.0, EUR 98/night (outskirts). Central 4.0+: Term"},{"t":39.97,"kind":"alert","from":"city_researcher#4","to":"main","text":"search_hotels failed for Prague with RuntimeError: hotel search service unavailable (HTTP 503). sear"},{"t":46.29,"kind":"result","from":"city_researcher#3","to":"main","text":"Rome, 2 nights in May, 2 travellers, 1 room, prices in EUR per room per night.\n\nCheapest hotel rated"},{"t":49.83,"kind":"instruction","from":"main","to":"city_researcher#4","text":"Proceed with the backup data, no need to retry search_hotels. Only Old Town Loft (4.7, EUR 131, cent"},{"t":53.7,"kind":"result","from":"city_researcher#4","to":"main","text":"Prague, May, 2 nights, 2 travellers sharing one room.\n\nHotels rated 4.0+ (from search_hotels_backup;"}],"correct":true},"L4":{"level":"L4_child_asks_parent","wall":68.95,"blocked":0,"calls":{"llm":21,"tool":10},"agents":[{"id":"main","role":"planner","parent":null,"model":"claude-sonnet-5-5","status":"done"},{"id":"city_researcher#2","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"city_researcher#3","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"city_researcher#4","role":"city_researcher","parent":"main","model":"claude-haiku-5-5","status":"done"}],"spans":[{"agent":"main","kind":"llm","label":"think","start":0.0,"end":4.46},{"agent":"city_researcher#2","kind":"llm","label":"think","start":4.46,"end":8.39},{"agent":"main","kind":"llm","label":"think","start":4.46,"end":9.4},{"agent":"city_researcher#2","kind":"tool","label":"search_hotels","start":8.39,"end":12.39},{"agent":"city_researcher#3","kind":"llm","label":"think","start":9.4,"end":13.45},{"agent":"main","kind":"llm","label":"think","start":9.4,"end":14.04},{"agent":"city_researcher#3","kind":"tool","label":"search_hotels","start":13.45,"end":17.45},{"agent":"city_researcher#4","kind":"llm","label":"think","start":14.04,"end":18.24},{"agent":"main","kind":"llm","label":"think","start":14.04,"end":19.43},{"agent":"city_researcher#2","kind":"llm","label":"think","start":12.39,"end":20.1},{"agent":"city_researcher#2","kind":"tool","label":"get_weather","start":20.1,"end":22.1},{"agent":"city_researcher#4","kind":"tool","label":"search_hotels","start":18.24,"end":22.24},{"agent":"main","kind":"tool","label":"search_flights","start":19.43,"end":22.45},{"agent":"city_researcher#3","kind":"llm","label":"think","start":17.45,"end":22.76},{"agent":"city_researcher#3","kind":"tool","label":"get_weather","start":22.76,"end":24.77},{"agent":"main","kind":"llm","label":"think","start":22.45,"end":26.91},{"agent":"city_researcher#4","kind":"llm","label":"think","start":22.24,"end":27.32},{"agent":"city_researcher#2","kind":"llm","label":"think","start":22.1,"end":27.62},{"agent":"city_researcher#4","kind":"tool","label":"get_weather","start":27.32,"end":29.33},{"agent":"main","kind":"tool","label":"search_flights","start":26.91,"end":29.92},{"agent":"city_researcher#3","kind":"llm","label":"think","start":24.78,"end":32.35},{"agent":"main","kind":"llm","label":"think","start":29.92,"end":34.16},{"agent":"city_researcher#4","kind":"llm","label":"think","start":29.33,"end":36.06},{"agent":"main","kind":"tool","label":"search_flights","start":34.16,"end":37.16},{"agent":"main","kind":"llm","label":"think","start":37.16,"end":43.13},{"agent":"city_researcher#3","kind":"blocked","label":"waiting for an answer","start":32.35,"end":43.14},{"agent":"main","kind":"llm","label":"think","start":43.14,"end":47.41},{"agent":"city_researcher#3","kind":"llm","label":"think","start":43.14,"end":48.35},{"agent":"main","kind":"tool","label":"search_flights","start":47.41,"end":50.41},{"agent":"main","kind":"llm","label":"think","start":50.41,"end":55.28},{"agent":"main","kind":"llm","label":"think","start":55.28,"end":60.57},{"agent":"main","kind":"llm","label":"think","start":60.57,"end":68.95}],"events":[{"t":4.46,"kind":"spawn","from":"main","to":"city_researcher#2","text":"City: Lisbon. Rule: find the cheapest hotel rated 4.0 or higher (price per room per night in EUR), a"},{"t":9.4,"kind":"spawn","from":"main","to":"city_researcher#3","text":"City: Rome. Rule: find the cheapest hotel rated 4.0 or higher (price per room per night in EUR), and"},{"t":14.04,"kind":"spawn","from":"main","to":"city_researcher#4","text":"City: Prague. Rule: find the cheapest hotel rated 4.0 or higher (price per room per night in EUR), a"},{"t":27.62,"kind":"result","from":"city_researcher#2","to":"main","text":"Lisbon. Cheapest hotel rated 4.0+: Baixa Rooms (4.1, central), EUR 96 per room per night. Cheapest c"},{"t":32.35,"kind":"question","from":"city_researcher#3","to":"main","text":"Rome: two hotels rated 4.0+ are within EUR 10 of each other. Via Appia Lodge (4.0, EUR 98/night, out"},{"t":36.06,"kind":"result","from":"city_researcher#4","to":"main","text":"Prague: Cheapest hotel rated 4.0+ is Old Town Loft (4.7, central) at EUR 131 per room per night. It "},{"t":43.13,"kind":"instruction","from":"main","to":"city_researcher#3","text":"Report Termini Inn (central, EUR 104/night) as the Rome pick. It is only EUR 6/night more than Via A"},{"t":48.35,"kind":"result","from":"city_researcher#3","to":"main","text":"Rome: Pick Termini Inn (rating 4.0, central, EUR 104/night per room), as the parent directed. Cheape"}],"correct":true},"L5":{"level":"L5_race_and_cancel","wall":49.27,"blocked":15.73,"calls":{"llm":17,"tool":9},"agents":[{"id":"main","role":"planner","parent":null,"model":"claude-sonnet-5-5","status":"done"},{"id":"flight_scout#2","role":"flight_scout","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"flight_scout#3","role":"flight_scout","parent":"main","model":"claude-haiku-5-5","status":"cancelled"},{"id":"flight_scout#4","role":"flight_scout","parent":"main","model":"claude-haiku-5-5","status":"cancelled"}],"spans":[{"agent":"main","kind":"llm","label":"think","start":0.0,"end":4.25},{"agent":"flight_scout#2","kind":"llm","label":"think","start":4.25,"end":7.95},{"agent":"main","kind":"llm","label":"think","start":4.25,"end":8.83},{"agent":"flight_scout#2","kind":"tool","label":"search_flights (skyscan)","start":7.95,"end":9.95},{"agent":"flight_scout#3","kind":"llm","label":"think","start":8.83,"end":12.93},{"agent":"flight_scout#2","kind":"llm","label":"think","start":9.95,"end":14.05},{"agent":"main","kind":"llm","label":"think","start":8.83,"end":14.11},{"agent":"flight_scout#2","kind":"tool","label":"search_flights (skyscan)","start":14.05,"end":16.06},{"agent":"flight_scout#4","kind":"llm","label":"think","start":14.11,"end":17.74},{"agent":"main","kind":"llm","label":"think","start":14.11,"end":18.27},{"agent":"flight_scout#3","kind":"tool","label":"search_flights (farefinder)","start":12.93,"end":18.93},{"agent":"flight_scout#2","kind":"llm","label":"think","start":16.06,"end":20.01},{"agent":"flight_scout#2","kind":"tool","label":"search_flights (skyscan)","start":20.01,"end":22.02},{"agent":"flight_scout#3","kind":"llm","label":"think","start":18.93,"end":22.88},{"agent":"flight_scout#2","kind":"llm","label":"think","start":22.02,"end":26.45},{"agent":"flight_scout#2","kind":"tool","label":"search_flights (skyscan)","start":26.45,"end":28.46},{"agent":"flight_scout#3","kind":"tool","label":"search_flights (farefinder)","start":22.88,"end":28.89},{"agent":"flight_scout#4","kind":"tool","label":"search_flights (airdeal)","start":17.74,"end":31.74},{"agent":"flight_scout#3","kind":"llm","label":"think","start":28.89,"end":32.74},{"agent":"flight_scout#2","kind":"llm","label":"think","start":28.46,"end":34.0},{"agent":"main","kind":"blocked","label":"wait_any (3)","start":18.27,"end":34.0},{"agent":"flight_scout#4","kind":"llm","label":"think","start":31.74,"end":35.3},{"agent":"main","kind":"llm","label":"think","start":34.0,"end":38.41},{"agent":"flight_scout#3","kind":"tool","label":"search_flights (farefinder)","start":32.74,"end":38.41},{"agent":"main","kind":"llm","label":"think","start":38.41,"end":43.34},{"agent":"flight_scout#4","kind":"tool","label":"search_flights (airdeal)","start":35.3,"end":43.34},{"agent":"main","kind":"llm","label":"think","start":43.34,"end":49.27}],"events":[{"t":4.25,"kind":"spawn","from":"main","to":"flight_scout#2","text":"Provider: skyscan. Find the cheapest flight for each leg of Toronto -> Lisbon, Lisbon -> Rome, Rome "},{"t":8.83,"kind":"spawn","from":"main","to":"flight_scout#3","text":"Provider: farefinder. Find the cheapest flight for each leg of Toronto -> Lisbon, Lisbon -> Rome, Ro"},{"t":14.11,"kind":"spawn","from":"main","to":"flight_scout#4","text":"Provider: airdeal. Find the cheapest flight for each leg of Toronto -> Lisbon, Lisbon -> Rome, Rome "},{"t":34.0,"kind":"result","from":"flight_scout#2","to":"main","text":"Cheapest per leg (per person, EUR): Toronto->Lisbon TP 258 at 612; Lisbon->Rome FR 2181 at 61; Rome-"},{"t":38.41,"kind":"cancel","from":"main","to":"flight_scout#3","text":"cancel"},{"t":38.41,"kind":"result","from":"flight_scout#3","to":"main","text":"[cancelled before finishing]"},{"t":43.34,"kind":"cancel","from":"main","to":"flight_scout#4","text":"cancel"},{"t":43.34,"kind":"result","from":"flight_scout#4","to":"main","text":"[cancelled before finishing]"}],"correct":true},"L6":{"level":"L6_nested","wall":65.23,"blocked":3.18,"calls":{"llm":35,"tool":10},"agents":[{"id":"main","role":"planner","parent":null,"model":"claude-sonnet-5-5","status":"done"},{"id":"city_planner#2","role":"city_planner","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"city_planner#3","role":"city_planner","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"hotel_scout#4","role":"hotel_scout","parent":"city_planner#2","model":"claude-haiku-5-5","status":"done"},{"id":"weather_scout#5","role":"weather_scout","parent":"city_planner#2","model":"claude-haiku-5-5","status":"done"},{"id":"city_planner#6","role":"city_planner","parent":"main","model":"claude-haiku-5-5","status":"done"},{"id":"hotel_scout#7","role":"hotel_scout","parent":"city_planner#3","model":"claude-haiku-5-5","status":"done"},{"id":"hotel_scout#8","role":"hotel_scout","parent":"city_planner#6","model":"claude-haiku-5-5","status":"done"},{"id":"weather_scout#9","role":"weather_scout","parent":"city_planner#6","model":"claude-haiku-5-5","status":"done"},{"id":"weather_scout#10","role":"weather_scout","parent":"city_planner#3","model":"claude-haiku-5-5","status":"done"}],"spans":[{"agent":"main","kind":"llm","label":"think","start":0.0,"end":5.36},{"agent":"main","kind":"llm","label":"think","start":5.36,"end":10.57},{"agent":"city_planner#2","kind":"llm","label":"think","start":5.36,"end":10.68},{"agent":"hotel_scout#4","kind":"llm","label":"think","start":10.68,"end":14.47},{"agent":"city_planner#2","kind":"llm","label":"think","start":10.68,"end":15.54},{"agent":"main","kind":"llm","label":"think","start":10.57,"end":15.71},{"agent":"city_planner#3","kind":"llm","label":"think","start":10.57,"end":15.94},{"agent":"hotel_scout#4","kind":"tool","label":"search_hotels","start":14.47,"end":18.48},{"agent":"weather_scout#5","kind":"llm","label":"think","start":15.54,"end":18.97},{"agent":"city_planner#2","kind":"llm","label":"think","start":15.54,"end":19.4},{"agent":"hotel_scout#7","kind":"llm","label":"think","start":15.94,"end":19.85},{"agent":"main","kind":"llm","label":"think","start":15.71,"end":19.88},{"agent":"city_planner#6","kind":"llm","label":"think","start":15.71,"end":20.28},{"agent":"city_planner#3","kind":"llm","label":"think","start":15.94,"end":20.36},{"agent":"weather_scout#5","kind":"tool","label":"get_weather","start":18.97,"end":20.98},{"agent":"main","kind":"tool","label":"search_flights","start":19.88,"end":22.89},{"agent":"hotel_scout#7","kind":"tool","label":"search_hotels","start":19.85,"end":23.86},{"agent":"hotel_scout#8","kind":"llm","label":"think","start":20.28,"end":24.54},{"agent":"city_planner#6","kind":"llm","label":"think","start":20.28,"end":24.55},{"agent":"hotel_scout#4","kind":"llm","label":"think","start":18.48,"end":25.46},{"agent":"city_planner#2","kind":"blocked","label":"wait_all (2)","start":19.4,"end":25.46},{"agent":"weather_scout#5","kind":"llm","label":"think","start":20.98,"end":25.96},{"agent":"city_planner#2","kind":"blocked","label":"wait_all (2)","start":25.46,"end":25.96},{"agent":"main","kind":"llm","label":"think","start":22.89,"end":27.16},{"agent":"city_planner#6","kind":"llm","label":"think","start":24.55,"end":28.2},{"agent":"weather_scout#9","kind":"llm","label":"think","start":24.55,"end":28.34},{"agent":"hotel_scout#8","kind":"tool","label":"search_hotels","start":24.54,"end":28.54},{"agent":"hotel_scout#7","kind":"llm","label":"think","start":23.86,"end":30.14},{"agent":"city_planner#3","kind":"blocked","label":"wait hotel_scout#7","start":20.36,"end":30.14},{"agent":"main","kind":"tool","label":"search_flights","start":27.16,"end":30.16},{"agent":"weather_scout#9","kind":"tool","label":"get_weather","start":28.34,"end":30.35},{"agent":"city_planner#2","kind":"llm","label":"think","start":25.96,"end":32.75},{"agent":"main","kind":"llm","label":"think","start":30.16,"end":34.46},{"agent":"city_planner#3","kind":"llm","label":"think","start":30.14,"end":34.81},{"agent":"weather_scout#9","kind":"llm","label":"think","start":30.35,"end":35.31},{"agent":"hotel_scout#8","kind":"llm","label":"think","start":28.54,"end":35.61},{"agent":"city_planner#6","kind":"blocked","label":"wait_all (2)","start":28.2,"end":35.61},{"agent":"main","kind":"tool","label":"search_flights","start":34.46,"end":37.47},{"agent":"city_planner#3","kind":"llm","label":"think","start":34.81,"end":38.26},{"agent":"weather_scout#10","kind":"llm","label":"think","start":34.81,"end":38.29},{"agent":"weather_scout#10","kind":"tool","label":"get_weather","start":38.29,"end":40.29},{"agent":"main","kind":"llm","label":"think","start":37.47,"end":41.77},{"agent":"city_planner#6","kind":"llm","label":"think","start":35.61,"end":42.88},{"agent":"main","kind":"tool","label":"search_flights","start":41.77,"end":44.77},{"agent":"weather_scout#10","kind":"llm","label":"think","start":40.29,"end":45.44},{"agent":"city_planner#3","kind":"blocked","label":"wait weather_scout#10","start":38.26,"end":45.44},{"agent":"main","kind":"llm","label":"think","start":44.77,"end":48.96},{"agent":"city_planner#3","kind":"llm","label":"think","start":45.44,"end":52.14},{"agent":"main","kind":"blocked","label":"wait city_planner#3","start":48.96,"end":52.14},{"agent":"main","kind":"llm","label":"think","start":52.14,"end":56.33},{"agent":"main","kind":"llm","label":"think","start":56.33,"end":65.23}],"events":[{"t":5.36,"kind":"spawn","from":"main","to":"city_planner#2","text":"City: Lisbon. May trip, 2 travellers sharing one room, 2 nights. Find the cheapest hotel rated 4.0 o"},{"t":10.57,"kind":"spawn","from":"main","to":"city_planner#3","text":"City: Rome. May trip, 2 travellers sharing one room, 2 nights. Find the cheapest hotel rated 4.0 or "},{"t":10.68,"kind":"spawn","from":"city_planner#2","to":"hotel_scout#4","text":"City: Lisbon. Trip in May, 2 travellers sharing one room, 2 nights. Find hotels rated 4.0 or higher."},{"t":15.54,"kind":"spawn","from":"city_planner#2","to":"weather_scout#5","text":"City: Lisbon. Report the typical weather in Lisbon during May: average high and low temperatures in "},{"t":15.71,"kind":"spawn","from":"main","to":"city_planner#6","text":"City: Prague. May trip, 2 travellers sharing one room, 2 nights. Find the cheapest hotel rated 4.0 o"},{"t":15.94,"kind":"spawn","from":"city_planner#3","to":"hotel_scout#7","text":"City: Rome. May trip, 2 travellers sharing one room, 2 nights. Find hotels rated 4.0 or higher with "},{"t":20.28,"kind":"spawn","from":"city_planner#6","to":"hotel_scout#8","text":"City: Prague. May trip, 2 travellers sharing one room, 2 nights. Find the cheapest hotel rated 4.0 o"},{"t":24.55,"kind":"spawn","from":"city_planner#6","to":"weather_scout#9","text":"City: Prague. Report the typical weather in Prague in May: average high and low temperatures (C), av"},{"t":25.46,"kind":"result","from":"hotel_scout#4","to":"city_planner#2","text":"Lisbon, 2 travellers, 1 room, 2 nights, May. Results from search_hotels (Lisbon). The search did not"},{"t":25.96,"kind":"result","from":"weather_scout#5","to":"city_planner#2","text":"Lisbon in May: average high about 22°C; low around 13–14°C (typical range, not in the history output"},{"t":30.14,"kind":"result","from":"hotel_scout#7","to":"city_planner#3","text":"Rome, May, 2 travellers sharing 1 room, 2 nights. All 3 hotels returned are rated 4.0+.\n\n1. Trasteve"},{"t":32.75,"kind":"result","from":"city_planner#2","to":"main","text":"Chosen hotel: Baixa Rooms\nRating: 4.1\nPrice: EUR 96 per room per night\nCentral: yes (Baixa)\nTotal fo"},{"t":34.81,"kind":"spawn","from":"city_planner#3","to":"weather_scout#10","text":"City: Rome. Report the typical weather for May in Rome: average high and low temperatures (Celsius),"},{"t":35.31,"kind":"result","from":"weather_scout#9","to":"city_planner#6","text":"Prague in May: average daily high about 19°C (66°F). Average low is not in the history I retrieved, "},{"t":35.61,"kind":"result","from":"hotel_scout#8","to":"city_planner#6","text":"Prague, 2 travellers sharing one room, 2 nights. Only one hotel meets the 4.0+ rating threshold in t"},{"t":42.88,"kind":"result","from":"city_planner#6","to":"main","text":"Hotel: Old Town Loft (rating 4.7, central) at EUR 131 per room per night, EUR 262 total for 2 nights"},{"t":45.44,"kind":"result","from":"weather_scout#10","to":"city_planner#3","text":"Rome in May: average high about 24°C and average low about 13°C. Typical rainfall is around 50 mm, s"},{"t":52.14,"kind":"result","from":"city_planner#3","to":"main","text":"Chosen hotel: Termini Inn (central). Rating 4.0. Price EUR 104 per room per night, so EUR 208 for 2 "}],"correct":true}},"cmp":[{"level":"0 single agent","wall s":82.06,"agents":1.0,"LLM calls":11.0,"tool calls":10.0,"LLM s (summed)":51.95,"tool s (summed)":30.11,"main blocked s":0.0,"main blocked %":0.0,"messages":0.0,"correct":"True"},{"level":"1 sync handoff","wall s":120.21,"agents":4.0,"LLM calls":17.0,"tool calls":10.0,"LLM s (summed)":90.13,"tool s (summed)":30.08,"main blocked s":66.3,"main blocked %":0.55,"messages":3.0,"correct":"True"},{"level":"2 async spawn","wall s":56.76,"agents":4.0,"LLM calls":18.0,"tool calls":10.0,"LLM s (summed)":86.41,"tool s (summed)":30.07,"main blocked s":0.0,"main blocked %":0.0,"messages":3.0,"correct":"True"},{"level":"3 progress + redirect","wall s":68.77,"agents":4.0,"LLM calls":25.0,"tool calls":12.0,"LLM s (summed)":127.27,"tool s (summed)":39.1,"main blocked s":0.0,"main blocked %":0.0,"messages":6.0,"correct":"True"},{"level":"4 child asks parent","wall s":68.95,"agents":4.0,"LLM calls":21.0,"tool calls":10.0,"LLM s (summed)":112.23,"tool s (summed)":30.07,"main blocked s":0.0,"main blocked %":0.0,"messages":5.0,"correct":"True"},{"level":"5 race + cancel","wall s":49.27,"agents":4.0,"LLM calls":17.0,"tool calls":9.0,"LLM s (summed)":74.31,"tool s (summed)":47.78,"main blocked s":15.73,"main blocked %":0.32,"messages":3.0,"correct":"True"},{"level":"6 nested","wall s":65.23,"agents":10.0,"LLM calls":35.0,"tool calls":10.0,"LLM s (summed)":173.3,"tool s (summed)":30.05,"main blocked s":3.18,"main blocked %":0.05,"messages":9.0,"correct":"True"}]};
+
+const CITY = {'city_researcher#2':'Lisbon','city_researcher#3':'Rome','city_researcher#4':'Prague'};
+const LANES = ['main','city_researcher#2','city_researcher#3','city_researcher#4'];
+const TOOLNAME = {search_flights:'flights',search_hotels:'hotels',get_weather:'weather',search_hotels_backup:'backup hotels'};
+const TOOLSTATUS = {search_flights:'searching flights',search_hotels:'searching hotels',get_weather:'checking weather',search_hotels_backup:'backup hotel search'};
+const FAILED = {run:'L3', agent:'city_researcher#4', start:19.97}; // the Prague hotel search that returned HTTP 503
+const f1 = x => (Math.round(x*10)/10).toFixed(1);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const laneName = a => a==='main' ? 'Planner' : CITY[a]+' helper';
+function modelName(run,a){
+  const ag = D.runs[run].agents.find(x=>x.id===a); if(!ag) return '';
+  return ag.model.replace('claude-','').replace(/-(\d+)-(\d+)$/,' $1.$2').replace(/^./,c=>c.toUpperCase());
+}
+const isFailed = (run,s) => run===FAILED.run && s.agent===FAILED.agent && Math.abs(s.start-FAILED.start)<0.005;
+
+function blockedSoFar(run,t){
+  return D.runs[run].spans.filter(s=>s.agent==='main'&&s.kind==='blocked'&&s.start<t)
+    .reduce((a,s)=>a+Math.min(s.end,t)-s.start,0);
+}
+function waitingFor(span){ const m = span.label.match(/(city_researcher#\d)/); return m ? m[1] : null; }
+
+function statusAt(run,a,t){
+  const R = D.runs[run], sp = R.spans.filter(s=>s.agent===a);
+  if(a==='main' && t>=R.wall-1e-6) return {txt:'final answer given', cls:'t-answer'};
+  const bl = sp.find(s=>s.kind==='blocked' && s.start<=t && t<s.end);
+  if(bl) return {txt:'waiting for '+laneName(waitingFor(bl)), cls:'t-wait', waitOn:waitingFor(bl)};
+  const cur = sp.find(s=>s.start<=t && t<s.end);
+  if(cur){
+    if(cur.kind==='llm') return {txt:'model call', cls:'muted'};
+    if(isFailed(run,cur)) return {txt:'hotel search (will fail)', cls:'t-alert'};
+    return {txt:TOOLSTATUS[cur.label]||cur.label, cls:'muted'};
+  }
+  if(!sp.length || t<sp[0].start) return {txt:'not started', cls:'faint'};
+  if(t>=Math.max(...sp.map(s=>s.end))) return {txt:'finished', cls:'faint'};
+  return {txt:'between steps', cls:'faint'};
+}
+
+/* ---------- scenes ---------- */
+const S = [
+ {key:'cast', nav:'1 The setup', title:'The task and the team',
+  lede:'The task: plan a May trip Toronto, Lisbon, Rome, Prague and back, 2 nights per city for 2 travellers, with the cheapest flights and a suitable hotel in each city. A planner agent (Claude Sonnet 5.5) runs the job. It can pass each city\'s hotel and weather research to a helper agent (Claude Haiku 5.5) and do the four flight searches itself. Every rectangle in the next scenes is one recorded step: a model call or a search.',
+  axis:125, tmax:82.06, panels:[{run:'L0', title:'For comparison: one agent doing all 10 searches itself', lanes:['main'], names:{main:'Single agent'}}],
+  notes:[
+   [0,'One agent alone: it thinks (blue), runs a search (orange), thinks again, and so on. Each model call is a fresh claude -p process and takes about 4 to 10 s.'],
+   [27.95,'28.0 s: four flight searches done (3 s each). Now the three hotel searches (4 s each).'],
+   [58.22,'58.2 s: then three weather checks (2 s each).'],
+   [72.47,'72.5 s: last search done; one long final model call writes the plan.'],
+   [82.06,'82.1 s: one agent finishes alone in 82.1 s, 11 model calls and 10 searches in a single line. This is the time to beat.']],
+  stats:(t)=>[['clock',f1(Math.min(t,82.06))+' s'],['model calls so far',countSpans('L0','llm',t)+' of 11'],['searches so far',countSpans('L0','tool',t)+' of 10']]},
+
+ {key:'sync', nav:'2 Sync handoff: 120 s', title:'Sync handoff: the planner stops each time it hands off a city',
+  lede:'The planner gives Lisbon to a helper and waits for the answer before it even thinks about Rome. Watch the planner\'s lane: the hatched grey stretches are time it spends doing nothing.',
+  axis:125, tmax:120.21, ref:82.06, panels:[{run:'L1', title:'Sync handoff'}],
+  notes:[
+   [0,'The planner reads the task and decides its first step (5.6 s model call).'],
+   [5.57,'5.6 s: it hands Lisbon to a helper, then stops. A handoff means the planner can do nothing else until that helper answers.'],
+   [30.59,'30.6 s: Lisbon\'s answer comes back after 25.0 s of waiting. Only now does the planner turn to Rome.'],
+   [36.46,'36.5 s: Rome is handed off. The planner waits again, while the Lisbon helper is already finished and Prague has not started.'],
+   [57.73,'57.7 s: Rome comes back after 21.3 s of waiting.'],
+   [63.16,'63.2 s: Prague is handed off. A third wait.'],
+   [83.17,'83.2 s: Prague comes back after 20.0 s. The planner has waited 66.3 s in total and has not searched a single flight yet. One agent alone was already done at 82.1 s (dashed line).'],
+   [87.64,'87.6 s: the planner finally runs its four flight searches, one after another.'],
+   [120.21,'120.2 s: final answer. 66.3 of the 120.2 s (55%) was the planner waiting. The helpers worked one at a time, so splitting the work saved nothing.']],
+  stats:(t)=>[['clock',f1(Math.min(t,120.21))+' s'],['planner waiting so far',f1(blockedSoFar('L1',t))+' s'],['share of time waiting', t>0? Math.round(100*blockedSoFar('L1',t)/Math.min(t,120.21))+'%':'0%']]},
+
+ {key:'async', nav:'3 Async spawn: 57 s', title:'Async spawn: the planner starts all three helpers and keeps working',
+  lede:'Same task, same models. Now the planner starts a helper and moves straight on: three helpers start within about 10 s and then work at the same time, while the planner searches flights. The finished handoff run is shown faded above on the same time axis.',
+  axis:125, tmax:56.76, ref:82.06, panels:[{run:'L1', title:'Sync handoff (finished, for comparison)', ghost:true, compact:true},{run:'L2', title:'Async spawn'}],
+  notes:[
+   [0,'The planner reads the task (5.0 s model call).'],
+   [5.03,'5.0 s: the Lisbon helper starts. The planner does not wait; its next model call begins at once.'],
+   [10.50,'10.5 s: the Rome helper starts. Each start still costs the planner one model call, about 5 s.'],
+   [15.13,'15.1 s: the Prague helper starts. All three helpers now work at the same time.'],
+   [19.25,'19.3 s: while the helpers search hotels, the planner runs its own flight searches.'],
+   [25.27,'25.3 s: the Lisbon answer arrives and is held until the planner asks for it. The planner is busy, not waiting.'],
+   [30.60,'30.6 s: the Rome answer arrives.'],
+   [34.52,'34.5 s: the Prague answer arrives. All three helpers are finished before the planner\'s flight searches are.'],
+   [43.94,'43.9 s: the last flight search ends. All three answers are already in, so collecting them costs 0 s of waiting.'],
+   [56.76,'56.8 s: final answer, 63.5 s sooner than the handoff run and 25.3 s sooner than one agent alone. The planner never waited.']],
+  stats:(t)=>[['clock',f1(Math.min(t,56.76))+' s'],['planner waiting so far',f1(blockedSoFar('L2',t))+' s'],['helpers working at once',helpersBusy('L2',t)+' of 3']]},
+
+ {key:'budget', nav:'4 Where the time went', title:'Where the planner\'s time went',
+  lede:'In every recorded run, the time to the final answer equals the planner\'s own model calls plus its own searches plus the time it spent waiting. The helpers\' work only adds to the total when the planner waits for it.',
+  type:'budget', tmax:1},
+
+ {key:'late', nav:'5 The late message', title:'The one message that arrived too late to be read',
+  lede:'A variant of async spawn: helpers also send progress reports, and the planner may send them instructions. An agent only reads new messages when its next model call starts. Watch the Prague helper (bottom lane).',
+  axis:70, tmax:68.77, panels:[{run:'L3', title:'Async spawn with progress reports and instructions', focus:'city_researcher#4', extraBottom:18}],
+  notes:[
+   [0,'The planner starts the three helpers, as in async spawn, then searches flights.'],
+   [16.14,'16.1 s: the Prague helper starts.'],
+   [19.97,'20.0 s: its hotel search begins.'],
+   [23.97,'24.0 s: the search fails (a simulated HTTP 503 error, built into this run).'],
+   [27.58,'27.6 s: the helper switches to the backup hotel search, which takes 5 s.'],
+   [39.97,'40.0 s: the helper sends the planner an urgent report about the failure.'],
+   [46.86,'46.9 s: the helper starts what turns out to be its last model call. What it reads is fixed at this moment.'],
+   [49.83,'49.8 s: 9.9 s after the report, the planner replies: "Proceed with the backup data, no need to retry search_hotels." It arrives while that last call is still running.'],
+   [53.70,'53.7 s: the helper returns its Prague answer and stops. It never makes another model call, so the instruction is never read, and nothing tells the planner.'],
+   [68.77,'68.8 s: final answer, still correct: the helper had already used the backup data. This was the only unread message in the 7 recorded runs; here it did no harm.']],
+  stats:(t)=>{const r=t>=53.70?1:0;return [['clock',f1(Math.min(t,68.77))+' s'],['messages between agents so far',String(msgCount('L3',t))],['messages never read', String(r)]];}},
+
+ {key:'take', nav:'6 What it shows', title:'What the replay shows', type:'text'}
+];
+
+function countSpans(run,kind,t){ return D.runs[run].spans.filter(s=>s.kind===kind && s.start<=t && (s.end<=t+1e-9 || s.start<t)).length; }
+function helpersBusy(run,t){ return LANES.slice(1).filter(a=>D.runs[run].spans.some(s=>s.agent===a&&s.start<=t&&t<s.end)).length; }
+function msgCount(run,t){ return D.runs[run].events.filter(e=>e.t<=t).length; }
+
+/* ---------- drawing ---------- */
+const X0=180, X1=975;
+let AX=125;
+const sx = t => X0 + (t/AX)*(X1-X0);
+const LH=40, BH=22, HEAD=30;
+
+function arrow(x,y1,y2,cls,title){
+  const dir = y2>y1?1:-1, ye = y2 - dir*2;
+  return `<g class="${cls}"><title>${esc(title)}</title><line x1="${x}" y1="${y1}" x2="${x}" y2="${ye-dir*5}" stroke-width="1.8"/>`+
+    `<path d="M${x-4.5},${ye-dir*7} L${x+4.5},${ye-dir*7} L${x},${ye} Z" stroke="none"/><circle cx="${x}" cy="${y1}" r="2.6" stroke="none"/></g>`;
+}
+
+function panel(p,y,t){
+  const R = D.runs[p.run], lanes = p.lanes || LANES;
+  const tt = p.ghost ? R.wall : t;
+  const lh = p.compact ? 26 : LH, bh = p.compact ? 14 : BH;
+  let o = `<g opacity="${p.ghost?0.42:1}">`;
+  const done = tt>=R.wall-1e-6;
+  o += `<text x="${X0}" y="${y+18}" font-size="14.5" font-weight="700">${esc(p.title)}</text>`;
+  o += `<text x="${X1}" y="${y+18}" font-size="13.5" text-anchor="end" class="${done?'':'muted'}">${done?'finished at '+f1(R.wall)+' s':''}</text>`;
+  const y0 = y+HEAD, laneY = {};
+  lanes.forEach((a,i)=>laneY[a]=y0+i*lh);
+  const mainSt = statusAt(p.run,'main',tt);
+  lanes.forEach(a=>{
+    const ly = laneY[a];
+    const hi = (!p.ghost && mainSt.waitOn===a) || (p.focus===a);
+    o += `<rect class="${hi?'lanehi':'lane'}" x="${X0}" y="${ly+2}" width="${X1-X0}" height="${lh-4}" rx="3"/>`;
+    o += `<text x="12" y="${ly+(p.compact?17:16)}" font-size="${p.compact?12.5:14}" font-weight="600">${esc((p.names&&p.names[a])||laneName(a))}</text>`;
+    if(!p.compact){
+      const st = statusAt(p.run,a,tt);
+      o += `<text x="12" y="${ly+32}" font-size="12" class="${st.cls}">${esc(st.txt)}</text>`;
+      o += `<text x="${X0-8}" y="${ly+16}" font-size="11" text-anchor="end" class="faint">${esc(modelName(p.run,a))}</text>`;
+    }
+  });
+  // spans
+  R.spans.forEach(s=>{
+    if(!(s.agent in laneY) || s.start>=tt || s.end-s.start<0.01) return;
+    const e = Math.min(s.end,tt), x=sx(s.start), w=Math.max(sx(e)-x,0.8), by=laneY[s.agent]+(lh-bh)/2;
+    if(s.kind==='blocked'){
+      o += `<g><title>${esc('Planner waiting for '+laneName(waitingFor(s))+': '+f1(s.start)+' to '+f1(s.end)+' s ('+f1(s.end-s.start)+' s)')}</title><rect class="waitfill" x="${x}" y="${by}" width="${w}" height="${bh}"/><rect class="waitstroke" x="${x}" y="${by}" width="${w}" height="${bh}"/></g>`;
+      if(!p.compact && w>80){
+        const lbl = e>=s.end ? 'waited '+f1(e-s.start)+' s for '+CITY[waitingFor(s)] : 'waiting for '+CITY[waitingFor(s)]+': '+f1(e-s.start)+' s';
+        o += `<text x="${x+w/2}" y="${by-4}" font-size="11.5" text-anchor="middle" class="t-wait" font-weight="600">${esc(lbl)}</text>`;
+      }
+    } else {
+      const cls = s.kind==='llm'?'think':'search';
+      const tip = (s.kind==='llm'?'Model call':'Search: '+s.label)+', '+f1(s.start)+' to '+f1(s.end)+' s ('+f1(s.end-s.start)+' s)';
+      o += `<rect class="${cls}" x="${x}" y="${by}" width="${w}" height="${bh}" rx="2"><title>${esc(tip)}</title></rect>`;
+      if(s.kind==='tool' && !p.compact && w>34 && e>=s.end) o += `<text class="barlabel" x="${x+w/2}" y="${by+bh/2+4}" text-anchor="middle">${esc(TOOLNAME[s.label]==='backup hotels'&&w<60?'backup':TOOLNAME[s.label])}</text>`;
+      if(isFailed(p.run,s) && e>=s.end){
+        const cx=sx(s.end), cy=by+bh/2;
+        o += `<line class="fail" x1="${cx-6}" y1="${cy-6}" x2="${cx+6}" y2="${cy+6}"/><line class="fail" x1="${cx-6}" y1="${cy+6}" x2="${cx+6}" y2="${cy-6}"/>`;
+        o += `<text x="${cx}" y="${by-4}" font-size="11.5" text-anchor="middle" class="t-alert" font-weight="700">failed (503)</text>`;
+      }
+    }
+  });
+  // messages
+  R.events.forEach(e=>{
+    if(e.t>tt || !(e.from in laneY) || !(e.to in laneY)) return;
+    const x=sx(e.t), from=laneY[e.from]+lh/2, to=laneY[e.to]+lh/2;
+    const kind = (p.run==='L1' && e.kind==='spawn') ? 'handoff' : e.kind;
+    o += arrow(x, from, to, 'm-'+e.kind, f1(e.t)+' s  '+kind+' from '+laneName(e.from)+' to '+laneName(e.to)+': '+e.text);
+  });
+  // late-message highlights
+  if(p.run==='L3' && !p.ghost){
+    const P='city_researcher#4', ly=laneY[P];
+    if(tt>=39.97) o += `<text x="${sx(39.97)-6}" y="${ly+6}" font-size="11.5" text-anchor="end" class="t-alert" font-weight="700">urgent report</text>`;
+    if(tt>=46.86){
+      const last = R.spans.find(s=>s.agent===P && Math.abs(s.start-46.86)<0.01);
+      const xa=sx(last.start), xb=sx(Math.min(last.end,tt)), yb=ly+lh-1;
+      o += `<path class="outline" d="M${xa},${ly+(lh-BH)/2-3} h${Math.max(xb-xa,1)} v${BH+6} h${-Math.max(xb-xa,1)} Z"/>`;
+      o += `<text x="${xa}" y="${yb+13}" font-size="11.5" class="muted">last model call, input fixed at 46.9 s</text>`;
+    }
+    if(tt>=49.83){
+      const x=sx(49.83), y=ly+lh/2;
+      o += `<text x="${x+8}" y="${ly+6}" font-size="11.5" class="t-instr" font-weight="700">instruction</text>`;
+      if(tt>=53.70){
+        o += `<rect class="unread" x="${x-9}" y="${y-7}" width="18" height="13" rx="2"/><path class="unread" d="M${x-9},${y-6} L${x},${y+1} L${x+9},${y-6}"/>`;
+        o += `<text x="${sx(53.70)+8}" y="${y+4}" font-size="12.5" class="t-alert" font-weight="700">never read</text>`;
+      }
+    }
+  }
+  o += '</g>';
+  return {svg:o, h: HEAD + lanes.length*lh + 8 + (p.extraBottom||0)};
+}
+
+function axisSvg(y,t,scene){
+  let o = `<line class="axis" x1="${X0}" y1="${y}" x2="${X1}" y2="${y}"/>`;
+  const step = AX>100?10:5;
+  for(let s=0;s<=AX+1e-9;s+=step){
+    o += `<line class="axis" x1="${sx(s)}" y1="${y}" x2="${sx(s)}" y2="${y+5}"/><text x="${sx(s)}" y="${y+19}" font-size="12" text-anchor="middle" class="muted">${s}</text>`;
+  }
+  o += `<text x="${X0-8}" y="${y+19}" font-size="12" text-anchor="end" class="muted">seconds</text>`;
+  // annotation ticks
+  (scene.notes||[]).forEach((n,i)=>{
+    const past = n[0]<=t+1e-9;
+    o += `<g class="tick${past?' past':''}" data-t="${n[0]}" role="button" aria-label="Jump to ${f1(n[0])} s"><title>Jump to ${f1(n[0])} s</title><circle cx="${sx(n[0])}" cy="${y+32}" r="5"/></g>`;
+  });
+  return {svg:o, h:44};
+}
+
+function drawChart(scene,t){
+  AX = scene.axis;
+  let y=8, body='', tops=[], bottoms=[];
+  scene.panels.forEach(p=>{ const r=panel(p,y,t); body+=r.svg; tops.push(y+HEAD); y+=r.h; bottoms.push(y-8); y+=8; });
+  const ax = axisSvg(y,t,scene);
+  let grid='';
+  const step = AX>100?10:5;
+  for(let s=step;s<=AX;s+=step) grid += `<line class="grid" x1="${sx(s)}" y1="${tops[0]-4}" x2="${sx(s)}" y2="${y}"/>`;
+  let ref='';
+  if(scene.ref){ ref = `<line class="ref" x1="${sx(scene.ref)}" y1="${8}" x2="${sx(scene.ref)}" y2="${y}"/><text x="${sx(scene.ref)+4}" y="${22}" font-size="11.5" class="muted">one agent alone: ${f1(scene.ref)} s</text>`; }
+  const ph = `<line class="play" x1="${sx(Math.min(t,scene.tmax))}" y1="${tops[tops.length>1?1:0]-6}" x2="${sx(Math.min(t,scene.tmax))}" y2="${y}"/>`;
+  const H = y + ax.h;
+  const defs = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect class="hatchbg" width="6" height="6"/><line class="hatchln" x1="0" y1="0" x2="0" y2="6"/></pattern></defs>`;
+  chart.setAttribute('viewBox',`0 0 1000 ${H}`);
+  chart.innerHTML = defs + grid + body + ref + ph + ax.svg;
+}
+
+function drawBudget(k){
+  // k in 0..1 animation progress
+  AX = 125;
+  const rows = [
+    {run:'L0', name:'One agent alone', all:'0 single agent'},
+    {run:'L1', name:'Sync handoff', all:'1 sync handoff'},
+    {run:'L2', name:'Async spawn', all:'2 async spawn'}];
+  const sum = (run,kind)=>D.runs[run].spans.filter(s=>s.agent==='main'&&s.kind===kind).reduce((a,s)=>a+s.end-s.start,0);
+  let o = `<defs><pattern id="hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><rect class="hatchbg" width="6" height="6"/><line class="hatchln" x1="0" y1="0" x2="0" y2="6"/></pattern></defs>`;
+  let y = 30;
+  o += `<text x="${X0}" y="18" font-size="13" class="muted">Planner's time, split three ways (solid bar). Dashed outline: model time of all agents added up.</text>`;
+  rows.forEach(r=>{
+    const L=sum(r.run,'llm'), T=sum(r.run,'tool'), B=sum(r.run,'blocked'), W=D.runs[r.run].wall;
+    const cmp = D.cmp.find(c=>c.level===r.all);
+    const all = cmp['LLM s (summed)'];
+    o += `<text x="12" y="${y+20}" font-size="15" font-weight="700">${r.name}</text>`;
+    o += `<text x="12" y="${y+38}" font-size="12.5" class="muted">${D.runs[r.run].agents.length} agent${D.runs[r.run].agents.length>1?'s':''}, ${D.runs[r.run].calls.llm} model calls</text>`;
+    let x = X0; const segs=[['think',L,'own model calls'],['search',T,'own searches'],['waitfill',B,'waiting']];
+    const total = (L+T+B)*k;
+    let acc=0;
+    segs.forEach(([cls,v,lbl])=>{
+      const vis = Math.max(0, Math.min(v, total-acc)); acc+=v;
+      if(vis<=0) return;
+      const w = sx(vis)-X0;
+      o += `<rect class="${cls}" x="${x}" y="${y+6}" width="${w}" height="26" rx="2"><title>${lbl}: ${f1(v)} s</title></rect>`;
+      if(cls==='waitfill') o += `<rect class="waitstroke" x="${x}" y="${y+6}" width="${w}" height="26"/>`;
+      if(k>=1 && w>58) o += `<text x="${x+w/2}" y="${y+23}" font-size="12" text-anchor="middle" font-weight="700" ${cls==='waitfill'?'class="onhatch"':'class="barlabel"'} style="font-size:12px">${f1(v)} s</text>`;
+      x += w;
+    });
+    if(k>=1){
+      o += W>110 ? `<text x="${sx(W)}" y="${y+1}" font-size="14" font-weight="700" text-anchor="end">= ${f1(W)} s</text>`
+                 : `<text x="${sx(W)+8}" y="${y+24}" font-size="14" font-weight="700">= ${f1(W)} s</text>`;
+      o += `<rect class="outline" x="${X0}" y="${y+38}" width="${sx(all)-X0}" height="10" rx="2"/>`;
+      o += `<text x="${sx(all)+8}" y="${y+47}" font-size="12" class="muted">all agents' model time: ${f1(all)} s</text>`;
+    }
+    y += 70;
+  });
+  // axis
+  o += `<line class="axis" x1="${X0}" y1="${y}" x2="${X1}" y2="${y}"/>`;
+  for(let s=0;s<=125;s+=10) o += `<line class="axis" x1="${sx(s)}" y1="${y}" x2="${sx(s)}" y2="${y+5}"/><text x="${sx(s)}" y="${y+19}" font-size="12" text-anchor="middle" class="muted">${s}</text>`;
+  o += `<text x="${X0-8}" y="${y+19}" font-size="12" text-anchor="end" class="muted">seconds</text>`;
+  chart.setAttribute('viewBox',`0 0 1000 ${y+30}`);
+  chart.innerHTML = o;
+}
+
+function budgetText(){
+  return 'The two helper runs did about the same amount of model work in total (90.1 s and 86.4 s of model calls summed over all agents) and the planner\'s own calls took about as long (41.9 s and 44.7 s). So the 63.5 s gap comes from the 66.3 s the sync planner spent waiting; the async planner\'s own calls and searches even took 2.9 s longer (56.8 s against 53.9 s). Splitting work only pays when the helpers\' time overlaps with something the planner is doing.';
+}
+
+const TAKE = `
+<h3>Two lessons from the replay</h3>
+<ul>
+<li>Helpers save time only when the planner keeps working while they run. The sync planner handed off three cities and waited 25.0, 21.3 and 20.0 s, so it finished at 120.2 s, slower than one agent alone (82.1 s). The async planner started the same three helpers, searched flights meanwhile and never waited: 56.8 s.</li>
+<li>A message to an agent is read only when that agent's next model call starts. The Prague helper's last call began at 46.9 s; the planner's instruction arrived at 49.8 s and was never read. In this run the helper had already done what the instruction asked, so the answer was still correct, but nothing warned the planner that its message went unread.</li>
+</ul>
+<h3>Time to a correct answer, all seven recorded patterns</h3>
+<table class="lv" id="lvTable"><thead><tr><th>Pattern</th><th class="n">Seconds</th><th class="n">Planner waiting</th><th class="barcell"></th></tr></thead><tbody></tbody></table>
+<p style="font-size:14px;color:var(--muted);margin-top:6px">All seven answers were correct, so correctness does not separate the patterns. Race and cancel solved a smaller, flights-only task and is not comparable on time.</p>
+<h3>How far to trust it</h3>
+<ul>
+<li>One recorded run per pattern. A second run could differ, and gaps of a few seconds may not repeat.</li>
+<li>Each step is a new <code>claude -p</code> process; the median model call took 4.5 s (range 3.1 to 9.6 s), so model-call speed dominates every timeline.</li>
+<li>Searches are simulated with fixed delays, and the pattern was set by instructions; the planner never chose how to coordinate.</li>
+<li>"Planner waiting" counts only the planner. Helpers can also wait: in the child-asks-parent run the Rome helper waited 10.8 s for a reply while the planner shows 0 s.</li>
+</ul>`;
+
+function fillTable(){
+  const tb = document.querySelector('#lvTable tbody'); if(!tb) return;
+  tb.innerHTML = D.cmp.map(c=>{
+    const lv = c.level.replace(/^\d+\s*/,'') + (c.level.startsWith('5')?' (flights only)':''); const w=c['wall s'];
+    return `<tr><td>${esc(lv)}</td><td class="n">${f1(w)}</td><td class="n">${f1(c['main blocked s'])} s (${Math.round(c['main blocked %']*100)}%)</td><td class="barcell"><div class="minibar${w>82.06?' slow':''}" style="width:${(w/125*100).toFixed(1)}%"></div></td></tr>`;
+  }).join('');
+}
+
+/* ---------- player ---------- */
+const chart = document.getElementById('chart');
+const els = {title:sceneTitle, lede:sceneLede, caption:caption, stats:stats, scrub:scrub, clock:clock, play:playBtn};
+let cur = 0, t = 0, playing = false, last = null;
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const capture = /capture/.test(location.search);
+
+const steps = document.getElementById('steps');
+S.forEach((s,i)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=s.nav; b.onclick=()=>go(i); steps.appendChild(b); });
+
+function render(){
+  const sc = S[cur];
+  if(sc.type==='budget'){ drawBudget(Math.min(t/sc.tmax,1)); els.caption.textContent = budgetText(); els.stats.innerHTML='';
+    els.clock.textContent=''; return; }
+  if(sc.type==='text') return;
+  drawChart(sc,t);
+  const notes = sc.notes||[]; let n = notes[0];
+  notes.forEach(x=>{ if(x[0]<=t+1e-9) n=x; });
+  els.caption.textContent = n ? n[1] : '';
+  els.stats.innerHTML = sc.stats(t).map(([k,v])=>`<span class="chip">${esc(k)}: <b>${esc(v)}</b></span>`).join('');
+  els.clock.textContent = f1(Math.min(t,sc.tmax))+' s';
+  els.scrub.value = t;
+}
+
+function go(i, startT){
+  cur = Math.max(0,Math.min(S.length-1,i));
+  const sc = S[cur];
+  [...steps.children].forEach((b,j)=>b.setAttribute('aria-current', j===cur?'step':'false'));
+  els.title.textContent = sc.title; els.lede.textContent = sc.lede||'';
+  prevBtn.disabled = cur===0; nextBtn.disabled = cur===S.length-1;
+  const isText = sc.type==='text';
+  chartScene.style.display = isText?'none':'block';
+  textScene.style.display = isText?'block':'none';
+  controls.style.display = sc.type==='budget'?'none':'flex';
+  legend.style.display = sc.type==='budget'?'none':'flex';
+  legend.querySelectorAll('[data-only]').forEach(el=>el.style.display = el.dataset.only===sc.key?'':'none');
+  legend.querySelectorAll('[data-not]').forEach(el=>el.style.display = el.dataset.not===sc.key?'none':'');
+  if(isText){ textScene.innerHTML = TAKE; fillTable(); setPlaying(false); return; }
+  els.scrub.max = sc.tmax;
+  t = startT!==undefined ? startT : (reduce ? sc.tmax : 0);
+  render();
+  setPlaying(!reduce && !capture && t<sc.tmax);
+}
+
+function setPlaying(p){ playing=p; els.play.textContent = p?'Pause':(t>=S[cur].tmax?'Replay':'Play'); last=null; if(p) requestAnimationFrame(tick); }
+function tick(ts){
+  if(!playing) return;
+  if(last!==null){
+    const sc=S[cur];
+    const sp = sc.type==='budget' ? 0.9 : Number(speed.value);
+    t = Math.min(sc.tmax, t + (ts-last)/1000*sp);
+    render();
+    if(t>=sc.tmax){ setPlaying(false); return; }
+  }
+  last = ts; requestAnimationFrame(tick);
+}
+playBtn.onclick = ()=>{ if(playing) setPlaying(false); else { if(t>=S[cur].tmax) t=0; setPlaying(true);} };
+restartBtn.onclick = ()=>{ t=0; render(); setPlaying(true); };
+scrub.oninput = ()=>{ setPlaying(false); t=Number(scrub.value); render(); };
+prevBtn.onclick = ()=>go(cur-1); nextBtn.onclick = ()=>go(cur+1);
+chart.addEventListener('click',e=>{ const g=e.target.closest('.tick'); if(g){ setPlaying(false); t=Number(g.dataset.t); render(); } });
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT') return;
+  if(e.key==='ArrowRight') go(cur+1); else if(e.key==='ArrowLeft') go(cur-1);
+  else if(e.key===' '){ e.preventDefault(); playBtn.click(); }
+});
+// deterministic hook for frame capture
+window.__frame = (i,tt)=>{ go(i, tt); setPlaying(false); t=tt; render(); };
+window.__scenes = S.map(s=>({key:s.key,tmax:s.tmax,type:s.type||'chart'}));
+go(0);
+</script>
+</body>
+</html>
