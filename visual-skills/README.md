@@ -10,6 +10,9 @@ The skills are plain folders in the [Agent Skills](https://docs.claude.com/en/do
 format: a `SKILL.md` with a name and a description that tells the model when to use it, plus scripts and
 references it reads only when needed.
 
+The skills are also published on their own, as a Claude Code plugin with release zips for claude.ai, at
+[k-sandhu/visual-explainer-skills](https://github.com/k-sandhu/visual-explainer-skills).
+
 ## The skills
 
 | Skill | What it does | Use it when the reader must grasp... |
