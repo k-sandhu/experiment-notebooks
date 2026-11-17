@@ -1,0 +1,23 @@
+# Full free-classifier protocol and completion record
+
+## Registered design, 2026-11-02 Toronto time
+
+The owner authorized the full expanded-prompt study and requested free decision models. The frozen `protocol.json` retains the same 40 definitions, useful exceptions, per-post rules and six regions as the original classifier audit. Both current conditions use the dated `respan/span-01-lite-20260925` standard route, restricted to Respan, no fallback, maximum input/output prices zero. Its live endpoint catalogue advertises zero prices; the tiny route control reported zero and left the account's free-variant daily counter unchanged. This is a documented zero-price route, not a second classifier checkpoint, paid fallback or new account.
+
+The `:free` pilot route is retained as history and not mixed into current counts. Reclassifying the original baseline through the same checkpoint avoids confounding a prompt change with a paid-versus-free classifier change. The classifier sees source, whole measured text, regions and rubric, but no writer identity, prompt condition or previous drafts. Shuffled matched pairs and within-pair arm order use fixed seeds. Writer conditions themselves were collected sequentially, so backend drift remains a confound.
+
+The strict population uses the frozen baseline body parser and exact enclosed expanded body. A secondary raw-text audit was declared after early writer tag failures were observed, before any full-run style label. For nonempty invalid-tag replies it classifies the exact entire raw reply, with `strict_readable=false` and `input_kind=raw_unparsed_response`. It never guesses a body or discards a closing tag. No prose labels are manually assigned. The primary tag-valid population is selected by compliance, which limits generalization.
+
+Each nonempty reply has 240 predicates: 40 patterns in six regions. Whole-text labels are primary. Assembled regional windows can change layout, so regional formatting labels are diagnostic. The unchanged questions are packed in order into batches of max(4, min(40, floor(900000 / state_characters))) questions. This size rule was frozen before full classification. Eight pair workers and a 0.5-second minimum fresh-request start interval bound transport. Each batch repeats the complete state. A long-source authored control, separate from study data, returned the intended obvious contrast/hashtag responses at native cost zero. It is not representative classifier validation or proof of full-source attention.
+
+Successful exact requests replay from hash-keyed full private request/response records. All HTTP attempts remain cached. A 504/413 batch with more than four questions splits in half; other eligible transient failures have at most three attempts per leaf and honor Retry-After. Valid answers are never retried. Malformed or missing answers are unreadable, not absent. No generation is redrafted because of its wording or classifier label.
+
+## Completion, 2026-11-02 Toronto time
+
+There are 800 case records: 400 baseline and 400 expanded, including one explicit unreadable-generation record. The full audit returned 191,760 valid typed probabilities; 0 invalid and 0 missing predicates among nonempty cases. Primary strict comparison has 292 matched pairs; exact-raw sensitivity has 399. The capacity-interrupted Sol SETI block is also excluded in a separate sensitivity.
+
+The primary ledger contains 5438 HTTP attempts, statuses {'200': 5438}, with reported cost $0.000000. Successful requests without cost fields: 0; failed requests without cost fields: 0. Native input tokens: 592222534; output tokens: 0. Cache-read counters are unavailable, not zero. The long-source control and route control each reported zero and are separate from this primary ledger. Earlier pilot attempts, including the unpriced 504, remain in their own ledger.
+
+Thresholds 0.5, 0.2 and 0.8 and 2,000 article-cluster bootstrap draws are descriptive choices, not human-calibrated guarantees. The article-weighted estimate resamples all available paired cells within each sampled article; post-weighted changes are retained separately. Missing/tag-failed outputs are not converted to negative labels. The 40 overlapping patterns are never added into a quality score. The taxonomy/prompt were selected after viewing baseline data; no human factual, preference or editing-time outcome was collected.
+
+Native answer reconstruction, writer/source/request fingerprints, exact raw sensitivity inputs, price/provider guards and source-free offline replay are checked in `../expanded_full_comparison/validation.json`. All 35 regression tests pass. Current reader material replaces the earlier paid-classifier comparison; old data remain untouched as design history.
