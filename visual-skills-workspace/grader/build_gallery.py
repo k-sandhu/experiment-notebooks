@@ -97,7 +97,7 @@ for case in TITLES:
         return f"""<div class="run">
   <div class="run-head"><h3>{name}</h3>{badge}<span class="muted">{mins(cfg)} to build</span></div>
   <div class="frame"><iframe src="runs/{case}/{short}.html" title="{esc(title)}, {name.lower()}" loading="lazy"></iframe></div>
-  <a class="open" href="runs/{case}/{short}.html" target="_blank" rel="noopener">Open full size ↗</a>{(f' · <a class="open" href="runs/{case}/with_r1.html" target="_blank" rel="noopener">First-round version ↗</a>' if short == 'with' and prev else '')}
+  <div class="opens"><button type="button" class="open" data-src="runs/{case}/{short}.html" data-title="{esc(title)}, {name.lower()}">Open full size</button>{(f'<button type="button" class="open" data-src="runs/{case}/with_r1.html" data-title="{esc(title)}, first-round version with the skills">First-round version</button>' if short == 'with' and prev else '')}</div>
   {review(cfg)}
   {checks(cfg)}
 </div>"""
@@ -153,13 +153,24 @@ if showcase:
         if (d / "card.png").exists():
             shutil.copy(d / "card.png", out / "runs" / "showcase" / nb / "card.png")
             img = f"<img src='runs/showcase/{nb}/card.png' alt='{esc(ttl)}: a frame from the explainer' loading='lazy'>"
-        cards.append(f"<a class='card' href='runs/showcase/{nb}/index.html' target='_blank' rel='noopener'>{img}<span class='eyebrow'>{esc(src)} · {esc(form)}</span><b>{esc(ttl)}</b><span class='muted'>Open ↗</span></a>")
+        cards.append(f"<button type='button' class='card open' data-src='runs/showcase/{nb}/index.html' data-title='{esc(ttl)}'>{img}<span class='eyebrow'>{esc(src)} · {esc(form)}</span><b>{esc(ttl)}</b><span class='muted'>Open</span></button>")
     if cards:
         show_html = f"""<section aria-labelledby="more"><h2 id="more">More experiments</h2>
-<p class="muted" style="max-width:72ch;margin-bottom:16px">Eight more notebooks, each built once with the revised skills from the notebook's README and data, with no human edits. Each opens full size in its own tab.</p>
+<p class="muted" style="max-width:72ch;margin-bottom:16px">Eight more notebooks, each built once with the revised skills from the notebook's README and data, with no human edits. Tap a card to open it full size.</p>
 <div class="cards">{''.join(cards)}</div></section>
 """
 
+viewer_js = r"""<script>
+(function () {
+  const v = document.getElementById('viewer'), fr = document.getElementById('viewer-frame'), t = document.getElementById('viewer-title'), x = document.getElementById('viewer-close');
+  let back = null;
+  function open(src, title, from) { back = from; t.textContent = title; fr.src = src; v.hidden = false; document.body.style.overflow = 'hidden'; x.focus(); }
+  function close() { v.hidden = true; fr.src = 'about:blank'; document.body.style.overflow = ''; if (back) back.focus(); }
+  document.addEventListener('click', e => { const b = e.target.closest('button.open'); if (b) open(b.dataset.src, b.dataset.title, b); });
+  x.addEventListener('click', close);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !v.hidden) close(); });
+})();
+</script>"""
 page = f"""<title>Explainer Skills Lab</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -203,7 +214,16 @@ blockquote {{ margin: 8px 0 12px; padding: 10px 14px; border-left: 3px solid var
 .win {{ font-size: 12px; font-weight: 600; color: var(--good); border: 1px solid currentColor; border-radius: 999px; padding: 1px 8px }}
 .frame {{ background: var(--chalk); border-radius: 14px; overflow: hidden; border: 1px solid var(--line) }}
 iframe {{ display: block; width: 100%; height: 820px; border: 0; background: #fff }}
-.open {{ font-size: 13px; justify-self: start }}
+.opens {{ display: flex; gap: 8px; flex-wrap: wrap }}
+button.open {{ font: 500 13px var(--sans); color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer }}
+button.open:hover {{ border-color: var(--accent) }}
+.card.open {{ font: inherit; text-align: left; padding: 10px 10px 12px; cursor: pointer; color: var(--ink) }}
+.viewer {{ position: fixed; inset: 0; z-index: 50; background: var(--bg); display: grid; grid-template-rows: auto 1fr; padding: calc(env(safe-area-inset-top, 0px) + 10px) max(12px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 10px) max(12px, env(safe-area-inset-left, 0px)); gap: 8px }}
+.viewer[hidden] {{ display: none }}
+.viewer-bar {{ display: flex; align-items: center; gap: 12px; justify-content: space-between; max-width: 620px; width: 100%; margin: 0 auto }}
+.viewer-bar b {{ font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }}
+.viewer-bar button {{ font: 600 14px var(--sans); background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer }}
+.viewer iframe {{ width: 100%; max-width: 620px; height: 100%; margin: 0 auto; border-radius: 14px; border: 1px solid var(--line) }}
 .scores {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; font-size: 11.5px; color: var(--muted); text-align: center }}
 .scores span {{ background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 2px }}
 .scores b {{ display: block; font-size: 18px; color: var(--ink); font-variant-numeric: tabular-nums }}
@@ -258,6 +278,11 @@ summary {{ cursor: pointer; color: var(--ink) }}
 <p>The skill files contain no data or wording from the five test notebooks, so the runs with skills could not copy an answer. The pages here are copies of each run's output, unedited.</p>
 </section>
 </main>
+<div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-labelledby="viewer-title">
+  <div class="viewer-bar"><b id="viewer-title"></b><button type="button" id="viewer-close">Close</button></div>
+  <iframe id="viewer-frame" title="Explainer, full size"></iframe>
+</div>
+{viewer_js}
 """
 out.mkdir(parents=True, exist_ok=True)
 (out / "index.html").write_text(page, encoding="utf-8")
