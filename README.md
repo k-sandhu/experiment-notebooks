@@ -25,8 +25,8 @@ included.
   time series from its recent history (16) and predicting from a small table (14).
 - Some study the step before training a model: generating examples with exact answers, and collecting scored
   attempts that a training method could learn from (23, 24, 25, 27).
-- Some attempt a smaller-model replication of direct weight writing: a language model emits a network's
-  numerical parameters, and a separate tester loads them unchanged to see which functions work (41, 42).
+- Some skip training altogether and ask a model to write another model's parameters directly, then run the file
+  unchanged on hidden data (41, 42, 45).
 
 You can learn from every notebook without reading code. Each README starts by teaching its topic with a small
 example, then states the question, shows worked examples from the saved results, explains each chart, and says
@@ -101,24 +101,30 @@ costs.
 | 25 | [Scored attempts at office tasks](notebooks/25-knowledge-work-rollouts/) | Training a model on its own attempts needs a score that says whether the job was really done, and repeated attempts at the same task that sometimes succeed and sometimes fail, because the training learns from comparing them. On 12 new office tasks (calendar changes, questions on IBM's October 2026 results, reconciliations of US Treasury cash records), each attempted three times by two small open-weight models (Granite 4.2 8B, Nemotron 3.5 Lightning) and two OpenAI models (GPT-6.1 Sol, GPT-6 Luna), how often is the work actually finished, do the environments' own scores agree, and how many of the 48 groups of three attempts hold both a success and a failure? No model is trained. | 119/144 attempts finished: Granite 16/36, Nemotron 35, Sol 35, Luna 33 (one Luna failure was a withheld reply that held the correct booking). The calendar's point per successful action could not tell finished bookings from broken ones, and the finance score's 1% tolerance passed 6 wrong answers. Only 9/48 groups were mixed; Sol and Nemotron had 1 each, at over 100 model calls per mixed group against 30 for Granite |
 | 27 | [When to stop repeating a task while collecting training attempts](notebooks/27-adaptive-knowledge-rollouts/) | Training a model by trial and error compares its successful and failed attempts at the same task, but each attempt by a tool-using agent costs many model calls, and a strong model mostly succeeds, so most groups of attempts teach nothing. One proposed saving is to try each task twice and move on when the two attempts agree. On fictional scheduling tasks with exactly computed answers (and, at first, ledger and purchasing tasks), attempted by GPT-6.1 Sol and GPT-6 Luna, does that collect more groups of four attempts holding both a success and a failure than always making four? The budgets are equal in model calls in four comparisons, and in tokens (24 million per model and collector) on 16 new twelve-review scheduling tasks. No model is trained. | No. At equal tokens both rules collected 4 mixed groups with Sol and 0 with Luna, and across all five comparisons always-four collected 11 against 10 for stopping early. Sol solved all 111 known attempts on the first three task sets, so no Sol group could be mixed until the tasks gained competing handoff charges; Luna then solved none of 55. Most of Sol's failures on the hardest tasks were valid agendas a median 4.7% above the cheapest. Four blocks of four tasks cannot rule out a small difference either way. |
 
-## Replicating weight-space programming on smaller networks
+## Writing a model's parameters directly
 
-A classifier usually gets its numerical weights from a training program. Another possibility is to ask a
-language model to write every number itself, then load those numbers into a fixed network. A successful reply
-must be both complete enough to execute and accurate on the intended task. These experiments separate those
-two requirements and preserve the teacher's original output without fitting or repairing its values.
+A trained model is a file of numbers. A random forest is a list of yes-or-no questions with thresholds and leaf
+votes; an LSTM forecaster is a few hundred weights. A training program normally picks them by searching for numbers
+that fit labelled examples, and it never knows what rule produced the data. A language model can sometimes see that
+rule in the examples, for instance that one class fills a circle in two of the features. If it can also write the
+thresholds or weights that compute the rule, with no tools to run or check anything, the result can be both more
+accurate than a model trained on a small sample and readable by a person. If it misreads the data or breaks the file
+format, the file is useless, so these experiments run every file unchanged on hidden data and count unreadable files
+apart from wrong ones.
 
-The starting point is [Sparks of Weight-Space Programming](https://rikiyat.github.io/blog/weight-space-programming/).
-Our programme tests direct numerical writing on much smaller architectures: known mathematical rules, geometric
-classification, digit recognition and a tiny SQL generator. It also retains the initial random-network control,
-verbal-feedback attempts, ordinary decoding controls and numerical-prior rewrites. Functional MLPs reproduce the
-mechanism on our tasks; failed SQL generation and incomplete replies mark limits of those attempts. The blog's
-blind weight-reading and competent pretrained-model repair claims have not been reproduced here.
+Notebooks 41 and 42 start from [Sparks of Weight-Space Programming](https://rikiyat.github.io/blog/weight-space-programming/)
+and test direct numerical writing on much smaller networks: known mathematical rules, geometric classification,
+digit recognition and a tiny SQL generator. A successful reply must be both complete enough to run and accurate on
+the task, and the notebooks keep the model's original numbers without fitting or repairing them. The small
+classifier networks worked on these tasks; the SQL generator matched none of the requested schemas, and some replies
+never gave a complete network. The blog's claims about reading weights blind and repairing a competent pretrained
+model have not been reproduced here. Notebook 45 asks the same question of random forests and LSTM forecasters.
 
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
 | 41 | [Directly written MLP classifiers](notebooks/41-direct-weight-mlps/) | Can twelve tool-free models emit all 6,570 weights and biases of a digit classifier from the same 2,048 labelled eight-by-eight images, with exact preprocessing code? Test the networks unchanged on 1,797 official hidden test images, and compare with earlier 17- and 388-parameter known-rule tasks. | First submitted networks: Astra 1,645/1,797 correct (91.54%), Claude Fable 5.1 1,628 (90.60%), Sol 1,422 (79.13%), Muse 606 (33.72%); the other six first flat replies, including Opus, Sonnet and Haiku 5.5, gave no usable network. Asked again for numbered entries per tensor, Opus 5.5 scores 1,580 (87.92%), Sonnet 5.5 1,214 (67.56%) and Gemini 1,091 (60.71%); the Opus and Sonnet networks repeat flat replies that had only miscounted rows. Haiku 5.5 wrote runs of zeros and then declined, and Nemotron timed out. The three top open-weight models on OpenRouter, asked for numbered entries from the start, all completed the format, but DeepSeek V4.1 Flash scores 379 (21.09%), MiMo-V2.6-Pro 335 (18.64%) and GLM-5.3 194 (10.80%): each network sends most images to one or two digits. The same-sample nearest-neighbour reference gets 1,750 (97.38%). This old public benchmark may have appeared in teacher training, so scores are upper bounds on learning new data. |
 | 42 | [Tiny SQL generators written as weights](notebooks/42-tiny-sql-direct-weights/) | Can a tool-free teacher write 2,208 editable values of a tiny transformer with frozen word vectors to generate a SELECT query using the supplied table and column names? Do ordinary decoding controls or bounded numerical priors recover useful behaviour? | The unbounded Astra checkpoint matches 0/123 requested schemas in every one of 11 decoder conditions, across 1,845 outputs. Bounded weights pass all numerical constraints but match 0/16 schemas. Zeros fall from 57.1% to 5.4% and maximum magnitude from 10²² to 1, without functional SQL success. The task scores sit at a floor and do not rank the failed generators. |
+| 45 | [Random forests and LSTMs written by hand](notebooks/45-handwritten-forest-lstm/) | A model trained on a small, noisy sample fits the noise as well as the pattern; a reader who recognises the rule behind the data can write the rule instead. Can a language model with no tools write a working random forest and a working LSTM forecaster directly as parameter files? Eight models (Claude Opus 5.5, Fable 5.1 and Sonnet 5.5, GPT-6.1 Sol, Muse Wonder Full, Kimi K3.1 Pro, GLM 5.3, DeepSeek V4.1 Flash) each wrote three forests for four synthetic classification tasks (200 to 1,500 labelled rows, from three simple rules or from a smooth random function) and three 8-unit LSTMs for two synthetic daily-sales series, 144 files in all, each run unchanged on 5,000 hidden rows or 140 hidden days and compared with the same models trained in the usual way. | When the labels follow a short rule, the best writers write the rule: all 9 of Sol's rules-task forests scored 92.0% to 92.4% against a 92.6% ceiling, even from 200 rows, where a trained forest with the same limits scored 54.2% and gradient boosting 75.4%. Opus, Muse and Fable did so in 5, 4 and 3 of 9 and misread a rule in the others; Sonnet, Kimi and DeepSeek scored 33% to 60%, and GLM 5.3 used up its 128,000-token allowance without answering in 15 of 18 requests. On smooth labels no written forest beat training (best median 71.1% against 69.4% for the trained forest and 74.1% for boosting). The best written LSTMs (error 2.60 to 3.02) beat the same LSTM trained by gradient descent (3.87) but not a linear model (2.47), and none learned a 30-day pay cycle. Keeping the best of three files by its score on the visible data gave a forest within 1.2 points of the ceiling from all four top models on 200 and 600 rows |
 
 ## Making bounded decisions
 
@@ -399,6 +405,7 @@ command-line tool installed and signed in.
 | [35](notebooks/judges/35-judge-taste/) | The notebook's own `requirements.txt`; replays all 2,016 judgments from `data/cache/` | `NB_LIVE=1` judges two development pairs by default; `NB_PROFILE=full` for the frozen test; $5 OpenRouter cap | `OPENROUTER_API_KEY`; `claude`, `codex` |
 | [38](notebooks/38-long-text-edits/) | Nothing extra; every merge method runs again on the cached replies (needs `git`, and GNU `patch` for that method) | `NB_LIVE=1`; `NB_N_DOCS` and `NB_MODELS` set the size; capped at 3,000 CLI calls, USD 80 of Claude list price and USD 15 of OpenRouter spend | `OPENROUTER_API_KEY`; `claude`, `codex` |
 | [39](notebooks/39-rust-vs-python/) | Nothing extra; the notebook reads the saved programs and measurements | `python -m bench.sessions run-all --kind main` and `--kind langs`, `python -m bench.oneshot run --protocol v2` and `export` (all skipped while the saved results match their request hashes; new sessions need `OPENROUTER_API_KEY` for the open-weight models), then `python -m bench.measure all` and `anchor --authors opus55`: about seven hours of local timing on mains power, Windows only | `claude`, `codex`, `muse`; Rust 1.99, MSVC 19.40, Go 1.27, .NET SDK 8, Java 23, Node.js 22, Python 3.13 with NumPy 2.2 |
+| [45](notebooks/45-handwritten-forest-lstm/) | Nothing extra; the notebook reads the saved replies and trained reference weights | `NB45_FRESH=1` and delete the reply files to replace; `MODELS`, `TASKS` and `N_REPEATS` set the size (the full set of 144 requests cost about US$118 at list prices plus a Muse subscription) | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
 
 ## Data and licences
 
@@ -452,6 +459,7 @@ here with their data and caches.
 | 41 | UCI Optical Recognition of Handwritten Digits; archived synthetic 17- and 388-parameter tasks | Public-data exception requested by owner; UCI donated 1998, possible pretraining exposure; earlier synthetic points created for these experiments | UCI data CC BY 4.0, E. Alpaydin and C. Kaynak; hashes and attribution in the notebook's manifest |
 | 42 | Synthetic SQL schemas, teacher-generated parameters, frozen GloVe subset and pinned Pythia diagnostic statistics | Schema requests authored for the experiment; pretrained vectors/reference are older inputs, not fresh target data | GloVe pretrained vectors PDDL; Pythia Apache 2.0; exact subset and pinned reference provenance retained |
 | 44 | Twelve fictional business and public-sector briefs (data tables and analyst notes) generated in code with exact answers | Fresh: generated 5 November 2026 | This repository |
+| 45 | Synthetic classification rows (four tasks, 200 to 1,500 labelled rows and 5,000 hidden rows each) and two 700-day daily-sales series, generated in code from fixed seeds | Fresh: generated 9 November 2026 (two sets reproduce the 5 November pilot) | This repository |
 
 ## For AI agents
 
