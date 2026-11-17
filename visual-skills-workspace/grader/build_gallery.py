@@ -12,9 +12,13 @@ import sys
 
 it = pathlib.Path(sys.argv[1]).resolve()
 out = pathlib.Path(sys.argv[2])
-prev = pathlib.Path(sys.argv[3]).resolve() if len(sys.argv) > 3 and sys.argv[3] != "-" else None
+# PREV: earlier iteration folders, oldest first, separated by commas ("-" for none)
+prevs = [pathlib.Path(p).resolve() for p in sys.argv[3].split(",")] if len(sys.argv) > 3 and sys.argv[3] != "-" else []
 showcase = pathlib.Path(sys.argv[4]).resolve() if len(sys.argv) > 4 else None
-pkey = json.loads((prev / "blind_key.json").read_text(encoding="utf-8")) if prev and (prev / "blind_key.json").exists() else {}
+rnum = lambda p: int(p.name.split("-")[-1])
+ROUND = rnum(it)
+pkeys = {p: json.loads((p / "blind_key.json").read_text(encoding="utf-8")) if (p / "blind_key.json").exists() else {} for p in prevs}
+prev = prevs[-1] if prevs else None
 cases = json.loads((it.parent.parent / "visual-skills" / "evals" / "cases.json").read_text(encoding="utf-8"))
 key = json.loads((it / "blind_key.json").read_text(encoding="utf-8")) if (it / "blind_key.json").exists() else {}
 
@@ -36,6 +40,8 @@ def load(p):
 rows, sections = [], []
 tot = {"with_skill": [0, 0], "without_skill": [0, 0]}
 wins = {"with_skill": 0, "without_skill": 0, "tie": 0}
+pwin_tot = {p: {"with_skill": 0, "without_skill": 0, "tie": 0} for p in prevs}
+PICK = {'with_skill': 'With skills', 'without_skill': 'Without', 'tie': 'Tie', None: '–'}
 for case in TITLES:
     if not (it / case).exists():
         continue
@@ -63,14 +69,18 @@ for case in TITLES:
         winner = "tie" if w == "tie" else k.get(w)
         wins[winner or "tie"] += 1
     title, sub = TITLES[case]
-    pwin = None
-    if prev:
-        pv = load(prev / "blind" / case / "verdict.json")
+    pwins, older = [], []
+    for p in prevs:
+        pv = load(p / "blind" / case / "verdict.json")
+        pwin = None
         if pv:
-            pw_ = pv.get("winner", "tie"); pwin = "tie" if pw_ == "tie" else pkey.get(case, {}).get(pw_)
-        r1 = prev / case / "with_skill" / "outputs" / "explainer.html"
-        if r1.exists():
-            shutil.copy(r1, out / "runs" / case / "with_r1.html")
+            pw_ = pv.get("winner", "tie"); pwin = "tie" if pw_ == "tie" else pkeys[p].get(case, {}).get(pw_)
+            pwin_tot[p][pwin or "tie"] += 1
+        pwins.append(pwin)
+        r = p / case / "with_skill" / "outputs" / "explainer.html"
+        if r.exists():
+            shutil.copy(r, out / "runs" / case / f"with_r{rnum(p)}.html")
+            older.append(rnum(p))
 
     def checks(cfg):
         gg = g.get(cfg)
@@ -97,7 +107,7 @@ for case in TITLES:
         return f"""<div class="run">
   <div class="run-head"><h3>{name}</h3>{badge}<span class="muted">{mins(cfg)} to build</span></div>
   <div class="frame"><iframe src="runs/{case}/{short}.html" title="{esc(title)}, {name.lower()}" loading="lazy"></iframe></div>
-  <div class="opens"><button type="button" class="open" data-src="runs/{case}/{short}.html" data-title="{esc(title)}, {name.lower()}">Open full size</button>{(f'<button type="button" class="open" data-src="runs/{case}/with_r1.html" data-title="{esc(title)}, first-round version with the skills">First-round version</button>' if short == 'with' and prev else '')}</div>
+  <div class="opens"><button type="button" class="open" data-src="runs/{case}/{short}.html" data-title="{esc(title)}, {name.lower()}">Open full size</button>{''.join(f'<button type="button" class="open" data-src="runs/{case}/with_r{n}.html" data-title="{esc(title)}, round {n} version with the skills">Round {n} version</button>' for n in older) if short == 'with' else ''}</div>
   {review(cfg)}
   {checks(cfg)}
 </div>"""
@@ -115,8 +125,8 @@ for case in TITLES:
                 f"<td class='num'>{gw['summary']['passed'] if gw else '–'}/{gw['summary']['total'] if gw else '–'}</td>"
                 f"<td class='num'>{gwo['summary']['passed'] if gwo else '–'}/{gwo['summary']['total'] if gwo else '–'}</td>"
                 f"<td class='num'>{vs.get('with_skill', '–')}</td><td class='num'>{vs.get('without_skill', '–')}</td>"
-                f"<td>{ {'with_skill': 'With skills', 'without_skill': 'Without', 'tie': 'Tie', None: '–'}[pwin] }</td>"
-                f"<td>{ {'with_skill': 'With skills', 'without_skill': 'Without', 'tie': 'Tie', None: '–'}[winner] }</td></tr>")
+                + "".join(f"<td>{PICK[x]}</td>" for x in pwins)
+                + f"<td>{PICK[winner]}</td></tr>")
 
 SKILLS = [
     ("explainer-director", "Finds the one message, picks the form, writes a storyboard with one idea per step."),
@@ -246,35 +256,35 @@ summary {{ cursor: pointer; color: var(--ink) }}
   <p class="eyebrow">Experiment notebooks · visual explainer skills</p>
   <h1>Explainer Skills Lab</h1>
   <p>Seven agent skills for turning a finding, a process or a dataset into an animated, interactive explainer that a newcomer can follow on a phone. They grew out of the chalkboard animations of an agentic finance harness and a lesson on deep work versus parallel agents.</p>
-  <p>To test them, the same model built five explainers from this repository's experiment data with the skills and without them, and a separate model compared each pair blind. After round 1, the reviews' complaints went into the skills and the five were rebuilt (round 2) against the same versions made without the skills. Round 2 and the no-skills versions are live below, side by side, with the round-1 version one click away. Eight more notebooks built with the skills follow.</p>
+  <p>To test them, the same model built five explainers from this repository's experiment data with the skills and without them, and a separate model compared each pair blind. After each round, the reviews' complaints went into the skills and the five were rebuilt, always against the same versions made without the skills. Round 3 and the no-skills versions are live below, side by side, with the round-1 and round-2 versions one click away. Eight more notebooks built with the skills follow.</p>
 </header>
 
 <section aria-labelledby="sk"><h2 id="sk">The skills</h2><ul class="skills">{skills_html}</ul></section>
 
 <section aria-labelledby="res"><h2 id="res">Results</h2>
 <div class="tbl"><table>
-<thead><tr><th>Test case</th><th class="num">Checks, with (round 2)</th><th class="num">Checks, without</th><th class="num">Review score, with</th><th class="num">Review score, without</th><th>Pick, round 1</th><th>Pick, round 2</th></tr></thead>
+<thead><tr><th>Test case</th><th class="num">Checks, with (round {ROUND})</th><th class="num">Checks, without</th><th class="num">Review score, with</th><th class="num">Review score, without</th>{''.join(f'<th>Pick, round {rnum(p)}</th>' for p in prevs)}<th>Pick, round {ROUND}</th></tr></thead>
 <tbody>{''.join(rows)}</tbody>
-<tfoot><tr><td>All five</td><td class="num">{pw('with_skill')}</td><td class="num">{pw('without_skill')}</td><td></td><td></td><td></td><td>With skills {wins['with_skill']}, without {wins['without_skill']}, tie {wins['tie']}</td></tr></tfoot>
+<tfoot><tr><td>All five</td><td class="num">{pw('with_skill')}</td><td class="num">{pw('without_skill')}</td><td></td><td></td>{''.join(f"<td>With {pwin_tot[p]['with_skill']}, without {pwin_tot[p]['without_skill']}</td>" for p in prevs)}<td>With {wins['with_skill']}, without {wins['without_skill']}{f", tie {wins['tie']}" if wins['tie'] else ''}</td></tr></tfoot>
 </table></div>
 <p class="muted" style="margin-top:10px;max-width:80ch">Automatic checks render each page at 360 px and 560 px and look for errors, sideways scrolling, overlapping or tiny text, controls that move, and the case's key numbers on screen. The review score is the sum of five 1-to-5 ratings (message, accuracy, engagement, craft, fit) from a separate model that saw both versions unlabelled and used them in a browser.</p>
 </section>
 
 {''.join(sections)}
 
-{show_html}<section class="note" aria-labelledby="chg"><h2 id="chg">What two rounds of reviews taught</h2>
-<p>Across both rounds the version with the skills won 5 of the 10 blind comparisons. The skills made layout reliable: 54 of 55 automatic checks passed in each round with them, against 48 of 55 without, and only the skills versions' replays fit their whole timeline on a phone. The versions made without the skills won by going deeper for their audience: a monthly bill at the reader's own volume, a quiz that marks the reader's answer, a path the reader types in, a list of what the test could not show.</p>
-<p>Round 1 changes, tested in round 2: the social-feed case became a self-playing card, the forecast now ends with how often the models' ranges held across all forecasts, and the guardrail lesson asks before each reveal. Changes from round 2, now in the skills but not yet re-tested:</p>
+{show_html}<section class="note" aria-labelledby="chg"><h2 id="chg">What three rounds of reviews taught</h2>
+<p>Across three rounds the version with the skills won 8 of the 15 blind comparisons (3, 2, then 3 of 5). Its summed review score was higher in every round: 110 to 105, 109 to 103, then 112 to 100 out of 125. The skills made layout reliable: 54 of 55 automatic checks passed in each round with them, against 48 of 55 without. The replay and the forecast won all three rounds; the guardrail lesson and the SQL card lost all three.</p>
+<p>The round-2 changes, tested in round 3:</p>
 <ul>
-<li>A question step waits for the reader and marks the answer right or wrong; the idle demo no longer answers for them (the guardrail case was lost on this).</li>
-<li>Give an explorable's outcome in the reader's units, such as dollars per month at a volume they type in (the invoice case was lost on this).</li>
-<li>End with the test's limits in plain words: items, runs per item, ceilings, what the setup made easy (the SQL case was lost on this, twice).</li>
-<li>Labels at least 13 units (about 11 px on a phone); the render check now warns under 10.5 px. The legend shows only the colours a step uses. No internal run names on screen.</li>
+<li>Outcome in the reader's units. Worked: the invoice explorable now gives a monthly bill at a volume the reader picks, and it won back the case (24 to 19).</li>
+<li>Text size, legends, no internal names. Worked: no tiny-text failures with the skills in any case, and the reviewers no longer flagged run names.</li>
+<li>End with the test's limits. Followed, but the SQL case still lost by one point. The reviewer preferred the other version's fixed-size card for a LinkedIn post and its note that the models still answered ordinary questions, which shows the clean scores were not refusals.</li>
+<li>Question steps mark the reader's answer. Only half followed: the guardrail lesson now waits for the guess, but its feedback reads the same whatever the reader picks, and it packs four tricks into one auto-playing step where the other version gives each trick its own guess.</li>
 </ul>
 </section>
 
 <section class="note" aria-labelledby="lim"><h2 id="lim">How far to trust this</h2>
-<p>Each case was built once per condition in each round, and round 2 reused the same no-skills versions, so the five-versus-five result could easily swing either way with more runs. The reviewer is also a model. Read the comparison as a map of what the skills change, not a measurement of how much.</p>
+<p>Each case was built once per condition in each round, and all three rounds reused the same no-skills versions, so the 8-of-15 result could easily swing either way with more runs. The reviewer is also a model, and it scored the same no-skills page differently from round to round (the invoice page got 21, 21, then 19), so differences of one or two points are noise. Read the comparison as a map of what the skills change, not a measurement of how much.</p>
 <p>The skill files contain no data or wording from the five test notebooks, so the runs with skills could not copy an answer. The pages here are copies of each run's output, unedited.</p>
 </section>
 </main>

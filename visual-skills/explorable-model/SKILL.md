@@ -1,6 +1,6 @@
 ---
 name: explorable-model
-description: Build an explorable explanation - a live model the reader steers with one or two sliders or toggles while linked views show the outcome change - for questions where the answer depends on a choice or an assumption: a price, a threshold, a rate, a budget, an error cost, a break-even point, a tradeoff between options. Use when someone wants an interactive "what if" calculator that teaches, a break-even or crossover explainer, a sensitivity visual, or asks to let readers "play with the numbers", "see when it pays off" or "find where the answer flips", from data or a cost model.
+description: Build an explorable explanation - a live model the reader steers with one or two sliders or toggles while linked views show the outcome change - for questions where the answer depends on a choice or an assumption, such as a price, a threshold, a rate, a budget, an error cost, a break-even point or a tradeoff between options. Use when someone wants an interactive "what if" calculator that teaches, a break-even or crossover explainer, a sensitivity visual, or asks to let readers "play with the numbers", "see when it pays off" or "find where the answer flips", from data or a cost model.
 ---
 
 # Explorable model

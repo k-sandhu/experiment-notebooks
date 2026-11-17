@@ -82,21 +82,37 @@ by a blind side-by-side review. The case folders are in [evals/](evals/); result
 
 ## Results
 
-Two rounds, five cases each, one build per condition per round (round 2 reused the round-1 builds made
-without the skills). Blind reviews by a separate model:
+Three rounds, five cases each, one build per condition per round. After each round the reviewers' complaints
+went into the skills and the five were rebuilt; every round compared against the same builds made without the
+skills. Blind reviews by a separate model; the score is the sum of five 1-to-5 ratings (message, accuracy,
+engagement, craft, fit), so 25 is the maximum.
 
-| Case | Round 1 pick | Round 2 pick |
-|---|---|---|
-| guardrail-gates | Without skills | Without skills |
-| handoff-timelines | With skills | With skills |
-| invoice-checks | With skills | Without skills |
-| sql-safety-units | Without skills | Without skills |
-| forecast-guess | With skills | With skills |
+| Case | Round 1 | Round 2 | Round 3 | Round 3 score, with / without |
+|---|---|---|---|---|
+| guardrail-gates | Without | Without | Without | 20 / 23 |
+| handoff-timelines | With | With | With | 24 / 16 |
+| invoice-checks | With | Without | With | 24 / 19 |
+| sql-safety-units | Without | Without | Without | 21 / 22 |
+| forecast-guess | With | With | With | 23 / 20 |
+| **Wins with skills** | 3 of 5 | 2 of 5 | 3 of 5 | 112 / 100 |
 
-The skills won 5 of 10 comparisons. Automatic checks (errors, sideways scrolling, overlapping or tiny text,
-moving controls, the case's key numbers on screen) passed 54 of 55 with the skills in each round and 48 of 55
-without. The skills made phone layout and replays reliable; the builds without them won when they went deeper for
-the audience (a monthly bill at the reader's volume, a quiz that marks the answer, a list of the test's limits).
-Those lessons are now in the skills and have not been re-tested. With one build per condition, the split could
-easily move either way. Eight more notebooks (08, 12, 27, 28, 29, 31, 33, 41) were built with the skills as a
-showcase; all pass the render check.
+The skills won 8 of 15 comparisons, and their summed review score was higher in every round (110 to 105,
+109 to 103, 112 to 100). Automatic checks (errors, sideways scrolling, overlapping or tiny text, moving
+controls, the case's key numbers on screen) passed 54 of 55 with the skills in each round and 48 of 55 without.
+
+What the rounds showed:
+
+- The skills make phone layout and replays reliable. The replay won all three rounds; the version made without
+  the skills put its timeline in a sideways-scrolling box where most of the action happened off screen.
+- Giving an explorable's outcome in the reader's units (a monthly bill at a volume the reader picks) won back
+  the invoice case in round 3 after it was lost in round 2.
+- Two cases lost every round. The guardrail lesson waits for the reader's guess but gives the same feedback
+  whatever they pick, and packs four tricks into one auto-playing step, where the other version gives each
+  trick its own guess with "Right" or "Not quite". The SQL visual lost by one point to a fixed-size card that
+  suits a LinkedIn post and that shows the models still answered ordinary questions, so the clean scores were
+  not refusals.
+
+With one build per condition, the split could easily move either way. The reviewer also scored the same
+no-skills page differently across rounds (the invoice page got 21, 21, then 19), so one or two points is noise.
+Eight more notebooks (08, 12, 27, 28, 29, 31, 33, 41) were built with the skills as a showcase; all pass the
+render check.

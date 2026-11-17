@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cheap model, checked</title>
+<style>:root{color-scheme:light}html,body{margin:0;background:#EFE9DC}body{padding:16px;min-height:100vh;box-sizing:border-box;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#22252A}
+.pg{max-width:560px;margin:0 auto}.pg h1{font-size:22px;line-height:1.25;margin:4px 6px 6px}.pg p{font-size:14px;line-height:1.5;margin:0 6px 12px;color:#3C4046}
+.pg footer{font-size:12px;line-height:1.5;color:#5F6368;margin:14px 6px 0}.pg footer p{font-size:12px;color:#5F6368;margin:0 0 6px}</style>
+</head><body>
+<div class="pg"><h1>When does a cheap first pass pay for invoice payments?</h1>
+<p>A cheap AI model answers every invoice; a check decides which answers to trust, and only the doubtful ones go to an expensive model. Six short steps on 72 test invoices, then a price slider to find where each strategy wins.</p>
+<div id="x"></div>
+<footer><p>Data: 72 generated test invoices from experiment 21 (econ/21-verification-costs: summary.csv, case_results.csv, break_even.json, cost_scenarios.csv). Cheap model: Qwen3.8 Flash (reasoning off). Expensive model: GPT-6.1 Sol. Reviewer: Claude Opus 5.5 at list price.</p>
+<p>Assumed, not measured: the price of one GPT call (the subscription reported no charge). The checks met no hard mistakes on this set, so the accuracy of the two checks could not be compared. Bills for 1,000 invoices scale the 72-invoice averages and assume the same mix.</p></footer></div>
+<script>
+/* explainer-kit v1. A small engine for animated, stepwise SVG explainers. No dependencies.
+   Exposes window.K. Read explainer-kit/SKILL.md for the API and the rules it encodes.
+   Every animation is tied to a "generation": moving to another step cancels all timers,
+   loops and tweens of the old step, so steps can never bleed into each other. */
+(function () {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const QS = new URLSearchParams(location.search);
+const REC = QS.has('record');
+const f = n => (+n).toFixed(1);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = { inOut: k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, out: k => 1 - Math.pow(1 - k, 3), linear: k => k };
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- styles: one object per look. ink colours draw lines and text; fill colours encode data
+   (fills were checked for colour-blind separation against their background). */
+const STYLES = {
+  chalkboard: { dark: 1, bg: '#1E2023', panel: '#17191B', ink: '#ECE7DA', mut: '#9A9A93', faint: '#55585E', line: '#4A4D53',
+    blue: '#9CC3E6', green: '#A8DDC3', amber: '#F2D98B', violet: '#C3B5E8', red: '#EBA494',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 1, texture: 1, hand: "'Caveat', cursive", handSize: 1.12, font: 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap' },
+  paper: { dark: 0, bg: '#FBF8F1', panel: '#F3EEE3', ink: '#22252A', mut: '#5F6368', faint: '#C9C3B6', line: '#BDB6A8',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: .7, texture: 0, hand: "'Kalam', cursive", handSize: 1, font: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap' },
+  editorial: { dark: 0, bg: '#FFFFFF', panel: '#F5F5F2', ink: '#1A1A1A', mut: '#5C5C5C', faint: '#D6D6D0', line: '#C4C4BE',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: 0, texture: 0, hand: "'Source Serif 4', Georgia, serif", handSize: .9, font: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap' },
+  blueprint: { dark: 1, bg: '#10243A', panel: '#0C1C2E', ink: '#E6EEF5', mut: '#93A8BC', faint: '#3A5672', line: '#4A6A89',
+    blue: '#8EC5F0', green: '#9BE0C0', amber: '#F5D58A', violet: '#C9B8F2', red: '#F2A08F',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 0, texture: 0, grid: 1, hand: "'IBM Plex Mono', ui-monospace, monospace", handSize: .78, font: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap' },
+};
+let ST = STYLES.chalkboard, ROUGH = 1;
+const C = {};                                   // active colours, e.g. K.C.ink, K.C.fill.blue
+function col(c) { if (!c) return C.ink; if (c[0] === '#' || c.startsWith('rgb') || c === 'none' || c === 'transparent') return c; if (c.startsWith('fill.')) return C.fill[c.slice(5)] || c; return C[c] || c; }
+function useStyle(name, root) {
+  ST = STYLES[name] || STYLES.chalkboard; ROUGH = ST.rough;
+  Object.keys(C).forEach(k => delete C[k]); Object.assign(C, ST, { fill: { ...ST.fill } });
+  injectCSS();
+  if (ST.font && !document.querySelector(`link[href="${ST.font}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ST.font; document.head.appendChild(l); }
+  if (root) {
+    const v = { bg: ST.bg, panel: ST.panel, ink: ST.ink, mut: ST.mut, faint: ST.faint, line: ST.line, blue: ST.blue, green: ST.green, amber: ST.amber, violet: ST.violet, red: ST.red, hand: ST.hand };
+    for (const k in v) root.style.setProperty('--k-' + k, v[k]);
+    root.classList.add('kx', 'kx-' + (name in STYLES ? name : 'chalkboard'));
+    if (ST.texture) { const r = rng(9); let s = ''; for (let i = 0; i < 140; i++) s += `<circle cx='${(r() * 240).toFixed(1)}' cy='${(r() * 240).toFixed(1)}' r='${(.4 + r() * .8).toFixed(2)}' fill='%23ffffff' fill-opacity='${(.02 + r() * .045).toFixed(3)}'/>`; root.style.backgroundImage = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>${s}</svg>")`; }
+    if (ST.grid) root.style.backgroundImage = `linear-gradient(${ST.faint}55 1px,transparent 1px),linear-gradient(90deg,${ST.faint}55 1px,transparent 1px)`, root.style.backgroundSize = '20px 20px';
+  }
+  return ST;
+}
+function fontsReady(ms = 1500) { return Promise.race([document.fonts ? document.fonts.ready.then(() => document.fonts.load(`20px ${ST.hand.split(',')[0]}`)) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
+
+/* ---------- hand-drawn geometry. Each shape takes a seed so its wobble is identical on every frame. */
+const J = (r, a) => (r() - .5) * 2 * a * ROUGH;
+function line(x1, y1, x2, y2, seed = 1, bow = 1.6) { const r = rng(seed); return `M${f(x1 + J(r, .5))} ${f(y1 + J(r, .5))} Q${f((x1 + x2) / 2 + J(r, bow))} ${f((y1 + y2) / 2 + J(r, bow))} ${f(x2)} ${f(y2)}`; }
+function rect(x, y, w, h, seed = 1) {
+  if (!ROUGH) return `M${f(x)} ${f(y)}H${f(x + w)}V${f(y + h)}H${f(x)}Z`;
+  const r = rng(seed), p = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(q => [q[0] + J(r, 1.3), q[1] + J(r, 1.3)]);
+  let d = `M${f(p[0][0])} ${f(p[0][1])}`;
+  for (let i = 0; i < 4; i++) { const A = p[i], B = p[(i + 1) % 4]; d += ` Q${f((A[0] + B[0]) / 2 + J(r, 1.5))} ${f((A[1] + B[1]) / 2 + J(r, 1.5))} ${f(B[0])} ${f(B[1])}`; }
+  return d + ` L${f(p[0][0] + (p[1][0] - p[0][0]) * .08)} ${f(p[0][1] + J(r, 1))}`;
+}
+function ellipse(cx, cy, rx, ry = rx, seed = 1) { const r = rng(seed); return `M${f(cx - rx)} ${f(cy)} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx + rx)} ${f(cy + J(r, .6))} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx - rx + 1.5 * ROUGH)} ${f(cy + .6 * ROUGH)}`; }
+function arrow(fx, fy, x, y, seed = 1, L = 8) { const a = Math.atan2(y - fy, x - fx), r = rng(seed), k = .5 + J(r, .06); return `M${f(x - L * Math.cos(a - k))} ${f(y - L * Math.sin(a - k))} L${f(x)} ${f(y)} L${f(x - L * Math.cos(a + k))} ${f(y - L * Math.sin(a + k))}`; }
+function poly(pts, seed = 1) { const r = rng(seed); return 'M' + pts.map((p, i) => `${f(p[0] + (i ? J(r, .6) : 0))} ${f(p[1] + (i ? J(r, .6) : 0))}`).join(' L'); }
+function curve(x1, y1, x2, y2, bend = .3) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1; return `M${f(x1)} ${f(y1)} Q${f(mx - dy * bend)} ${f(my + dx * bend)} ${f(x2)} ${f(y2)}`; }
+
+/* ---------- markup builders. Elements carry data-k (draw|fade), data-t (delay ms) and data-d (duration ms);
+   the engine reveals them in that order when a step opens, and shows them at once with reduced motion. */
+function P(d, c, t = 0, du = 600, w = 1.5, extra = '') { return `<path d="${d}" fill="none" stroke="${col(c)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" data-k="draw" data-t="${t}" data-d="${du}" ${extra}/>`; }
+function T(x, y, s, o = {}) {
+  const fam = o.h ? 'var(--k-hand)' : o.m ? 'var(--font-mono, ui-monospace, Menlo, monospace)' : 'var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)';
+  const z = (o.z || 12) * (o.h ? ST.handSize : 1);
+  return `<text${o.id ? ` id="${o.id}"` : ''} x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${f(z)}"${o.w ? ` font-weight="${o.w}"` : ''} fill="${col(o.c)}" style="font-family:${fam};font-variant-numeric:tabular-nums" data-k="fade" data-t="${o.t || 0}" data-d="${o.d || 450}"${o.extra ? ' ' + o.extra : ''}>${o.raw ? s : esc(s)}</text>`;
+}
+function F(shape, c, t = 0, o = {}) { return `<path d="${shape}" fill="${col(c)}" fill-opacity="${o.op == null ? .85 : o.op}" stroke="none" data-k="fade" data-t="${t}" data-d="${o.d || 450}"${o.id ? ` id="${o.id}"` : ''}/>`; }
+function reveal(svg) {
+  const els = [...svg.querySelectorAll('[data-k]')];
+  if (RM) { els.forEach(e => { e.style.opacity = 1; e.style.strokeDashoffset = 0; }); return 0; }
+  let end = 0;
+  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (e.dataset.k === 'draw') { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
+  svg.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (e.dataset.k === 'draw') { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
+  return end;
+}
+function finish(svg) { svg.querySelectorAll('[data-k]').forEach(e => { e.style.transition = 'none'; e.style.strokeDashoffset = 0; e.style.opacity = 1; }); }
+
+/* ---------- small DOM helpers */
+function mk(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const ICON = {
+  left: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  right: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
+  replay: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+let cssDone = false;
+function injectCSS() {
+  if (cssDone) return; cssDone = true;
+  const s = document.createElement('style');
+  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
+.kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
+.kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
+.kx-count{font-size:11px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kx-cap{font-size:13.5px;line-height:1.55;margin:6px 8px 8px;color:var(--k-ink)}
+.kx-act{display:flex;justify-content:center;align-items:center;gap:8px;min-height:44px;flex-wrap:wrap;margin:0 4px 4px}
+.kx-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--k-mut);margin:6px 8px 8px}.kx-legend>span{transition:opacity .4s}
+.kx-sw{display:inline-block;width:12px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.kx-nav{display:flex;align-items:center;gap:8px}.kx button.kx-next{min-width:112px}.kx-act .kx-ctl{flex:1 1 100%}
+@media (max-width:480px){.kx{padding:12px 8px 10px}.kx button.kx-next{min-width:96px;padding:0 8px}.kx button.kx-dot{padding:10px 3px}.kx-nav{gap:6px}}
+.kx button{background:transparent;border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:0 12px;font:inherit;font-size:13px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.kx button:hover{border-color:var(--k-mut)}.kx button:focus-visible,.kx [role=button]:focus-visible{outline:2px solid var(--k-violet);outline-offset:2px}
+.kx button.pri{border-color:var(--k-violet);color:var(--k-violet)}.kx button[aria-pressed=true]{background:color-mix(in srgb,var(--k-violet) 18%,transparent)}
+.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
+.kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
+.kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
+.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:11px;line-height:17px;height:92px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
+.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1}
+.kx-time{font-size:11px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
+.kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
+.kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
+.kx-ripple{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid var(--k-ink);pointer-events:none;animation:kxrp .6s ease-out forwards}@keyframes kxrp{from{transform:scale(.3);opacity:.9}to{transform:scale(1.4);opacity:0}}
+.kx-recording .kx-nav button:not(.kx-dot),.kx-recording .kx-scrub button{visibility:hidden}
+.kx .sr-only,.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.kx *{transition:none!important;animation:none!important}}`;
+  document.head.appendChild(s);
+}
+
+/* ---------- step context: everything a step needs, bound to its generation */
+function makeCtx(eng, svg, i) {
+  const g = eng.gen, alive = () => g === eng.gen, dyn = svg.querySelector('.kx-dyn');
+  const q = s => svg.querySelector(s);
+  const pick = e => typeof e === 'string' ? q(e) : e;
+  const s = {
+    i, svg, dyn, q, alive, C, RM, root: eng.root, act: eng.act,
+    at(ms, fn) { const id = setTimeout(() => { if (alive()) fn(); }, ms); eng.timers.push(id); return id; },
+    wait(ms) { return new Promise(r => s.at(ms, () => { if (!(eng.inDemo && eng.touched)) r(); })); },   // an idle demo stops for good once the reader acts
+    loop(delay, fn) { s.at(delay, () => { let last = performance.now(); const t0 = last, st = {}; const k = n => { if (!alive()) return; st.dt = Math.min(.05, Math.max(0, (n - last) / 1000)); last = n; st.e = n - t0; if (fn(st) !== false) requestAnimationFrame(k); }; requestAnimationFrame(k); }); },
+    tween(du, fn, o = {}) { const ez = ease[o.ease || 'inOut']; return new Promise(res => s.at(o.delay || 0, () => { if (RM || du <= 0) { fn(1); res(); return; } const t0 = performance.now(); const k = n => { if (!alive()) return; const p = clamp((n - t0) / du); fn(ez(p)); if (p < 1) requestAnimationFrame(k); else res(); }; requestAnimationFrame(k); })); },
+    el(tag, attrs, parent) { return mk(tag, attrs, parent || dyn); },
+    drawIn(e, du = 500, delay = 0) { e = pick(e); if (!e || RM) return; const L = e.getTotalLength() + 1; e.style.transition = 'none'; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; e.getBoundingClientRect(); e.style.transition = `stroke-dashoffset ${du}ms cubic-bezier(.45,0,.55,1) ${delay}ms`; e.style.strokeDashoffset = 0; },
+    fadeIn(e, du = 400, delay = 0) { e = pick(e); if (!e) return; e.style.transition = 'none'; e.style.opacity = 0; e.getBoundingClientRect(); e.style.transition = `opacity ${du}ms ease ${delay}ms`; e.style.opacity = 1; },
+    fadeOut(e, du = 400, remove = true) { e = pick(e); if (!e) return; e.style.transition = `opacity ${du}ms`; e.style.opacity = 0; if (remove) setTimeout(() => e.remove(), du + 50); },
+    travel(path, du = 600, c = 'ink', o = {}) {   // a dot that moves along a path element or a list of points
+      let p = pick(path), temp = false;
+      if (Array.isArray(path)) { p = mk('path', { d: 'M' + path.map(q => q.join(' ')).join(' L'), fill: 'none', stroke: col(c), 'stroke-width': 1.6, 'stroke-opacity': o.trail === false ? 0 : .5, 'stroke-linecap': 'round' }, dyn); temp = true; if (o.trail !== false) s.drawIn(p, du); }
+      const d = mk('circle', { r: o.r || 3.6, fill: col(c) }, dyn), L = p.getTotalLength();
+      const done = () => { s.fadeOut(d, 300); if (temp && !o.keep) setTimeout(() => s.fadeOut(p, 450), 200); };
+      if (RM) { const e = p.getPointAtLength(L); d.setAttribute('cx', e.x); d.setAttribute('cy', e.y); done(); return Promise.resolve(); }
+      return s.tween(du, k => { const e = p.getPointAtLength(k * L); d.setAttribute('cx', f(e.x)); d.setAttribute('cy', f(e.y)); }, { delay: o.delay || 0 }).then(done);
+    },
+    ring(x, y, w, h, c = 'ink', o = {}) { const p = mk('path', { d: rect(x, y, w, h, Math.round(x * 7 + y)), fill: 'none', stroke: col(c), 'stroke-width': o.w || 2.4, 'stroke-linecap': 'round', class: 'pulse' }, dyn); p.style.opacity = 0; setTimeout(() => p.remove(), 1400); return p; },
+    write(x, y, text, o = {}) { const w = document.createElementNS(NS, 'g'); w.innerHTML = T(x, y, text, o); const t = w.firstChild; dyn.appendChild(t); t.removeAttribute('data-k'); s.fadeIn(t, o.d || 450, o.t || 0); return t; },
+    float(x, y, text, c = 'ink', z = 16) { const t = s.write(x, y, text, { h: 1, z, c }); if (!RM) { t.style.transition = 'transform 1.1s ease-out, opacity 1.1s ease-out'; requestAnimationFrame(() => requestAnimationFrame(() => { t.style.transform = 'translateY(-18px)'; t.style.opacity = 0; })); } setTimeout(() => t.remove(), 1200); },
+    swap(e, text, c) { e = pick(e); if (!e) return; e.style.transition = 'opacity .15s'; e.style.opacity = 0; s.at(160, () => { e.textContent = text; if (c) e.setAttribute('fill', col(c)); e.style.opacity = 1; }); },
+    count(e, to, o = {}) { e = pick(e); if (!e) return; const from = o.from != null ? o.from : (+e.dataset.v || 0), fmt = o.fmt || (v => Math.round(v).toLocaleString()); e.dataset.v = to; return s.tween(o.du || 900, k => { e.textContent = (o.pre || '') + fmt(lerp(from, to, k)) + (o.post || ''); }, { delay: o.delay || 0 }); },
+    bar(e, frac, du = 600, axis = 'x') { e = pick(e); if (!e) return; e.style.transformBox = 'fill-box'; e.style.transformOrigin = axis === 'x' ? '0 50%' : '50% 100%'; e.style.transition = RM ? 'none' : `transform ${du}ms cubic-bezier(.45,0,.55,1)`; e.style.transform = axis === 'x' ? `scaleX(${clamp(frac).toFixed(4)})` : `scaleY(${clamp(frac).toFixed(4)})`; },
+    btn(icon, label, fn, o = {}) { const b = document.createElement('button'); if (o.primary) b.className = 'pri'; b.innerHTML = (ICON[icon] || '') + esc(label); b.type = 'button'; b.onclick = e => { if (e.isTrusted) s.touched(); fn(b); }; eng.act.appendChild(b); return b; },
+    on(e, fn, label) { e = pick(e); e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0'); if (label) e.setAttribute('aria-label', label); e.style.cursor = 'pointer'; const h = ev => { if (ev.isTrusted) s.touched(); fn(ev); }; e.addEventListener('click', h); e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); h(ev); } }); return e; },
+    point(ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 }; },
+    drag(e, o) { e = pick(e); e.style.touchAction = 'none'; e.style.cursor = 'grab'; let on = false; e.addEventListener('pointerdown', ev => { on = true; e.setPointerCapture(ev.pointerId); s.touched(); o.move && o.move(s.point(ev), ev); }); e.addEventListener('pointermove', ev => { if (on && alive()) o.move && o.move(s.point(ev), ev); }); const up = ev => { if (!on) return; on = false; o.end && o.end(s.point(ev), ev); }; e.addEventListener('pointerup', up); e.addEventListener('pointercancel', up); return e; },
+    cap(text) { eng.cap.textContent = text; },
+    touched() { eng.touched = true; if (eng.stopAuto && !REC) eng.stopAuto(); },   // a reader who acts takes over from autoplay
+    tap(e) { e = pick(e); if (!e || !alive() || (eng.inDemo && eng.touched)) return; const r = e.getBoundingClientRect(), R = eng.root.getBoundingClientRect(), d = document.createElement('div'); d.className = 'kx-ripple'; d.style.left = (r.left + r.width / 2 - R.left) + 'px'; d.style.top = (r.top + r.height / 2 - R.top) + 'px'; eng.root.appendChild(d); setTimeout(() => d.remove(), 650); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); },
+    /* unit charts: one circle per item, keyed, so items keep their identity when they move */
+    units(items, o = {}) { const gU = mk('g', { class: 'kx-units' }, o.parent || dyn); s._units = items.map((it, j) => { const c = mk('circle', { cx: o.x0 || 0, cy: o.y0 || 0, r: o.r || 4, fill: col(o.fill || 'fill.blue') }, gU); c.style.transition = 'fill .5s, opacity .5s'; return { it, c, x: o.x0 || 0, y: o.y0 || 0, r: o.r || 4, j }; }); return s._units; },
+    arrange(layout, o = {}) { const U = s._units || [], du = o.du || 900, stg = o.stagger == null ? 4 : o.stagger, ez = ease[o.ease || 'inOut'];
+      const tg = U.map((u, j) => { const L = layout(u.it, j) || {}; if (L.fill) u.c.style.fill = col(L.fill); if (L.opacity != null) u.c.style.opacity = L.opacity; return { x0: u.x, y0: u.y, r0: u.r, x: L.x == null ? u.x : L.x, y: L.y == null ? u.y : L.y, r: L.r == null ? u.r : L.r, dl: (L.order == null ? j : L.order) * stg }; });
+      const tot = du + Math.max(0, ...tg.map(t => t.dl));
+      return s.tween(tot, k => { const ms = k * tot; U.forEach((u, j) => { const t = tg[j], p = ez(clamp((ms - t.dl) / du)); u.x = lerp(t.x0, t.x, p); u.y = lerp(t.y0, t.y, p); u.r = lerp(t.r0, t.r, p); u.c.setAttribute('cx', f(u.x)); u.c.setAttribute('cy', f(u.y)); u.c.setAttribute('r', f(u.r)); }); }, { ease: 'linear', delay: o.delay || 0 }); },
+  };
+  return s;
+}
+
+/* ---------- stepper: a lesson that moves one idea at a time, with fixed controls */
+const ALL = (window.EXPLAINERS = window.EXPLAINERS || []);
+function frame(root, o, kind) {
+  root = typeof root === 'string' ? document.querySelector(root) : root;
+  useStyle(o.style || 'chalkboard', root);
+  const [W, H] = o.viewBox || [380, 300];
+  const legend = (o.legend || []).map(l => `<span data-l="${l.key}"><span class="kx-sw" style="background:${col(l.color)}"></span>${esc(l.label)}</span>`).join('');
+  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div>
+<svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
+${kind === 'player' ? '<div class="kx-scrub"><button class="kx-pp" type="button"></button><input type="range" min="0" step="1" aria-label="Scrub the timeline"><span class="kx-time"></span></div>' : '<div class="kx-act"></div>'}
+${legend ? `<div class="kx-legend">${legend}</div>` : ''}<div class="kx-nav"><button class="kx-back" type="button" aria-label="Previous">${ICON.left}</button><div class="kx-dots"></div>${kind === 'stepper' ? `<button class="kx-replay" type="button" aria-label="Replay this step" title="Replay this step">${ICON.replay}</button>` : ''}<button class="kx-next" type="button"></button></div>`;
+  if (REC) root.classList.add('kx-recording');
+  const $ = s => root.querySelector(s);
+  return { root, W, H, svg: $('.kx-stage'), cap: $('.kx-cap'), act: $('.kx-act'), title: $('.kx-title'), count: $('.kx-count'), dots: $('.kx-dots'), next: $('.kx-next'), back: $('.kx-back'), replay: $('.kx-replay'), log: $('.kx-log'), $ };
+}
+function fixCaptionHeight(fr, texts) {   // reserve the tallest caption so nothing below it ever moves
+  const m = fr.cap.cloneNode(); m.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;min-height:0;width:${fr.cap.clientWidth}px`; m.removeAttribute('aria-live'); fr.cap.parentNode.appendChild(m);
+  let h = 0; texts.forEach(t => { m.textContent = t; h = Math.max(h, m.offsetHeight); }); m.remove(); fr.cap.style.minHeight = h + 'px';
+}
+function stepper(o) {
+  const fr = frame(o.root, o, 'stepper'), S = o.steps;
+  if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
+  const eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
+  let cur = 0, first = true, auto = null, ends = [];
+  eng.stopAuto = () => { auto = null; };
+  S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
+  const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
+  fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
+  function build(i) {
+    cur = i; eng.touched = false; const st = S[i], s = {};
+    fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
+    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = `Step ${i + 1} of ${S.length}`;
+    fr.svg.setAttribute('aria-label', (st.title || '') + '. ' + (st.alt || st.cap || ''));
+    [...fr.dots.children].forEach((d, j) => j === i ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current'));
+    fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !st.keys || st.keys.includes(e.dataset.l) ? 1 : .3);
+    fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : 'Next' + ICON.right;
+    fr.cap.style.transition = 'none'; fr.cap.style.opacity = 0; fr.cap.textContent = st.cap || '';
+    const revealEnd = reveal(fr.svg);
+    const ctx = makeCtx(eng, fr.svg, i);
+    ctx.at(st.capDelay == null ? 300 : st.capDelay, () => { fr.cap.style.transition = 'opacity .6s'; fr.cap.style.opacity = 1; });
+    if (st.start) st.start(ctx);
+    eng.inDemo = false;
+    if (st.demo && st.idleDemo && !REC) ctx.at(st.idleDemo, () => { if (!eng.touched) { eng.inDemo = true; Promise.resolve(st.demo(ctx)).finally(() => { eng.inDemo = false; }); } });
+    ends[i] = st.duration || revealEnd + 600;
+    eng.ctx = ctx;
+  }
+  function go(i, keepAuto) {
+    if (!keepAuto) auto = null;
+    eng.gen++; eng.timers.forEach(clearTimeout); eng.timers = [];
+    i = Math.max(0, Math.min(S.length - 1, i));
+    const g = eng.gen;
+    if (first || RM) { first = false; build(i); fr.svg.style.opacity = 1; }
+    else { fr.svg.style.opacity = 0; setTimeout(() => { if (g === eng.gen) { build(i); fr.svg.style.opacity = 1; } }, 230); }
+  }
+  fr.back.onclick = () => go(cur - 1);
+  fr.next.onclick = () => go(cur < S.length - 1 ? cur + 1 : 0);
+  fr.replay.onclick = () => go(cur);
+  document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('[role=button],input,button,textarea,select')) return; if (ALL.length > 1 && !fr.root.contains(document.activeElement)) return; if (e.key === 'ArrowRight') go(cur + 1); if (e.key === 'ArrowLeft') go(cur - 1); });
+  const api = {
+    kind: 'stepper', root: fr.root, get count() { return S.length; }, get current() { return cur; },
+    go: i => go(i), duration: i => S[i].duration || ends[i] || 4000, hasDemo: i => !!S[i].demo,
+    demo: i => { const c = eng.ctx; return c && c.i === i && S[i].demo ? Promise.resolve(S[i].demo(c)) : Promise.resolve(); },
+    demoDuration: i => S[i].demoDuration || 0,
+    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(hold); } },
+  };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { go(+(QS.get('step') || 1) - 1); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; });
+    else if (o.autoplay && !RM && !QS.has('step') && !QS.has('static')) { const run = () => api.autoplay().then(() => { if (o.autoplay === 'loop' && auto) run(); }); run(); } });
+  return api;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
+   so pause, scrub, replay and recording all work for free. Chapters label stretches of the timeline. */
+function player(o) {
+  const fr = frame(o.root, o, 'player'), eng = { gen: 0, timers: [], root: fr.root, act: null, cap: fr.cap, touched: false };
+  const CH = o.chapters || [{ at: 0, title: o.title || '', cap: '' }], D = o.duration;
+  const range = fr.$('.kx-scrub input'), pp = fr.$('.kx-pp'), tm = fr.$('.kx-time');
+  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1;
+  fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
+  const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
+  CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
+  fixCaptionHeight(fr, CH.map(c => c.cap || ''));
+  const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
+  function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !c.keys || c.keys.includes(e.dataset.l) ? 1 : .3); }
+  function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
+  function draw() { range.value = t; tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
+  function seek(x) { t = clamp(x, 0, D); draw(); }
+  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n; t += dt * speed; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
+  function play() { if (t >= D) t = 0; if (RM) { seek(end(chapterAt(t)) - 1); return; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }  // reduced motion: jump to the end state of the chapter instead of animating
+  function pause() { playing = false; updPP(); }
+  function updPP() { pp.innerHTML = playing ? ICON.pause + 'Pause' : t >= D ? ICON.replay + 'Replay' : ICON.play + 'Play'; pp.setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  pp.onclick = () => playing ? pause() : play();
+  range.oninput = () => { pause(); seek(+range.value); };
+  fr.back.onclick = () => { seek(CH[Math.max(0, chapterAt(t) - (t - CH[chapterAt(t)].at < 600 ? 1 : 0))].at); };
+  fr.next.innerHTML = 'Next' + ICON.right; fr.next.onclick = () => { const k = chapterAt(t); seek(k < CH.length - 1 ? CH[k + 1].at : 0); play(); };
+  const end = i => i < CH.length - 1 ? CH[i + 1].at : D;
+  const api = { kind: 'player', root: fr.root, get count() { return CH.length; }, get current() { return chapterAt(t); }, go: i => { seek(CH[i].at); play(); }, duration: i => (end(i) - CH[i].at) / speed, hasDemo: () => false, demo: () => Promise.resolve(), seek, play, pause, get time() { return t; },
+    async autoplay() { seek(0); play(); while (t < D) await sleep(200); await sleep(o.hold || 2000); } };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if (o.autoplay !== false && !QS.has('static')) play(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  return api;
+}
+
+/* ---------- controls for explorables */
+let uid = 0;
+function slider(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent; const id = 'kx' + (++uid);
+  const w = document.createElement('div'); w.className = 'kx-ctl';
+  w.innerHTML = `<label for="${id}">${esc(o.label)}</label><output for="${id}"></output><input id="${id}" type="range" min="${o.min}" max="${o.max}" step="${o.step || 'any'}" value="${o.value}">`;
+  parent.appendChild(w); const inp = w.querySelector('input'), out = w.querySelector('output'), fmt = o.fmt || (v => v);
+  const upd = () => { out.textContent = fmt(+inp.value); o.oninput && o.oninput(+inp.value); };
+  inp.addEventListener('input', upd); upd();
+  return { el: w, input: inp, get value() { return +inp.value; }, set(v) { inp.value = v; upd(); } };
+}
+function toggle(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent;
+  const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', o.value ? 'true' : 'false'); b.innerHTML = esc(o.label); parent.appendChild(b);
+  b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', v); o.onchange && o.onchange(v); };
+  return b;
+}
+
+/* ---------- layout and number helpers */
+const grid = (j, o) => ({ x: (o.x0 || 0) + (j % o.cols) * (o.gap || 10), y: (o.y0 || 0) + Math.floor(j / o.cols) * (o.gapY || o.gap || 10) });
+function scale(d0, d1, r0, r1) { const s = v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0); s.invert = p => d0 + (p - r0) / (r1 - r0 || 1) * (d1 - d0); return s; }
+const fmt = {
+  int: v => Math.round(v).toLocaleString('en-US'),
+  pct: (v, d = 0) => (v * 100).toFixed(d) + '%',
+  usd: (v, d = 2) => (v < 0 ? '−' : '') + '$' + Math.abs(v).toFixed(d),
+  sec: v => v < 60 ? v.toFixed(0) + ' s' : Math.floor(v / 60) + ' min ' + Math.round(v % 60) + ' s',
+};
+/* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
+function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
+
+const K = { version: '1.0', NS, RM, C, STYLES, useStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
+window.K = K;
+})();
+</script>
+<script>
+/* ===== SCENE ===== */
+const {P, T, F, line, rect, arrow, C, clamp} = K;
+
+/* ---------- DATA: copied from evals/invoice-checks/files/data.json and facts.md
+   (source experiment: econ/21-verification-costs). Every number on screen is computed from here. */
+const DATA = {
+  n: 72,                                   // summary.n
+  holdIds: [12, 16, 18, 22, 30, 36, 40, 46, 48, 54, 64, 66, 70, 72],  // invoice_rows: gold_status = HOLD
+  cheapRight: 14,                          // summary: Qwen direct automatic_correct (all 14 are holds)
+  cheapMeanError: 930.0124,                // summary: Qwen direct mean_payment_deviation_usd
+  gptCallsWithCheck: 58,                   // summary: gpt_invocations for both check routes (GPT direct = 72)
+  // break_even.source_file: extra known model cost per invoice versus GPT on every invoice (USD).
+  // Includes the cheap model's own answer plus the check (second cheap call, or Claude at list price).
+  askTwiceCost: 0.0002175613055555556,
+  claudeCost: 0.02590074725,
+  breakEvenFile: {ask: 0.0011188867142857147, cla: 0.13320384300000002},   // break_even.json, used as a self-check
+  assumedRange: [0.005, 0.25],             // facts.md caveats: GPT price per call is assumed, 0.5 to 25 cents
+  exampleG: 0.05,                          // README running example price (cost_scenarios.csv)
+  checkpoint005: {gpt: 0.05, ask: 0.0405, cla: 0.06618},  // cost_scenario_checkpoints at G = 0.05, self-check
+  example: {id: 'test-002', exact: 1171.39, cheap: 145.67, under: 1025.72},   // facts.md "Concrete invoices"
+  tolerance1usdWrongPaid: 8,               // facts.md caveats: ask twice within USD 1 would have paid 8 wrong answers
+};
+
+/* ---------- the model: one pure function. G = price of one GPT call in USD. */
+const SKIP = (DATA.n - DATA.gptCallsWithCheck) / DATA.n;      // 14/72 of GPT calls skipped by a check
+const ESC = DATA.gptCallsWithCheck / DATA.n;                   // 58/72 still go to GPT
+const BE = {ask: DATA.askTwiceCost / SKIP, cla: DATA.claudeCost / SKIP};   // break-even GPT price
+function model(G) {
+  const r = {
+    gpt: {check: 0, exp: G},
+    ask: {check: DATA.askTwiceCost, exp: ESC * G},
+    cla: {check: DATA.claudeCost, exp: ESC * G},
+  };
+  for (const k in r) { r[k].total = r[k].check + r[k].exp; r[k].pct = r[k].total / G; }
+  r.best = ['gpt', 'ask', 'cla'].reduce((a, b) => (r[b].total < r[a].total ? b : a));
+  r.saving = r.gpt.total - r[r.best].total;
+  return r;
+}
+// self-checks against the source files (console error if the model drifts from them)
+(() => {
+  const m = model(DATA.exampleG), ok = (a, b, tol) => Math.abs(a - b) <= tol;
+  const bad = [];
+  if (!ok(m.gpt.total, DATA.checkpoint005.gpt, 1e-5)) bad.push('gpt');
+  if (!ok(m.ask.total, DATA.checkpoint005.ask, 1e-5)) bad.push('ask');
+  if (!ok(m.cla.total, DATA.checkpoint005.cla, 1e-5)) bad.push('cla');
+  if (!ok(BE.ask, DATA.breakEvenFile.ask, 1e-9) || !ok(BE.cla, DATA.breakEvenFile.cla, 1e-9)) bad.push('break-even');
+  if (bad.length) console.error('model disagrees with source files:', bad.join(', '));
+})();
+
+/* ---------- one formatter per kind of number */
+const fc = v => { const c = v * 100; return (c < 10 ? c.toFixed(2) : c.toFixed(1)) + '¢'; };   // prices and costs, in cents
+const fpct = v => Math.round(v * 100) + '%';
+const fusd = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const CI = K.wilson(DATA.cheapRight, DATA.n);
+
+/* ---------- the 72 invoices as dots; the same invoice keeps the same place in steps 1 to 3 */
+const INV = Array.from({length: DATA.n}, (_, i) => ({id: i + 1, hold: DATA.holdIds.includes(i + 1)}));
+{ let h = 0, p = 0; INV.forEach(it => { it.k = it.hold ? h++ : p++; }); }
+const TOP = 112, DROP = 128;
+const posTop = it => it.hold ? K.grid(it.k, {cols: 5, x0: 44, y0: TOP, gap: 14}) : K.grid(it.k, {cols: 14, x0: 162, y0: TOP, gap: 14});
+const posLow = it => { const p = posTop(it); return {x: p.x, y: p.y + DROP}; };
+const EX = INV[1];   // test-002
+function dots(s, pos, fill, show = true) {
+  const U = s.units(INV, {r: 4.6, fill: 'faint'});
+  U.forEach(u => { const p = pos(u.it); u.x = p.x; u.y = p.y; u.c.setAttribute('cx', p.x); u.c.setAttribute('cy', p.y);
+    u.c.style.fill = K.col(fill(u.it)); if (!show) u.c.style.opacity = 0; });
+  return U;
+}
+const recolor = (s, U, pick, delay, stagger) => U.forEach((u, j) => { const c = pick(u.it); if (c) s.at(delay + j * stagger, () => { u.c.style.fill = K.col(c); }); });
+
+/* ---------- chart geometry for steps 5 and 6 */
+const GMIN = 0.0005, GMAX = 0.30;
+const logx = (x0, x1) => G => x0 + Math.log(G / GMIN) / Math.log(GMAX / GMIN) * (x1 - x0);
+const PX = logx(48, 294), PY = v => 196 - (v - 0.7) / 0.8 * 140;     // plot: x 48..294, y 56..196, 70% to 150%
+function pathFor(fn) {
+  let d = '';
+  for (let i = 0; i <= 120; i++) { const G = GMIN * Math.pow(GMAX / GMIN, i / 120); const y = PY(Math.min(fn(G), 1.62));
+    d += (i ? 'L' : 'M') + PX(G).toFixed(1) + ' ' + y.toFixed(1); }
+  return d;
+}
+const snap = G => { const c = G * 100; return c < 10 ? Math.round(c * 100) / 10000 : Math.round(c * 10) / 1000; };   // price shown = price used
+const SL = {min: 0, max: 1000, toG: v => GMIN * Math.pow(GMAX / GMIN, v / 1000), fromG: G => Math.log(G / GMIN) / Math.log(GMAX / GMIN) * 1000};
+
+K.stepper({
+  root: '#x', style: 'paper', viewBox: [380, 370], actHeight: 80, hold: 2600,
+  title: 'When does it pay to let a cheap AI model handle invoices and send only doubtful ones to an expensive model? A lesson on 72 test invoices with a price slider.',
+  legend: [
+    {key: 'cheap', label: 'Cheap answer, right', color: 'fill.amber'},
+    {key: 'wrong', label: 'Wrong amount', color: 'fill.red'},
+    {key: 'gpt', label: 'Expensive model (GPT)', color: 'fill.blue'},
+    {key: 'ask', label: 'Ask-twice check', color: 'fill.green'},
+    {key: 'cla', label: 'Claude review check', color: 'fill.violet'},
+  ],
+  steps: [
+    /* 1 ------------------------------------------------------------------ */
+    { title: '1. 72 test invoices', keys: [],
+      cap: 'Each dot is one test invoice made by code. 58 should be paid an exact amount, 14 should be held (duplicates, blocked suppliers, invalid limit exceptions). Right means decision and amount match to the cent.',
+      draw: () =>
+        T(24, 44, 'Each dot is one invoice', {a: 'start', h: 1, z: 19}) +
+        T(38, 96, 'Hold · 14', {a: 'start', z: 13, w: 600}) +
+        T(156, 96, 'Pay an exact amount · 58', {a: 'start', z: 13, w: 600, t: 150}) +
+        P(rect(24, 204, 332, 92, 11), 'line', 1700, 600, 1.2) +
+        T(40, 228, 'One invoice: ' + DATA.example.id + ' (circled)', {a: 'start', h: 1, z: 16, t: 2100}) +
+        T(40, 252, 'Exact answer: PAY ' + fusd(DATA.example.exact), {a: 'start', z: 13, t: 2300}) +
+        T(40, 272, 'It counts as right only if the decision and the', {a: 'start', z: 12, c: 'mut', t: 2500}) +
+        T(40, 288, 'amount both match, to the cent.', {a: 'start', z: 12, c: 'mut', t: 2500}) +
+        T(190, 330, 'A rules program gives the exact answer for all 72.', {z: 12, c: 'mut', t: 2800}),
+      start(s) {
+        const U = dots(s, posTop, () => 'faint', false);
+        U.forEach((u, j) => s.at(300 + j * 14, () => { u.c.style.opacity = 1; }));
+        s.at(1500, () => { const p = posTop(EX); s.el('circle', {cx: p.x, cy: p.y, r: 9, fill: 'none', stroke: C.ink, 'stroke-width': 1.6}); });
+      },
+      duration: 3300 },
+
+    /* 2 ------------------------------------------------------------------ */
+    { title: '2. Cheap model alone', keys: ['cheap', 'wrong'],
+      cap: 'The cheap model (Qwen3.8 Flash) answered all 72 on its own. It got 14 right, and every one was a hold. All 58 payments had the wrong amount, so it cannot be trusted to pay alone.',
+      draw: () =>
+        T(24, 44, 'The cheap model answers all 72', {a: 'start', h: 1, z: 19}) +
+        T(38, 96, 'Hold · 14', {a: 'start', z: 13, w: 600}) +
+        T(156, 96, 'Pay an exact amount · 58', {a: 'start', z: 13, w: 600}) +
+        T(38, 162, DATA.cheapRight + ' right', {a: 'start', z: 13, c: 'amber', w: 600, t: 2000}) +
+        T(156, 190, (DATA.n - DATA.cheapRight) + ' wrong amount', {a: 'start', z: 13, c: 'red', w: 600, t: 2100}) +
+        P(rect(24, 204, 332, 92, 11), 'line', 2300, 500, 1.2) +
+        T(40, 228, DATA.example.id + ' (circled)', {a: 'start', h: 1, z: 16, t: 2500}) +
+        T(40, 250, 'Exact answer: PAY ' + fusd(DATA.example.exact), {a: 'start', z: 13, t: 2600}) +
+        T(40, 268, 'Cheap model said: PAY ' + fusd(DATA.example.cheap), {a: 'start', z: 13, t: 2800}) +
+        T(40, 286, 'Underpaid by ' + fusd(DATA.example.under), {a: 'start', z: 13, c: 'red', w: 600, t: 3000}) +
+        T(24, 320, `Cheap model alone: ${DATA.cheapRight} of ${DATA.n} right (${fpct(DATA.cheapRight / DATA.n)})`, {a: 'start', z: 13, w: 600, t: 3300}) +
+        T(24, 338, `With ${DATA.n} invoices the true rate could be ${fpct(CI[0])} to ${fpct(CI[1])}`, {a: 'start', z: 12, c: 'mut', t: 3500}) +
+        T(24, 355, 'Average payment error: ' + fusd(Math.round(DATA.cheapMeanError)).replace('.00', '') + ' per invoice', {a: 'start', z: 12, c: 'mut', t: 3600}),
+      start(s) {
+        const U = dots(s, posTop, () => 'faint');
+        const p = posTop(EX); s.el('circle', {cx: p.x, cy: p.y, r: 9, fill: 'none', stroke: C.ink, 'stroke-width': 1.6});
+        recolor(s, U, it => it.hold ? 'fill.amber' : 'fill.red', 700, 16);
+      },
+      duration: 4100 },
+
+    /* 3 ------------------------------------------------------------------ */
+    { title: '3. Check, then escalate', keys: ['cheap', 'wrong', 'gpt', 'ask', 'cla'],
+      cap: 'A check decides which cheap answers to trust; doubtful ones go to the expensive model, GPT. Both checks trusted the same 14 right answers and sent the 58 wrong ones on. No wrong payment got through.',
+      draw: () =>
+        T(24, 34, 'Two ways to check a cheap answer', {a: 'start', h: 1, z: 17}) +
+        T(24, 56, 'Ask twice: a 2nd cheap call must match to the cent', {a: 'start', z: 12, c: 'green', w: 600, t: 200}) +
+        T(24, 74, 'Claude review: Claude Opus 5.5 checks the answer', {a: 'start', z: 12, c: 'violet', w: 600, t: 400}) +
+        T(38, 98, 'Cheap model’s answers', {a: 'start', z: 12, c: 'mut', id: 'ans'}) +
+        P(rect(24, 182, 332, 32, 31), 'ink', 300, 600, 1.4) +
+        T(190, 203, 'CHECK: ask twice, or Claude review', {z: 13, w: 600, t: 700}) +
+        T(38, 292, DATA.cheapRight + ' trusted:', {a: 'start', z: 12, c: 'amber', w: 600, t: 3600}) +
+        T(38, 307, 'cheap answer', {a: 'start', z: 12, c: 'amber', t: 3600}) +
+        T(38, 322, 'paid', {a: 'start', z: 12, c: 'amber', t: 3600}) +
+        T(156, 320, DATA.gptCallsWithCheck + ' doubtful: sent to GPT', {a: 'start', z: 12, c: 'blue', w: 600, t: 4300}) +
+        T(156, 335, 'GPT got all ' + DATA.gptCallsWithCheck + ' right', {a: 'start', z: 12, c: 'blue', t: 4400}) +
+        T(190, 357, 'Wrong answers paid: 0 of 72 with either check', {z: 12, c: 'mut', t: 4700}),
+      start(s) {
+        const U = dots(s, posTop, it => it.hold ? 'fill.amber' : 'fill.red');
+        const D = 1300, STG = 24, DU = 900, order = it => it.hold ? it.k : 18 + it.k;
+        s.arrange(it => ({...posLow(it), order: order(it)}), {du: DU, stagger: STG, delay: D});
+        U.forEach(u => { if (!u.it.hold) s.at(D + order(u.it) * STG + DU * 0.45, () => { u.c.style.fill = K.col('fill.blue'); }); });
+        s.at(D + 400, () => { const a = s.q('#ans'); a.style.transition = 'opacity .5s'; a.style.opacity = 0; });
+      },
+      duration: 5000 },
+
+    /* 4 ------------------------------------------------------------------ */
+    { title: '4. The bill at 5¢', keys: ['gpt', 'ask', 'cla'],
+      cap: 'At an assumed 5¢ per GPT call, skipping 14 of 72 calls saves 0.97¢ per invoice. Asking twice costs 0.02¢, so it comes out cheaper. Claude’s review costs 2.59¢, more than it saves.',
+      draw: () => {
+        const m = model(DATA.exampleG), X = 40 / 0.01, x0 = 24;   // 40 units per cent
+        const row = (y, label, key, t) => {
+          const r = m[key], w1 = r.check * X, w2 = r.exp * X;
+          const best = m.best === key;
+          return T(x0, y, label, {a: 'start', z: 13, t}) +
+            (w1 ? `<rect id="c-${key}" x="${x0}" y="${y + 6}" width="${Math.max(w1, 1.2).toFixed(1)}" height="18" fill="${K.col(key === 'ask' ? 'fill.green' : 'fill.violet')}" style="transform:scaleX(0)"/>` : '') +
+            `<rect id="g-${key}" x="${(x0 + w1).toFixed(1)}" y="${y + 6}" width="${w2.toFixed(1)}" height="18" fill="${C.fill.blue}" style="transform:scaleX(0)"/>` +
+            T(356, y + 20, fc(r.total) + (best ? ' ✓ cheapest' : ''), {a: 'end', z: 13, w: 600, t: t + 1600});
+        };
+        return T(24, 34, `Cost per invoice at an assumed ${fc(DATA.exampleG)} per GPT call`, {a: 'start', z: 12, c: 'mut'}) +
+          P(line(x0 + DATA.exampleG * X, 62, x0 + DATA.exampleG * X, 224, 41, 0), 'mut', 300, 500, 1.1, 'stroke-dasharray="4 4"') +
+          T(x0 + DATA.exampleG * X, 56, 'GPT-only bill', {z: 12, c: 'mut', t: 400}) +
+          row(78, 'GPT on every invoice', 'gpt', 200) +
+          row(132, 'Cheap model + ask twice', 'ask', 400) +
+          row(186, 'Cheap model + Claude review', 'cla', 600) +
+          T(24, 252, `A check skips GPT on ${DATA.n - DATA.gptCallsWithCheck} of ${DATA.n} invoices (${fpct(SKIP)}).`, {a: 'start', z: 13, t: 2600}) +
+          T(24, 272, `At ${fc(DATA.exampleG)} a call, that saves ${fc(SKIP * DATA.exampleG)} per invoice.`, {a: 'start', z: 13, t: 2800}) +
+          T(24, 298, `Ask twice costs ${fc(DATA.askTwiceCost)}: net saving ${fc(m.gpt.total - m.ask.total)}`, {a: 'start', z: 13, c: 'green', w: 600, t: 3200}) +
+          T(24, 318, `Claude review costs ${fc(DATA.claudeCost)}: net loss ${fc(m.cla.total - m.gpt.total)}`, {a: 'start', z: 13, c: 'violet', w: 600, t: 3500}) +
+          T(24, 346, 'Check cost includes the cheap model’s own answer.', {a: 'start', z: 12, c: 'mut', t: 3800});
+      },
+      start(s) {
+        ['gpt', 'ask', 'cla'].forEach((k, i) => {
+          if (s.q('#c-' + k)) s.at(900 + i * 250, () => s.bar('#c-' + k, 1, 500));
+          s.at(1300 + i * 250, () => s.bar('#g-' + k, 1, 700));
+        });
+      },
+      duration: 4300 },
+
+    /* 5 ------------------------------------------------------------------ */
+    { title: '5. Slide the GPT price', keys: ['gpt', 'ask', 'cla'],
+      cap: 'Drag the price. Each line is a bill as a share of “GPT on every invoice”. Below 0.11¢ a call, no check pays. Above it, asking twice is cheapest. No check here can save more than 19%.',
+      draw: () => {
+        let g = '';
+        [0.8, 1.0, 1.2, 1.4].forEach(v => { g += `<line x1="48" x2="294" y1="${PY(v)}" y2="${PY(v)}" stroke="${C.faint}" stroke-width=".8"/>` + T(44, PY(v) + 4, fpct(v), {a: 'end', z: 12, c: 'mut'}); });
+        [[0.001, '0.1¢'], [0.01, '1¢'], [0.1, '10¢']].forEach(([G, l]) => { g += `<line x1="${PX(G)}" x2="${PX(G)}" y1="196" y2="200" stroke="${C.mut}"/>` + T(PX(G), 211, l, {z: 12, c: 'mut'}); });
+        return T(24, 26, 'Bill as a share of “GPT on every invoice”', {a: 'start', z: 12, c: 'mut'}) + g +
+          `<line x1="48" x2="294" y1="196" y2="196" stroke="${C.mut}"/>` +
+          `<line x1="48" x2="294" y1="${PY(ESC)}" y2="${PY(ESC)}" stroke="${C.mut}" stroke-dasharray="2 3"/>` +
+          T(110, 191, `most saved: ${fpct(SKIP)}`, {a: 'start', z: 12, c: 'mut', t: 900}) +
+          T(171, 226, 'price of one GPT call (log scale)', {z: 12, c: 'mut'}) +
+          `<clipPath id="pc"><rect x="48" y="52" width="246" height="146"/></clipPath>` +
+          `<g clip-path="url(#pc)">` +
+          P(pathFor(G => model(G).gpt.pct), 'fill.blue', 200, 600, 2.2) +
+          P(pathFor(G => model(G).ask.pct), 'fill.green', 500, 900, 2.2) +
+          P(pathFor(G => model(G).cla.pct), 'fill.violet', 800, 900, 2.2) + `</g>` +
+          T(300, PY(1.0) + 4, 'GPT on all', {a: 'start', z: 12, c: 'blue', w: 600, t: 600}) +
+          T(300, PY(model(GMAX).cla.pct) + 4, 'Claude', {a: 'start', z: 12, c: 'violet', w: 600, t: 1500}) +
+          T(300, PY(model(GMAX).ask.pct) + 4, 'ask twice', {a: 'start', z: 12, c: 'green', w: 600, t: 1200}) +
+          `<line x1="${PX(BE.ask)}" x2="${PX(BE.ask)}" y1="52" y2="196" stroke="${C.fill.green}" stroke-dasharray="3 3"/>` +
+          `<line x1="${PX(BE.cla)}" x2="${PX(BE.cla)}" y1="52" y2="196" stroke="${C.fill.violet}" stroke-dasharray="3 3"/>` +
+          T(PX(BE.ask), 47, 'break-even ' + fc(BE.ask), {z: 12, c: 'green', w: 600, t: 1400}) +
+          T(PX(BE.cla), 47, 'break-even ' + fc(BE.cla), {z: 12, c: 'violet', w: 600, t: 1700}) +
+          `<g id="now"></g>` +
+          T(24, 242, 'Bill for 1,000 invoices like these', {a: 'start', z: 12, c: 'mut'}) +
+          ['gpt', 'ask', 'cla'].map((k, i) => {
+            const y = 260 + i * 24;
+            return T(24, y, ['GPT on every invoice', 'Cheap model + ask twice', 'Cheap model + Claude review'][i], {a: 'start', z: 12, id: 'l-' + k}) +
+              T(356, y, '', {a: 'end', z: 12, w: 600, id: 'v-' + k}) +
+              `<rect id="sc-${k}" x="24" y="${y + 4}" height="8" width="0" fill="${K.col(k === 'ask' ? 'fill.green' : 'fill.violet')}"/>` +
+              `<rect id="sg-${k}" x="24" y="${y + 4}" height="8" width="0" fill="${C.fill.blue}"/>`;
+          }).join('') +
+          T(24, 342, '', {a: 'start', z: 13, w: 600, id: 'verdict'}) +
+          T(24, 359, '', {a: 'start', z: 12, c: 'violet', id: 'verdict2'});
+      },
+      start(s) {
+        const now = s.q('#now');
+        const upd = G => {
+          const m = model(G), keys = ['gpt', 'ask', 'cla'], max = Math.max(...keys.map(k => m[k].total));
+          now.innerHTML = '';
+          K.mk('line', {x1: PX(G), x2: PX(G), y1: 52, y2: 196, stroke: C.ink, 'stroke-width': 1.2}, now);
+          keys.forEach(k => { const v = m[k].pct; if (v <= 1.5 && v >= 0.7) K.mk('circle', {cx: PX(G), cy: PY(v), r: 4, fill: K.col({gpt: 'fill.blue', ask: 'fill.green', cla: 'fill.violet'}[k]), stroke: C.bg, 'stroke-width': 1.2}, now); });
+          keys.forEach(k => {
+            const r = m[k], wc = r.check / max * 250, wg = r.exp / max * 250;
+            s.q('#sc-' + k).setAttribute('width', wc.toFixed(2));
+            const g = s.q('#sg-' + k); g.setAttribute('x', (24 + wc).toFixed(2)); g.setAttribute('width', wg.toFixed(2));
+            s.q('#v-' + k).textContent = fusd(r.total * 1000) + (m.best === k ? ' ✓' : '');
+            s.q('#l-' + k).setAttribute('font-weight', m.best === k ? 700 : 400);
+          });
+          s.q('#verdict').textContent = m.best === 'gpt'
+            ? `At ${fc(G)} a call, skip the check: GPT on all is cheapest`
+            : `At ${fc(G)} a call, ask twice is cheapest: ${fpct(m.saving / G)} less`;
+          s.q('#verdict2').textContent = m.cla.total < m.gpt.total
+            ? 'Claude review beats GPT on all, but not ask twice'
+            : 'Claude review costs more than GPT on all';
+        };
+        const sl = K.slider(s.act, {label: 'GPT price per call (assumed)', min: SL.min, max: SL.max, step: 1,
+          value: Math.round(SL.fromG(DATA.exampleG)), fmt: v => fc(snap(SL.toG(v))), oninput: v => upd(snap(SL.toG(v)))});
+        sl.input.setAttribute('aria-valuetext', fc(snap(SL.toG(sl.value))));
+        sl.input.addEventListener('input', e => { if (e.isTrusted) s.touched(); sl.input.setAttribute('aria-valuetext', fc(snap(SL.toG(sl.value)))); });
+      },
+      demo: async s => {
+        const inp = s.act.querySelector('input');
+        const go = async (to, ms) => { const from = +inp.value, n = Math.max(1, Math.round(ms / 40));
+          for (let i = 1; i <= n; i++) { inp.value = Math.round(from + (to - from) * i / n); inp.dispatchEvent(new Event('input')); await s.wait(40); } };
+        await go(SL.fromG(GMIN), 1600); await s.wait(500);
+        await go(SL.fromG(BE.ask * 1.1), 900); await s.wait(900);
+        await go(SL.fromG(BE.cla * 1.05), 2200); await s.wait(900);
+        await go(SL.fromG(GMAX), 900); await s.wait(500);
+        await go(SL.fromG(DATA.exampleG), 1200);
+      },
+      idleDemo: 5000, demoDuration: 11000, duration: 2000 },
+
+    /* 6 ------------------------------------------------------------------ */
+    { title: '6. Which check to use', keys: ['gpt', 'ask', 'cla'],
+      cap: 'Over the whole assumed price range, asking the cheap model twice is cheapest. Claude’s review never beats it here: both checks made the same choices. Test on your own invoice mix before trusting the rule.',
+      draw: () => {
+        const X = logx(24, 356), xa = X(BE.ask), xc = X(BE.cla), r0 = X(DATA.assumedRange[0]), r1 = X(DATA.assumedRange[1]);
+        return T(24, 30, 'Cheapest choice, by price of one GPT call', {a: 'start', z: 12, c: 'mut'}) +
+          `<rect x="24" y="60" width="${(xa - 24).toFixed(1)}" height="34" fill="${C.fill.blue}" opacity=".9"/>` +
+          `<rect x="${xa.toFixed(1)}" y="60" width="${(356 - xa).toFixed(1)}" height="34" fill="${C.fill.green}" opacity=".9"/>` +
+          T((xa + 356) / 2, 82, 'cheap model + ask twice', {z: 13, c: '#FFFFFF', w: 700, t: 300}) +
+          T(24, 108, 'GPT on all', {a: 'start', z: 12, c: 'blue', w: 600, t: 300}) +
+          T(xa, 53, fc(BE.ask), {z: 12, c: 'green', w: 600, t: 500}) +
+          `<line x1="${xc}" x2="${xc}" y1="56" y2="98" stroke="${C.fill.violet}" stroke-width="2" stroke-dasharray="3 2"/>` +
+          T(xc, 53, fc(BE.cla), {z: 12, c: 'violet', w: 600, t: 700}) +
+          T(X(0.01), 108, '1¢', {z: 12, c: 'mut'}) + T(X(0.1), 108, '10¢', {z: 12, c: 'mut'}) +
+          P(line(r0, 122, r1, 122, 61, 0), 'mut', 900, 500, 1.2) + P(line(r0, 117, r0, 127, 62, 0), 'mut', 900, 100, 1.2) + P(line(r1, 117, r1, 127, 63, 0), 'mut', 1300, 100, 1.2) +
+          T((r0 + r1) / 2, 140, `prices assumed in the study: ${fc(DATA.assumedRange[0]).replace('0¢', '¢')} to ${fc(DATA.assumedRange[1]).replace('.0', '')}`, {z: 12, c: 'mut', t: 1300}) +
+          T(356, 158, `Claude review beats GPT on all only above ${fc(BE.cla)}`, {a: 'end', z: 12, c: 'violet', t: 1600}) +
+          P(rect(24, 166, 332, 90, 64), 'line', 2000, 600, 1.2) +
+          T(38, 188, 'The rule', {a: 'start', h: 1, z: 17, t: 2300}) +
+          T(38, 208, 'A check pays when it costs less than', {a: 'start', z: 13, t: 2500}) +
+          T(38, 226, '(share the cheap model gets right) × (GPT price).', {a: 'start', z: 13, t: 2600}) +
+          T(38, 246, `Here ${fpct(SKIP)} × price. Ask twice: ${fc(DATA.askTwiceCost)}. Claude: ${fc(DATA.claudeCost)}.`, {a: 'start', z: 12, c: 'mut', t: 2800}) +
+          T(38, 278, `• Both checks were perfect here (72 of 72), so the`, {a: 'start', z: 12, c: 'mut', t: 3000}) +
+          T(46, 293, 'test cannot say which one catches more mistakes.', {a: 'start', z: 12, c: 'mut', t: 3000}) +
+          T(38, 312, `• Ask twice needed a match to the cent. Within $1,`, {a: 'start', z: 12, c: 'mut', t: 3300}) +
+          T(46, 327, `it would have paid ${DATA.tolerance1usdWrongPaid} wrong answers.`, {a: 'start', z: 12, c: 'mut', t: 3300}) +
+          T(38, 346, `• Cheap model right on ${fpct(SKIP)} (${fpct(CI[0])} to ${fpct(CI[1])} likely);`, {a: 'start', z: 12, c: 'mut', t: 3600}) +
+          T(46, 361, 'the GPT price is an assumption.', {a: 'start', z: 12, c: 'mut', t: 3600});
+      },
+      duration: 4200 },
+  ],
+});
+
+</script>
+</body></html>

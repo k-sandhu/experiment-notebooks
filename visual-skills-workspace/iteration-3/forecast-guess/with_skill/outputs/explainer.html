@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beat last week</title>
+<style>:root{color-scheme:dark}html,body{margin:0;background:#141517}body{padding:16px;min-height:100vh;box-sizing:border-box}</style>
+</head><body>
+<div id="x"></div>
+<script>
+/* explainer-kit v1. A small engine for animated, stepwise SVG explainers. No dependencies.
+   Exposes window.K. Read explainer-kit/SKILL.md for the API and the rules it encodes.
+   Every animation is tied to a "generation": moving to another step cancels all timers,
+   loops and tweens of the old step, so steps can never bleed into each other. */
+(function () {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const QS = new URLSearchParams(location.search);
+const REC = QS.has('record');
+const f = n => (+n).toFixed(1);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = { inOut: k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, out: k => 1 - Math.pow(1 - k, 3), linear: k => k };
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- styles: one object per look. ink colours draw lines and text; fill colours encode data
+   (fills were checked for colour-blind separation against their background). */
+const STYLES = {
+  chalkboard: { dark: 1, bg: '#1E2023', panel: '#17191B', ink: '#ECE7DA', mut: '#9A9A93', faint: '#55585E', line: '#4A4D53',
+    blue: '#9CC3E6', green: '#A8DDC3', amber: '#F2D98B', violet: '#C3B5E8', red: '#EBA494',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 1, texture: 1, hand: "'Caveat', cursive", handSize: 1.12, font: 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap' },
+  paper: { dark: 0, bg: '#FBF8F1', panel: '#F3EEE3', ink: '#22252A', mut: '#5F6368', faint: '#C9C3B6', line: '#BDB6A8',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: .7, texture: 0, hand: "'Kalam', cursive", handSize: 1, font: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap' },
+  editorial: { dark: 0, bg: '#FFFFFF', panel: '#F5F5F2', ink: '#1A1A1A', mut: '#5C5C5C', faint: '#D6D6D0', line: '#C4C4BE',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: 0, texture: 0, hand: "'Source Serif 4', Georgia, serif", handSize: .9, font: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap' },
+  blueprint: { dark: 1, bg: '#10243A', panel: '#0C1C2E', ink: '#E6EEF5', mut: '#93A8BC', faint: '#3A5672', line: '#4A6A89',
+    blue: '#8EC5F0', green: '#9BE0C0', amber: '#F5D58A', violet: '#C9B8F2', red: '#F2A08F',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 0, texture: 0, grid: 1, hand: "'IBM Plex Mono', ui-monospace, monospace", handSize: .78, font: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap' },
+};
+let ST = STYLES.chalkboard, ROUGH = 1;
+const C = {};                                   // active colours, e.g. K.C.ink, K.C.fill.blue
+function col(c) { if (!c) return C.ink; if (c[0] === '#' || c.startsWith('rgb') || c === 'none' || c === 'transparent') return c; if (c.startsWith('fill.')) return C.fill[c.slice(5)] || c; return C[c] || c; }
+function useStyle(name, root) {
+  ST = STYLES[name] || STYLES.chalkboard; ROUGH = ST.rough;
+  Object.keys(C).forEach(k => delete C[k]); Object.assign(C, ST, { fill: { ...ST.fill } });
+  injectCSS();
+  if (ST.font && !document.querySelector(`link[href="${ST.font}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ST.font; document.head.appendChild(l); }
+  if (root) {
+    const v = { bg: ST.bg, panel: ST.panel, ink: ST.ink, mut: ST.mut, faint: ST.faint, line: ST.line, blue: ST.blue, green: ST.green, amber: ST.amber, violet: ST.violet, red: ST.red, hand: ST.hand };
+    for (const k in v) root.style.setProperty('--k-' + k, v[k]);
+    root.classList.add('kx', 'kx-' + (name in STYLES ? name : 'chalkboard'));
+    if (ST.texture) { const r = rng(9); let s = ''; for (let i = 0; i < 140; i++) s += `<circle cx='${(r() * 240).toFixed(1)}' cy='${(r() * 240).toFixed(1)}' r='${(.4 + r() * .8).toFixed(2)}' fill='%23ffffff' fill-opacity='${(.02 + r() * .045).toFixed(3)}'/>`; root.style.backgroundImage = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>${s}</svg>")`; }
+    if (ST.grid) root.style.backgroundImage = `linear-gradient(${ST.faint}55 1px,transparent 1px),linear-gradient(90deg,${ST.faint}55 1px,transparent 1px)`, root.style.backgroundSize = '20px 20px';
+  }
+  return ST;
+}
+function fontsReady(ms = 1500) { return Promise.race([document.fonts ? document.fonts.ready.then(() => document.fonts.load(`20px ${ST.hand.split(',')[0]}`)) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
+
+/* ---------- hand-drawn geometry. Each shape takes a seed so its wobble is identical on every frame. */
+const J = (r, a) => (r() - .5) * 2 * a * ROUGH;
+function line(x1, y1, x2, y2, seed = 1, bow = 1.6) { const r = rng(seed); return `M${f(x1 + J(r, .5))} ${f(y1 + J(r, .5))} Q${f((x1 + x2) / 2 + J(r, bow))} ${f((y1 + y2) / 2 + J(r, bow))} ${f(x2)} ${f(y2)}`; }
+function rect(x, y, w, h, seed = 1) {
+  if (!ROUGH) return `M${f(x)} ${f(y)}H${f(x + w)}V${f(y + h)}H${f(x)}Z`;
+  const r = rng(seed), p = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(q => [q[0] + J(r, 1.3), q[1] + J(r, 1.3)]);
+  let d = `M${f(p[0][0])} ${f(p[0][1])}`;
+  for (let i = 0; i < 4; i++) { const A = p[i], B = p[(i + 1) % 4]; d += ` Q${f((A[0] + B[0]) / 2 + J(r, 1.5))} ${f((A[1] + B[1]) / 2 + J(r, 1.5))} ${f(B[0])} ${f(B[1])}`; }
+  return d + ` L${f(p[0][0] + (p[1][0] - p[0][0]) * .08)} ${f(p[0][1] + J(r, 1))}`;
+}
+function ellipse(cx, cy, rx, ry = rx, seed = 1) { const r = rng(seed); return `M${f(cx - rx)} ${f(cy)} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx + rx)} ${f(cy + J(r, .6))} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx - rx + 1.5 * ROUGH)} ${f(cy + .6 * ROUGH)}`; }
+function arrow(fx, fy, x, y, seed = 1, L = 8) { const a = Math.atan2(y - fy, x - fx), r = rng(seed), k = .5 + J(r, .06); return `M${f(x - L * Math.cos(a - k))} ${f(y - L * Math.sin(a - k))} L${f(x)} ${f(y)} L${f(x - L * Math.cos(a + k))} ${f(y - L * Math.sin(a + k))}`; }
+function poly(pts, seed = 1) { const r = rng(seed); return 'M' + pts.map((p, i) => `${f(p[0] + (i ? J(r, .6) : 0))} ${f(p[1] + (i ? J(r, .6) : 0))}`).join(' L'); }
+function curve(x1, y1, x2, y2, bend = .3) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1; return `M${f(x1)} ${f(y1)} Q${f(mx - dy * bend)} ${f(my + dx * bend)} ${f(x2)} ${f(y2)}`; }
+
+/* ---------- markup builders. Elements carry data-k (draw|fade), data-t (delay ms) and data-d (duration ms);
+   the engine reveals them in that order when a step opens, and shows them at once with reduced motion. */
+function P(d, c, t = 0, du = 600, w = 1.5, extra = '') { return `<path d="${d}" fill="none" stroke="${col(c)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" data-k="draw" data-t="${t}" data-d="${du}" ${extra}/>`; }
+function T(x, y, s, o = {}) {
+  const fam = o.h ? 'var(--k-hand)' : o.m ? 'var(--font-mono, ui-monospace, Menlo, monospace)' : 'var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)';
+  const z = (o.z || 12) * (o.h ? ST.handSize : 1);
+  return `<text${o.id ? ` id="${o.id}"` : ''} x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${f(z)}"${o.w ? ` font-weight="${o.w}"` : ''} fill="${col(o.c)}" style="font-family:${fam};font-variant-numeric:tabular-nums" data-k="fade" data-t="${o.t || 0}" data-d="${o.d || 450}"${o.extra ? ' ' + o.extra : ''}>${o.raw ? s : esc(s)}</text>`;
+}
+function F(shape, c, t = 0, o = {}) { return `<path d="${shape}" fill="${col(c)}" fill-opacity="${o.op == null ? .85 : o.op}" stroke="none" data-k="fade" data-t="${t}" data-d="${o.d || 450}"${o.id ? ` id="${o.id}"` : ''}/>`; }
+function reveal(svg) {
+  const els = [...svg.querySelectorAll('[data-k]')];
+  if (RM) { els.forEach(e => { e.style.opacity = 1; e.style.strokeDashoffset = 0; }); return 0; }
+  let end = 0;
+  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (e.dataset.k === 'draw') { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
+  svg.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (e.dataset.k === 'draw') { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
+  return end;
+}
+function finish(svg) { svg.querySelectorAll('[data-k]').forEach(e => { e.style.transition = 'none'; e.style.strokeDashoffset = 0; e.style.opacity = 1; }); }
+
+/* ---------- small DOM helpers */
+function mk(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const ICON = {
+  left: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  right: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
+  replay: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+let cssDone = false;
+function injectCSS() {
+  if (cssDone) return; cssDone = true;
+  const s = document.createElement('style');
+  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
+.kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
+.kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
+.kx-count{font-size:11px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kx-cap{font-size:13.5px;line-height:1.55;margin:6px 8px 8px;color:var(--k-ink)}
+.kx-act{display:flex;justify-content:center;align-items:center;gap:8px;min-height:44px;flex-wrap:wrap;margin:0 4px 4px}
+.kx-legend{display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px 12px;font-size:12px;color:var(--k-mut);margin:6px 8px 8px;min-height:40px}.kx-legend>span{transition:opacity .4s}
+.kx-sw{display:inline-block;width:12px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.kx-nav{display:flex;align-items:center;gap:8px}.kx button.kx-next{min-width:112px}.kx-act .kx-ctl{flex:1 1 100%}
+@media (max-width:480px){.kx{padding:12px 8px 10px}.kx button.kx-next{min-width:96px;padding:0 8px}.kx button.kx-dot{padding:10px 3px}.kx-nav{gap:6px}}
+.kx button{background:transparent;border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:0 12px;font:inherit;font-size:13px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.kx button:hover{border-color:var(--k-mut)}.kx button:focus-visible,.kx [role=button]:focus-visible{outline:2px solid var(--k-violet);outline-offset:2px}
+.kx button.pri{border-color:var(--k-violet);color:var(--k-violet)}.kx button[aria-pressed=true]{background:color-mix(in srgb,var(--k-violet) 18%,transparent)}
+.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
+.kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
+.kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
+.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:11px;line-height:17px;height:92px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
+.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1}
+.kx-time{font-size:11px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
+.kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
+.kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
+.kx-ripple{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid var(--k-ink);pointer-events:none;animation:kxrp .6s ease-out forwards}@keyframes kxrp{from{transform:scale(.3);opacity:.9}to{transform:scale(1.4);opacity:0}}
+.kx-recording .kx-nav button:not(.kx-dot),.kx-recording .kx-scrub button{visibility:hidden}
+.kx .sr-only,.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.kx *{transition:none!important;animation:none!important}}`;
+  document.head.appendChild(s);
+}
+
+/* ---------- step context: everything a step needs, bound to its generation */
+function makeCtx(eng, svg, i) {
+  const g = eng.gen, alive = () => g === eng.gen, dyn = svg.querySelector('.kx-dyn');
+  const q = s => svg.querySelector(s);
+  const pick = e => typeof e === 'string' ? q(e) : e;
+  const s = {
+    i, svg, dyn, q, alive, C, RM, root: eng.root, act: eng.act,
+    at(ms, fn) { const id = setTimeout(() => { if (alive()) fn(); }, ms); eng.timers.push(id); return id; },
+    wait(ms) { return new Promise(r => s.at(ms, () => { if (!(eng.inDemo && eng.touched)) r(); })); },   // an idle demo stops for good once the reader acts
+    loop(delay, fn) { s.at(delay, () => { let last = performance.now(); const t0 = last, st = {}; const k = n => { if (!alive()) return; st.dt = Math.min(.05, Math.max(0, (n - last) / 1000)); last = n; st.e = n - t0; if (fn(st) !== false) requestAnimationFrame(k); }; requestAnimationFrame(k); }); },
+    tween(du, fn, o = {}) { const ez = ease[o.ease || 'inOut']; return new Promise(res => s.at(o.delay || 0, () => { if (RM || du <= 0) { fn(1); res(); return; } const t0 = performance.now(); const k = n => { if (!alive()) return; const p = clamp((n - t0) / du); fn(ez(p)); if (p < 1) requestAnimationFrame(k); else res(); }; requestAnimationFrame(k); })); },
+    el(tag, attrs, parent) { return mk(tag, attrs, parent || dyn); },
+    drawIn(e, du = 500, delay = 0) { e = pick(e); if (!e || RM) return; const L = e.getTotalLength() + 1; e.style.transition = 'none'; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; e.getBoundingClientRect(); e.style.transition = `stroke-dashoffset ${du}ms cubic-bezier(.45,0,.55,1) ${delay}ms`; e.style.strokeDashoffset = 0; },
+    fadeIn(e, du = 400, delay = 0) { e = pick(e); if (!e) return; e.style.transition = 'none'; e.style.opacity = 0; e.getBoundingClientRect(); e.style.transition = `opacity ${du}ms ease ${delay}ms`; e.style.opacity = 1; },
+    fadeOut(e, du = 400, remove = true) { e = pick(e); if (!e) return; e.style.transition = `opacity ${du}ms`; e.style.opacity = 0; if (remove) setTimeout(() => e.remove(), du + 50); },
+    travel(path, du = 600, c = 'ink', o = {}) {   // a dot that moves along a path element or a list of points
+      let p = pick(path), temp = false;
+      if (Array.isArray(path)) { p = mk('path', { d: 'M' + path.map(q => q.join(' ')).join(' L'), fill: 'none', stroke: col(c), 'stroke-width': 1.6, 'stroke-opacity': o.trail === false ? 0 : .5, 'stroke-linecap': 'round' }, dyn); temp = true; if (o.trail !== false) s.drawIn(p, du); }
+      const d = mk('circle', { r: o.r || 3.6, fill: col(c) }, dyn), L = p.getTotalLength();
+      const done = () => { s.fadeOut(d, 300); if (temp && !o.keep) setTimeout(() => s.fadeOut(p, 450), 200); };
+      if (RM) { const e = p.getPointAtLength(L); d.setAttribute('cx', e.x); d.setAttribute('cy', e.y); done(); return Promise.resolve(); }
+      return s.tween(du, k => { const e = p.getPointAtLength(k * L); d.setAttribute('cx', f(e.x)); d.setAttribute('cy', f(e.y)); }, { delay: o.delay || 0 }).then(done);
+    },
+    ring(x, y, w, h, c = 'ink', o = {}) { const p = mk('path', { d: rect(x, y, w, h, Math.round(x * 7 + y)), fill: 'none', stroke: col(c), 'stroke-width': o.w || 2.4, 'stroke-linecap': 'round', class: 'pulse' }, dyn); p.style.opacity = 0; setTimeout(() => p.remove(), 1400); return p; },
+    write(x, y, text, o = {}) { const w = document.createElementNS(NS, 'g'); w.innerHTML = T(x, y, text, o); const t = w.firstChild; dyn.appendChild(t); t.removeAttribute('data-k'); s.fadeIn(t, o.d || 450, o.t || 0); return t; },
+    float(x, y, text, c = 'ink', z = 16) { const t = s.write(x, y, text, { h: 1, z, c }); if (!RM) { t.style.transition = 'transform 1.1s ease-out, opacity 1.1s ease-out'; requestAnimationFrame(() => requestAnimationFrame(() => { t.style.transform = 'translateY(-18px)'; t.style.opacity = 0; })); } setTimeout(() => t.remove(), 1200); },
+    swap(e, text, c) { e = pick(e); if (!e) return; e.style.transition = 'opacity .15s'; e.style.opacity = 0; s.at(160, () => { e.textContent = text; if (c) e.setAttribute('fill', col(c)); e.style.opacity = 1; }); },
+    count(e, to, o = {}) { e = pick(e); if (!e) return; const from = o.from != null ? o.from : (+e.dataset.v || 0), fmt = o.fmt || (v => Math.round(v).toLocaleString()); e.dataset.v = to; return s.tween(o.du || 900, k => { e.textContent = (o.pre || '') + fmt(lerp(from, to, k)) + (o.post || ''); }, { delay: o.delay || 0 }); },
+    bar(e, frac, du = 600, axis = 'x') { e = pick(e); if (!e) return; e.style.transformBox = 'fill-box'; e.style.transformOrigin = axis === 'x' ? '0 50%' : '50% 100%'; e.style.transition = RM ? 'none' : `transform ${du}ms cubic-bezier(.45,0,.55,1)`; e.style.transform = axis === 'x' ? `scaleX(${clamp(frac).toFixed(4)})` : `scaleY(${clamp(frac).toFixed(4)})`; },
+    btn(icon, label, fn, o = {}) { const b = document.createElement('button'); if (o.primary) b.className = 'pri'; b.innerHTML = (ICON[icon] || '') + esc(label); b.type = 'button'; b.onclick = e => { if (e.isTrusted) s.touched(); fn(b); }; eng.act.appendChild(b); return b; },
+    on(e, fn, label) { e = pick(e); e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0'); if (label) e.setAttribute('aria-label', label); e.style.cursor = 'pointer'; const h = ev => { if (ev.isTrusted) s.touched(); fn(ev); }; e.addEventListener('click', h); e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); h(ev); } }); return e; },
+    point(ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 }; },
+    drag(e, o) { e = pick(e); e.style.touchAction = 'none'; e.style.cursor = 'grab'; let on = false; e.addEventListener('pointerdown', ev => { on = true; e.setPointerCapture(ev.pointerId); s.touched(); o.move && o.move(s.point(ev), ev); }); e.addEventListener('pointermove', ev => { if (on && alive()) o.move && o.move(s.point(ev), ev); }); const up = ev => { if (!on) return; on = false; o.end && o.end(s.point(ev), ev); }; e.addEventListener('pointerup', up); e.addEventListener('pointercancel', up); return e; },
+    cap(text) { eng.cap.textContent = text; },
+    touched() { eng.touched = true; if (eng.stopAuto && !REC) eng.stopAuto(); },   // a reader who acts takes over from autoplay
+    tap(e) { e = pick(e); if (!e || !alive() || (eng.inDemo && eng.touched)) return; const r = e.getBoundingClientRect(), R = eng.root.getBoundingClientRect(), d = document.createElement('div'); d.className = 'kx-ripple'; d.style.left = (r.left + r.width / 2 - R.left) + 'px'; d.style.top = (r.top + r.height / 2 - R.top) + 'px'; eng.root.appendChild(d); setTimeout(() => d.remove(), 650); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); },
+    /* unit charts: one circle per item, keyed, so items keep their identity when they move */
+    units(items, o = {}) { const gU = mk('g', { class: 'kx-units' }, o.parent || dyn); s._units = items.map((it, j) => { const c = mk('circle', { cx: o.x0 || 0, cy: o.y0 || 0, r: o.r || 4, fill: col(o.fill || 'fill.blue') }, gU); c.style.transition = 'fill .5s, opacity .5s'; return { it, c, x: o.x0 || 0, y: o.y0 || 0, r: o.r || 4, j }; }); return s._units; },
+    arrange(layout, o = {}) { const U = s._units || [], du = o.du || 900, stg = o.stagger == null ? 4 : o.stagger, ez = ease[o.ease || 'inOut'];
+      const tg = U.map((u, j) => { const L = layout(u.it, j) || {}; if (L.fill) u.c.style.fill = col(L.fill); if (L.opacity != null) u.c.style.opacity = L.opacity; return { x0: u.x, y0: u.y, r0: u.r, x: L.x == null ? u.x : L.x, y: L.y == null ? u.y : L.y, r: L.r == null ? u.r : L.r, dl: (L.order == null ? j : L.order) * stg }; });
+      const tot = du + Math.max(0, ...tg.map(t => t.dl));
+      return s.tween(tot, k => { const ms = k * tot; U.forEach((u, j) => { const t = tg[j], p = ez(clamp((ms - t.dl) / du)); u.x = lerp(t.x0, t.x, p); u.y = lerp(t.y0, t.y, p); u.r = lerp(t.r0, t.r, p); u.c.setAttribute('cx', f(u.x)); u.c.setAttribute('cy', f(u.y)); u.c.setAttribute('r', f(u.r)); }); }, { ease: 'linear', delay: o.delay || 0 }); },
+  };
+  return s;
+}
+
+/* ---------- stepper: a lesson that moves one idea at a time, with fixed controls */
+const ALL = (window.EXPLAINERS = window.EXPLAINERS || []);
+function frame(root, o, kind) {
+  root = typeof root === 'string' ? document.querySelector(root) : root;
+  useStyle(o.style || 'chalkboard', root);
+  const [W, H] = o.viewBox || [380, 300];
+  const legend = (o.legend || []).map(l => `<span data-l="${l.key}"><span class="kx-sw" style="background:${col(l.color)}"></span>${esc(l.label)}</span>`).join('');
+  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div>
+<svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
+${kind === 'player' ? '<div class="kx-scrub"><button class="kx-pp" type="button"></button><input type="range" min="0" step="1" aria-label="Scrub the timeline"><span class="kx-time"></span></div>' : '<div class="kx-act"></div>'}
+${legend ? `<div class="kx-legend">${legend}</div>` : ''}<div class="kx-nav"><button class="kx-back" type="button" aria-label="Previous">${ICON.left}</button><div class="kx-dots"></div>${kind === 'stepper' ? `<button class="kx-replay" type="button" aria-label="Replay this step" title="Replay this step">${ICON.replay}</button>` : ''}<button class="kx-next" type="button"></button></div>`;
+  if (REC) root.classList.add('kx-recording');
+  const $ = s => root.querySelector(s);
+  return { root, W, H, svg: $('.kx-stage'), cap: $('.kx-cap'), act: $('.kx-act'), title: $('.kx-title'), count: $('.kx-count'), dots: $('.kx-dots'), next: $('.kx-next'), back: $('.kx-back'), replay: $('.kx-replay'), log: $('.kx-log'), $ };
+}
+function fixCaptionHeight(fr, texts) {   // reserve the tallest caption so nothing below it ever moves
+  const m = fr.cap.cloneNode(); m.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;min-height:0;width:${fr.cap.clientWidth}px`; m.removeAttribute('aria-live'); fr.cap.parentNode.appendChild(m);
+  let h = 0; texts.forEach(t => { m.textContent = t; h = Math.max(h, m.offsetHeight); }); m.remove(); fr.cap.style.minHeight = h + 'px';
+}
+function stepper(o) {
+  const fr = frame(o.root, o, 'stepper'), S = o.steps;
+  if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
+  const eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
+  let cur = 0, first = true, auto = null, ends = [];
+  eng.stopAuto = () => { auto = null; };
+  S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
+  const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
+  fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
+  function build(i) {
+    cur = i; eng.touched = false; const st = S[i], s = {};
+    fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
+    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = `Step ${i + 1} of ${S.length}`;
+    fr.svg.setAttribute('aria-label', (st.title || '') + '. ' + (st.alt || st.cap || ''));
+    [...fr.dots.children].forEach((d, j) => j === i ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current'));
+    fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !st.keys || st.keys.includes(e.dataset.l) ? '' : 'none');   // only this step's colours
+    fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : 'Next' + ICON.right;
+    fr.cap.style.transition = 'none'; fr.cap.style.opacity = 0; fr.cap.textContent = st.cap || '';
+    const revealEnd = reveal(fr.svg);
+    const ctx = makeCtx(eng, fr.svg, i);
+    ctx.at(st.capDelay == null ? 300 : st.capDelay, () => { fr.cap.style.transition = 'opacity .6s'; fr.cap.style.opacity = 1; });
+    if (st.start) st.start(ctx);
+    eng.inDemo = false;
+    if (st.demo && st.idleDemo && !REC && !st.ask) ctx.at(st.idleDemo, () => { if (!eng.touched) { eng.inDemo = true; Promise.resolve(st.demo(ctx)).finally(() => { eng.inDemo = false; }); } });
+    ends[i] = st.duration || revealEnd + 600;
+    eng.ctx = ctx;
+  }
+  function go(i, keepAuto) {
+    if (!keepAuto) auto = null;
+    eng.gen++; eng.timers.forEach(clearTimeout); eng.timers = [];
+    i = Math.max(0, Math.min(S.length - 1, i));
+    const g = eng.gen;
+    if (first || RM) { first = false; build(i); fr.svg.style.opacity = 1; }
+    else { fr.svg.style.opacity = 0; setTimeout(() => { if (g === eng.gen) { build(i); fr.svg.style.opacity = 1; } }, 230); }
+  }
+  fr.back.onclick = () => go(cur - 1);
+  fr.next.onclick = () => go(cur < S.length - 1 ? cur + 1 : 0);
+  fr.replay.onclick = () => go(cur);
+  document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('[role=button],input,button,textarea,select')) return; if (ALL.length > 1 && !fr.root.contains(document.activeElement)) return; if (e.key === 'ArrowRight') go(cur + 1); if (e.key === 'ArrowLeft') go(cur - 1); });
+  const api = {
+    kind: 'stepper', root: fr.root, get count() { return S.length; }, get current() { return cur; },
+    go: i => go(i), duration: i => S[i].duration || ends[i] || 4000, hasDemo: i => !!S[i].demo,
+    demo: i => { const c = eng.ctx; return c && c.i === i && S[i].demo ? Promise.resolve(S[i].demo(c)) : Promise.resolve(); },
+    demoDuration: i => S[i].demoDuration || 0,
+    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(hold); } },
+  };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { go(+(QS.get('step') || 1) - 1); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; });
+    else if (o.autoplay && !RM && !QS.has('step') && !QS.has('static')) { const run = () => api.autoplay().then(() => { if (o.autoplay === 'loop' && auto) run(); }); run(); } });
+  return api;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
+   so pause, scrub, replay and recording all work for free. Chapters label stretches of the timeline. */
+function player(o) {
+  const fr = frame(o.root, o, 'player'), eng = { gen: 0, timers: [], root: fr.root, act: null, cap: fr.cap, touched: false };
+  const CH = o.chapters || [{ at: 0, title: o.title || '', cap: '' }], D = o.duration;
+  const range = fr.$('.kx-scrub input'), pp = fr.$('.kx-pp'), tm = fr.$('.kx-time');
+  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1;
+  fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
+  const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
+  CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
+  fixCaptionHeight(fr, CH.map(c => c.cap || ''));
+  const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
+  function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !c.keys || c.keys.includes(e.dataset.l) ? '' : 'none'); }
+  function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
+  function draw() { range.value = t; tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
+  function seek(x) { t = clamp(x, 0, D); draw(); }
+  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n; t += dt * speed; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
+  function play() { if (t >= D) t = 0; if (RM) { seek(end(chapterAt(t)) - 1); return; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }  // reduced motion: jump to the end state of the chapter instead of animating
+  function pause() { playing = false; updPP(); }
+  function updPP() { pp.innerHTML = playing ? ICON.pause + 'Pause' : t >= D ? ICON.replay + 'Replay' : ICON.play + 'Play'; pp.setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  pp.onclick = () => playing ? pause() : play();
+  range.oninput = () => { pause(); seek(+range.value); };
+  fr.back.onclick = () => { seek(CH[Math.max(0, chapterAt(t) - (t - CH[chapterAt(t)].at < 600 ? 1 : 0))].at); };
+  fr.next.innerHTML = 'Next' + ICON.right; fr.next.onclick = () => { const k = chapterAt(t); seek(k < CH.length - 1 ? CH[k + 1].at : 0); play(); };
+  const end = i => i < CH.length - 1 ? CH[i + 1].at : D;
+  const api = { kind: 'player', root: fr.root, get count() { return CH.length; }, get current() { return chapterAt(t); }, go: i => { seek(CH[i].at); play(); }, duration: i => (end(i) - CH[i].at) / speed, hasDemo: () => false, demo: () => Promise.resolve(), seek, play, pause, get time() { return t; },
+    async autoplay() { seek(0); play(); while (t < D) await sleep(200); await sleep(o.hold || 2000); } };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if (o.autoplay !== false && !QS.has('static')) play(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  return api;
+}
+
+/* ---------- controls for explorables */
+let uid = 0;
+function slider(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent; const id = 'kx' + (++uid);
+  const w = document.createElement('div'); w.className = 'kx-ctl';
+  w.innerHTML = `<label for="${id}">${esc(o.label)}</label><output for="${id}"></output><input id="${id}" type="range" min="${o.min}" max="${o.max}" step="${o.step || 'any'}" value="${o.value}">`;
+  parent.appendChild(w); const inp = w.querySelector('input'), out = w.querySelector('output'), fmt = o.fmt || (v => v);
+  const upd = () => { out.textContent = fmt(+inp.value); o.oninput && o.oninput(+inp.value); };
+  inp.addEventListener('input', upd); upd();
+  return { el: w, input: inp, get value() { return +inp.value; }, set(v) { inp.value = v; upd(); } };
+}
+function toggle(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent;
+  const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', o.value ? 'true' : 'false'); b.innerHTML = esc(o.label); parent.appendChild(b);
+  b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', v); o.onchange && o.onchange(v); };
+  return b;
+}
+
+/* ---------- layout and number helpers */
+const grid = (j, o) => ({ x: (o.x0 || 0) + (j % o.cols) * (o.gap || 10), y: (o.y0 || 0) + Math.floor(j / o.cols) * (o.gapY || o.gap || 10) });
+function scale(d0, d1, r0, r1) { const s = v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0); s.invert = p => d0 + (p - r0) / (r1 - r0 || 1) * (d1 - d0); return s; }
+const fmt = {
+  int: v => Math.round(v).toLocaleString('en-US'),
+  pct: (v, d = 0) => (v * 100).toFixed(d) + '%',
+  usd: (v, d = 2) => (v < 0 ? '−' : '') + '$' + Math.abs(v).toFixed(d),
+  sec: v => v < 60 ? v.toFixed(0) + ' s' : Math.floor(v / 60) + ' min ' + Math.round(v % 60) + ' s',
+};
+/* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
+function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
+
+const K = { version: '1.0', NS, RM, C, STYLES, useStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
+window.K = K;
+})();
+</script>
+<script>
+/* ===== SCENE: Ontario demand, "guess next week, then see who beats copying last week" ===== */
+const {P, T, F, C} = K;
+/* DATA is generated by build.py from evals/forecast-guess/files/data.json (notebook 16):
+   lastWeek  = example.history[168:]  (hourly MW, 2026-08-13T00:00 to 08-19T23:00)
+   actual    = example.actual          (2026-08-20T00:00 to 08-26T23:00)
+   naive     = example.seasonal_naive  (== lastWeek, "copy last week")
+   chronos*  = example.forecasts / p10_p90 for Chronos-2 (median and 80% range)
+   maeWeek   = example.mae_168h_mw     (MW, this week only)
+   ontario   = relative_mae_by_series_512[*].ontario_demand (20 forecast starts, mean of 24 h and 168 h horizons)
+   chronosBySeries = relative_mae_by_series_512['Chronos-2']
+   headline  = headline_scores, context 512: [relative MAE, 95% low, 95% high] over 6 series */
+const DATA = {"lastWeek":[15873,15306,14971,14914,14852,15453,16435,17342,18000,18583,18744,19778,20377,20825,21309,21901,22353,22212,21737,21171,20658,19407,18014,16848,16103,15616,15428,15312,15450,15922,16564,17318,17985,18785,19369,20053,20624,20869,20905,21280,21872,21842,21370,20640,20033,18850,17679,16536,15817,15197,14830,14645,14723,14877,15372,15879,16526,17229,17890,18341,18502,18625,19053,19604,20096,20239,19653,18768,18161,17184,16260,15389,14873,14479,14112,13874,13774,13608,13734,14769,15745,16626,17475,18243,18524,18962,19499,20433,20825,20561,20291,20051,19718,18713,17800,16773,16190,15978,15834,15806,16109,16765,17392,18207,18924,19742,20241,20488,20951,20737,20912,21452,22108,22009,21604,20815,20006,18637,17390,16229,15451,15078,14765,14517,14759,15259,16111,16827,17516,17993,18542,19248,19985,20217,20037,20519,21266,21264,20957,20368,19939,19004,17797,16645,15887,15622,15157,15064,15231,15955,16401,17355,18108,18608,19099,19559,19973,20173,20362,20912,21362,21191,20564,19939,19106,17758,16661,15576],"lastWeekTimes":["2026-08-13T00:00","2026-08-19T23:00"],"actual":[14820,14468,14255,14107,14290,14562,15382,16259,16572,16978,17186,17514,18236,18533,18814,19321,20021,20166,19762,19401,18851,17650,16509,15543,14970,14708,14502,14380,14558,14897,15451,16221,16957,17521,17955,18358,18812,18993,19320,19831,20394,20422,19961,19346,18854,17801,16675,15774,15169,14688,14374,14288,14047,13765,14128,15088,15973,16532,16785,17257,18049,18487,18620,18842,19069,18566,18190,18002,17562,16747,15902,14938,14144,13689,13405,13386,13340,13447,13810,14569,14995,15408,15708,15947,15983,15764,15858,16302,16902,17068,16812,16750,16432,15545,14653,13905,13398,13151,13037,13029,13116,13940,14939,15856,16151,16219,16294,16296,16551,16866,17007,17444,18036,17998,17676,17831,17365,16462,15572,14682,13949,13571,13582,13635,13975,14692,15529,16156,16524,16840,17152,17521,18003,18238,18524,19222,19863,19837,19478,19168,18693,17383,16246,15150,14575,14327,13951,13968,14265,14755,15487,16040,16941,17582,17966,18352,18850,19105,19614,20122,20684,20617,20118,19874,19222,18067,16920,15929],"naive":[15873,15306,14971,14914,14852,15453,16435,17342,18000,18583,18744,19778,20377,20825,21309,21901,22353,22212,21737,21171,20658,19407,18014,16848,16103,15616,15428,15312,15450,15922,16564,17318,17985,18785,19369,20053,20624,20869,20905,21280,21872,21842,21370,20640,20033,18850,17679,16536,15817,15197,14830,14645,14723,14877,15372,15879,16526,17229,17890,18341,18502,18625,19053,19604,20096,20239,19653,18768,18161,17184,16260,15389,14873,14479,14112,13874,13774,13608,13734,14769,15745,16626,17475,18243,18524,18962,19499,20433,20825,20561,20291,20051,19718,18713,17800,16773,16190,15978,15834,15806,16109,16765,17392,18207,18924,19742,20241,20488,20951,20737,20912,21452,22108,22009,21604,20815,20006,18637,17390,16229,15451,15078,14765,14517,14759,15259,16111,16827,17516,17993,18542,19248,19985,20217,20037,20519,21266,21264,20957,20368,19939,19004,17797,16645,15887,15622,15157,15064,15231,15955,16401,17355,18108,18608,19099,19559,19973,20173,20362,20912,21362,21191,20564,19939,19106,17758,16661,15576],"chronos":[14917,14471,14181,14017,14135,14620,15309,16056,16663,17224,17718,18322,18774,19046,19309,19726,20409,20389,19965,19356,18712,17678,16526,15567,14990,14621,14325,14169,14292,14699,15378,16184,16936,17491,18028,18583,19040,19365,19677,20187,20730,20700,20352,19736,19048,18043,17035,16093,15463,15067,14760,14612,14603,14714,15091,15781,16598,17418,18156,18743,19118,19421,19711,19943,20242,20127,19701,19140,18558,17853,17013,16196,15479,15078,14789,14575,14466,14514,14829,15465,16245,16989,17723,18236,18538,18856,19249,19668,19931,19818,19374,18961,18453,17609,16847,16020,15362,14972,14686,14559,14760,15288,15957,16676,17318,17876,18348,18912,19342,19644,19993,20418,20929,20978,20547,19985,19316,18218,17040,16110,15470,15101,14823,14629,14774,15309,16043,16820,17426,17937,18405,18909,19359,19655,19945,20428,20939,20930,20628,20054,19336,18262,17163,16189,15369,14959,14637,14514,14702,15241,15988,16702,17330,17858,18318,18868,19303,19596,19937,20334,20896,20864,20475,19947,19300,18205,17047,16100],"chronosP10":[14665,14160,13736,13541,13597,13979,14608,15337,15886,16316,16718,17259,17664,17962,18126,18487,18982,18972,18581,18036,17447,16412,15316,14429,13820,13421,13211,13064,13177,13461,14007,14687,15389,15895,16358,16828,17174,17483,17737,18249,18787,18755,18423,17817,17217,16367,15447,14641,14017,13708,13407,13297,13257,13317,13608,14169,14879,15696,16329,16812,17119,17401,17644,17842,18046,17965,17538,17104,16583,16018,15255,14588,13928,13535,13294,13153,13096,13099,13328,13905,14447,15156,15786,16243,16525,16828,17132,17464,17739,17605,17265,16890,16376,15730,15038,14309,13835,13482,13250,13164,13252,13662,14202,14875,15400,15908,16318,16785,17098,17338,17648,18078,18691,18681,18335,17917,17321,16377,15275,14479,13921,13548,13334,13226,13365,13736,14320,14981,15525,15953,16361,16746,17112,17394,17661,18143,18694,18692,18426,17869,17246,16343,15348,14484,13819,13468,13194,13094,13176,13590,14178,14853,15383,15867,16260,16697,17041,17291,17579,17969,18600,18556,18234,17824,17224,16271,15186,14348],"chronosP90":[15067,14794,14563,14512,14681,15176,15993,16766,17450,18112,18653,19271,19771,20158,20415,20817,21635,21582,21168,20571,19897,18917,17713,16671,16068,15781,15413,15198,15418,15953,16782,17612,18422,19051,19602,20164,20677,20972,21335,21830,22306,22253,21887,21360,20658,19673,18566,17544,16915,16429,16155,16034,16008,16271,16571,17404,18226,19101,19803,20431,20906,21193,21470,21691,22097,21894,21505,20922,20285,19550,18697,17815,17132,16670,16283,16205,16055,16155,16494,17279,18046,18827,19550,20086,20427,20770,21188,21576,21722,21658,21264,20840,20311,19514,18627,17734,16936,16475,16219,16159,16391,16947,17681,18443,19061,19694,20153,20760,21236,21533,21865,22217,22666,22488,22145,21572,20911,19829,18611,17577,16875,16613,16237,16088,16291,16829,17681,18498,19156,19692,20170,20703,21172,21479,21811,22250,22615,22558,22260,21803,21098,20016,18795,17730,16917,16432,16152,16038,16244,16875,17719,18506,19107,19706,20168,20790,21271,21546,21890,22232,22738,22492,22185,21627,20993,19904,18720,17703],"maeWeek":{"Moirai 2":1014.5,"Toto 2":1099.0,"TiRex-2":963.1,"TTM R3":2289.7,"TimesFM 2.5":572.1,"Chronos-2":979.9,"Lag-Llama":3686.3,"AutoETS":1751.6,"Lag boosting":2645.7,"Theta":1872.7,"Seasonal naive":1561.3,"AutoARIMA":905.7},"ontario":{"AutoARIMA":1.109,"AutoETS":1.069,"Chronos-2":0.666,"Lag boosting":1.322,"Lag-Llama":2.277,"Moirai 2":0.678,"Seasonal naive":1.0,"TTM R3":1.644,"Theta":1.78,"TiRex-2":0.641,"TimesFM 2.5":0.732,"Toto 2":0.671},"chronosBySeries":{"ontario_demand":0.666,"toronto_temperature":0.784,"toronto_wind":0.785,"usd_cad":1.045,"wiki_ai":1.075,"wiki_toronto":0.803},"headline":{"Chronos-2":[0.8596,0.7479,0.9742],"Moirai 2":[0.8622,0.7495,0.9768],"TiRex-2":[0.8692,0.7399,1.0262],"Toto 2":[0.8712,0.7562,0.9917],"TimesFM 2.5":[0.9107,0.7683,1.0699],"AutoETS":[0.9606,0.9095,1.0144],"Seasonal naive":[1.0,1.0,1.0],"AutoARIMA":[1.0021,0.9078,1.1068],"Theta":[1.0863,0.8993,1.3789],"Lag boosting":[1.1505,1.0456,1.2538],"TTM R3":[1.2581,0.9801,1.5453],"Lag-Llama":[1.3338,1.028,1.747]}};
+
+const N = 168, W = 380, H = 310;
+const X0 = 44, X1 = 366, XS = (X1 - X0) / 335;
+const X = h => X0 + h * XS;                         // h = 0..167 last week, 168..335 next week
+const YLO = 12000, YHI = 24000, YB = 262, YT = 90;
+const Y = v => YB - (v - YLO) / (YHI - YLO) * (YB - YT);
+const Yinv = y => YLO + (YB - y) / (YB - YT) * (YHI - YLO);
+const fmt = v => Math.round(v).toLocaleString('en-US');
+const mae = f => f.reduce((a, v, i) => a + Math.abs(v - DATA.actual[i]), 0) / N;
+const pathOf = (arr, h0) => arr.map((v, i) => (i ? 'L' : 'M') + X(h0 + i).toFixed(1) + ' ' + Y(v).toFixed(1)).join('');
+
+// Example guess (illustrative, not a model): last week's average day, repeated seven times
+const PROFILE = [...Array(24)].map((_, hr) => DATA.lastWeek.filter((_, i) => i % 24 === hr).reduce((a, b) => a + b, 0) / 7);
+const EXAMPLE = [...Array(N)].map((_, i) => PROFILE[i % 24]);
+let GUESS = null, GUESS_IS_EXAMPLE = false;          // the reader's guess survives between steps 3 and 4
+
+const NAIVE_MAE = mae(DATA.naive), CHRONOS_MAE = mae(DATA.chronos);
+const HOUR5PM = 17;                                   // Thu Aug 20, 17:00
+const COVER = DATA.actual.filter((v, i) => v >= DATA.chronosP10[i] && v <= DATA.chronosP90[i]).length;
+const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+
+/* ---------- the shared chart frame (same positions in steps 1-5) */
+const DAYS = 'TFSSMTWTFSSMTW';                        // Aug 13 (Thu) .. Aug 26 (Wed)
+function frameMarkup({hidden = true, q = false} = {}) {
+  let m = '';
+  if (hidden) m += `<rect x="${X(167.5).toFixed(1)}" y="${YT - 4}" width="${(368 - X(167.5)).toFixed(1)}" height="${YB - YT + 4}" fill="${C.faint}" fill-opacity=".22"/>`;
+  [14000, 18000, 22000].forEach(v => {
+    m += `<line x1="${X0}" x2="${X1}" y1="${Y(v)}" y2="${Y(v)}" stroke="${C.line}" stroke-width=".6" stroke-dasharray="2 4"/>`;
+    m += T(39, Y(v) + 4.5, (v / 1000) + 'k', {z: 13, a: 'end', c: 'mut'});
+  });
+  m += T(39, YT - 2, 'MW', {z: 13, a: 'end', c: 'mut'});
+  m += `<line x1="${X0}" x2="${X1}" y1="${YB}" y2="${YB}" stroke="${C.mut}" stroke-width="1"/>`;
+  for (let d = 0; d < 14; d++) m += T(X(d * 24 + 12), 279, DAYS[d], {z: 13, c: d === 2 || d === 3 || d === 9 || d === 10 ? 'ink' : 'mut'});
+  m += `<line x1="${X(167.5)}" x2="${X(167.5)}" y1="${YT - 6}" y2="${YB + 4}" stroke="${C.mut}" stroke-width="1" stroke-dasharray="3 3"/>`;
+  m += T(X(84), 299, 'last week, Aug 13-19', {h: 1, z: 15, c: 'mut'});
+  m += T(X(252), 299, 'next week, Aug 20-26', {h: 1, z: 15, c: 'mut'});
+  if (q) m += T(X(252), 190, '?', {h: 1, z: 44, c: 'mut', t: 1600});
+  return m;
+}
+const histPlain = () => `<path d="${pathOf(DATA.lastWeek, 0)}" fill="none" stroke="${C.ink}" stroke-width="1.5" stroke-linejoin="round"/>`;
+const dashed = (arr, color, op = 1, id = '') => `<path ${id ? `id="${id}"` : ''} d="${pathOf(arr, 168)}" fill="none" stroke="${K.col(color)}" stroke-width="1.6" stroke-dasharray="4 3" stroke-opacity="${op}" stroke-linejoin="round"/>`;
+
+/* ---------- bar chart helpers (steps 6-7) */
+const BX0 = 122, BX = v => BX0 + v * 85;            // 1.0 = copying last week
+const ROWS = [                                      // fixed order: pretrained, then the rule, then fitted methods
+  ['Chronos-2', 'pre'], ['Moirai 2', 'pre'], ['TiRex-2', 'pre'], ['Toto 2', 'pre'], ['TimesFM 2.5', 'pre'], ['TTM R3', 'pre'], ['Lag-Llama', 'pre'],
+  ['Seasonal naive', 'copy'], ['AutoETS', 'fit'], ['AutoARIMA', 'fit'], ['Theta', 'fit'], ['Lag boosting', 'fit']];
+const KIND = {pre: 'violet', copy: 'blue', fit: 'green'};
+const rowY = j => 66 + j * 17.4 + (j > 6 ? 6 : 0) + (j > 7 ? 6 : 0);
+const label = m => m === 'Seasonal naive' ? 'Copy last week' : m;
+const STATES = [
+  {name: 'This week, Aug 20-26', v: m => DATA.maeWeek[m] / DATA.maeWeek['Seasonal naive']},
+  {name: 'Ontario, 20 forecast starts', v: m => DATA.ontario[m]},
+  {name: 'All 6 series, 112 starts', v: m => DATA.headline[m][0], ci: m => DATA.headline[m].slice(1)},
+];
+const CAP6 = [
+  `Bar = typical miss ÷ copying last week's miss; left of the line beats copying. This week the fitted AutoARIMA (${(DATA.maeWeek.AutoARIMA / NAIVE_MAE).toFixed(2)}) beat four of the five leading pretrained models.`,
+  `Over 20 forecast starts on Ontario power, the four leading pretrained models missed about a third less than copying (0.64 to 0.68). All four fitted methods missed more than copying did.`,
+  `Six series (power, weather, page views, USD/CAD): the best cut the miss by ${Math.round((1 - DATA.headline['Chronos-2'][0]) * 100)}% (Chronos-2). Whiskers: 95% range over series. AutoETS (${DATA.headline.AutoETS[0].toFixed(2)}) is not clearly behind.`,
+];
+
+const steps = [
+  { title: '1. A week of Ontario power', keys: ['actual'],
+    cap: 'Each wave is one day of electricity use in Ontario: low before dawn, highest in the late afternoon, lower at weekends. The next week is hidden: what will its 168 hours look like?',
+    draw: () => T(12, 30, 'Ontario electricity demand', {h: 1, z: 22, a: 'start'}) +
+      T(12, 52, 'megawatts used each hour, August 2026', {z: 14, a: 'start', c: 'mut', t: 200}) +
+      frameMarkup({q: true}) + P(pathOf(DATA.lastWeek, 0), 'ink', 400, 1500, 1.5),
+    duration: 2600 },
+
+  { title: '2. The rule to beat', keys: ['actual', 'copy'],
+    cap: 'The simplest forecast: next Thursday at 5 p.m. will match last Thursday at 5 p.m. Copy the whole week forward. Forecasters call this seasonal naive, and every method is scored against it.',
+    draw: () => T(12, 30, 'Copy last week forward', {h: 1, z: 22, a: 'start'}) +
+      T(12, 52, 'each hour = the same hour 7 days earlier', {z: 14, a: 'start', c: 'mut', t: 200}) +
+      frameMarkup() + histPlain() +
+      `<path id="copy" d="${pathOf(DATA.lastWeek, 0)}" fill="none" stroke="${C.blue}" stroke-width="1.6" stroke-dasharray="4 3" opacity="0"/>`,
+    start(s) {
+      const a = [X(HOUR5PM), Y(DATA.lastWeek[HOUR5PM])], b = [X(168 + HOUR5PM), Y(DATA.lastWeek[HOUR5PM])];
+      s.at(500, () => { s.write(a[0], a[1] - 9, 'Thu 5 p.m.', {z: 13, c: 'blue'}); });
+      s.at(900, () => s.travel([a, [(a[0] + b[0]) / 2, a[1] - 30], b], 900, 'blue', {r: 3.5, keep: true}));
+      const cp = s.q('#copy');
+      s.at(2000, () => { cp.style.opacity = 1; s.tween(1300, k => cp.setAttribute('transform', `translate(${(k * 168 * XS).toFixed(2)} 0)`), {ease: 'inOut'}); });
+      s.at(3500, () => s.write(X(252), 106, 'copy of last week', {h: 1, z: 16, c: 'blue'}));
+    },
+    duration: 4200 },
+
+  { title: '3. Your turn: draw next week', keys: ['actual', 'you'], ask: true,
+    cap: 'Drag across the shaded week to draw your forecast, hour by hour. Reveal opens once most of the week is drawn. No time to draw? Tap Example.',
+    draw: () => T(12, 30, 'Draw your forecast', {h: 1, z: 22, a: 'start'}) +
+      T(12, 52, 'drawn: 0%', {id: 'pct', z: 14, a: 'start', c: 'amber'}) +
+      frameMarkup() + histPlain() +
+      T(X(252), 112, 'draw here', {h: 1, z: 17, c: 'amber', t: 300}) +
+      `<path id="g" d="" fill="none" stroke="${C.amber}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` +
+      `<rect id="pad" x="${X(167.5) - 6}" y="${YT - 6}" width="${(372 - X(167.5)).toFixed(1)}" height="${YB - YT + 12}" fill="transparent"/>`,
+    start(s) {
+      const g = new Array(N).fill(null);
+      let last = null, reveal;
+      const redraw = () => {
+        let d = '', on = false;
+        if (g[0] != null) { d = `M${X(167).toFixed(1)} ${Y(DATA.lastWeek[167]).toFixed(1)}`; on = true; }
+        g.forEach((v, i) => { if (v == null) { on = false; return; } d += (on ? 'L' : 'M') + X(168 + i).toFixed(1) + ' ' + Y(v).toFixed(1); on = true; });
+        s.q('#g').setAttribute('d', d);
+        const p = g.filter(v => v != null).length / N;
+        s.q('#pct').textContent = 'drawn: ' + Math.round(p * 100) + '%';
+        if (reveal) reveal.disabled = p < .7;
+      };
+      const put = (h, v) => { h = Math.round(K.clamp(h, 0, N - 1)); v = K.clamp(v, YLO, YHI);
+        if (last && last.h !== h) { const st = h > last.h ? 1 : -1; for (let k = last.h + st; k !== h; k += st) g[k] = K.lerp(last.v, v, (k - last.h) / (h - last.h)); }
+        g[h] = v; last = {h, v}; };
+      s.drag('#pad', {
+        move(p) { put((p.x - X(168)) / XS, Yinv(p.y)); GUESS_IS_EXAMPLE = false; redraw(); },
+        end() { last = null; } });
+      s.btn('restart', 'Clear', () => { g.fill(null); last = null; redraw(); });
+      s.btn('', 'Example', () => fillExample(s, g, redraw));
+      reveal = s.btn('check', 'Reveal', () => {
+        // fill any gaps by linear interpolation, flat at the ends
+        const idx = g.map((v, i) => v == null ? -1 : i).filter(i => i >= 0);
+        GUESS = g.map((v, i) => { if (v != null) return v; const lo = idx.filter(j => j < i).pop(), hi = idx.find(j => j > i);
+          if (lo == null) return g[hi]; if (hi == null) return g[lo]; return K.lerp(g[lo], g[hi], (i - lo) / (hi - lo)); });
+        EX.go(3); }, {primary: true});
+      reveal.disabled = true;
+      s._fill = () => fillExample(s, g, redraw);
+    },
+    demo: async s => { await s._fill(); await s.wait(600); },
+    demoDuration: 3000, duration: 1200 },
+
+  { title: '4. What happened', keys: ['actual', 'copy', 'you'],
+    cap: `Next week used less power than last week (average ${fmt(avg(DATA.actual))} vs ${fmt(avg(DATA.lastWeek))} MW), so copying overshot: by ${fmt(DATA.naive[HOUR5PM] - DATA.actual[HOUR5PM])} MW on Thursday at 5 p.m.`,
+    draw: () => {
+      const g = GUESS || EXAMPLE, ex = !GUESS || GUESS_IS_EXAMPLE;
+      return T(12, 26, (ex ? 'Example guess' : 'Your line') + ': off by', {z: 14, a: 'start', c: 'amber'}) +
+        T(196, 26, '', {id: 'sg', z: 15, a: 'end', c: 'amber', w: 700}) + T(200, 26, 'MW an hour', {z: 14, a: 'start', c: 'amber'}) +
+        T(12, 48, 'Copy last week: off by', {z: 14, a: 'start', c: 'blue'}) +
+        T(196, 48, '', {id: 'sn', z: 15, a: 'end', c: 'blue', w: 700}) + T(200, 48, 'MW an hour', {z: 14, a: 'start', c: 'blue'}) +
+        T(12, 70, '', {id: 'verdict', h: 1, z: 17, a: 'start'}) +
+        frameMarkup({hidden: false}) + histPlain() + dashed(DATA.naive, 'blue', .75) +
+        `<path d="${pathOf(g, 168)}" fill="none" stroke="${C.amber}" stroke-width="2" stroke-dasharray="3 2.5" stroke-opacity="1"/>` +
+        P(pathOf(DATA.actual, 168), 'ink', 500, 1500, 1.8) +
+        `<g id="br" opacity="0"><line x1="${X(168 + HOUR5PM)}" x2="${X(168 + HOUR5PM)}" y1="${Y(DATA.naive[HOUR5PM])}" y2="${Y(DATA.actual[HOUR5PM])}" stroke="${C.red}" stroke-width="2"/>` +
+        T(X(168 + HOUR5PM) - 5, Y(DATA.naive[HOUR5PM]) - 4, `+${fmt(DATA.naive[HOUR5PM] - DATA.actual[HOUR5PM])} MW`, {z: 13, a: 'end', c: 'red'}) + '</g>';
+    },
+    start(s) {
+      const g = GUESS || EXAMPLE, ex = !GUESS || GUESS_IS_EXAMPLE, mg = mae(g);
+      s.at(2200, () => { s.count('#sg', mg, {from: 0, du: 700, fmt: fmt}); s.count('#sn', NAIVE_MAE, {from: 0, du: 700, fmt: fmt}); });
+      s.at(3300, () => { s.q('#br').style.transition = 'opacity .5s'; s.q('#br').style.opacity = 1; });
+      const pct = Math.round(Math.abs(1 - mg / NAIVE_MAE) * 100);
+      const who = ex ? 'The example' : 'You';
+      const v = pct === 0 ? `${who} tied with copying last week.` : mg < NAIVE_MAE ? `${who} beat copying by ${pct}%.` : `Copying last week beat ${ex ? 'the example' : 'you'} by ${pct}%.`;
+      s.at(3500, () => { s.q('#verdict').textContent = v; s.fadeIn(s.q('#verdict'), 450); });
+      s.btn('restart', 'Draw again', () => { GUESS = null; EX.go(2); });
+    },
+    duration: 4200 },
+
+  { title: '5. A pretrained model tries', keys: ['actual', 'copy', 'pre'],
+    cap: `Chronos-2 learned from many other series beforehand and was given only these numbers: no dates, no weather. Shaded: its 80% range, which held the actual in ${COVER} of 168 hours.`,
+    draw: () =>
+      T(12, 26, 'Chronos-2: off by', {z: 14, a: 'start', c: 'violet'}) +
+      T(196, 26, '', {id: 'sc', z: 15, a: 'end', c: 'violet', w: 700}) + T(200, 26, 'MW an hour', {z: 14, a: 'start', c: 'violet'}) +
+      T(12, 48, 'Copy last week: off by', {z: 14, a: 'start', c: 'blue'}) +
+      T(196, 48, fmt(NAIVE_MAE), {z: 15, a: 'end', c: 'blue', w: 700}) + T(200, 48, 'MW an hour', {z: 14, a: 'start', c: 'blue'}) +
+      T(12, 70, '', {id: 'verdict', h: 1, z: 17, a: 'start'}) +
+      frameMarkup({hidden: false}) + histPlain() + dashed(DATA.naive, 'blue', .45) +
+      F(DATA.chronosP90.map((v, i) => (i ? 'L' : 'M') + X(168 + i).toFixed(1) + ' ' + Y(v).toFixed(1)).join('') +
+        DATA.chronosP10.map((v, i) => i).reverse().map(i => 'L' + X(168 + i).toFixed(1) + ' ' + Y(DATA.chronosP10[i]).toFixed(1)).join('') + 'Z', 'fill.violet', 300, {op: .38}) +
+      `<path d="${pathOf(DATA.actual, 168)}" fill="none" stroke="${C.ink}" stroke-width="1.8" stroke-linejoin="round"/>` +
+      P(pathOf(DATA.chronos, 168), 'violet', 700, 1500, 1.8),
+    start(s) {
+      s.at(2300, () => s.count('#sc', CHRONOS_MAE, {from: NAIVE_MAE, du: 900, fmt: fmt}));
+      s.at(3400, () => { s.q('#verdict').textContent = `${Math.round((1 - CHRONOS_MAE / NAIVE_MAE) * 100)}% less error than copying last week`; s.fadeIn(s.q('#verdict'), 450); });
+    },
+    duration: 4000 },
+
+  { title: '6. One week is one draw', keys: ['pre', 'copy', 'fit'],
+    cap: CAP6[0],
+    draw: () => {
+      let m = T(12, 24, STATES[0].name, {id: 'st', h: 1, z: 19, a: 'start'}) +
+        T(12, 44, 'bar = typical miss ÷ miss of copying last week', {z: 13, a: 'start', c: 'mut'});
+      m += `<line x1="${BX(1)}" x2="${BX(1)}" y1="54" y2="${rowY(11) + 10}" stroke="${C.mut}" stroke-dasharray="3 3"/>`;
+      ROWS.forEach(([name, kind], j) => {
+        const y = rowY(j);
+        m += T(116, y + 4.5, label(name), {z: 13, a: 'end', c: KIND[kind], t: 80 + j * 50});
+        m += `<rect id="b${j}" x="${BX0}" y="${y - 5.5}" width="0" height="11" rx="1.5" fill="${C.fill[KIND[kind]]}"/>`;
+        m += `<line id="w${j}" x1="${BX0}" x2="${BX0}" y1="${y}" y2="${y}" stroke="${C.ink}" stroke-width="1.3" opacity="0"/>`;
+        m += `<text id="v${j}" x="${BX0 + 4}" y="${y + 4.5}" font-size="13" fill="${C.ink}" style="font-variant-numeric:tabular-nums"></text>`;
+      });
+      m += T(BX(1) - 5, 300, '← beats copying', {z: 13, a: 'end', c: 'mut'}) + T(BX(1) + 5, 300, 'loses to it →', {z: 13, a: 'start', c: 'mut'});
+      return m;
+    },
+    start(s) {
+      let cur = -1; const btns = [];
+      const show = (k, du = 900) => {
+        if (k === cur) return; const from = ROWS.map(([m]) => cur < 0 ? 0 : STATES[cur].v(m)); cur = k;
+        btns.forEach((b, i) => b.className = i === k ? 'pri' : '');
+        s.swap('#st', STATES[k].name); if (k || from.some(Boolean)) s.cap(CAP6[k]);
+        const to = ROWS.map(([m]) => STATES[k].v(m)), ci = STATES[k].ci;
+        ROWS.forEach(([m], j) => { const w = s.q('#w' + j); w.style.transition = 'opacity .4s';
+          if (ci) { const [lo, hi] = ci(m); w.setAttribute('x1', BX(lo)); w.setAttribute('x2', BX(hi)); w.style.opacity = m === 'Seasonal naive' ? 0 : .9; } else w.style.opacity = 0; });
+        s.tween(du, e => ROWS.forEach(([m], j) => {
+          const v = K.lerp(from[j], to[j], e), r = s.q('#b' + j), t = s.q('#v' + j);
+          r.setAttribute('width', Math.max(0, BX(v) - BX0).toFixed(1));
+          const end = Math.max(BX(v), ci ? BX(ci(m)[1]) : 0);
+          t.setAttribute('x', (end + 4).toFixed(1)); t.textContent = v.toFixed(2);
+        }), {ease: 'inOut'});
+      };
+      STATES.forEach((st, k) => btns.push(s.btn('', ['This week', '20 starts', '6 series'][k], () => show(k))));
+      s.at(900, () => show(0, 1100));
+      s._show = show;
+    },
+    demo: async s => { s.tap(s.act.children[1]); await s.wait(3800); s.tap(s.act.children[2]); await s.wait(3800); },
+    idleDemo: 6000, demoDuration: 7800, duration: 2400 },
+
+  { title: '7. Where it helps', keys: ['pre', 'copy'],
+    cap: 'Chronos-2 series by series: where demand, weather or page views repeat a daily or weekly cycle it beats copying. With no dependable cycle (AI page views, USD/CAD) copying the last cycle wins.',
+    draw: () => {
+      const S = [['Ontario power', 'ontario_demand'], ['Toronto temp.', 'toronto_temperature'], ['Toronto wind', 'toronto_wind'],
+        ['Toronto views', 'wiki_toronto'], ['AI page views', 'wiki_ai'], ['USD/CAD', 'usd_cad']];
+      let m = T(12, 24, 'Chronos-2, series by series', {h: 1, z: 19, a: 'start'}) +
+        T(12, 44, 'miss ÷ miss of copying the last cycle', {z: 13, a: 'start', c: 'mut'});
+      const ry = j => 78 + j * 30 + (j > 3 ? 14 : 0);
+      m += `<line x1="${BX(1)}" x2="${BX(1)}" y1="60" y2="${ry(5) + 14}" stroke="${C.blue}" stroke-dasharray="3 3"/>`;
+      m += T(BX(1), 296, 'copying = 1', {z: 13, c: 'blue'});
+      S.forEach(([lab, key], j) => {
+        const v = DATA.chronosBySeries[key], y = ry(j);
+        m += T(116, y + 4.5, lab, {z: 13, a: 'end', c: 'ink', t: 100 + j * 120});
+        m += F(`M${BX0} ${y - 7}H${BX(v).toFixed(1)}V${y + 7}H${BX0}Z`, 'fill.violet', 300 + j * 160, {op: .9});
+        m += T(BX(v) + 5, y + 4.5, v.toFixed(2), {z: 13, a: 'start', t: 400 + j * 160});
+      });
+      m += P(`M262 ${ry(0) - 8}h5V${ry(3) + 8}h-5`, 'mut', 1500, 400, 1.2) + T(272, ry(1) + 20, 'steady cycle:', {z: 13, a: 'start', c: 'mut', t: 1700}) +
+        T(272, ry(1) + 36, 'beats copying', {z: 13, a: 'start', c: 'mut', t: 1700});
+      m += P(`M262 ${ry(4) - 8}h5V${ry(5) + 8}h-5`, 'mut', 1900, 300, 1.2) + T(272, ry(4) + 11, 'no steady', {z: 13, a: 'start', c: 'mut', t: 2100}) +
+        T(272, ry(4) + 27, 'cycle: loses', {z: 13, a: 'start', c: 'mut', t: 2100});
+      return m;
+    },
+    duration: 2800 },
+
+  { title: '8. What to take away', keys: [],
+    cap: 'Limits: six hand-picked series, one two-month window (Aug 20 to Oct 17, 2026) with overlapping forecast weeks, and no holiday or weather inputs for any method.',
+    draw: () => {
+      const items = [
+        ['Score every forecast against copying the', 'last cycle. On Ontario power, all four', 'fitted methods lost to it.'],
+        ['Steady cycles: the best pretrained models', 'missed a third less (Ontario, 0.64-0.68).'],
+        [`Across six series: ${Math.round((1 - DATA.headline['Chronos-2'][0]) * 100)}% less (Chronos-2), not`, `clearly ahead of AutoETS (${Math.round((1 - DATA.headline.AutoETS[0]) * 100)}% less).`],
+        ['Their 80% ranges held the actual only', '65.5-70.1% of the time: too narrow.'],
+      ];
+      let m = '', y = 34;
+      items.forEach((lines, j) => {
+        m += P(K.ellipse(24, y - 5, 10, 10, 40 + j), 'amber', 200 + j * 700, 400, 1.4) + T(24, y, String(j + 1), {h: 1, z: 17, c: 'amber', t: 300 + j * 700});
+        lines.forEach((ln, k) => m += T(42, y + k * 19, ln, {z: 14.5, a: 'start', t: 350 + j * 700 + k * 120}));
+        y += lines.length * 19 + 22;
+      });
+      m += T(42, 296, 'one week is one draw: judge on many', {h: 1, z: 16, a: 'start', c: 'mut', t: 3200});
+      return m;
+    },
+    duration: 3800 },
+];
+
+async function fillExample(s, g, redraw) {
+  GUESS_IS_EXAMPLE = true;
+  await s.tween(1600, k => { const n = Math.round(k * N); for (let i = 0; i < n; i++) g[i] = EXAMPLE[i]; redraw(); }, {ease: 'linear'});
+  GUESS_IS_EXAMPLE = true;
+  s.cap('Example guess: last week\'s average day, repeated seven times (illustrative, not a model). Tap Reveal to see the real week.');
+}
+
+// constant legend height (entries hide per step) and a dark halo so labels stay readable over lines
+document.head.insertAdjacentHTML('beforeend', `<style>#x .kx-legend{min-height:3.2em;align-content:flex-start}
+#x .kx-stage text{paint-order:stroke;stroke:${'#1E2023'};stroke-width:3px;stroke-linejoin:round}</style>`);
+const EX = K.stepper({
+  root: '#x', style: 'chalkboard', viewBox: [W, H],
+  title: 'Guess a week of Ontario electricity demand, then see how copying last week and pretrained forecasting models did.',
+  legend: [
+    {key: 'actual', label: 'Actual demand', color: 'ink'},
+    {key: 'copy', label: 'Copy last week', color: 'blue'},
+    {key: 'you', label: 'Your guess', color: 'amber'},
+    {key: 'pre', label: 'Pretrained model', color: 'violet'},
+    {key: 'fit', label: 'Fitted method', color: 'green'},
+  ],
+  extraCaptions: CAP6.concat(['Example guess: last week\'s average day, repeated seven times (illustrative, not a model). Tap Reveal to see the real week.']),
+  steps,
+});
+
+</script>
+</body></html>

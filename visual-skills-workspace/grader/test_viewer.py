@@ -13,6 +13,6 @@ with sync_playwright() as pw:
     print('viewer open:', p.is_visible('#viewer'), '| title:', p.inner_text('#viewer-title'), '| explainer steps:', fr.locator('.kx-dot').count())
     p.screenshot(path=f"{S}/viewer.png")
     p.click('#viewer-close'); p.wait_for_timeout(300); print('closed:', not p.is_visible('#viewer'))
-    p.locator('button.open', has_text='First-round version').first.click(); p.wait_for_timeout(2500)
+    p.locator('button.open', has_text='Round 2 version').first.click(); p.wait_for_timeout(2500)
     print('round-1 opens:', p.frame_locator('#viewer-frame').locator('.kx-dot').count() > 0, '| errors:', errs, '| width:', p.evaluate('document.documentElement.scrollWidth'))
     b.close()
