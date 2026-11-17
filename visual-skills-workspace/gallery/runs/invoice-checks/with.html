@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cheap model, checked</title>
-<style>:root{color-scheme:light}html,body{margin:0;background:#F2F2EE}body{padding:16px;min-height:100vh;box-sizing:border-box}</style>
+<title>Checking cheap invoice answers</title>
+<style>:root{color-scheme:light}html,body{margin:0;background:#F2F2EE}body{padding:16px;min-height:100vh;box-sizing:border-box}.kx .kx-legend{min-height:52px}</style>
 </head><body>
 <div id="x"></div>
 <script>
@@ -328,317 +328,347 @@ window.K = K;
 })();
 </script>
 <script>
-/* ===== SCENE: everything below is the explainer itself. ===== */
-const {P, T, F, line, rect, arrow, C, clamp} = K;
+/* ===== SCENE: everything below is the explainer itself. Edit freely. ===== */
+const {P, T, F, line, rect, arrow, C, fmt} = K;
 
-/* ---------- DATA: every number on screen is computed from this block.
-   Source: evals/invoice-checks/files/data.json (copied from econ/21-verification-costs/data/*). */
+/* ---- DATA: copied from evals/invoice-checks/files/data.json and facts.md (econ notebook 21, 72 test invoices) ---- */
 const DATA = {
-  n: 72,                // test invoices (summary.n)
-  holds: 14,            // gold_status HOLD in invoice_rows; also Qwen direct automatic_correct (summary)
-  payable: 58,          // gold_status PAY in invoice_rows
-  cheapRight: 14,       // Qwen direct automatic_correct (summary.csv)
-  cheapCost: 0.0001444, // Qwen direct known_model_cost_mean, USD per invoice (cost_lines)
-  cheapUnderpay: 922.66,// Qwen direct mean_underpayment_exposure_usd (summary: 922.6569)
-  escalated: 58,        // gpt_escalations for both check routes (summary)
-  // cost_lines: known model cost per invoice (USD) and expensive calls per invoice
-  routes: {
-    only:   {name: 'Expensive only', known: 0,         gpt: 1.0},
-    twice:  {name: 'Ask twice',      known: 0.0002176, gpt: 58 / 72},
-    claude: {name: 'Claude review',  known: 0.0259,    gpt: 58 / 72},
+  n: 72,                                   // summary.n
+  passed: 14,                              // invoices both checks accepted (invoice_rows: gpt_invocations 0); all 14 are HOLDs
+  expensiveCalls: 58,                      // summary.gpt_invocations for both check routes
+  cheapRight: 14,                          // summary: Qwen direct automatic_correct
+  checkCost: {                             // mean known_model_cost per invoice, USD (cost_lines; equal to the mean over invoice_rows)
+    repeat: 0.00021756527777777777,        // two Qwen calls, OpenRouter metered
+    claude: 0.02590069444444444,           // one Qwen call + Claude Opus 5.5 review at list price
   },
-  breakEven: {twice: 0.0011189, claude: 0.1332},   // break_even.recomputed (USD per expensive call)
-  personRoute: 0.8315,  // Claude screen + review, cost per invoice with USD 1 per person review (cost_lines intercept)
-  ex002: {right: 1171.39, first: 145.67, second: 59.13},  // facts.md concrete invoices: test-002
-  // invoice ids that are holds (gold_status HOLD in invoice_rows)
-  holdIds: [12, 16, 18, 22, 30, 36, 40, 46, 48, 54, 64, 66, 70, 72],
+  reviewRoute: 0.8315,                     // cost_lines: Claude screen + review intercept per invoice (assumed USD 1 per person review)
+  passedIds: ['test-012','test-016','test-018','test-022','test-030','test-036','test-040','test-046','test-048','test-054','test-064','test-066','test-070','test-072'],
+  ex012: {amount: 1785.54, answers: ['HOLD', 'HOLD']},                   // facts.md, test-012
+  ex002: {right: 1171.39, answers: [145.67, 59.13]},                     // facts.md, test-002 (14567 and 5913 cents; GPT 117139)
+  looseGapWrong: 8,                        // facts.md: within USD 1 the repeat check would have paid 8 wrong answers
+  defaultPrice: 0.05,                      // README running example, an ASSUMED price per expensive call
 };
-const ROUTE_KEYS = ['only', 'twice', 'claude'];
-const ROUTE_COL = {only: 'ink', twice: 'blue', claude: 'violet'};
+const share = DATA.passed / DATA.n;                          // expensive calls skipped per invoice (0.1944)
+const sendOn = DATA.expensiveCalls / DATA.n;                 // expensive calls per invoice with a check (0.8056)
+const BE = {repeat: DATA.checkCost.repeat / share, claude: DATA.checkCost.claude / share};   // break-even price per call
+const wilsonLow = K.wilson(DATA.n, DATA.n)[0];
 
-/* ---------- the model: one pure function. g = price of one expensive call (USD, assumed), v = invoices a month. */
-function model(g, v) {
-  const out = {};
-  ROUTE_KEYS.forEach(k => { const r = DATA.routes[k];
-    out[k] = {check: v * r.known, calls: v * r.gpt * g, n: v * r.gpt, total: v * (r.known + r.gpt * g)}; });
-  out.saving = {twice: out.only.total - out.twice.total, claude: out.only.total - out.claude.total};
-  out.best = ROUTE_KEYS.reduce((a, k) => out[k].total < out[a].total - 1e-12 ? k : a, 'only');
-  return out;
-}
-// Break-even recomputed from the model inputs (must equal DATA.breakEven, checked in notes)
-const BE = {twice: DATA.routes.twice.known / (1 - DATA.routes.twice.gpt), claude: DATA.routes.claude.known / (1 - DATA.routes.claude.gpt)};
+/* ---- one formatter per kind of number, used by every label, readout and sentence ---- */
+const fmtP = G => { const c = G * 100; return (c < 1 ? c.toFixed(2) : c.toFixed(1)) + '¢'; };          // price per call
+const money = v => { const a = Math.abs(v); return '$' + (a < 10 ? a.toFixed(2) : Math.round(a).toLocaleString('en-US')); };
+const amt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});   // invoice amounts, to the cent
+const int = v => Math.round(v).toLocaleString('en-US');
+const nice2 = v => { const p = Math.pow(10, Math.floor(Math.log10(v)) - 1); return Math.round(v / p) * p; };
 
-/* ---------- one formatter per kind of number, used by slider, chart and verdict alike */
-const money = v => { const a = Math.abs(v), s = v < -1e-9 ? '−' : '';
-  return s + '$' + (a >= 100 ? Math.round(a).toLocaleString('en-US') : a >= 10 ? a.toFixed(0) : a.toFixed(2)); };
-const price = g => '$' + (g < 0.01 ? g.toFixed(4) : g.toFixed(3));
-const count = v => Math.round(v).toLocaleString('en-US');
-const kfmt = v => { const a = Math.abs(v), s = v < 0 ? '−' : '';
-  return s + '$' + (a >= 1000 ? (a / 1000).toFixed(a % 1000 ? 1 : 0) + 'k' : Math.round(a)); };
-
-/* ---------- invoice dots (steps 1-3) */
-const ITEMS = Array.from({length: DATA.n}, (_, i) => ({id: i + 1, hold: DATA.holdIds.includes(i + 1)}));
-const SORTED = ITEMS.filter(it => !it.hold).concat(ITEMS.filter(it => it.hold));   // 58 payable, then 14 holds
-const GRID = {cols: 12, x0: 74.5, y0: 62, gap: 21};
-const gridPos = it => K.grid(SORTED.indexOf(it), GRID);
-
-/* ---------- chart geometry (steps 5-6): monthly saving vs "Expensive only", per invoice scaled by volume */
-const CX = K.scale(0, 0.30, 62, 356);            // price of one expensive call
-const YLO = -0.03, YHI = 0.06;                    // saving per invoice, USD
-const CY = K.scale(YLO, YHI, 196, 52);
-const saveAt = (k, g) => g * (1 - DATA.routes[k].gpt) - DATA.routes[k].known;   // per invoice
-function chartMarkup(t0) {
-  const z = CY(0), ticks = [-0.02, 0, 0.02, 0.04, 0.06];
-  let m = '';
-  m += `<rect x="62" y="52" width="294" height="${(z - 52).toFixed(1)}" fill="${C.fill.green}" fill-opacity=".07"/>`;
-  m += `<rect x="62" y="${z.toFixed(1)}" width="294" height="${(196 - z).toFixed(1)}" fill="${C.fill.red}" fill-opacity=".07"/>`;
-  m += T(66, 66, 'check saves money', {a: 'start', z: 13, c: 'green', t: t0 + 200});
-  m += T(352, 190, 'check costs extra', {a: 'end', z: 13, c: 'red', t: t0 + 200});
-  ticks.forEach((v, i) => { m += `<line x1="62" x2="356" y1="${CY(v)}" y2="${CY(v)}" stroke="${C.faint}" stroke-width="${v ? .6 : 0}"/>`;
-    m += T(56, CY(v) + 4.5, '', {a: 'end', z: 13, c: 'mut', id: 'yt' + i, t: t0}); });
-  m += P(line(62, z, 356, z, 1), 'ink', t0, 500, 2);
-  m += T(352, z + 15, 'Expensive only', {a: 'end', z: 13, c: 'ink', t: t0 + 300});
-  [0, 0.1, 0.2, 0.3].forEach(v => { m += T(CX(v), 213, v ? '$' + v.toFixed(2) : '$0', {z: 13, c: 'mut', t: t0}); });
-  m += T(209, 230, 'price of one expensive call (assumed)', {z: 13, c: 'mut', t: t0 + 100});
-  m += T(12, 38, 'monthly saving vs expensive only', {a: 'start', z: 13, c: 'mut', t: t0});
-  return m;
-}
-function routeLine(k, t) {
-  const pts = [0, 0.3].map(g => [CX(g), CY(saveAt(k, g))]);
-  return P(line(pts[0][0], pts[0][1], pts[1][0], pts[1][1], 3), ROUTE_COL[k], t, 900, 2.6, `id="ln-${k}"`);
-}
-const lineLabels = t => T(300, 58, 'Ask twice', {a: 'end', z: 14, w: 600, c: 'blue', t}) +
-                        T(356, 140, 'Claude review', {a: 'end', z: 14, w: 600, c: 'violet', t: t + 150});
-function setTicks(s, v) { [-0.02, 0, 0.02, 0.04, 0.06].forEach((y, i) => { const e = s.q('#yt' + i); if (e) e.textContent = kfmt(y * v); }); }
-
-/* price marker: vertical line plus a dot and value on each check line */
-function marker(s) {
-  const g = s.el('g', {});
-  const ln = s.el('line', {y1: 52, y2: 196, stroke: C.mut, 'stroke-width': 1.2, 'stroke-dasharray': '3 3'}, g);
-  const d = {}, lb = {};
-  ['twice', 'claude'].forEach(k => { d[k] = s.el('circle', {r: 4.5, fill: C[ROUTE_COL[k]], stroke: C.bg, 'stroke-width': 1.5}, g);
-    lb[k] = s.el('text', {'font-size': 13, 'font-weight': 600, fill: C[ROUTE_COL[k]], style: 'font-variant-numeric:tabular-nums'}, g); });
-  return (gp, v) => {
-    const x = CX(gp); ln.setAttribute('x1', x); ln.setAttribute('x2', x);
-    const ys = {};
-    ['twice', 'claude'].forEach(k => { ys[k] = CY(clamp(saveAt(k, gp), YLO, YHI)); d[k].setAttribute('cx', x); d[k].setAttribute('cy', ys[k]); });
-    // Ask twice: above-left of its dot (below-right near the y axis); Claude: below-right (above-left near the right edge).
-    // Both lines rise to the right, so these corners stay clear of the line itself.
-    // Flip sides where a marker label would sit on a fixed line label (Ask twice ~x 245-300, Claude review ~x 271-356).
-    const pos = {twice: x < 110 || (x >= 230 && x <= 320) ? 'br' : 'al', claude: x > 200 ? 'al' : 'br'};
-    const place = (k, side) => { const br = side === 'br';
-      lb[k].setAttribute('x', br ? x + 8 : x - 8); lb[k].setAttribute('text-anchor', br ? 'start' : 'end');
-      lb[k].setAttribute('y', br ? ys[k] + 17 : ys[k] - 7); };
-    // fixed chart texts: if a value label would sit on one, try the other side; failing that, dim the fixed text
-    const fixed = [...g.ownerSVGElement.querySelectorAll('text')].filter(t => !g.contains(t) && t.textContent.trim());
-    fixed.forEach(t => { if (t.dataset.dim) { t.style.opacity = 1; delete t.dataset.dim; } });
-    const hits = e => { const A = e.getBBox(); return fixed.filter(t => { const B = t.getBBox();
-      return A.x < B.x + B.width - 1 && B.x < A.x + A.width - 1 && A.y < B.y + B.height - 1 && B.y < A.y + A.height - 1; }); };
-    ['twice', 'claude'].forEach(k => { const sv = v * saveAt(k, gp);
-      lb[k].textContent = (sv >= 0 ? '+' : '') + money(sv); place(k, pos[k]);
-      if (hits(lb[k]).length) { const alt = pos[k] === 'br' ? 'al' : 'br'; place(k, alt);
-        const bb = lb[k].getBBox();
-        if (hits(lb[k]).length || bb.x < 62 || bb.x + bb.width > 368) place(k, pos[k]); }
-      hits(lb[k]).forEach(t => { t.style.transition = 'opacity .12s'; t.style.opacity = .12; t.dataset.dim = 1; }); });
+/* ---- the model: monthly bill of each route at price G per expensive call and vol invoices a month ---- */
+function model(G, vol) {
+  const r = {
+    none:   {check: 0, calls: vol * G},
+    repeat: {check: vol * DATA.checkCost.repeat, calls: vol * sendOn * G},
+    claude: {check: vol * DATA.checkCost.claude, calls: vol * sendOn * G},
   };
+  for (const k in r) r[k].total = r[k].check + r[k].calls;
+  r.best = ['none', 'repeat', 'claude'].reduce((a, b) => r[b].total < r[a].total ? b : a);
+  r.saveRepeat = r.none.total - r.repeat.total;
+  r.saveClaude = r.none.total - r.claude.total;
+  return r;
 }
+window.MODEL = model; window.BE = BE;     // exposed for the number check in notes.md
 
-/* monthly bill bars (steps 4 and 6). rows = y baselines; returns update(g, v) */
-function bills(s, y0, gap, x0, x1, big) {
-  const rows = {};
-  ROUTE_KEYS.forEach((k, i) => { const y = y0 + i * gap, c = ROUTE_COL[k];
-    const nm = s.el('text', {x: 12, y: y + 4.5, 'font-size': big ? 14 : 13, 'font-weight': 600, fill: C[c]});
-    nm.textContent = DATA.routes[k].name;
-    const chk = s.el('rect', {x: x0, y: y - 7, height: 14, width: 0, fill: C.fill.red, 'fill-opacity': .9});
-    const cal = s.el('rect', {x: x0, y: y - 7, height: 14, width: 0, fill: C[c], 'fill-opacity': .85});
-    const val = s.el('text', {x: 368, y: y + 4.5, 'text-anchor': 'end', 'font-size': big ? 14 : 13, 'font-weight': 600, fill: C.ink, style: 'font-variant-numeric:tabular-nums'});
-    const sub = big ? s.el('text', {x: 12, y: y + 24, 'font-size': 13, fill: C.mut, style: 'font-variant-numeric:tabular-nums'}) : null;
-    rows[k] = {chk, cal, val, sub};
+const NAME = {none: 'No check', repeat: 'Repeat check', claude: 'Claude check'};
+const ROUTE_COL = {none: 'blue', repeat: 'ink', claude: 'violet'};
+
+/* ---- shared drawing: the flow of one invoice (steps 1 and 2) ---- */
+function flow(inv) {
+  return P(rect(14, 14, 150, 80, 11), 'mut', 0, 500) +
+    T(24, 38, 'Invoice ' + inv.id, {a: 'start', z: 14, w: 600, t: 150}) +
+    T(24, 60, inv.line2, {a: 'start', z: 13, t: 250}) +
+    T(24, 80, inv.line3, {a: 'start', z: 13, c: 'mut', t: 350}) +
+    P(line(166, 54, 212, 54, 12), 'mut', 500, 300) + P(arrow(166, 54, 212, 54, 13), 'mut', 780, 120) +
+    P(rect(216, 14, 150, 80, 14), 'green', 600, 500) +
+    T(291, 40, 'Cheap AI model', {z: 14, w: 600, t: 800}) +
+    T(291, 60, 'asked twice', {z: 13, c: 'mut', t: 900}) +
+    T(291, 80, 'Qwen3.8 Flash', {z: 13, c: 'mut', t: 950}) +
+    `<g id="chips" opacity="0">` +
+      `<rect x="214" y="110" width="74" height="28" rx="5" fill="${C.panel}" stroke="${C.line}"/>` +
+      `<rect x="294" y="110" width="74" height="28" rx="5" fill="${C.panel}" stroke="${C.line}"/>` +
+      T(251, 129, inv.answers[0], {z: 13, w: 600}) + T(331, 129, inv.answers[1], {z: 13, w: 600}) +
+      T(206, 129, 'answers', {z: 13, a: 'end', c: 'mut'}) +
+    `</g>` +
+    P(line(291, 140, 250, 168, 15), 'mut', 1100, 300) + P(arrow(291, 140, 250, 168, 16), 'mut', 1380, 120) +
+    P(rect(80, 170, 240, 52, 17), 'amber', 1200, 500) +
+    T(200, 192, 'Do both answers match,', {z: 14, t: 1400}) +
+    T(200, 211, 'decision and cents?', {z: 14, t: 1450}) +
+    P(line(150, 222, 100, 262, 18), 'mut', 1600, 300) + P(arrow(150, 222, 100, 262, 19), 'mut', 1880, 120) +
+    P(line(250, 222, 283, 262, 20), 'mut', 1600, 300) + P(arrow(250, 222, 283, 262, 21), 'mut', 1880, 120) +
+    `<g id="yesbox">` + P(rect(14, 264, 172, 66, 22), 'green', 1700, 500) +
+      T(100, 289, 'Match', {z: 14, w: 600, c: 'green', t: 1900}) +
+      T(100, 311, 'use the cheap answer', {z: 13, t: 1950}) + `</g>` +
+    `<g id="nobox">` + P(rect(198, 264, 170, 66, 23), 'blue', 1700, 500) +
+      T(283, 289, 'No match', {z: 14, w: 600, c: 'blue', t: 1900}) +
+      T(283, 311, 'ask the expensive model', {z: 13, t: 1950}) + `</g>`;
+}
+const fade = (s, sel, op) => { const e = s.q(sel); e.style.transition = 'opacity .5s'; e.style.opacity = op; };
+
+/* ---- shared drawing: the savings chart and the monthly bills (steps 5 and 6) ---- */
+const XL = Math.log10(0.0005), XR = Math.log10(0.5);
+const X = G => K.lerp(56, 350, (Math.log10(G) - XL) / (XR - XL));
+const PY0 = 92, PY1 = 222;                        // plot top and bottom
+const BAR = {x: 112, w: 190, y: [300, 336, 372], h: 20};
+function chartFrame() {
+  const ticks = [[0.001, '0.1¢'], [0.01, '1¢'], [0.1, '10¢'], [0.5, '50¢']];
+  return `<rect x="${X(0.005).toFixed(1)}" y="${PY0}" width="${(X(0.25) - X(0.005)).toFixed(1)}" height="${PY1 - PY0}" fill="${C.panel}"/>` +
+    T(12, 80, 'Saved each month vs. no check (dashed)', {a: 'start', z: 13, c: 'mut'}) +
+    ticks.map(([g, l]) => `<line x1="${X(g)}" x2="${X(g)}" y1="${PY1}" y2="${PY1 + 4}" stroke="${C.mut}"/>` + T(X(g), PY1 + 18, l, {z: 13, c: 'mut'})).join('') +
+    `<line x1="56" x2="350" y1="${PY1}" y2="${PY1}" stroke="${C.line}"/>` +
+    T(203, PY1 + 36, 'price of one expensive call (log scale)', {z: 13, c: 'mut'}) +
+    `<g id="plot"></g>` +
+    T(12, 288, '', {a: 'start', z: 13, c: 'mut', id: 'billtitle'}) +
+    ['none', 'repeat', 'claude'].map((k, i) =>
+      T(12, BAR.y[i] + 15, NAME[k], {a: 'start', z: 13, id: 'bl' + k}) +
+      `<rect x="${BAR.x}" y="${BAR.y[i]}" width="${BAR.w}" height="${BAR.h}" fill="none" stroke="${C.faint}"/>` +
+      `<rect id="bc${k}" x="${BAR.x}" y="${BAR.y[i]}" width="0" height="${BAR.h}" fill="${C.fill.amber}"/>` +
+      `<rect id="bg${k}" x="${BAR.x}" y="${BAR.y[i]}" width="0" height="${BAR.h}" fill="${C.fill.blue}"/>` +
+      T(368, BAR.y[i] + 15, '', {a: 'end', z: 13, w: 600, id: 'bv' + k})).join('') +
+    T(12, 414, 'amber: cost of the checks · blue: expensive calls', {a: 'start', z: 13, c: 'mut'}) +
+    T(12, 22, '', {a: 'start', z: 15, w: 600, id: 'v1'}) +
+    T(12, 42, '', {a: 'start', z: 13, id: 'v2'}) +
+    T(12, 60, '', {a: 'start', z: 13, id: 'v3'});
+}
+function niceStep(span) { const p = Math.pow(10, Math.floor(Math.log10(span))); return [1, 2, 2.5, 5, 10].map(m => m * p).find(st => span / st <= 4); }
+function drawExplore(s, G, vol) {
+  const m = model(G, vol);
+  // saving per month against no check, drawn as a line over the whole price range
+  const sav = (k, g) => vol * (g - (DATA.checkCost[k] + sendOn * g));
+  const lo = sav('claude', 0.0005), hi = sav('repeat', 0.5);
+  const st = niceStep(hi - lo), y1 = Math.ceil(hi / st) * st;
+  let y0 = Math.floor(lo / st) * st;
+  if (lo - y0 < 0.15 * (y1 - y0)) y0 -= st;      // room under the lowest line for its label
+  const Y = v => K.lerp(PY1, PY0, (v - y0) / (y1 - y0));
+  let h = '';
+  for (let v = y0; v <= y1 + 1e-9; v += st) h += `<line x1="56" x2="350" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${C.faint}" stroke-width=".7"/>` +
+    T(52, Y(v) + 4.5, Math.abs(v) < 1e-9 ? '$0' : (v < 0 ? '−' : '') + money(v), {a: 'end', z: 13, c: 'mut'});
+  h += `<line x1="56" x2="350" y1="${Y(0)}" y2="${Y(0)}" stroke="${C.fill.blue}" stroke-width="1.6" stroke-dasharray="5 4"/>`;
+  ['claude', 'repeat'].forEach(k => {
+    let d = ''; for (let i = 0; i <= 80; i++) { const g = Math.pow(10, K.lerp(XL, XR, i / 80)); d += (i ? 'L' : 'M') + X(g).toFixed(1) + ' ' + Y(sav(k, g)).toFixed(1); }
+    h += `<path d="${d}" fill="none" stroke="${K.col(ROUTE_COL[k])}" stroke-width="${m.best === k ? 3 : 2}"/>`;
+    h += `<circle cx="${X(BE[k]).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="4" fill="${C.bg}" stroke="${K.col(ROUTE_COL[k])}" stroke-width="2"/>`;
   });
-  return (g, v, k01 = 1) => {
-    const m = model(g, v), mx = Math.max(...ROUTE_KEYS.map(k => m[k].total)) || 1, W = x1 - x0;
-    ROUTE_KEYS.forEach(k => { const r = rows[k], wc = W * m[k].check / mx * k01, wg = W * m[k].calls / mx * k01;
-      r.chk.setAttribute('width', Math.max(0, wc)); r.cal.setAttribute('x', x0 + wc); r.cal.setAttribute('width', Math.max(0, wg));
-      r.val.textContent = (m.best === k ? '✓ ' : '') + money(m[k].total);
-      if (r.sub) r.sub.textContent = count(m[k].n) + ' expensive calls ' + money(m[k].calls) + (m[k].check ? ' + checks ' + money(m[k].check) : '');
-    });
-    return m;
-  };
+  h += T(X(0.012), Y(sav('repeat', 0.012)) - 8, 'repeat check', {z: 13, c: 'ink'}) +
+       T(60, Y(sav('claude', 0.0005)) + 17, 'Claude check', {a: 'start', z: 13, c: 'violet'}) +
+       T(X(BE.repeat) - 2, Y(0) - 8, fmtP(BE.repeat), {a: 'end', z: 13, c: 'ink'}) +
+       T(X(BE.claude) + 6, Y(0) + 17, fmtP(BE.claude), {a: 'start', z: 13, c: 'violet'});
+  const cx = X(G);
+  h += `<line x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${PY0 - 2}" y2="${PY1}" stroke="${C.ink}" stroke-opacity=".55"/>`;
+  ['repeat', 'claude'].forEach(k => h += `<circle cx="${cx.toFixed(1)}" cy="${Y(sav(k, G)).toFixed(1)}" r="4.5" fill="${K.col(ROUTE_COL[k])}"/>`);
+  s.q('#plot').innerHTML = h;
+  // monthly bills
+  const max = Math.max(m.none.total, m.repeat.total, m.claude.total);
+  ['none', 'repeat', 'claude'].forEach(k => {
+    const wc = BAR.w * m[k].check / max, wg = BAR.w * m[k].calls / max;
+    s.q('#bc' + k).setAttribute('width', wc.toFixed(1));
+    const g = s.q('#bg' + k); g.setAttribute('x', (BAR.x + wc).toFixed(1)); g.setAttribute('width', wg.toFixed(1));
+    s.q('#bv' + k).textContent = money(m[k].total);
+    s.q('#bl' + k).setAttribute('font-weight', m.best === k ? 700 : 400);
+    s.q('#bl' + k).textContent = NAME[k] + (m.best === k ? ' ✓' : '');
+  });
+  s.q('#billtitle').textContent = `Monthly bill for ${int(vol)} invoices`;
+  s.q('#v1').textContent = `At ${fmtP(G)} a call: ${m.best === 'none' ? 'no check' : NAME[m.best].toLowerCase()} is cheapest`;
+  const say = (k, v) => Math.abs(v) < 0.005 ? `${NAME[k]}: breaks even with no check` : `${NAME[k]}: ${v >= 0 ? 'saves ' + money(v) : 'costs ' + money(v) + ' more'} a month vs. no check`;
+  s.q('#v2').textContent = say('repeat', m.saveRepeat);
+  s.q('#v3').textContent = say('claude', m.saveClaude);
 }
-function verdict(m, g) {
-  const b = m.best, nm = DATA.routes[b].name;
-  const l1 = `Cheapest at ${price(g)} a call: ${nm}, ${money(m[b].total)} a month`;
-  const l2 = b === 'only' ? 'Both checks cost more than the calls they save.' : `It saves ${money(m.saving[b])} a month vs Expensive only.`;
-  return [l1, l2];
+function priceSlider(s, state, redraw) {
+  return K.slider(s.act, {label: 'Price of one expensive call (assumed)', min: XL, max: XR, step: 0.01, value: Math.log10(state.G),
+    fmt: v => fmtP(Math.pow(10, v)), oninput: v => { state.G = Math.pow(10, v); redraw(); }});
+}
+// a real pointer or key on a slider cancels the idle demo (scripted input events do not)
+const readerTakesOver = s => s.act.querySelectorAll('input').forEach(i => ['pointerdown', 'keydown'].forEach(ev => i.addEventListener(ev, () => s.touched())));
+async function sweep(s, inp, from, to, ms) {
+  const n = Math.round(ms / 40);
+  for (let i = 0; i <= n; i++) { inp.value = K.lerp(from, to, i / n); inp.dispatchEvent(new Event('input')); await s.wait(40); }
 }
 
-let VOL = 10000;   // invoices a month: an example volume the reader can change in step 6
-let GP = 0.05;     // price of one expensive call (assumed); the study's running example
-const W14 = K.wilson(DATA.cheapRight, DATA.n);
+/* ---- captions, built from the computed numbers ---- */
+const CAP = {
+  c1: `A cheap AI model reads invoice test-012 twice. Both answers say HOLD, which is right, so that answer is used and the expensive model is never called.`,
+  c2: `Invoice test-002: the two cheap answers differ, so it goes to the expensive model, which pays the right ${amt(DATA.ex002.right)}. The other check tested, Claude reviewing the cheap answer, also rejected it.`,
+  c3: `All ${DATA.n} test invoices. The cheap model alone got ${DATA.cheapRight} right, all of them invoices to hold. Both checks passed exactly those ${DATA.passed} and sent the other ${DATA.expensiveCalls} on, so every route ended ${DATA.n} of ${DATA.n} right.`,
+  c4: `Each check skips the expensive model on ${DATA.passed} of ${DATA.n} invoices but costs something itself. It pays when the skipped calls are worth more than the checks. The ${fmtP(DATA.defaultPrice)} price is an assumption.`,
+  c5: `Watch the price sweep. Above the dashed line a check costs less than no check; each crosses it at its break-even price. Shaded: the 0.5¢ to 25¢ range the notebook assumed.`,
+  c6: `Your turn: set your expensive model's price and your monthly invoice count. The bills and the verdict change; the break-even prices do not depend on volume.`,
+  c7: `The repeat check pays once an expensive call costs more than ${fmtP(BE.repeat)}; a Claude check only above ${fmtP(BE.claude)}. Test on your own invoice mix before relying on either.`,
+};
+for (const k in CAP) if (CAP[k].length > 220) console.warn('caption too long', k, CAP[k].length);
 
 K.stepper({
-  root: '#x', style: 'editorial', viewBox: [380, 376],
-  title: 'When does it pay to let a cheap AI model handle invoice payments and send only doubtful ones to an expensive model? Based on 72 test invoices.',
-  actHeight: 110,
+  root: '#x', style: 'editorial', viewBox: [380, 430],
+  title: 'When does checking a cheap AI model\'s invoice answers, and sending only doubtful invoices to an expensive model, cost less than using the expensive model on every invoice? Based on 72 test invoices.',
+  actHeight: 126,
   legend: [
-    {key: 'pay', label: 'Should be paid', color: 'mut'},
-    {key: 'hold', label: 'Should be held', color: 'fill.amber'},
-    {key: 'right', label: 'Cheap answer right', color: 'fill.green'},
-    {key: 'wrong', label: 'Cheap answer wrong', color: 'fill.red'},
-    {key: 'only', label: 'Expensive only', color: 'ink'},
-    {key: 'twice', label: 'Ask twice', color: 'fill.blue'},
-    {key: 'claude', label: 'Claude review', color: 'fill.violet'},
+    {key: 'cheap', label: 'cheap answer used', color: 'fill.green'},
+    {key: 'gpt', label: 'expensive model', color: 'fill.blue'},
+    {key: 'wrong', label: 'wrong answer', color: 'fill.red'},
+    {key: 'check', label: 'cost of checks', color: 'fill.amber'},
+    {key: 'rep', label: 'repeat check', color: 'ink'},
+    {key: 'cl', label: 'Claude check', color: 'violet'},
   ],
-  extraCaptions: [],
   steps: [
-    { title: '1. 72 test invoices', keys: ['pay', 'hold'],
-      cap: 'Each test invoice needs one decision: pay an exact amount, or hold it. An answer counts as right only if the decision and the amount match to the cent.',
-      draw: () =>
-        T(190, 196, `${DATA.payable} should be paid an exact amount`, {z: 14, c: 'ink', t: 1600}) +
-        T(190, 216, `${DATA.holds} should be held (duplicate, blocked supplier,`, {z: 14, c: 'amber', t: 2000}) +
-        T(190, 234, 'or a payment-limit exception not signed)', {z: 14, c: 'amber', t: 2000}) +
-        P(rect(40, 262, 300, 78, 5), 'faint', 2500, 600, 1.2) +
-        T(54, 286, 'Example: invoice test-002', {a: 'start', z: 14, w: 600, t: 2900}) +
-        T(54, 308, `Right answer: PAY $${DATA.ex002.right.toLocaleString('en-US')}`, {a: 'start', z: 14, t: 3100}) +
-        T(54, 328, 'Generated by code, checked by two rule programs', {a: 'start', z: 13, c: 'mut', t: 3300}),
+    { title: '1. One invoice, asked twice', keys: ['cheap', 'gpt'], cap: CAP.c1,
+      draw: () => flow({id: 'test-012', line2: amt(DATA.ex012.amount) + ' to approve', line3: 'right answer: HOLD', answers: DATA.ex012.answers}),
       start(s) {
-        s.units(SORTED, {r: 7, fill: 'faint', x0: 190, y0: 115});
-        s.arrange(it => ({...gridPos(it), fill: 'faint'}), {du: 700, stagger: 8});
-        s.at(1300, () => s.arrange(it => ({fill: it.hold ? 'fill.amber' : 'mut'}), {du: 300, stagger: 0}));
+        s.at(2300, () => fade(s, '#chips', 1));
+        s.at(2600, async () => {
+          await s.travel([[291, 140], [250, 168]], 450, 'amber');
+          s.ring(80, 170, 240, 52, 'amber');
+          await s.wait(500);
+          fade(s, '#nobox', .3);
+          await s.travel([[150, 222], [100, 262]], 450, 'green');
+          s.ring(14, 264, 172, 66, 'green');
+          s.write(14, 362, '✓ Held correctly. No expensive call needed.', {a: 'start', z: 14, w: 600, c: 'green'});
+          s.write(14, 386, `The two cheap calls cost ${fmtP(DATA.checkCost.repeat)} an invoice`, {a: 'start', z: 13, t: 300});
+          s.write(14, 404, `on average across the ${DATA.n} test invoices.`, {a: 'start', z: 13, t: 300});
+        });
       },
-      duration: 3800 },
+      duration: 5200 },
 
-    { title: '2. Cheap model alone', keys: ['right', 'wrong'],
-      cap: 'Qwen3.8 Flash costs about $0.00014 per invoice. It held every invoice that should be held, but paid a wrong amount on every one of the 58 payable invoices.',
-      draw: () =>
-        T(190, 196, `Right on ${DATA.cheapRight} of ${DATA.n}: all of them holds`, {z: 14, c: 'green', w: 600, t: 1400}) +
-        T(190, 216, `Wrong amount on ${DATA.payable} of ${DATA.payable} payable invoices`, {z: 14, c: 'red', w: 600, t: 1700}) +
-        T(190, 236, `It would underpay by $${Math.round(DATA.cheapUnderpay)} per invoice on average`, {z: 13, c: 'mut', t: 2000}) +
-        P(rect(40, 262, 300, 78, 5), 'faint', 0, 0, 1.2) +
-        T(54, 286, 'Example: invoice test-002', {a: 'start', z: 14, w: 600}) +
-        T(54, 308, `Right answer: PAY $${DATA.ex002.right.toLocaleString('en-US')}`, {a: 'start', z: 14}) +
-        T(54, 328, `Cheap model: PAY $${DATA.ex002.first}  ✗`, {a: 'start', z: 14, c: 'red', w: 600, t: 2400}),
+    { title: '2. When the answers differ', keys: ['cheap', 'gpt', 'wrong'], cap: CAP.c2,
+      draw: () => flow({id: 'test-002', line2: amt(DATA.ex002.right) + ' to pay', line3: 'right answer: PAY', answers: DATA.ex002.answers.map(amt)}),
       start(s) {
-        s.units(SORTED, {r: 7, fill: 'mut'});
-        s.arrange(it => ({...gridPos(it), fill: it.hold ? 'fill.amber' : 'mut'}), {du: 1, stagger: 0});
-        s.at(900, () => s.arrange(it => ({fill: it.hold ? 'fill.green' : 'fill.red'}), {du: 400, stagger: 0}));
+        s.at(2300, () => fade(s, '#chips', 1));
+        s.at(2600, async () => {
+          await s.travel([[291, 140], [250, 168]], 450, 'amber');
+          s.ring(80, 170, 240, 52, 'amber');
+          await s.wait(500);
+          fade(s, '#yesbox', .3);
+          await s.travel([[250, 222], [283, 262]], 450, 'blue');
+          s.ring(198, 264, 170, 66, 'blue');
+          s.write(283, 352, `pays ${amt(DATA.ex002.right)} ✓`, {z: 14, w: 600, c: 'blue'});
+          s.write(14, 380, `Without the check, the first cheap answer would`, {a: 'start', z: 13, t: 400, c: 'red'});
+          s.write(14, 398, `have underpaid by ${amt(DATA.ex002.right - DATA.ex002.answers[0])}.`, {a: 'start', z: 13, t: 400, c: 'red'});
+        });
       },
-      duration: 3000 },
+      duration: 5400 },
 
-    { title: '3. Check, then escalate', keys: ['right', 'wrong'],
-      cap: 'Two checks were tested. Both accepted the same 14 right answers and sent all 58 wrong ones to the expensive model (GPT-6.1 Sol), so both ended 72 of 72 right.',
-      draw: () =>
-        T(12, 22, 'Ask twice: ask the cheap model again;', {a: 'start', z: 14, c: 'blue', w: 600}) +
-        T(12, 40, 'pay only if both amounts match to the cent', {a: 'start', z: 14, c: 'blue'}) +
-        T(12, 64, 'Claude review: Claude Opus 5.5 checks', {a: 'start', z: 14, c: 'violet', w: 600, t: 300}) +
-        T(12, 82, 'the cheap answer before payment', {a: 'start', z: 14, c: 'violet', t: 300}) +
-        T(80, 222, `${DATA.cheapRight} accepted:`, {z: 14, c: 'green', w: 600, t: 2600}) +
-        T(80, 240, 'paid on cheap answer', {z: 13, c: 'green', t: 2600}) +
-        T(270, 278, `${DATA.escalated} sent to expensive model,`, {z: 14, c: 'red', w: 600, t: 2800}) +
-        T(270, 296, `then all ${DATA.escalated} right`, {z: 13, c: 'red', t: 2800}) +
-        T(12, 330, `test-002: $${DATA.ex002.first}, then $${DATA.ex002.second}: no match,`, {a: 'start', z: 13, c: 'mut', t: 3300}) +
-        T(12, 348, `so the expensive model answered $${DATA.ex002.right.toLocaleString('en-US')} ✓`, {a: 'start', z: 13, c: 'mut', t: 3300}),
+    { title: '3. All 72 test invoices', keys: ['cheap', 'gpt', 'wrong'], cap: CAP.c3,
+      draw: () => T(12, 24, `Cheap model alone: ${DATA.cheapRight} of ${DATA.n} right`, {id: 'h1', a: 'start', z: 15, w: 600}) +
+        T(12, 44, `✓ ${DATA.cheapRight} right (all invoices to hold)   ✗ ${DATA.n - DATA.cheapRight} wrong amounts`, {id: 'h2', a: 'start', z: 13, c: 'mut'}) +
+        `<g id="after" opacity="0">` +
+          T(12, 176, `Check passed: ${DATA.passed}`, {a: 'start', z: 14, w: 600, c: 'green'}) +
+          T(12, 194, 'cheap answer used', {a: 'start', z: 13, c: 'mut'}) +
+          T(150, 176, `Check failed: ${DATA.expensiveCalls}`, {a: 'start', z: 14, w: 600, c: 'blue'}) +
+          T(150, 194, 'sent to the expensive model', {a: 'start', z: 13, c: 'mut'}) +
+          T(12, 342, `Final answers right: ${DATA.n} of ${DATA.n} with either check`, {a: 'start', z: 14, w: 600}) +
+          T(12, 364, 'Wrong answers let through: 0', {a: 'start', z: 13}) +
+          T(12, 382, 'Right answers sent on anyway: 0', {a: 'start', z: 13}) +
+          T(12, 404, 'Both checks made exactly the same split.', {a: 'start', z: 13, c: 'mut'}) +
+        `</g>`,
       start(s) {
-        s.units(SORTED, {r: 7, fill: 'mut'});
-        s.arrange(it => ({...gridPos(it), fill: it.hold ? 'fill.green' : 'fill.red'}), {du: 1, stagger: 0});
-        s.at(30, () => s.arrange(it => { const p = gridPos(it); return {x: p.x, y: p.y + 70}; }, {du: 500, stagger: 0}));
-        s.at(1000, () => {
+        const ids = Array.from({length: DATA.n}, (_, i) => 'test-' + String(i + 1).padStart(3, '0'));
+        const items = ids.map(id => ({id, pass: DATA.passedIds.includes(id)}));
+        s.units(items, {r: 0, fill: 'faint', x0: 190, y0: 110});
+        const pos = j => ({x: 30 + (j % 18) * 19, y: 76 + Math.floor(j / 18) * 19});
+        s.arrange((it, j) => ({...pos(j), r: 6, fill: it.pass ? 'fill.green' : 'fill.red'}), {du: 700, stagger: 12});
+        s.at(3600, () => {
+          fade(s, '#after', 1);
           let a = 0, b = 0;
-          s.arrange(it => it.hold ? {...K.grid(a++, {cols: 4, x0: 49, y0: 132, gap: 20}), r: 6.5}
-                                  : {...K.grid(b++, {cols: 8, x0: 188, y0: 112, gap: 20}), r: 6.5}, {du: 1100, stagger: 10});
+          s.arrange(it => it.pass ? (q => ({x: 22 + (q % 5) * 19, y: 216 + Math.floor(q / 5) * 19, order: q}))(a++)
+                                  : (q => ({x: 160 + (q % 11) * 19, y: 216 + Math.floor(q / 11) * 19, fill: 'fill.blue', order: q + 4}))(b++), {du: 1000, stagger: 14});
         });
       },
-      duration: 3800 },
+      duration: 6200 },
 
-    { title: '4. Bill at 5 cents a call', keys: ['only', 'twice', 'claude'],
-      cap: 'The expensive model’s price per invoice was not measured. At an assumed $0.05 a call and 10,000 invoices a month, Ask twice is cheapest and Claude review is dearest.',
-      draw: () =>
-        T(12, 24, 'Bill for 10,000 invoices a month (example)', {a: 'start', z: 14, w: 600}) +
-        T(12, 42, 'Expensive call priced at $0.05 (assumed)', {a: 'start', z: 13, c: 'mut'}) +
-        F(K.rect(12, 270, 12, 10, 7), 'fill.red', 2200, {op: .9}) +
-        T(30, 279, '= checking cost; the rest is expensive calls', {a: 'start', z: 13, c: 'mut', t: 2200}) +
-        T(12, 312, `Not drawn: the cheap model alone (58 of 72 wrong)`, {a: 'start', z: 13, c: 'mut', t: 2600}) +
-        T(12, 330, `and Claude review sending doubts to a person at an`, {a: 'start', z: 13, c: 'mut', t: 2600}) +
-        T(12, 348, `assumed $1 each: $${DATA.personRoute.toFixed(2)} per invoice, $${count(DATA.personRoute * 10000)} a month.`, {a: 'start', z: 13, c: 'mut', t: 2600}),
-      start(s) {
-        const up = bills(s, 82, 64, 120, 300, true);
-        s.tween(1400, k => up(0.05, 10000, k), {delay: 300, ease: 'out'});
-      },
-      duration: 3000 },
-
-    { title: '5. Where it flips', keys: ['only', 'twice', 'claude'],
-      cap: 'Each line is a check’s monthly saving over sending everything to the expensive model. It pays where the line is above zero: Ask twice from $0.0011 a call, Claude review from $0.133.',
-      draw: () => chartMarkup(0) + routeLine('twice', 700) + routeLine('claude', 1100) + lineLabels(1700),
-      start(s) {
-        setTicks(s, 10000);
-        const mk = marker(s), z = CY(0);
-        const be = s.el('g', {opacity: 0}); be.style.transition = 'opacity .4s';
-        s.el('circle', {cx: CX(BE.claude), cy: z, r: 5, fill: 'none', stroke: C.violet, 'stroke-width': 2}, be);
-        const t1 = s.el('text', {x: CX(BE.claude) + 7, y: z + 18, 'font-size': 13, 'font-weight': 600, fill: C.violet}, be);
-        t1.textContent = price(BE.claude);
-        const be2 = s.el('g', {opacity: 0}); be2.style.transition = 'opacity .4s';
-        s.el('circle', {cx: CX(BE.twice), cy: z, r: 5, fill: 'none', stroke: C.blue, 'stroke-width': 2}, be2);
-        const t2 = s.el('text', {x: 68, y: z - 24, 'font-size': 13, 'font-weight': 600, fill: C.blue}, be2);
-        t2.textContent = price(BE.twice);
-        let g = 0.005; mk(g, 10000);
-        s.at(2200, async () => {
-          be2.setAttribute('opacity', 1);
-          await s.tween(1600, k => { g = 0.005 + k * (BE.claude - 0.005); mk(g, 10000); }, {delay: 700});
-          be.setAttribute('opacity', 1); s.ring(CX(BE.claude) - 14, z - 14, 28, 28, 'violet');
-          await s.tween(1300, k => { g = BE.claude + k * (0.25 - BE.claude); mk(g, 10000); }, {delay: 800});
-        });
-      },
-      duration: 7000 },
-
-    { title: '6. Your turn', keys: ['only', 'twice', 'claude'],
-      cap: 'Drag the price of one expensive call and pick your monthly volume. The chart shows each check’s saving; the bars show the full monthly bill, cheapest marked ✓.',
-      draw: () => chartMarkup(0) + routeLine('twice', 0) + routeLine('claude', 0) + lineLabels(0) +
-        T(12, 246, 'Monthly bill', {a: 'start', z: 13, c: 'mut'}) +
-        F(K.rect(104, 238, 10, 9, 7), 'fill.red', 0, {op: .9}) + T(118, 246, '= checking cost', {a: 'start', z: 13, c: 'mut'}),
-      start(s) {
-        const mk = marker(s), up = bills(s, 266, 22, 120, 300, false);
-        const v1 = s.el('text', {x: 12, y: 346, 'font-size': 13.5, 'font-weight': 600, fill: C.ink});
-        const v2 = s.el('text', {x: 12, y: 364, 'font-size': 13, fill: C.mut});
-        const redraw = () => { setTicks(s, VOL); mk(GP, VOL); const m = up(GP, VOL); const [a, b] = verdict(m, GP); v1.textContent = a; v2.textContent = b; };
-        const sl = K.slider(s.act, {label: 'Price of one expensive call (assumed)', min: 0.0005, max: 0.30, step: 0.0005, value: GP,
-          fmt: price, oninput: v => { GP = v; redraw(); }});
-        sl.input.addEventListener('input', () => s.touched());
-        const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:nowrap;font-size:12.5px;width:100%';
-        row.innerHTML = '<span style="color:var(--k-mut)">Invoices a month</span>'; s.act.appendChild(row);
-        const btns = [1000, 10000, 100000].map(v => { const b = document.createElement('button'); b.type = 'button'; b.textContent = count(v); b.style.padding = '0 9px';
-          b.setAttribute('aria-pressed', v === VOL); b.onclick = () => { s.touched(); VOL = v; btns.forEach(x => x.setAttribute('aria-pressed', x === b)); redraw(); };
-          row.appendChild(b); return b; });
-        redraw();
-      },
-      demo: async s => { const inp = s.act.querySelector('input');
-        const go = async (a, b, n) => { for (let i = 0; i <= n; i++) { inp.value = a + (b - a) * i / n; inp.dispatchEvent(new Event('input')); await s.wait(45); } };
-        await go(GP, 0.0005, 20); await s.wait(900); await go(0.0005, 0.2, 40); await s.wait(900); await go(0.2, 0.05, 20); },
-      idleDemo: 5000, demoDuration: 6000, duration: 600 },
-
-    { title: '7. What to take away', keys: ['twice', 'claude'],
-      cap: 'Both checks scored 72 of 72 and chose the same way on every invoice, so this test cannot say which one catches harder mistakes. The cheap model ran without reasoning.',
+    { title: '4. The trade, at 5¢ a call', keys: ['check', 'gpt'], cap: CAP.c4,
       draw: () => {
-        const sv = 1 - DATA.routes.twice.gpt, lo = W14[0], hi = W14[1];
-        const cLo = DATA.routes.claude.known / hi, cHi = DATA.routes.claude.known / lo;
-        return T(12, 24, 'Ask twice', {a: 'start', z: 15, w: 600, c: 'blue'}) +
-          T(12, 44, `pays once an expensive call costs more than ${price(BE.twice)}:`, {a: 'start', z: 14}) +
-          T(12, 62, 'nearly any price. Use it, with the to-the-cent rule.', {a: 'start', z: 14}) +
-          T(12, 96, 'Claude review', {a: 'start', z: 15, w: 600, c: 'violet', t: 500}) +
-          T(12, 116, `pays only above ${price(BE.claude)} a call; below that it`, {a: 'start', z: 14, t: 500}) +
-          T(12, 134, 'adds cost, and here it accepted the same 14.', {a: 'start', z: 14, t: 500}) +
-          T(12, 168, `Here the saving tops out at ${Math.round(sv * 100)}% of the bill`, {a: 'start', z: 15, w: 600, t: 1000}) +
-          T(12, 188, `Only ${DATA.cheapRight} of ${DATA.n} invoices (the holds) skipped the`, {a: 'start', z: 14, t: 1000}) +
-          T(12, 206, 'expensive model, because the cheap one got', {a: 'start', z: 14, t: 1000}) +
-          T(12, 224, 'no payable amount right.', {a: 'start', z: 14, t: 1000}) +
-          T(12, 258, 'Limits', {a: 'start', z: 15, w: 600, t: 1500}) +
-          T(12, 278, `• 72 invoices: on similar ones the share skipped could`, {a: 'start', z: 13, c: 'mut', t: 1500}) +
-          T(22, 295, `be ${Math.round(lo * 100)}–${Math.round(hi * 100)}%: Claude’s break-even ${price(cLo)}–${price(cHi)}`, {a: 'start', z: 13, c: 'mut', t: 1500}) +
-          T(12, 314, '• the expensive price is assumed, Claude at list price', {a: 'start', z: 13, c: 'mut', t: 1700}) +
-          T(12, 333, '• Ask twice works only with the to-the-cent rule: within', {a: 'start', z: 13, c: 'mut', t: 1900}) +
-          T(22, 350, '$1 it would have paid 8 wrong amounts', {a: 'start', z: 13, c: 'mut', t: 1900});
+        const m = model(DATA.defaultPrice, 10000), max = m.claude.total, W = 200, x0 = 12;
+        const rows = [['none', `${int(10000)} calls × ${fmtP(DATA.defaultPrice)}`],
+                      ['repeat', `${money(m.repeat.check)} checks + ${int(10000 * sendOn)} calls × ${fmtP(DATA.defaultPrice)}`],
+                      ['claude', `${money(m.claude.check)} checks + ${int(10000 * sendOn)} calls × ${fmtP(DATA.defaultPrice)}`]];
+        let h = T(12, 22, `Monthly bill for ${int(10000)} invoices`, {a: 'start', z: 15, w: 600}) +
+                T(12, 40, `price per expensive call: ${fmtP(DATA.defaultPrice)} (assumed)`, {a: 'start', z: 13, c: 'mut', t: 100});
+        rows.forEach(([k, sub], i) => {
+          const y = 56 + i * 56, wc = W * m[k].check / max, wg = W * m[k].calls / max;
+          h += T(x0, y + 14, NAME[k], {a: 'start', z: 14, w: 600, t: 300 + i * 500}) +
+               F(`M${x0 + 96} ${y}h${wc.toFixed(1)}v20h${-wc.toFixed(1)}Z`, 'fill.amber', 400 + i * 500, {op: 1}) +
+               F(`M${(x0 + 96 + wc).toFixed(1)} ${y}h${wg.toFixed(1)}v20h${-wg.toFixed(1)}Z`, 'fill.blue', 500 + i * 500, {op: 1}) +
+               T(368, y + 15, money(m[k].total), {a: 'end', z: 14, w: 600, t: 600 + i * 500}) +
+               T(x0, y + 37, sub, {a: 'start', z: 13, c: 'mut', t: 650 + i * 500});
+        });
+        const skipped = 10000 * share;
+        h += P(line(12, 222, 368, 224, 40), 'faint', 2000, 400, 1) +
+          T(12, 246, `Each check skips ${int(skipped)} expensive calls`, {a: 'start', z: 14, w: 600, t: 2300}) +
+          T(12, 264, `(${DATA.passed} of every ${DATA.n} invoices pass the check).`, {a: 'start', z: 13, t: 2350}) +
+          T(12, 288, 'Break-even price = cost of the checks ÷ calls skipped', {a: 'start', z: 13, t: 2700}) +
+          T(12, 308, `Repeat check: ${money(m.repeat.check)} ÷ ${int(skipped)} = ${fmtP(BE.repeat)} a call`, {a: 'start', z: 14, t: 3100}) +
+          T(12, 328, `Claude check: ${money(m.claude.check)} ÷ ${int(skipped)} = ${fmtP(BE.claude)} a call`, {a: 'start', z: 14, c: 'violet', t: 3400}) +
+          T(12, 360, `Not shown: cheap model alone (wrong on ${DATA.n - DATA.cheapRight} of ${DATA.n})`, {a: 'start', z: 13, c: 'mut', t: 3800}) +
+          T(12, 378, `and Claude check + person review (${money(DATA.reviewRoute * 10000)},`, {a: 'start', z: 13, c: 'mut', t: 3800}) +
+          T(12, 396, 'assuming $1 per review).', {a: 'start', z: 13, c: 'mut', t: 3800});
+        return h;
       },
-      duration: 2600 },
+      duration: 4400 },
+
+    { title: '5. Move the price', keys: ['check', 'gpt', 'rep', 'cl'], cap: CAP.c5,
+      draw: chartFrame,
+      start(s) {
+        const st = {G: DATA.defaultPrice, vol: 10000};
+        priceSlider(s, st, () => drawExplore(s, st.G, st.vol));
+        readerTakesOver(s);
+      },
+      demo: async s => {
+        const inp = s.act.querySelector('input');
+        await sweep(s, inp, XL, Math.log10(BE.repeat), 900); await s.wait(900);
+        await sweep(s, inp, Math.log10(BE.repeat), Math.log10(BE.claude), 2200); await s.wait(1100);
+        await sweep(s, inp, Math.log10(BE.claude), XR, 900); await s.wait(700);
+        await sweep(s, inp, XR, Math.log10(DATA.defaultPrice), 1100);
+      },
+      idleDemo: 2500, demoDuration: 8000, duration: 1200 },
+
+    { title: '6. Your price, your volume', keys: ['check', 'gpt', 'rep', 'cl'], cap: CAP.c6,
+      draw: chartFrame,
+      start(s) {
+        const st = {G: DATA.defaultPrice, vol: 10000};
+        const redraw = () => drawExplore(s, st.G, st.vol);
+        priceSlider(s, st, redraw);
+        K.slider(s.act, {label: 'Invoices per month (yours)', min: 3, max: 5.3, step: 0.01, value: 4,
+          fmt: v => int(nice2(Math.pow(10, v))), oninput: v => { st.vol = nice2(Math.pow(10, v)); redraw(); }});
+        readerTakesOver(s);
+      },
+      demo: async s => {
+        const [p, v] = s.act.querySelectorAll('input');
+        await sweep(s, p, Math.log10(DATA.defaultPrice), Math.log10(0.2), 1200); await s.wait(600);
+        await sweep(s, v, 4, 5, 1200); await s.wait(800);
+        await sweep(s, p, Math.log10(0.2), Math.log10(0.002), 1400);
+      },
+      idleDemo: 6000, demoDuration: 5600, duration: 1200 },
+
+    { title: '7. What to take away', keys: ['rep', 'cl'], cap: CAP.c7,
+      draw: () => {
+        const X2 = g => K.lerp(30, 350, (Math.log10(g) - XL) / (XR - XL)), ly = 70;
+        let h = T(12, 22, 'Where each check starts to pay', {a: 'start', z: 15, w: 600}) +
+          `<rect x="${X2(0.005).toFixed(1)}" y="${ly - 14}" width="${(X2(0.25) - X2(0.005)).toFixed(1)}" height="28" fill="${C.panel}"/>` +
+          P(line(30, ly, 350, ly, 50, 0), 'mut', 200, 600) +
+          [[0.001, '0.1¢'], [0.01, '1¢'], [0.1, '10¢'], [0.5, '50¢']].map(([g, l]) => `<line x1="${X2(g)}" x2="${X2(g)}" y1="${ly - 4}" y2="${ly + 4}" stroke="${C.mut}"/>` + T(X2(g), ly + 38, l, {z: 13, c: 'mut', t: 500})).join('') +
+          T(190, ly + 58, 'expensive call price (log scale; shaded: assumed)', {z: 13, c: 'mut', t: 600}) +
+          `<circle cx="${X2(BE.repeat).toFixed(1)}" cy="${ly}" r="5" fill="${C.ink}"/>` +
+          T(X2(BE.repeat) - 4, ly - 14, `repeat check pays above ${fmtP(BE.repeat)}`, {a: 'start', z: 13, t: 900}) +
+          `<circle cx="${X2(BE.claude).toFixed(1)}" cy="${ly}" r="5" fill="${C.violet}"/>` +
+          T(X2(BE.claude) + 6, ly + 22, `Claude check above ${fmtP(BE.claude)}`, {a: 'end', z: 13, c: 'violet', t: 1200});
+        const lim = [
+          [`Savings came only from the ${DATA.passed} invoices to hold. The`, `cheap model got none of the ${DATA.expensiveCalls} payments right.`],
+          [`If half as many passed the check, both break-even`, `prices would double (${fmtP(2 * BE.repeat)} and ${fmtP(2 * BE.claude)}).`],
+          [`Neither check let a wrong answer through, but ${DATA.n} of ${DATA.n}`, `still fits a true success rate as low as ${(wilsonLow * 100).toFixed(1)}%.`],
+          [`The repeat check needs agreement to the cent: allowing`, `a $1 gap would have paid ${DATA.looseGapWrong} wrong amounts.`],
+          [`Expensive price assumed (no metered bill); Claude at list`, `price; ${DATA.n} invoices from one generator.`],
+        ];
+        h += T(12, 162, 'Limits of this test', {a: 'start', z: 15, w: 600, t: 1600});
+        lim.forEach((L, i) => { const y = 188 + i * 46;
+          h += T(12, y, '•', {a: 'start', z: 13, t: 1800 + i * 300}) + T(24, y, L[0], {a: 'start', z: 13, t: 1800 + i * 300}) + T(24, y + 18, L[1], {a: 'start', z: 13, t: 1800 + i * 300}); });
+        return h;
+      },
+      duration: 3600 },
   ],
 });
+
 </script>
 </body></html>

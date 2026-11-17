@@ -46,7 +46,23 @@ Then write down:
 | A slide or a talk | **Short loop or a few static frames** | The presenter is the pace |
 | A chat reply (claude.ai widget) | Reader-paced, compact (3-6 steps) | Sits inline with text |
 
-When the request names a feed ("for a LinkedIn post"), build the self-playing card first; a reader-paced version can be a second deliverable from the same scene code.
+When the request names a feed ("for a LinkedIn post", "a visual for X"), the deliverable is a postable
+card, not a tap-through page:
+
+- **Fixed size.** One fixed-aspect drawing (4:5 portrait, for example a 400 x 500 viewBox, or 1:1) that
+  never scrolls and never changes height. Each scene is a slide that would work as a still image in a
+  carousel post. Use `--viewbox 400x500` and `autoplay: 'loop'`.
+- **Legible when scaled down.** The card is shown about 360 px wide on a phone, so every label, tick and
+  tag is at least 13 units in a 400-unit-wide card (about 12 px on screen). If a grid's labels would need
+  to be smaller, show fewer columns or put the grid on its own slide. Tiny labels inside a postable card
+  were the main complaint against the card that otherwise won.
+- **Reads without tapping.** The hook and the number in the first frame; every point made by the scenes
+  themselves; no part of the message behind a button. Optional controls go below the card and must
+  change something in it, or be left out.
+- **Clean pause points.** Hold each scene long enough to read (3-6 s) and make every held frame a finished
+  slide, so a reader who pauses or a GIF frame never lands mid-transition.
+
+A reader-paced version can be a second deliverable from the same scene code, but ship the card first.
 
 Forms combine. The strongest lessons usually are a stepper whose middle steps borrow from the others:
 one step where the reader plays the model, one where they guess, one that replays the real run. Pick the
@@ -100,6 +116,14 @@ Rules that make storyboards work, with the reason for each:
   recorded rates", "illustrative numbers".
 - When time is compressed, say by how much ("1 s here = 10 s of the real run").
 - If the evidence has a ceiling or floor (every method scores 100%), say the test cannot rank them.
+- Show the control result when there is one. A clean score on a "should refuse" or "should block" test
+  means little if the system also refuses ordinary work. When the source reports how the system did on
+  normal cases (ordinary questions answered, legitimate requests allowed, valid invoices paid), put that
+  number on screen next to the clean score, so a reader cannot take "0 broken rules" for "refused
+  everything". A reviewer chose the other version for exactly this.
+- Compute every derived number in code (percentages, chances such as 0.875^29, differences, ratios) and
+  print the values you put on screen; do not do the arithmetic in your head or round twice. Check that a
+  caption that names a value changes when the reader changes that value.
 - Do not let the animation imply a cause the data does not show.
 - End with the test's limits in plain words, not only the headline: how many items, how many runs per
   item, what the setup made easy or impossible, and any result at a ceiling or floor. Reviewers preferred the

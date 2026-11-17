@@ -45,6 +45,18 @@ A question step waits for the reader. Mark it `ask: true` so the idle demo never
 answer buttons until they choose, and say whether they were right and why. A reader who is thinking is not
 idle; a quiz that answers itself after five seconds teaches nothing.
 
+Feedback must depend on the pick. Write one reply per answer button: the first words are "Right" or
+"Not quite", then the reason for this case, then the case walked through on the drawing (the path resolved
+one part at a time, the invoice checked rule by rule). A single sentence shown whatever the reader chose
+is not feedback; reviewers marked it down every time. In `demo()`, pick the wrong answer once so a
+recording shows the "Not quite" branch too.
+
+One case per question. When the material has several cases (five tricks, three failure types), give each
+its own question with its own Right/Not quite reply, either as separate steps or as a sequence of
+questions inside one step that the reader advances. Never cycle several cases through one auto-playing
+step with one shared caption: the reader sees each for two seconds, cannot answer, and remembers none.
+If there are more than five cases, ask about the three that teach different things and list the rest.
+
 The richest hands-on step lets the reader bring their own case: type a path, enter a price, pick any item,
 and watch both sides of the comparison judge it with a reason. Prefer that over replaying fixed examples.
 

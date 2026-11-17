@@ -256,7 +256,7 @@ summary {{ cursor: pointer; color: var(--ink) }}
   <p class="eyebrow">Experiment notebooks · visual explainer skills</p>
   <h1>Explainer Skills Lab</h1>
   <p>Seven agent skills for turning a finding, a process or a dataset into an animated, interactive explainer that a newcomer can follow on a phone. They grew out of the chalkboard animations of an agentic finance harness and a lesson on deep work versus parallel agents.</p>
-  <p>To test them, the same model built five explainers from this repository's experiment data with the skills and without them, and a separate model compared each pair blind. After each round, the reviews' complaints went into the skills and the five were rebuilt, always against the same versions made without the skills. Round 3 and the no-skills versions are live below, side by side, with the round-1 and round-2 versions one click away. Eight more notebooks built with the skills follow.</p>
+  <p>To test them, the same model built five explainers from this repository's experiment data with the skills and without them, and a separate model compared each pair blind. After each round, the reviews' complaints went into the skills and the five were rebuilt, always against the same versions made without the skills. Round 4 and the no-skills versions are live below, side by side, with the earlier rounds' versions one click away. Eight more notebooks built with the skills follow.</p>
 </header>
 
 <section aria-labelledby="sk"><h2 id="sk">The skills</h2><ul class="skills">{skills_html}</ul></section>
@@ -272,19 +272,19 @@ summary {{ cursor: pointer; color: var(--ink) }}
 
 {''.join(sections)}
 
-{show_html}<section class="note" aria-labelledby="chg"><h2 id="chg">What three rounds of reviews taught</h2>
-<p>Across three rounds the version with the skills won 8 of the 15 blind comparisons (3, 2, then 3 of 5). Its summed review score was higher in every round: 110 to 105, 109 to 103, then 112 to 100 out of 125. The skills made layout reliable: 54 of 55 automatic checks passed in each round with them, against 48 of 55 without. The replay and the forecast won all three rounds; the guardrail lesson and the SQL card lost all three.</p>
-<p>The round-2 changes, tested in round 3:</p>
+{show_html}<section class="note" aria-labelledby="chg"><h2 id="chg">What four rounds of reviews taught</h2>
+<p>Across four rounds the version with the skills won 13 of the 20 blind comparisons (3, 2, 3, then 5 of 5). Its summed review score was higher in every round: 110 to 105, 109 to 103, 112 to 100, then 113 to 100 out of 125. The skills made layout reliable: 54 of 55 automatic checks passed in each round with them, against 48 of 55 without. The replay and the forecast won all four rounds.</p>
+<p>The round-3 changes, tested in round 4:</p>
 <ul>
-<li>Outcome in the reader's units. Worked: the invoice explorable now gives a monthly bill at a volume the reader picks, and it won back the case (24 to 19).</li>
-<li>Text size, legends, no internal names. Worked: no tiny-text failures with the skills in any case, and the reviewers no longer flagged run names.</li>
-<li>End with the test's limits. Followed, but the SQL case still lost by one point. The reviewer preferred the other version's fixed-size card for a LinkedIn post and its note that the models still answered ordinary questions, which shows the clean scores were not refusals.</li>
-<li>Question steps mark the reader's answer. Only half followed: the guardrail lesson now waits for the guess, but its feedback reads the same whatever the reader picks, and it packs four tricks into one auto-playing step where the other version gives each trick its own guess.</li>
+<li>One question per case, with "Right" or "Not quite" feedback that depends on the pick. Followed: the guardrail lesson now quizzes four tricks one at a time and walks a dot to where each path really ends. It won for the first time, 22 to 21.</li>
+<li>A social-feed visual is a fixed-size card that reads without tapping and shows a control result. Followed: the SQL visual is now a looping 4:5 card that shows the models still answered ordinary questions (10 of 11 got 23 of 23). It won for the first time, 22 to 21; the reviewer named legibility at phone width as the deciding point.</li>
+<li>Compute every derived number in code. No arithmetic errors were flagged in the versions with the skills this round; the round-3 SQL version had shown 3% where the right figure is 2.1%.</li>
 </ul>
+<p>The guardrail and SQL wins are by one point each, as is the invoice win, and the reviewer moved the unchanged no-skills guardrail page from 23 to 21 between rounds. So round 4 shows that the two cases that lost three times are now level, not that the skills are clearly better on them.</p>
 </section>
 
 <section class="note" aria-labelledby="lim"><h2 id="lim">How far to trust this</h2>
-<p>Each case was built once per condition in each round, and all three rounds reused the same no-skills versions, so the 8-of-15 result could easily swing either way with more runs. The reviewer is also a model, and it scored the same no-skills page differently from round to round (the invoice page got 21, 21, then 19), so differences of one or two points are noise. Read the comparison as a map of what the skills change, not a measurement of how much.</p>
+<p>Each case was built once per condition in each round, and all four rounds reused the same no-skills versions, so the 13-of-20 result could easily swing either way with more runs. The reviewer is also a model, and it scored the same no-skills page differently from round to round (the guardrail page got 23, 23, 23, then 21; the invoice page 21, 21, 19, then 21), so differences of one or two points are noise. Read the comparison as a map of what the skills change, not a measurement of how much.</p>
 <p>The skill files contain no data or wording from the five test notebooks, so the runs with skills could not copy an answer. The pages here are copies of each run's output, unedited.</p>
 </section>
 </main>

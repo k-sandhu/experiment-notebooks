@@ -37,6 +37,9 @@ outcome (`s.on` on the dot, a card in the dynamic layer). Pick two or three dots
   column with their label and count on the same line.
 - Same item, same place across groups when items are shared (question 17 is always the 17th cell), so
   the reader can compare groups item by item: a column of red across all models is a hard item.
+- For a social feed post, follow the card rules in `explainer-director` (fixed 4:5 card, labels at least
+  13 units, one idea per slide). A per-model grid with category columns is usually too dense for one card
+  at phone width: give the grid its own slide with fewer columns, or show counts per model instead.
 - Large sets (over ~600 items): use smaller dots, or one dot per 10 items and say so on screen.
 - Order of motion: stagger by item (`stagger` 3-8 ms) so the transition reads as a flow, and use the
   `order` field to move the interesting items last.
