@@ -16,7 +16,7 @@ A lesson of steps with Back, step dots, Replay and Next. Options:
 | Option | Meaning |
 |---|---|
 | `root` | Selector or element to build into (e.g. `'#x'`). |
-| `style` | `'chalkboard'` (default), `'paper'`, `'editorial'`, `'blueprint'`. |
+| `style` | `'chalkboard'` (default), `'paper'`, `'editorial'`, `'blueprint'`, or a theme object with your own colours and fonts (`references/themes.md`; `scaffold.py --theme` writes it in for you). |
 | `viewBox` | `[w, h]`, default `[380, 300]`. Keep 380 wide for phones and GIFs; height 260-440. |
 | `title` | One sentence describing the whole explainer, read by screen readers. |
 | `legend` | `[{key, label, color}]`. Steps list the keys they use; others dim to 30%. |

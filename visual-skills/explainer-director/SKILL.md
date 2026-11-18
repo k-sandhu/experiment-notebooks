@@ -141,6 +141,12 @@ another: `paper` for warm light pages, `editorial` for data-dense pieces beside 
 system diagrams. Default size is a 380-unit-wide drawing, which reads on a phone and records to a
 square-ish GIF.
 
+If the user names colours, fonts or a brand, build with a custom theme (`explainer-kit`,
+`references/themes.md`) instead of a built-in style. If they did not, but the piece will carry a brand (a
+company post, a product page, a client deck) and the user is there to answer, ask once whether they have
+colours or fonts to use, alongside the storyboard. When working autonomously, or when the user has no
+preference, use the built-in style without asking.
+
 Deliver the storyboard to the user in a few lines when they are present, then build. When working
 autonomously, keep the storyboard in your notes and build straight away.
 

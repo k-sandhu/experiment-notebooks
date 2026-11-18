@@ -57,7 +57,12 @@ reviewing real explainers frame by frame on a phone; the sources are named where
   amber = the human, violet = the model, green = a tool call or work in progress, blue = data or a result,
   red = an error or a cost. Change the mapping when the story needs it, but say it in the legend.
 - Ink colours (pastels on dark styles) are for strokes and text. Data fills are stronger colours checked
-  for colour-blind separation; use them for bars, dots and areas that tell categories apart.
+  for colour-blind separation as neighbouring pairs in the order blue, amber, green, violet, red; use them
+  for bars, dots and areas that tell categories apart, and assign them in that order.
+- No set of five colours is distinct for every reader. In the built-in styles, blue and violet fills look
+  almost the same to red-green colour-blind readers, and amber and red (dark styles) or green and red
+  (light styles) come close. When one chart needs both colours of such a pair, label the marks directly or
+  add a shape. `scripts/check_theme.py` lists the close pairs for any style or theme.
 - The chalkboard pastels fail a categorical-palette check as data colours (mint and blue are too close,
   all five are too light). That is why the kit has separate fills. Pastel strokes are fine because every
   shape also has a label.

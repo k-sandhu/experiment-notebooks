@@ -38,21 +38,36 @@ const STYLES = {
 let ST = STYLES.chalkboard, ROUGH = 1;
 const C = {};                                   // active colours, e.g. K.C.ink, K.C.fill.blue
 function col(c) { if (!c) return C.ink; if (c[0] === '#' || c.startsWith('rgb') || c === 'none' || c === 'transparent') return c; if (c.startsWith('fill.')) return C.fill[c.slice(5)] || c; return C[c] || c; }
+/* A theme is an object instead of a style name: your own colours and fonts merged over a built-in base
+   (references/themes.md). Slot names stay the same, so scene code works with any theme. */
+function resolveStyle(name) {
+  if (name && typeof name === 'object') {
+    const t = name, lum = h => { const v = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4); return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };
+    const dark = 'dark' in t ? !!t.dark : (t.bg ? lum(t.bg) < .18 : false);
+    const base = t.base in STYLES ? t.base : dark ? 'blueprint' : 'editorial';
+    const st = { ...STYLES[base], ...t, fill: { ...STYLES[base].fill, ...(t.fill || {}) }, dark: dark ? 1 : 0 };
+    if (!t.base && !('grid' in t)) st.grid = 0;
+    if (t.hand && !('font' in t)) st.font = null;           // a theme font that is installed locally, or a system font
+    return [st, base];
+  }
+  return name in STYLES ? [STYLES[name], name] : [STYLES.chalkboard, 'chalkboard'];
+}
 function useStyle(name, root) {
-  ST = STYLES[name] || STYLES.chalkboard; ROUGH = ST.rough;
+  let base; [ST, base] = resolveStyle(name); ROUGH = ST.rough || 0;
   Object.keys(C).forEach(k => delete C[k]); Object.assign(C, ST, { fill: { ...ST.fill } });
   injectCSS();
-  if (ST.font && !document.querySelector(`link[href="${ST.font}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ST.font; document.head.appendChild(l); }
+  [].concat(ST.font || []).forEach(u => { if (!document.querySelector(`link[href="${u}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = u; document.head.appendChild(l); } });
   if (root) {
     const v = { bg: ST.bg, panel: ST.panel, ink: ST.ink, mut: ST.mut, faint: ST.faint, line: ST.line, blue: ST.blue, green: ST.green, amber: ST.amber, violet: ST.violet, red: ST.red, hand: ST.hand };
     for (const k in v) root.style.setProperty('--k-' + k, v[k]);
-    root.classList.add('kx', 'kx-' + (name in STYLES ? name : 'chalkboard'));
+    if (ST.sans) root.style.setProperty('--font-sans', ST.sans);
+    root.classList.add('kx', 'kx-' + base);
     if (ST.texture) { const r = rng(9); let s = ''; for (let i = 0; i < 140; i++) s += `<circle cx='${(r() * 240).toFixed(1)}' cy='${(r() * 240).toFixed(1)}' r='${(.4 + r() * .8).toFixed(2)}' fill='%23ffffff' fill-opacity='${(.02 + r() * .045).toFixed(3)}'/>`; root.style.backgroundImage = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>${s}</svg>")`; }
     if (ST.grid) root.style.backgroundImage = `linear-gradient(${ST.faint}55 1px,transparent 1px),linear-gradient(90deg,${ST.faint}55 1px,transparent 1px)`, root.style.backgroundSize = '20px 20px';
   }
   return ST;
 }
-function fontsReady(ms = 1500) { return Promise.race([document.fonts ? document.fonts.ready.then(() => document.fonts.load(`20px ${ST.hand.split(',')[0]}`)) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
+function fontsReady(ms = 1500) { const fams = [ST.hand, ST.sans].filter(Boolean).map(h => h.split(',')[0]); return Promise.race([document.fonts ? document.fonts.ready.then(() => Promise.all(fams.map(f => document.fonts.load(`20px ${f}`)))) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
 
 /* ---------- hand-drawn geometry. Each shape takes a seed so its wobble is identical on every frame. */
 const J = (r, a) => (r() - .5) * 2 * a * ROUGH;
@@ -208,6 +223,12 @@ function stepper(o) {
   S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
   const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
   fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
+  const fixNext = () => {   // size Next to its widest label, so 'Start over' never pushes the other controls
+    const keep = fr.next.innerHTML; fr.next.style.minWidth = ''; let w = 0;
+    for (const h of [ICON.restart + 'Start over', 'Next' + ICON.right]) { fr.next.innerHTML = h; w = Math.max(w, fr.next.getBoundingClientRect().width); }
+    fr.next.innerHTML = keep; fr.next.style.minWidth = Math.ceil(w) + 'px'; };
+  fontsReady().then(() => { fixCaptionHeight(fr, capTexts); fixNext(); });   // a web font can wrap and size text differently once it loads
+  addEventListener('resize', fixNext);
   function build(i) {
     cur = i; eng.touched = false; const st = S[i], s = {};
     fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
@@ -263,7 +284,7 @@ function player(o) {
   fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
   const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
   CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
-  fixCaptionHeight(fr, CH.map(c => c.cap || ''));
+  fixCaptionHeight(fr, CH.map(c => c.cap || '')); fontsReady().then(() => fixCaptionHeight(fr, CH.map(c => c.cap || '')));
   const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
   function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !c.keys || c.keys.includes(e.dataset.l) ? '' : 'none'); }
   function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
@@ -316,6 +337,6 @@ const fmt = {
 /* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
 function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
 
-const K = { version: '1.0', NS, RM, C, STYLES, useStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
+const K = { version: '1.1', NS, RM, C, STYLES, useStyle, resolveStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
 window.K = K;
 })();

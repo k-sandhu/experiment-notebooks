@@ -1,6 +1,6 @@
 ---
 name: explainer-kit
-description: Engine, styles and quality checks for animated and interactive SVG explainers delivered as one self-contained HTML file (artifact page, claude.ai widget, or GIF/MP4). Provides a scaffold script, a small JavaScript engine (hand-drawn shapes, draw-in reveals, travelling dots, step lessons with fixed controls, a scrubbable timeline player, unit-chart motion, sliders), a render check that walks every step at phone and desktop widths and flags overlaps, moving controls and errors, and a recorder that turns the explainer into MP4 and GIF. Use it whenever you build any animated diagram, step-by-step lesson, interactive explainer or explainer GIF, together with the form skill chosen by explainer-director.
+description: Engine, styles (four built-in looks or a custom theme with the user's own brand colours and fonts) and quality checks for animated and interactive SVG explainers delivered as one self-contained HTML file (artifact page, claude.ai widget, or GIF/MP4). Provides a scaffold script, a small JavaScript engine (hand-drawn shapes, draw-in reveals, travelling dots, step lessons with fixed controls, a scrubbable timeline player, unit-chart motion, sliders), a render check that walks every step at phone and desktop widths and flags overlaps, moving controls and errors, and a recorder that turns the explainer into MP4 and GIF. Use it whenever you build any animated diagram, step-by-step lesson, interactive explainer or explainer GIF, together with the form skill chosen by explainer-director.
 ---
 
 # Explainer kit
@@ -15,6 +15,8 @@ Files (paths relative to this skill's folder):
 | File | Use |
 |---|---|
 | `scripts/scaffold.py` | Start a new explainer with the engine inlined. Kinds: `stepper`, `player`, `explorable`. |
+| `scripts/check_theme.py` | Check a custom theme's colours (contrast, colour-blind separation) before building with it. |
+| `references/themes.md` | Custom themes: your own colours and fonts in a JSON file. Read when the user names a brand, colours or fonts. |
 | `assets/kit.js` | The engine itself (window.K). Inlined by the scaffold; read it only to debug. |
 | `references/api.md` | Every function with its arguments and a short example. Read before writing the scene. |
 | `references/craft.md` | Motion, layout, typography and colour rules with the reasons behind them. |
@@ -28,6 +30,8 @@ Files (paths relative to this skill's folder):
    `python scripts/scaffold.py OUT.html --kind stepper --style chalkboard --title "Short name"`
    The file contains the engine and an example scene. Replace the example scene; keep the rest.
    For a claude.ai chat widget add `--fragment` (no html/head/body) and pass the file's text to the widget tool.
+   For the user's own colours and fonts, write a theme file and pass `--theme THEME.json` instead of
+   `--style` (see `references/themes.md`); the scaffold checks the theme first and refuses one that fails.
 3. **Write the scene.** Read `references/api.md`, then build each storyboard step. Put data in a
    `const DATA = {...}` near the top of the scene, copied from the source files, with a comment saying
    where each value comes from. Compute every number shown on screen from DATA so text and drawing agree.
@@ -84,10 +88,22 @@ If Playwright or ffmpeg is missing, say so and skip that step rather than claimi
 | `editorial` | White, crisp lines, serif headings, no wobble | Data stories next to an article or README |
 | `blueprint` | Navy grid, mono labels, crisp lines | Systems, pipelines, agent harnesses |
 
-The data fills of each style were checked for colour-blind separation against its background with a
-palette validator (adjacent pairs ΔE ≥ 8 under protan, deutan and tritan simulation). The pastel ink
-colours were not: they are for lines and text with labels, not for telling categories apart in a chart.
-Details and reasons are in `references/craft.md`.
+The data fills of each style were checked for colour-blind separation as neighbouring pairs in the order
+they are assigned (blue, amber, green, violet, red): each neighbour pair is at least 8 apart (OKLab x 100)
+under simulated protan, deutan and tritan vision. Pairs that are not neighbours can look alike:
+`python scripts/check_theme.py --builtin` lists them. In every style, blue and violet fills are hard to tell
+apart for red-green colour-blind readers, and amber and red (dark styles) or green and red (light styles)
+come close too. When a chart uses both colours of such a pair, label each mark or use a shape as well. The
+pastel ink colours were not checked as data colours: they are for lines and text with labels. Details and
+reasons are in `references/craft.md`.
+
+### Custom themes
+
+When the user gives brand colours or fonts, put them in a theme file instead of picking a built-in style.
+A theme overrides any slot of a base style and keeps the slot names, so every scene works with any
+theme. The format, an example and what each slot means are in `references/themes.md`. Run
+`python scripts/check_theme.py THEME.json` and fix every FAIL before building; tell the user about any WARN
+you leave, such as two brand colours that colour-blind readers cannot tell apart.
 
 ## Delivering
 

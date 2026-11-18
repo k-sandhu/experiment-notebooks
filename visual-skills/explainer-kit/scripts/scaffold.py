@@ -6,12 +6,16 @@ an optional Google Font, so the file works as a local page, a published artifact
 
 usage:
   python scaffold.py OUT.html --kind stepper|player|explorable [--style chalkboard|paper|editorial|blueprint]
-                     [--title "Short name"] [--fragment] [--viewbox 380x300]
+                     [--theme THEME.json [--force]] [--title "Short name"] [--fragment] [--viewbox 380x300]
+
+--theme uses your own colours and fonts instead of a built-in style (format in references/themes.md).
+The theme is checked first with check_theme.py; a failing theme is refused unless --force is given.
 
 --fragment writes a widget fragment (no <html>/<head>/<body>) for chat surfaces that render
 HTML snippets inline, such as claude.ai's visualize/show_widget tool.
 """
 import argparse
+import json
 import pathlib
 import sys
 
@@ -26,7 +30,7 @@ SCENES = {
 const {P, T, F, line, rect, ellipse, arrow, curve, poly, C} = K;
 // Coordinates are viewBox units. Keep text >= 11 units and inside the box.
 K.stepper({
-  root: '#x', style: '__STYLE__', viewBox: [__W__, __H__],
+  root: '#x', style: __STYLE__, viewBox: [__W__, __H__],
   title: 'One sentence that describes the whole lesson for screen readers.',
   legend: [  // one entry per colour meaning, used the same way in every step
     {key: 'you', label: 'You', color: 'amber'},
@@ -67,7 +71,7 @@ const {P, T, F, line, rect, ellipse, arrow, curve, poly, C, lerp, clamp} = K;
 const D = 12000;
 const LANES = ['Planner', 'Helper A', 'Helper B'];
 K.player({
-  root: '#x', style: '__STYLE__', viewBox: [__W__, __H__], duration: D,
+  root: '#x', style: __STYLE__, viewBox: [__W__, __H__], duration: D,
   title: 'One sentence that describes the whole replay for screen readers.',
   legend: [{key: 'busy', label: 'Working', color: 'fill.blue'}, {key: 'wait', label: 'Waiting', color: 'fill.amber'}],
   chapters: [
@@ -94,7 +98,7 @@ const {P, T, F, line, rect, ellipse, arrow, curve, poly, C, scale, fmt} = K;
 // Put the model in one pure function so the drawing can never disagree with the numbers.
 function model(p) { const cost = p.a * p.b; return {cost}; }
 K.stepper({
-  root: '#x', style: '__STYLE__', viewBox: [__W__, __H__],
+  root: '#x', style: __STYLE__, viewBox: [__W__, __H__],
   title: 'One sentence that describes the explorable for screen readers.',
   actHeight: 76,   // reserve room for the slider so the controls below never move
   legend: [{key: 'a', label: 'Option A', color: 'fill.blue'}, {key: 'b', label: 'Option B', color: 'fill.amber'}],
@@ -140,26 +144,54 @@ __SCENE__
 """
 
 
+def load_theme(path, force):
+    """Read and check a theme file; return (js_literal, page_bg, dark)."""
+    sys.path.insert(0, str(HERE))
+    import check_theme
+    theme = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    worst = check_theme.report(theme, pathlib.Path(path).name)
+    if worst == "FAIL" and not force:
+        sys.exit("The theme fails the check above. Fix the colours, or pass --force to build anyway and say so.")
+    _, st = check_theme.resolve(theme)
+    dark = bool(st["dark"])
+    page_bg = theme.get("pageBg") or shade(st["bg"], -0.06 if dark else -0.04)
+    return json.dumps(theme), page_bg, dark
+
+
+def shade(h, amt):
+    """Darken (amt < 0) or lighten a #RRGGBB colour, for the page behind the explainer card."""
+    v = [int(h[i:i + 2], 16) for i in (1, 3, 5)]
+    v = [round(c * (1 + amt)) if amt < 0 else round(c + (255 - c) * amt) for c in v]
+    return "#" + "".join(f"{max(0, min(255, c)):02X}" for c in v)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("out")
     ap.add_argument("--kind", choices=sorted(SCENES), default="stepper")
     ap.add_argument("--style", choices=sorted(PAGE_BG), default="chalkboard")
+    ap.add_argument("--theme", help="JSON file with your own colours and fonts; overrides --style")
+    ap.add_argument("--force", action="store_true", help="build with a theme that fails the check")
     ap.add_argument("--title", default="Explainer")
     ap.add_argument("--viewbox", default="380x300")
     ap.add_argument("--fragment", action="store_true")
     a = ap.parse_args()
     w, h = (int(v) for v in a.viewbox.lower().split("x"))
-    scene = SCENES[a.kind].replace("__STYLE__", a.style).replace("__W__", str(w)).replace("__H__", str(h)).strip()
+    if a.theme:
+        style, page_bg, dark = load_theme(a.theme, a.force)
+        label = f"theme={a.theme}"
+    else:
+        style, page_bg, dark, label = f"'{a.style}'", PAGE_BG[a.style], DARK[a.style], f"style={a.style}"
+    scene = SCENES[a.kind].replace("__STYLE__", style).replace("__W__", str(w)).replace("__H__", str(h)).strip()
     tpl = FRAGMENT if a.fragment else PAGE
-    html = (tpl.replace("__TITLE__", a.title).replace("__SCHEME__", "dark" if DARK[a.style] else "light")
-               .replace("__PAGEBG__", PAGE_BG[a.style]).replace("__KIT__", KIT.strip()).replace("__SCENE__", scene))
+    html = (tpl.replace("__TITLE__", a.title).replace("__SCHEME__", "dark" if dark else "light")
+               .replace("__PAGEBG__", page_bg).replace("__KIT__", KIT.strip()).replace("__SCENE__", scene))
     out = pathlib.Path(a.out)
     if out.exists():
         sys.exit(f"{out} exists; refusing to overwrite. Delete it first or choose another name.")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
-    print(f"wrote {out} ({len(html):,} bytes, kind={a.kind}, style={a.style}). Edit the SCENE block at the bottom.")
+    print(f"wrote {out} ({len(html):,} bytes, kind={a.kind}, {label}). Edit the SCENE block at the bottom.")
 
 
 if __name__ == "__main__":
