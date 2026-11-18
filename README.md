@@ -333,6 +333,7 @@ label. Each one gives the question, the fresh data to use, the models, the measu
 | Issue | Question |
 |---|---|
 | [#12](https://github.com/k-sandhu/experiment-notebooks/issues/12) | People have used the Decisions API since its October beta to route complaints, grade agent transcripts, pick an agent's next action from a screenshot and choose which LLM should answer a prompt, and their reports disagree on whether its probabilities can be trusted. On 14 tasks with fresh data, including those uses plus bird recordings, wildlife photos and restaurant inspection reports, which uses hold up, are its probabilities calibrated and stable when options are reordered or reworded, how does it compare with other decision models such as Jev where a task calls for it, and what does each cost? |
+| [#127](https://github.com/k-sandhu/experiment-notebooks/issues/127) | A dispatcher needs routes that the available vehicles can run before pickup sites close, and a new plan when the day changes. On 24 simulated Toronto days with real addresses, 24 vehicles and 240 pickups per day, can language models plan the morning routes and replan at 11 a.m. after a dock closes early and two pickups become urgent? Does seeing a street map help, and does giving a route optimizer an LLM's draft improve on the optimizer alone? |
 
 
 ## How models are called
