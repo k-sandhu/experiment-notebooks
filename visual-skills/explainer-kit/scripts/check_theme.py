@@ -36,16 +36,16 @@ NEUTRALS = ["bg", "panel", "ink", "mut", "faint", "line"]
 BUILTIN = {
     "chalkboard": {"dark": 1, "bg": "#1E2023", "panel": "#17191B", "ink": "#ECE7DA", "mut": "#9A9A93", "faint": "#55585E", "line": "#4A4D53",
                    "blue": "#9CC3E6", "green": "#A8DDC3", "amber": "#F2D98B", "violet": "#C3B5E8", "red": "#EBA494",
-                   "fill": {"blue": "#4A8FDB", "amber": "#BF8420", "green": "#2FA876", "violet": "#A070E8", "red": "#E8604F"}},
+                   "fill": {"blue": "#3F82AE", "amber": "#C38719", "green": "#28AD7E", "violet": "#A070E8", "red": "#D34144"}},
     "paper": {"dark": 0, "bg": "#FBF8F1", "panel": "#F3EEE3", "ink": "#22252A", "mut": "#5F6368", "faint": "#C9C3B6", "line": "#BDB6A8",
               "blue": "#2F6DB5", "green": "#1E7F55", "amber": "#C27C12", "violet": "#7B5EA7", "red": "#C8553D",
-              "fill": {"blue": "#2F6DB5", "amber": "#C27C12", "green": "#1E7F55", "violet": "#7B5EA7", "red": "#C8553D"}},
+              "fill": {"blue": "#0080D4", "amber": "#C27C12", "green": "#227D54", "violet": "#87559D", "red": "#CF2627"}},
     "editorial": {"dark": 0, "bg": "#FFFFFF", "panel": "#F5F5F2", "ink": "#1A1A1A", "mut": "#5C5C5C", "faint": "#D6D6D0", "line": "#C4C4BE",
                   "blue": "#2F6DB5", "green": "#1E7F55", "amber": "#C27C12", "violet": "#7B5EA7", "red": "#C8553D",
-                  "fill": {"blue": "#2F6DB5", "amber": "#C27C12", "green": "#1E7F55", "violet": "#7B5EA7", "red": "#C8553D"}},
+                  "fill": {"blue": "#0080D4", "amber": "#C27C12", "green": "#227D54", "violet": "#87559D", "red": "#CF2627"}},
     "blueprint": {"dark": 1, "bg": "#10243A", "panel": "#0C1C2E", "ink": "#E6EEF5", "mut": "#93A8BC", "faint": "#3A5672", "line": "#4A6A89",
                   "blue": "#8EC5F0", "green": "#9BE0C0", "amber": "#F5D58A", "violet": "#C9B8F2", "red": "#F2A08F",
-                  "fill": {"blue": "#4A8FDB", "amber": "#BF8420", "green": "#2FA876", "violet": "#A070E8", "red": "#E8604F"}},
+                  "fill": {"blue": "#3F82AE", "amber": "#C38719", "green": "#28AD7E", "violet": "#A070E8", "red": "#D34144"}},
 }
 
 CVD = {

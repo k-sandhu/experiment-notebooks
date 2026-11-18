@@ -88,14 +88,13 @@ If Playwright or ffmpeg is missing, say so and skip that step rather than claimi
 | `editorial` | White, crisp lines, serif headings, no wobble | Data stories next to an article or README |
 | `blueprint` | Navy grid, mono labels, crisp lines | Systems, pipelines, agent harnesses |
 
-The data fills of each style were checked for colour-blind separation as neighbouring pairs in the order
-they are assigned (blue, amber, green, violet, red): each neighbour pair is at least 8 apart (OKLab x 100)
-under simulated protan, deutan and tritan vision. Pairs that are not neighbours can look alike:
-`python scripts/check_theme.py --builtin` lists them. In every style, blue and violet fills are hard to tell
-apart for red-green colour-blind readers, and amber and red (dark styles) or green and red (light styles)
-come close too. When a chart uses both colours of such a pair, label each mark or use a shape as well. The
-pastel ink colours were not checked as data colours: they are for lines and text with labels. Details and
-reasons are in `references/craft.md`.
+In every style, each pair of the five data fills stays apart for readers with each common kind of colour
+blindness: at least 8 apart (OKLab x 100) under simulated protan, deutan and tritan vision and at least 15
+with normal vision, and each fill has contrast of at least 3 against its background
+(`python scripts/check_theme.py --builtin` prints the numbers). Earlier versions of the kit met this only
+for neighbouring fills; blue and violet looked alike to red-green colour-blind readers until the fills were
+re-tuned. Still label marks rather than rely on colour alone. The pastel ink colours were not checked as
+data colours: they are for lines and text with labels. Details and reasons are in `references/craft.md`.
 
 ### Custom themes
 

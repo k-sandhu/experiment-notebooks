@@ -56,10 +56,9 @@ flowchart LR
 Four styles: `chalkboard` (the original look), `paper`, `editorial` and `blueprint`, or a custom theme with
 your own colours and fonts in a small JSON file (`scaffold.py --theme brand.json`; format in
 `explainer-kit/references/themes.md`). `check_theme.py` checks a theme before it is used: text contrast,
-mark contrast, and whether the data colours stay apart for colour-blind readers. The data colours of the
-built-in styles pass that check as neighbouring pairs in the order they are assigned. Some pairs that are
-not neighbours look alike to colour-blind readers (blue and violet in every style), so a chart that uses
-both labels them. The original chalkboard pastels failed the check as data colours, so the kit keeps them
+mark contrast, and whether the data colours stay apart for colour-blind readers. In all four built-in styles,
+every pair of the five data colours passes that check. They were re-tuned for this: before, blue and violet
+looked alike to red-green colour-blind readers. The original chalkboard pastels failed the check as data colours, so the kit keeps them
 for lines and text and uses stronger fills for data.
 
 ## Installing

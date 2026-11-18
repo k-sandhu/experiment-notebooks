@@ -16,23 +16,24 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(
 function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
 /* ---------- styles: one object per look. ink colours draw lines and text; fill colours encode data
-   (fills were checked for colour-blind separation against their background). */
+   (every pair of fills stays apart under simulated protan, deutan and tritan vision, and each has contrast
+   of at least 3 against its background; scripts/check_theme.py --builtin shows the numbers). */
 const STYLES = {
   chalkboard: { dark: 1, bg: '#1E2023', panel: '#17191B', ink: '#ECE7DA', mut: '#9A9A93', faint: '#55585E', line: '#4A4D53',
     blue: '#9CC3E6', green: '#A8DDC3', amber: '#F2D98B', violet: '#C3B5E8', red: '#EBA494',
-    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    fill: { blue: '#3F82AE', amber: '#C38719', green: '#28AD7E', violet: '#A070E8', red: '#D34144' },
     rough: 1, texture: 1, hand: "'Caveat', cursive", handSize: 1.12, font: 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap' },
   paper: { dark: 0, bg: '#FBF8F1', panel: '#F3EEE3', ink: '#22252A', mut: '#5F6368', faint: '#C9C3B6', line: '#BDB6A8',
     blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
-    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    fill: { blue: '#0080D4', amber: '#C27C12', green: '#227D54', violet: '#87559D', red: '#CF2627' },
     rough: .7, texture: 0, hand: "'Kalam', cursive", handSize: 1, font: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap' },
   editorial: { dark: 0, bg: '#FFFFFF', panel: '#F5F5F2', ink: '#1A1A1A', mut: '#5C5C5C', faint: '#D6D6D0', line: '#C4C4BE',
     blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
-    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    fill: { blue: '#0080D4', amber: '#C27C12', green: '#227D54', violet: '#87559D', red: '#CF2627' },
     rough: 0, texture: 0, hand: "'Source Serif 4', Georgia, serif", handSize: .9, font: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap' },
   blueprint: { dark: 1, bg: '#10243A', panel: '#0C1C2E', ink: '#E6EEF5', mut: '#93A8BC', faint: '#3A5672', line: '#4A6A89',
     blue: '#8EC5F0', green: '#9BE0C0', amber: '#F5D58A', violet: '#C9B8F2', red: '#F2A08F',
-    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    fill: { blue: '#3F82AE', amber: '#C38719', green: '#28AD7E', violet: '#A070E8', red: '#D34144' },
     rough: 0, texture: 0, grid: 1, hand: "'IBM Plex Mono', ui-monospace, monospace", handSize: .78, font: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap' },
 };
 let ST = STYLES.chalkboard, ROUGH = 1;
