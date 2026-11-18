@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tax harness replay</title>
+<style>:root{color-scheme:dark}html,body{margin:0;background:#0A1826}body{padding:16px;min-height:100vh;box-sizing:border-box}</style>
+</head><body>
+<div id="x"></div>
+<script>
+/* explainer-kit v1. A small engine for animated, stepwise SVG explainers. No dependencies.
+   Exposes window.K. Read explainer-kit/SKILL.md for the API and the rules it encodes.
+   Every animation is tied to a "generation": moving to another step cancels all timers,
+   loops and tweens of the old step, so steps can never bleed into each other. */
+(function () {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const QS = new URLSearchParams(location.search);
+const REC = QS.has('record');
+const f = n => (+n).toFixed(1);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = { inOut: k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, out: k => 1 - Math.pow(1 - k, 3), linear: k => k };
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- styles: one object per look. ink colours draw lines and text; fill colours encode data
+   (fills were checked for colour-blind separation against their background). */
+const STYLES = {
+  chalkboard: { dark: 1, bg: '#1E2023', panel: '#17191B', ink: '#ECE7DA', mut: '#9A9A93', faint: '#55585E', line: '#4A4D53',
+    blue: '#9CC3E6', green: '#A8DDC3', amber: '#F2D98B', violet: '#C3B5E8', red: '#EBA494',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 1, texture: 1, hand: "'Caveat', cursive", handSize: 1.12, font: 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap' },
+  paper: { dark: 0, bg: '#FBF8F1', panel: '#F3EEE3', ink: '#22252A', mut: '#5F6368', faint: '#C9C3B6', line: '#BDB6A8',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: .7, texture: 0, hand: "'Kalam', cursive", handSize: 1, font: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap' },
+  editorial: { dark: 0, bg: '#FFFFFF', panel: '#F5F5F2', ink: '#1A1A1A', mut: '#5C5C5C', faint: '#D6D6D0', line: '#C4C4BE',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: 0, texture: 0, hand: "'Source Serif 4', Georgia, serif", handSize: .9, font: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap' },
+  blueprint: { dark: 1, bg: '#10243A', panel: '#0C1C2E', ink: '#E6EEF5', mut: '#93A8BC', faint: '#3A5672', line: '#4A6A89',
+    blue: '#8EC5F0', green: '#9BE0C0', amber: '#F5D58A', violet: '#C9B8F2', red: '#F2A08F',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 0, texture: 0, grid: 1, hand: "'IBM Plex Mono', ui-monospace, monospace", handSize: .78, font: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap' },
+};
+let ST = STYLES.chalkboard, ROUGH = 1;
+const C = {};                                   // active colours, e.g. K.C.ink, K.C.fill.blue
+function col(c) { if (!c) return C.ink; if (c[0] === '#' || c.startsWith('rgb') || c === 'none' || c === 'transparent') return c; if (c.startsWith('fill.')) return C.fill[c.slice(5)] || c; return C[c] || c; }
+function useStyle(name, root) {
+  ST = STYLES[name] || STYLES.chalkboard; ROUGH = ST.rough;
+  Object.keys(C).forEach(k => delete C[k]); Object.assign(C, ST, { fill: { ...ST.fill } });
+  injectCSS();
+  if (ST.font && !document.querySelector(`link[href="${ST.font}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ST.font; document.head.appendChild(l); }
+  if (root) {
+    const v = { bg: ST.bg, panel: ST.panel, ink: ST.ink, mut: ST.mut, faint: ST.faint, line: ST.line, blue: ST.blue, green: ST.green, amber: ST.amber, violet: ST.violet, red: ST.red, hand: ST.hand };
+    for (const k in v) root.style.setProperty('--k-' + k, v[k]);
+    root.classList.add('kx', 'kx-' + (name in STYLES ? name : 'chalkboard'));
+    if (ST.texture) { const r = rng(9); let s = ''; for (let i = 0; i < 140; i++) s += `<circle cx='${(r() * 240).toFixed(1)}' cy='${(r() * 240).toFixed(1)}' r='${(.4 + r() * .8).toFixed(2)}' fill='%23ffffff' fill-opacity='${(.02 + r() * .045).toFixed(3)}'/>`; root.style.backgroundImage = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>${s}</svg>")`; }
+    if (ST.grid) root.style.backgroundImage = `linear-gradient(${ST.faint}55 1px,transparent 1px),linear-gradient(90deg,${ST.faint}55 1px,transparent 1px)`, root.style.backgroundSize = '20px 20px';
+  }
+  return ST;
+}
+function fontsReady(ms = 1500) { return Promise.race([document.fonts ? document.fonts.ready.then(() => document.fonts.load(`20px ${ST.hand.split(',')[0]}`)) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
+
+/* ---------- hand-drawn geometry. Each shape takes a seed so its wobble is identical on every frame. */
+const J = (r, a) => (r() - .5) * 2 * a * ROUGH;
+function line(x1, y1, x2, y2, seed = 1, bow = 1.6) { const r = rng(seed); return `M${f(x1 + J(r, .5))} ${f(y1 + J(r, .5))} Q${f((x1 + x2) / 2 + J(r, bow))} ${f((y1 + y2) / 2 + J(r, bow))} ${f(x2)} ${f(y2)}`; }
+function rect(x, y, w, h, seed = 1) {
+  if (!ROUGH) return `M${f(x)} ${f(y)}H${f(x + w)}V${f(y + h)}H${f(x)}Z`;
+  const r = rng(seed), p = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(q => [q[0] + J(r, 1.3), q[1] + J(r, 1.3)]);
+  let d = `M${f(p[0][0])} ${f(p[0][1])}`;
+  for (let i = 0; i < 4; i++) { const A = p[i], B = p[(i + 1) % 4]; d += ` Q${f((A[0] + B[0]) / 2 + J(r, 1.5))} ${f((A[1] + B[1]) / 2 + J(r, 1.5))} ${f(B[0])} ${f(B[1])}`; }
+  return d + ` L${f(p[0][0] + (p[1][0] - p[0][0]) * .08)} ${f(p[0][1] + J(r, 1))}`;
+}
+function ellipse(cx, cy, rx, ry = rx, seed = 1) { const r = rng(seed); return `M${f(cx - rx)} ${f(cy)} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx + rx)} ${f(cy + J(r, .6))} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx - rx + 1.5 * ROUGH)} ${f(cy + .6 * ROUGH)}`; }
+function arrow(fx, fy, x, y, seed = 1, L = 8) { const a = Math.atan2(y - fy, x - fx), r = rng(seed), k = .5 + J(r, .06); return `M${f(x - L * Math.cos(a - k))} ${f(y - L * Math.sin(a - k))} L${f(x)} ${f(y)} L${f(x - L * Math.cos(a + k))} ${f(y - L * Math.sin(a + k))}`; }
+function poly(pts, seed = 1) { const r = rng(seed); return 'M' + pts.map((p, i) => `${f(p[0] + (i ? J(r, .6) : 0))} ${f(p[1] + (i ? J(r, .6) : 0))}`).join(' L'); }
+function curve(x1, y1, x2, y2, bend = .3) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1; return `M${f(x1)} ${f(y1)} Q${f(mx - dy * bend)} ${f(my + dx * bend)} ${f(x2)} ${f(y2)}`; }
+
+/* ---------- markup builders. Elements carry data-k (draw|fade), data-t (delay ms) and data-d (duration ms);
+   the engine reveals them in that order when a step opens, and shows them at once with reduced motion. */
+function P(d, c, t = 0, du = 600, w = 1.5, extra = '') { return `<path d="${d}" fill="none" stroke="${col(c)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" data-k="draw" data-t="${t}" data-d="${du}" ${extra}/>`; }
+function T(x, y, s, o = {}) {
+  const fam = o.h ? 'var(--k-hand)' : o.m ? 'var(--font-mono, ui-monospace, Menlo, monospace)' : 'var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)';
+  const z = (o.z || 12) * (o.h ? ST.handSize : 1);
+  return `<text${o.id ? ` id="${o.id}"` : ''} x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${f(z)}"${o.w ? ` font-weight="${o.w}"` : ''} fill="${col(o.c)}" style="font-family:${fam};font-variant-numeric:tabular-nums" data-k="fade" data-t="${o.t || 0}" data-d="${o.d || 450}"${o.extra ? ' ' + o.extra : ''}>${o.raw ? s : esc(s)}</text>`;
+}
+function F(shape, c, t = 0, o = {}) { return `<path d="${shape}" fill="${col(c)}" fill-opacity="${o.op == null ? .85 : o.op}" stroke="none" data-k="fade" data-t="${t}" data-d="${o.d || 450}"${o.id ? ` id="${o.id}"` : ''}/>`; }
+function reveal(svg) {
+  const els = [...svg.querySelectorAll('[data-k]')];
+  if (RM) { els.forEach(e => { e.style.opacity = 1; e.style.strokeDashoffset = 0; }); return 0; }
+  let end = 0;
+  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (e.dataset.k === 'draw') { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
+  svg.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (e.dataset.k === 'draw') { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
+  return end;
+}
+function finish(svg) { svg.querySelectorAll('[data-k]').forEach(e => { e.style.transition = 'none'; e.style.strokeDashoffset = 0; e.style.opacity = 1; }); }
+
+/* ---------- small DOM helpers */
+function mk(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const ICON = {
+  left: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  right: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
+  replay: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+let cssDone = false;
+function injectCSS() {
+  if (cssDone) return; cssDone = true;
+  const s = document.createElement('style');
+  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
+.kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
+.kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
+.kx-count{font-size:11px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kx-cap{font-size:13.5px;line-height:1.55;margin:6px 8px 8px;color:var(--k-ink)}
+.kx-act{display:flex;justify-content:center;align-items:center;gap:8px;min-height:44px;flex-wrap:wrap;margin:0 4px 4px}
+.kx-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--k-mut);margin:6px 8px 8px}.kx-legend>span{transition:opacity .4s}
+.kx-sw{display:inline-block;width:12px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.kx-nav{display:flex;align-items:center;gap:8px}.kx button.kx-next{min-width:112px}.kx-act .kx-ctl{flex:1 1 100%}
+@media (max-width:480px){.kx{padding:12px 8px 10px}.kx button.kx-next{min-width:96px;padding:0 8px}.kx button.kx-dot{padding:10px 3px}.kx-nav{gap:6px}}
+.kx button{background:transparent;border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:0 12px;font:inherit;font-size:13px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.kx button:hover{border-color:var(--k-mut)}.kx button:focus-visible,.kx [role=button]:focus-visible{outline:2px solid var(--k-violet);outline-offset:2px}
+.kx button.pri{border-color:var(--k-violet);color:var(--k-violet)}.kx button[aria-pressed=true]{background:color-mix(in srgb,var(--k-violet) 18%,transparent)}
+.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
+.kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
+.kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
+.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:11px;line-height:17px;height:92px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
+.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1}
+.kx-time{font-size:11px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
+.kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
+.kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
+.kx-ripple{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid var(--k-ink);pointer-events:none;animation:kxrp .6s ease-out forwards}@keyframes kxrp{from{transform:scale(.3);opacity:.9}to{transform:scale(1.4);opacity:0}}
+.kx-recording .kx-nav button:not(.kx-dot),.kx-recording .kx-scrub button{visibility:hidden}
+.kx .sr-only,.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.kx *{transition:none!important;animation:none!important}}`;
+  document.head.appendChild(s);
+}
+
+/* ---------- step context: everything a step needs, bound to its generation */
+function makeCtx(eng, svg, i) {
+  const g = eng.gen, alive = () => g === eng.gen, dyn = svg.querySelector('.kx-dyn');
+  const q = s => svg.querySelector(s);
+  const pick = e => typeof e === 'string' ? q(e) : e;
+  const s = {
+    i, svg, dyn, q, alive, C, RM, root: eng.root, act: eng.act,
+    at(ms, fn) { const id = setTimeout(() => { if (alive()) fn(); }, ms); eng.timers.push(id); return id; },
+    wait(ms) { return new Promise(r => s.at(ms, () => { if (!(eng.inDemo && eng.touched)) r(); })); },   // an idle demo stops for good once the reader acts
+    loop(delay, fn) { s.at(delay, () => { let last = performance.now(); const t0 = last, st = {}; const k = n => { if (!alive()) return; st.dt = Math.min(.05, Math.max(0, (n - last) / 1000)); last = n; st.e = n - t0; if (fn(st) !== false) requestAnimationFrame(k); }; requestAnimationFrame(k); }); },
+    tween(du, fn, o = {}) { const ez = ease[o.ease || 'inOut']; return new Promise(res => s.at(o.delay || 0, () => { if (RM || du <= 0) { fn(1); res(); return; } const t0 = performance.now(); const k = n => { if (!alive()) return; const p = clamp((n - t0) / du); fn(ez(p)); if (p < 1) requestAnimationFrame(k); else res(); }; requestAnimationFrame(k); })); },
+    el(tag, attrs, parent) { return mk(tag, attrs, parent || dyn); },
+    drawIn(e, du = 500, delay = 0) { e = pick(e); if (!e || RM) return; const L = e.getTotalLength() + 1; e.style.transition = 'none'; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; e.getBoundingClientRect(); e.style.transition = `stroke-dashoffset ${du}ms cubic-bezier(.45,0,.55,1) ${delay}ms`; e.style.strokeDashoffset = 0; },
+    fadeIn(e, du = 400, delay = 0) { e = pick(e); if (!e) return; e.style.transition = 'none'; e.style.opacity = 0; e.getBoundingClientRect(); e.style.transition = `opacity ${du}ms ease ${delay}ms`; e.style.opacity = 1; },
+    fadeOut(e, du = 400, remove = true) { e = pick(e); if (!e) return; e.style.transition = `opacity ${du}ms`; e.style.opacity = 0; if (remove) setTimeout(() => e.remove(), du + 50); },
+    travel(path, du = 600, c = 'ink', o = {}) {   // a dot that moves along a path element or a list of points
+      let p = pick(path), temp = false;
+      if (Array.isArray(path)) { p = mk('path', { d: 'M' + path.map(q => q.join(' ')).join(' L'), fill: 'none', stroke: col(c), 'stroke-width': 1.6, 'stroke-opacity': o.trail === false ? 0 : .5, 'stroke-linecap': 'round' }, dyn); temp = true; if (o.trail !== false) s.drawIn(p, du); }
+      const d = mk('circle', { r: o.r || 3.6, fill: col(c) }, dyn), L = p.getTotalLength();
+      const done = () => { s.fadeOut(d, 300); if (temp && !o.keep) setTimeout(() => s.fadeOut(p, 450), 200); };
+      if (RM) { const e = p.getPointAtLength(L); d.setAttribute('cx', e.x); d.setAttribute('cy', e.y); done(); return Promise.resolve(); }
+      return s.tween(du, k => { const e = p.getPointAtLength(k * L); d.setAttribute('cx', f(e.x)); d.setAttribute('cy', f(e.y)); }, { delay: o.delay || 0 }).then(done);
+    },
+    ring(x, y, w, h, c = 'ink', o = {}) { const p = mk('path', { d: rect(x, y, w, h, Math.round(x * 7 + y)), fill: 'none', stroke: col(c), 'stroke-width': o.w || 2.4, 'stroke-linecap': 'round', class: 'pulse' }, dyn); p.style.opacity = 0; setTimeout(() => p.remove(), 1400); return p; },
+    write(x, y, text, o = {}) { const w = document.createElementNS(NS, 'g'); w.innerHTML = T(x, y, text, o); const t = w.firstChild; dyn.appendChild(t); t.removeAttribute('data-k'); s.fadeIn(t, o.d || 450, o.t || 0); return t; },
+    float(x, y, text, c = 'ink', z = 16) { const t = s.write(x, y, text, { h: 1, z, c }); if (!RM) { t.style.transition = 'transform 1.1s ease-out, opacity 1.1s ease-out'; requestAnimationFrame(() => requestAnimationFrame(() => { t.style.transform = 'translateY(-18px)'; t.style.opacity = 0; })); } setTimeout(() => t.remove(), 1200); },
+    swap(e, text, c) { e = pick(e); if (!e) return; e.style.transition = 'opacity .15s'; e.style.opacity = 0; s.at(160, () => { e.textContent = text; if (c) e.setAttribute('fill', col(c)); e.style.opacity = 1; }); },
+    count(e, to, o = {}) { e = pick(e); if (!e) return; const from = o.from != null ? o.from : (+e.dataset.v || 0), fmt = o.fmt || (v => Math.round(v).toLocaleString()); e.dataset.v = to; return s.tween(o.du || 900, k => { e.textContent = (o.pre || '') + fmt(lerp(from, to, k)) + (o.post || ''); }, { delay: o.delay || 0 }); },
+    bar(e, frac, du = 600, axis = 'x') { e = pick(e); if (!e) return; e.style.transformBox = 'fill-box'; e.style.transformOrigin = axis === 'x' ? '0 50%' : '50% 100%'; e.style.transition = RM ? 'none' : `transform ${du}ms cubic-bezier(.45,0,.55,1)`; e.style.transform = axis === 'x' ? `scaleX(${clamp(frac).toFixed(4)})` : `scaleY(${clamp(frac).toFixed(4)})`; },
+    btn(icon, label, fn, o = {}) { const b = document.createElement('button'); if (o.primary) b.className = 'pri'; b.innerHTML = (ICON[icon] || '') + esc(label); b.type = 'button'; b.onclick = e => { if (e.isTrusted) s.touched(); fn(b); }; eng.act.appendChild(b); return b; },
+    on(e, fn, label) { e = pick(e); e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0'); if (label) e.setAttribute('aria-label', label); e.style.cursor = 'pointer'; const h = ev => { if (ev.isTrusted) s.touched(); fn(ev); }; e.addEventListener('click', h); e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); h(ev); } }); return e; },
+    point(ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 }; },
+    drag(e, o) { e = pick(e); e.style.touchAction = 'none'; e.style.cursor = 'grab'; let on = false; e.addEventListener('pointerdown', ev => { on = true; e.setPointerCapture(ev.pointerId); s.touched(); o.move && o.move(s.point(ev), ev); }); e.addEventListener('pointermove', ev => { if (on && alive()) o.move && o.move(s.point(ev), ev); }); const up = ev => { if (!on) return; on = false; o.end && o.end(s.point(ev), ev); }; e.addEventListener('pointerup', up); e.addEventListener('pointercancel', up); return e; },
+    cap(text) { eng.cap.textContent = text; },
+    touched() { eng.touched = true; if (eng.stopAuto && !REC) eng.stopAuto(); },   // a reader who acts takes over from autoplay
+    tap(e) { e = pick(e); if (!e || !alive() || (eng.inDemo && eng.touched)) return; const r = e.getBoundingClientRect(), R = eng.root.getBoundingClientRect(), d = document.createElement('div'); d.className = 'kx-ripple'; d.style.left = (r.left + r.width / 2 - R.left) + 'px'; d.style.top = (r.top + r.height / 2 - R.top) + 'px'; eng.root.appendChild(d); setTimeout(() => d.remove(), 650); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); },
+    /* unit charts: one circle per item, keyed, so items keep their identity when they move */
+    units(items, o = {}) { const gU = mk('g', { class: 'kx-units' }, o.parent || dyn); s._units = items.map((it, j) => { const c = mk('circle', { cx: o.x0 || 0, cy: o.y0 || 0, r: o.r || 4, fill: col(o.fill || 'fill.blue') }, gU); c.style.transition = 'fill .5s, opacity .5s'; return { it, c, x: o.x0 || 0, y: o.y0 || 0, r: o.r || 4, j }; }); return s._units; },
+    arrange(layout, o = {}) { const U = s._units || [], du = o.du || 900, stg = o.stagger == null ? 4 : o.stagger, ez = ease[o.ease || 'inOut'];
+      const tg = U.map((u, j) => { const L = layout(u.it, j) || {}; if (L.fill) u.c.style.fill = col(L.fill); if (L.opacity != null) u.c.style.opacity = L.opacity; return { x0: u.x, y0: u.y, r0: u.r, x: L.x == null ? u.x : L.x, y: L.y == null ? u.y : L.y, r: L.r == null ? u.r : L.r, dl: (L.order == null ? j : L.order) * stg }; });
+      const tot = du + Math.max(0, ...tg.map(t => t.dl));
+      return s.tween(tot, k => { const ms = k * tot; U.forEach((u, j) => { const t = tg[j], p = ez(clamp((ms - t.dl) / du)); u.x = lerp(t.x0, t.x, p); u.y = lerp(t.y0, t.y, p); u.r = lerp(t.r0, t.r, p); u.c.setAttribute('cx', f(u.x)); u.c.setAttribute('cy', f(u.y)); u.c.setAttribute('r', f(u.r)); }); }, { ease: 'linear', delay: o.delay || 0 }); },
+  };
+  return s;
+}
+
+/* ---------- stepper: a lesson that moves one idea at a time, with fixed controls */
+const ALL = (window.EXPLAINERS = window.EXPLAINERS || []);
+function frame(root, o, kind) {
+  root = typeof root === 'string' ? document.querySelector(root) : root;
+  useStyle(o.style || 'chalkboard', root);
+  const [W, H] = o.viewBox || [380, 300];
+  const legend = (o.legend || []).map(l => `<span data-l="${l.key}"><span class="kx-sw" style="background:${col(l.color)}"></span>${esc(l.label)}</span>`).join('');
+  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div>
+<svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
+${kind === 'player' ? '<div class="kx-scrub"><button class="kx-pp" type="button"></button><input type="range" min="0" step="1" aria-label="Scrub the timeline"><span class="kx-time"></span></div>' : '<div class="kx-act"></div>'}
+${legend ? `<div class="kx-legend">${legend}</div>` : ''}<div class="kx-nav"><button class="kx-back" type="button" aria-label="Previous">${ICON.left}</button><div class="kx-dots"></div>${kind === 'stepper' ? `<button class="kx-replay" type="button" aria-label="Replay this step" title="Replay this step">${ICON.replay}</button>` : ''}<button class="kx-next" type="button"></button></div>`;
+  if (REC) root.classList.add('kx-recording');
+  const $ = s => root.querySelector(s);
+  return { root, W, H, svg: $('.kx-stage'), cap: $('.kx-cap'), act: $('.kx-act'), title: $('.kx-title'), count: $('.kx-count'), dots: $('.kx-dots'), next: $('.kx-next'), back: $('.kx-back'), replay: $('.kx-replay'), log: $('.kx-log'), $ };
+}
+function fixCaptionHeight(fr, texts) {   // reserve the tallest caption so nothing below it ever moves
+  const m = fr.cap.cloneNode(); m.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;min-height:0;width:${fr.cap.clientWidth}px`; m.removeAttribute('aria-live'); fr.cap.parentNode.appendChild(m);
+  let h = 0; texts.forEach(t => { m.textContent = t; h = Math.max(h, m.offsetHeight); }); m.remove(); fr.cap.style.minHeight = h + 'px';
+}
+function stepper(o) {
+  const fr = frame(o.root, o, 'stepper'), S = o.steps;
+  if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
+  const eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
+  let cur = 0, first = true, auto = null, ends = [];
+  eng.stopAuto = () => { auto = null; };
+  S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
+  const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
+  fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
+  function build(i) {
+    cur = i; eng.touched = false; const st = S[i], s = {};
+    fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
+    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = `Step ${i + 1} of ${S.length}`;
+    fr.svg.setAttribute('aria-label', (st.title || '') + '. ' + (st.alt || st.cap || ''));
+    [...fr.dots.children].forEach((d, j) => j === i ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current'));
+    fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !st.keys || st.keys.includes(e.dataset.l) ? 1 : .3);
+    fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : 'Next' + ICON.right;
+    fr.cap.style.transition = 'none'; fr.cap.style.opacity = 0; fr.cap.textContent = st.cap || '';
+    const revealEnd = reveal(fr.svg);
+    const ctx = makeCtx(eng, fr.svg, i);
+    ctx.at(st.capDelay == null ? 300 : st.capDelay, () => { fr.cap.style.transition = 'opacity .6s'; fr.cap.style.opacity = 1; });
+    if (st.start) st.start(ctx);
+    eng.inDemo = false;
+    if (st.demo && st.idleDemo && !REC) ctx.at(st.idleDemo, () => { if (!eng.touched) { eng.inDemo = true; Promise.resolve(st.demo(ctx)).finally(() => { eng.inDemo = false; }); } });
+    ends[i] = st.duration || revealEnd + 600;
+    eng.ctx = ctx;
+  }
+  function go(i, keepAuto) {
+    if (!keepAuto) auto = null;
+    eng.gen++; eng.timers.forEach(clearTimeout); eng.timers = [];
+    i = Math.max(0, Math.min(S.length - 1, i));
+    const g = eng.gen;
+    if (first || RM) { first = false; build(i); fr.svg.style.opacity = 1; }
+    else { fr.svg.style.opacity = 0; setTimeout(() => { if (g === eng.gen) { build(i); fr.svg.style.opacity = 1; } }, 230); }
+  }
+  fr.back.onclick = () => go(cur - 1);
+  fr.next.onclick = () => go(cur < S.length - 1 ? cur + 1 : 0);
+  fr.replay.onclick = () => go(cur);
+  document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('[role=button],input,button,textarea,select')) return; if (ALL.length > 1 && !fr.root.contains(document.activeElement)) return; if (e.key === 'ArrowRight') go(cur + 1); if (e.key === 'ArrowLeft') go(cur - 1); });
+  const api = {
+    kind: 'stepper', root: fr.root, get count() { return S.length; }, get current() { return cur; },
+    go: i => go(i), duration: i => S[i].duration || ends[i] || 4000, hasDemo: i => !!S[i].demo,
+    demo: i => { const c = eng.ctx; return c && c.i === i && S[i].demo ? Promise.resolve(S[i].demo(c)) : Promise.resolve(); },
+    demoDuration: i => S[i].demoDuration || 0,
+    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(hold); } },
+  };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { go(+(QS.get('step') || 1) - 1); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; });
+    else if (o.autoplay && !RM && !QS.has('step') && !QS.has('static')) { const run = () => api.autoplay().then(() => { if (o.autoplay === 'loop' && auto) run(); }); run(); } });
+  return api;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
+   so pause, scrub, replay and recording all work for free. Chapters label stretches of the timeline. */
+function player(o) {
+  const fr = frame(o.root, o, 'player'), eng = { gen: 0, timers: [], root: fr.root, act: null, cap: fr.cap, touched: false };
+  const CH = o.chapters || [{ at: 0, title: o.title || '', cap: '' }], D = o.duration;
+  const range = fr.$('.kx-scrub input'), pp = fr.$('.kx-pp'), tm = fr.$('.kx-time');
+  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1;
+  fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
+  const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
+  CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
+  fixCaptionHeight(fr, CH.map(c => c.cap || ''));
+  const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
+  function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !c.keys || c.keys.includes(e.dataset.l) ? 1 : .3); }
+  function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
+  function draw() { range.value = t; tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
+  function seek(x) { t = clamp(x, 0, D); draw(); }
+  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n; t += dt * speed; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
+  function play() { if (t >= D) t = 0; if (RM) { seek(end(chapterAt(t)) - 1); return; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }  // reduced motion: jump to the end state of the chapter instead of animating
+  function pause() { playing = false; updPP(); }
+  function updPP() { pp.innerHTML = playing ? ICON.pause + 'Pause' : t >= D ? ICON.replay + 'Replay' : ICON.play + 'Play'; pp.setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  pp.onclick = () => playing ? pause() : play();
+  range.oninput = () => { pause(); seek(+range.value); };
+  fr.back.onclick = () => { seek(CH[Math.max(0, chapterAt(t) - (t - CH[chapterAt(t)].at < 600 ? 1 : 0))].at); };
+  fr.next.innerHTML = 'Next' + ICON.right; fr.next.onclick = () => { const k = chapterAt(t); seek(k < CH.length - 1 ? CH[k + 1].at : 0); play(); };
+  const end = i => i < CH.length - 1 ? CH[i + 1].at : D;
+  const api = { kind: 'player', root: fr.root, get count() { return CH.length; }, get current() { return chapterAt(t); }, go: i => { seek(CH[i].at); play(); }, duration: i => (end(i) - CH[i].at) / speed, hasDemo: () => false, demo: () => Promise.resolve(), seek, play, pause, get time() { return t; },
+    async autoplay() { seek(0); play(); while (t < D) await sleep(200); await sleep(o.hold || 2000); } };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if (o.autoplay !== false && !QS.has('static')) play(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  return api;
+}
+
+/* ---------- controls for explorables */
+let uid = 0;
+function slider(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent; const id = 'kx' + (++uid);
+  const w = document.createElement('div'); w.className = 'kx-ctl';
+  w.innerHTML = `<label for="${id}">${esc(o.label)}</label><output for="${id}"></output><input id="${id}" type="range" min="${o.min}" max="${o.max}" step="${o.step || 'any'}" value="${o.value}">`;
+  parent.appendChild(w); const inp = w.querySelector('input'), out = w.querySelector('output'), fmt = o.fmt || (v => v);
+  const upd = () => { out.textContent = fmt(+inp.value); o.oninput && o.oninput(+inp.value); };
+  inp.addEventListener('input', upd); upd();
+  return { el: w, input: inp, get value() { return +inp.value; }, set(v) { inp.value = v; upd(); } };
+}
+function toggle(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent;
+  const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', o.value ? 'true' : 'false'); b.innerHTML = esc(o.label); parent.appendChild(b);
+  b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', v); o.onchange && o.onchange(v); };
+  return b;
+}
+
+/* ---------- layout and number helpers */
+const grid = (j, o) => ({ x: (o.x0 || 0) + (j % o.cols) * (o.gap || 10), y: (o.y0 || 0) + Math.floor(j / o.cols) * (o.gapY || o.gap || 10) });
+function scale(d0, d1, r0, r1) { const s = v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0); s.invert = p => d0 + (p - r0) / (r1 - r0 || 1) * (d1 - d0); return s; }
+const fmt = {
+  int: v => Math.round(v).toLocaleString('en-US'),
+  pct: (v, d = 0) => (v * 100).toFixed(d) + '%',
+  usd: (v, d = 2) => (v < 0 ? '−' : '') + '$' + Math.abs(v).toFixed(d),
+  sec: v => v < 60 ? v.toFixed(0) + ' s' : Math.floor(v / 60) + ' min ' + Math.round(v % 60) + ' s',
+};
+/* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
+function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
+
+const K = { version: '1.0', NS, RM, C, STYLES, useStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
+window.K = K;
+})();
+</script>
+<script>
+/* ===== SCENE: everything below is the explainer itself. Edit freely. ===== */
+const {P, T, F, line, rect, arrow, poly, C} = K;
+
+/* Every value comes from notebooks/12-tax-research-harnesses (README.md and data/). See notes.md. */
+const DATA = {
+  // data/cases.json, test-01 ledger (cents / 100)
+  books: [['Receipts', 8100], ['Refunds', -200], ['Goods', -1000], ['Rent', -800], ['Supplies', -200], ['Wages', -1500]],
+  key: {profit: 4400, A: 2640, B: 1760},                       // data/gold.json test-01
+  gemma: {profit: 3400, A: 2040, B: 1360, right: 7},          // data/runs.json, all 8 Gemma test-01 runs = 340000
+  qwen: {profit: 4400, A: 2640, B: 1760, right: 9, think: 1930}, // data/runs.json + cache_requests.jsonl (reasoning_tokens)
+  // per setup for test-01: calls (scored.csv), Gemma and Qwen outcome (runs.json / scored.csv)
+  rows: [
+    {name: 'Direct call', calls: '1', q: 'ok'},
+    {name: '+ checklist', calls: '1', q: 'ok'},
+    {name: 'Self-review', calls: '2', q: 'ok'},
+    {name: 'Checker', calls: '2', q: 'ok'},
+    {name: 'Agent framework', calls: '2', q: 'http'},
+  ],
+  // scored.csv, companies test-01..test-12 in order. C correct, W wrong, E empty reply, X HTTP 400 (not run)
+  board: {
+    gemma: [['Direct call', 'WWWWWWWWWWWW', 'WWWWWWWWWWWW'], ['Self-review', 'WWWWWWWWWWWW', 'WWWWWWWWWWWW'],
+            ['Checker', 'WWWWWWWWWWWW', 'WWWWWWWWWWWW'], ['Agent', 'WWWWWWWWWWWW', 'WWWWWWWWWWWW']],
+    qwen: [['Direct call', 'CCCCCCCCCCCC', 'CCCCCCCCCCCC'], ['Self-review', 'CCCCCCCCCCCC', 'CECCCCCECCCE'],
+           ['Checker', 'CCCCCCCCCCEC', 'CCCCCCCCECCC'], ['Agent', 'XXXXXXXXXXXX', 'XXXXXXXXXXXX']],
+  },
+};
+const money = v => (v < 0 ? '−' : '') + Math.abs(v).toLocaleString('en-US');
+const sumBooks = DATA.books.reduce((a, b) => a + b[1], 0);   // 4,400, equals DATA.key.profit
+
+/* raw text that is hidden until a step fades it in (no data-k, so reveal() leaves it alone) */
+function hid(x, y, s, o = {}) {
+  const fam = o.m ? 'var(--font-mono, ui-monospace, Menlo, monospace)' : 'var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)';
+  return `<text id="${o.id}" x="${x}" y="${y}" text-anchor="${o.a || 'start'}" font-size="${o.z || 12}"${o.w ? ` font-weight="${o.w}"` : ''} fill="${K.col(o.c)}" style="font-family:${fam};font-variant-numeric:tabular-nums;opacity:0">${K.esc(s)}</text>`;
+}
+
+/* Geometry, fixed for every step */
+const G = {
+  books: [12, 34, 112, 150], model: [140, 70, 84, 64], wp: [240, 34, 128, 150],
+  list: [12, 202, 112, 52], chk: [240, 204, 128, 96],
+  pPrompt: [[124, 102], [139, 102]], pOut: [[224, 102], [239, 102]],
+  pList: [[124, 228], [152, 228], [152, 135]],
+  pReview: [[240, 166], [200, 166], [200, 135]],
+  pToChk: [[304, 184], [304, 203]],
+  pChkBack: [[240, 252], [176, 252], [176, 135]],
+  rowY: [364, 381, 398, 415, 432],
+};
+
+/* The whole harness diagram. o.anim: staggered first reveal; o.on: add-ons in use; o.model: 'g' or 'q';
+   o.wp: what the workpaper shows at draw time ('empty' | 'g' | 'q' | 'hidden'); o.done: tracker rows already filled. */
+function base(o) {
+  const A = !!o.anim, tt = (a) => A ? a : 0, dd = (a) => A ? a : 1;
+  const on = k => (o.on || []).includes(k);
+  const dim = k => `style="opacity:${on(k) ? 1 : .26};transition:opacity .45s"`;
+  let m = '';
+  // books
+  const [bx, by, bw, bh] = G.books;
+  m += P(rect(bx, by, bw, bh, 1), 'line', tt(0), dd(600));
+  m += T(bx + 8, by + 18, 'test-01 books', {h: 1, z: 16, a: 'start', t: tt(200), d: dd(450)});
+  DATA.books.forEach(([lab, v], i) => {
+    const y = by + 38 + i * 16;
+    m += T(bx + 8, y, lab, {a: 'start', c: 'mut', t: tt(350 + i * 110), d: dd(400)});
+    m += T(bx + bw - 8, y, money(v), {a: 'end', t: tt(350 + i * 110), d: dd(400)});
+  });
+  m += P(line(bx + 8, by + 128, bx + bw - 8, by + 128, 2, 0), 'mut', tt(1100), dd(300), 1);
+  m += T(bx + 8, by + 143, 'Profit', {a: 'start', c: 'green', w: 600, t: tt(1300), d: dd(400)});
+  m += T(bx + bw - 8, by + 143, money(sumBooks), {a: 'end', c: 'green', w: 600, t: tt(1300), d: dd(400), id: 'keyProfit'});
+  // model
+  const [mx, my, mw, mh] = G.model, mname = o.model === 'q' ? ['Qwen3.8', 'Flash'] : ['Gemma 4', '31B'];
+  m += `<g id="model">` + P(rect(mx, my, mw, mh, 3), 'violet', tt(500), dd(600), 1.8);
+  m += T(mx + mw / 2, my + 24, mname[0], {c: 'violet', z: 13, w: 600, t: tt(800), d: dd(400)});
+  m += T(mx + mw / 2, my + 40, mname[1], {c: 'violet', z: 13, w: 600, t: tt(800), d: dd(400)});
+  m += `<text id="msub" x="${mx + mw / 2}" y="${my + 56}" text-anchor="middle" font-size="12" fill="${C.mut}" style="font-family:var(--font-sans,system-ui,sans-serif);font-variant-numeric:tabular-nums">${o.msub || 'the model'}</text></g>`;
+  // connectors
+  m += P(poly(G.pPrompt, 4), 'mut', tt(900), dd(250)) + P(arrow(124, 102, 139, 102, 5, 5), 'mut', tt(1100), dd(120));
+  m += P(poly(G.pOut, 6), 'mut', tt(900), dd(250)) + P(arrow(224, 102, 239, 102, 7, 5), 'mut', tt(1100), dd(120));
+  // workpaper
+  const [wx, wy, ww, wh] = G.wp;
+  m += P(rect(wx, wy, ww, wh, 8), 'line', tt(300), dd(600));
+  m += T(wx + 8, wy + 18, 'Workpaper', {h: 1, z: 16, a: 'start', t: tt(600), d: dd(450)});
+  ['Profit', 'Owner A', 'Owner B', '6 other fields'].forEach((lab, i) => {
+    m += T(wx + 8, wy + 40 + i * 18, lab, {a: 'start', c: 'mut', t: tt(700 + i * 100), d: dd(400)});
+  });
+  const W = o.wp === 'g' ? DATA.gemma : o.wp === 'q' ? DATA.qwen : null;
+  const val = (k, i) => {
+    const y = wy + 40 + i * 18;
+    if (!W) return o.wp === 'hidden' ? hid(wx + ww - 8, y, '', {id: 'wv' + i, a: 'end'}) : T(wx + ww - 8, y, '?', {a: 'end', c: 'faint', t: tt(1000), d: dd(400), id: 'wv' + i});
+    const ok = W[k] === DATA.key[k];
+    return T(wx + ww - 8, y, money(W[k]) + (ok ? ' ✓' : ' ✗'), {a: 'end', c: ok ? 'green' : 'red', w: 600, id: 'wv' + i});
+  };
+  m += val('profit', 0) + val('A', 1) + val('B', 2);
+  if (W) m += T(wx + ww - 8, wy + 94, '✓', {a: 'end', c: 'green', w: 600, id: 'wv3'});
+  else m += o.wp === 'hidden' ? hid(wx + ww - 8, wy + 94, '✓', {id: 'wv3', a: 'end', c: 'green', w: 600}) : '';
+  m += P(line(wx + 8, wy + 106, wx + ww - 8, wy + 106, 9, 0), 'faint', tt(900), dd(300), 1);
+  if (W) m += T(wx + 8, wy + 126, W.right + ' of 9 right', {a: 'start', c: W.right === 9 ? 'green' : 'red', z: 13, w: 600, id: 'verdict'}) +
+              T(wx + 8, wy + 142, W.right === 9 ? 'fully correct' : 'not fully correct', {a: 'start', c: W.right === 9 ? 'green' : 'red', id: 'verdict2'});
+  else m += hid(wx + 8, wy + 126, '', {id: 'verdict', z: 13, w: 600}) + hid(wx + 8, wy + 142, '', {id: 'verdict2'}) +
+            (o.wp === 'empty' ? T(wx + 8, wy + 126, 'all 9 must match', {a: 'start', c: 'mut', t: tt(1500), d: dd(400)}) +
+                                T(wx + 8, wy + 142, 'the answer key', {a: 'start', c: 'mut', t: tt(1500), d: dd(400)}) : '');
+  // add-on 1: checklist
+  const [lx, ly, lw, lh] = G.list;
+  m += `<g id="gList" ${dim('list')}>` + P(rect(lx, ly, lw, lh, 10), 'blue', tt(1600), dd(500)) +
+       T(lx + 8, ly + 18, 'Checklist', {h: 1, z: 15, a: 'start', c: 'blue', t: tt(1800), d: dd(400)}) +
+       T(lx + 8, ly + 36, '+868 characters', {a: 'start', c: 'mut', t: tt(1800), d: dd(400)}) +
+       P(poly(G.pList, 11), 'blue', tt(1900), dd(400), 1.2) + P(arrow(152, 160, 152, 135, 12, 5), 'blue', tt(2250), dd(120), 1.2) + `</g>`;
+  // add-on 2: self-review loop
+  m += `<g id="gReview" ${dim('review')}>` + P(poly(G.pReview, 13), 'blue', tt(2000), dd(400), 1.2) +
+       P(arrow(200, 160, 200, 135, 14, 5), 'blue', tt(2350), dd(120), 1.2) +
+       T(220, 180, 'review', {c: 'blue', t: tt(2200), d: dd(400)}) + `</g>`;
+  // add-on 3: checker
+  const [cx, cy, cw, ch] = G.chk;
+  m += `<g id="gChk" ${dim('chk')}>` + P(rect(cx, cy, cw, ch, 15), 'amber', tt(2100), dd(500)) +
+       T(cx + 8, cy + 17, 'Checker', {h: 1, z: 15, a: 'start', c: 'amber', t: tt(2300), d: dd(400)});
+  ['format', 'tax year', 'sources', 'A + B = profit'].forEach((lab, i) => {
+    m += T(cx + 8, cy + 34 + i * 14, lab, {a: 'start', c: 'mut', t: tt(2350 + i * 60), d: dd(300)});
+    m += hid(cx + cw - 8, cy + 34 + i * 14, '✓', {id: 'ck' + i, a: 'end', c: 'green', w: 600});
+  });
+  m += T(cx + 8, cy + 90, 'no profit recheck', {a: 'start', c: 'red', t: tt(2600), d: dd(300), id: 'nocheck'});
+  m += P(poly(G.pToChk, 16), 'amber', tt(2400), dd(200), 1.2) +
+       P(poly(G.pChkBack, 17), 'amber', tt(2500), dd(500), 1.2) + P(arrow(176, 160, 176, 135, 18, 5), 'amber', tt(2950), dd(120), 1.2) + `</g>`;
+  // event log (two lines)
+  m += hid(14, 278, '', {id: 'log1', c: 'ink'}) + hid(14, 295, '', {id: 'log2', c: 'mut'});
+  // tracker
+  m += P(line(12, 312, 368, 312, 19, 0), 'faint', tt(2600), dd(500), 1);
+  m += T(12, 330, 'test-01, setup by setup', {h: 1, z: 15, a: 'start', t: tt(2700), d: dd(400)});
+  m += T(368, 330, 'key ' + money(DATA.key.profit), {a: 'end', c: 'green', t: tt(2700), d: dd(400)});
+  m += T(150, 347, 'calls', {c: 'mut', t: tt(2800), d: dd(400)}) +
+       T(266, 347, 'Gemma', {a: 'end', c: 'mut', t: tt(2800), d: dd(400)}) +
+       T(360, 347, 'Qwen', {a: 'end', c: 'mut', t: tt(2800), d: dd(400)});
+  DATA.rows.forEach((r, i) => {
+    const y = G.rowY[i], cur = o.cur === i;
+    if (cur) m += `<rect x="12" y="${y - 12}" width="356" height="16" rx="3" fill="${C.violet}" fill-opacity=".14"/>`;
+    m += T(20, y, r.name, {a: 'start', c: cur ? 'ink' : 'mut', w: cur ? 600 : 400, t: tt(2900 + i * 80), d: dd(400)});
+    const gDone = (o.done || 0) > i, qDone = !!o.qdone;
+    m += gDone ? T(150, y, r.calls, {}) + T(266, y, money(DATA.gemma.profit) + ' ✗', {a: 'end', c: 'red', w: 600})
+               : hid(150, y, r.calls, {id: 'tc' + i, a: 'middle'}) + hid(266, y, money(DATA.gemma.profit) + ' ✗', {id: 'tg' + i, a: 'end', c: 'red', w: 600}) +
+                 (o.cur === i ? '' : T(266, y, '·', {a: 'end', c: 'faint', t: tt(3000), d: dd(300)}));
+    const qtxt = r.q === 'ok' ? money(DATA.qwen.profit) + ' ✓' : 'HTTP 400';
+    m += qDone ? T(360, y, qtxt, {a: 'end', c: r.q === 'ok' ? 'green' : 'red', w: 600})
+               : hid(360, y, qtxt, {id: 'tq' + i, a: 'end', c: r.q === 'ok' ? 'green' : 'red', w: 600}) +
+                 (o.qrun ? '' : T(360, y, '·', {a: 'end', c: 'faint', t: tt(3000), d: dd(300)}));
+  });
+  return m;
+}
+
+/* small helpers used inside start() */
+const ctr = r => [r[0] + r[2] / 2, r[1] + r[3] / 2];
+function log(s, a, b) { s.swap('#log1', a); s.q('#log1').style.opacity = 1; if (b != null) { s.swap('#log2', b); s.q('#log2').style.opacity = 1; } }
+function showRow(s, i, gem = true) { if (gem) { s.fadeIn('#tc' + i, 400); s.fadeIn('#tg' + i, 400); } }
+function fillDraft(s, W) {
+  [['profit', 0], ['A', 1], ['B', 2]].forEach(([k, i], j) => {
+    const ok = W[k] === DATA.key[k], e = s.q('#wv' + i);
+    s.at(j * 160, () => { e.textContent = money(W[k]) + (ok ? ' ✓' : ' ✗'); e.setAttribute('fill', K.col(ok ? 'green' : 'red')); e.setAttribute('font-weight', 600); s.fadeIn(e, 350); });
+  });
+  s.at(500, () => s.fadeIn('#wv3', 350));
+  s.at(800, () => {
+    const v = s.q('#verdict'), v2 = s.q('#verdict2'), good = W.right === 9;
+    v.textContent = W.right + ' of 9 right'; v2.textContent = good ? 'fully correct' : 'not fully correct';
+    [v, v2].forEach(e => { e.setAttribute('fill', K.col(good ? 'green' : 'red')); s.fadeIn(e, 400); });
+    s.ring(G.wp[0] + 2, G.wp[1] + 26, G.wp[2] - 4, 20, good ? 'green' : 'red');
+  });
+}
+function sameDraft(s) { s.ring(G.wp[0] + 2, G.wp[1] + 26, G.wp[2] - 4, 20, 'red'); s.float(G.wp[0] + 64, G.wp[1] + 24, 'same', 'red', 15); }
+
+/* step 8: every run is a dot */
+function board(anim) {
+  let m = T(12, 26, 'All 192 runs, 12 companies each', {h: 1, z: 16, a: 'start'});
+  // shape legend (colour is never the only cue)
+  const lg = [['C', 'fully correct'], ['W', 'wrong'], ['E', 'empty reply'], ['X', 'not run']];
+  lg.forEach(([k, lab], i) => { const x = 18 + i * 92; m += mark(k, x, 46, 0) + T(x + 9, 50, lab, {a: 'start', c: 'mut'}); });
+  let t = 300;
+  const block = (name, rows, y0, total) => {
+    let b = T(12, y0, name, {a: 'start', w: 600, z: 13, c: 'violet', t: anim ? t : 0}) +
+            T(368, y0, total, {a: 'end', w: 600, z: 13, c: total.startsWith('0') ? 'red' : 'green', t: anim ? t + 200 : 0});
+    rows.forEach(([lab, sh, de], i) => {
+      [[sh, 'short'], [de, 'detailed']].forEach(([str, ins], j) => {
+        const y = y0 + 20 + (i * 2 + j) * 14;
+        t += 90;
+        if (j === 0) b += T(12, y + 4, lab, {a: 'start', c: 'ink', t: anim ? t : 0});
+        b += T(98, y + 4, ins, {a: 'start', c: 'mut', t: anim ? t : 0});
+        for (let c = 0; c < 12; c++) b += `<g data-k="fade" data-t="${anim ? t + c * 18 : 0}" data-d="${anim ? 300 : 1}">${mark(str[c], 166 + c * 10, y, 0)}</g>`;
+        const n = [...str].filter(ch => ch === 'C').length;
+        b += T(368, y + 4, str[0] === 'X' ? 'HTTP 400' : n + ' of 12', {a: 'end', c: str[0] === 'X' ? 'red' : n ? 'green' : 'red', t: anim ? t + 200 : 0});
+      });
+    });
+    return b;
+  };
+  m += block('Gemma 4 31B', DATA.board.gemma, 76, '0 of 96');
+  m += block('Qwen3.8 Flash', DATA.board.qwen, 214, '67 of 96');
+  m += P(line(12, 350, 368, 350, 30, 0), 'faint', anim ? t : 0, 400, 1);
+  m += T(12, 372, 'Gemma: profit wrong in 96 of 96.', {a: 'start', c: 'ink', t: anim ? t + 300 : 0});
+  m += T(12, 390, 'No step redid the sum, so none fixed it.', {a: 'start', c: 'mut', t: anim ? t + 400 : 0});
+  m += T(12, 412, 'Qwen: right whenever it replied (67 of 67).', {a: 'start', c: 'ink', t: anim ? t + 600 : 0});
+  m += T(12, 430, 'One model at the top, one at the bottom:', {a: 'start', c: 'mut', t: anim ? t + 700 : 0});
+  m += T(12, 446, 'this test had no room to show a gain.', {a: 'start', c: 'mut', t: anim ? t + 700 : 0});
+  return m;
+}
+function mark(k, x, y) {
+  if (k === 'C') return `<circle cx="${x}" cy="${y}" r="4" fill="${C.fill.green}"/>`;
+  if (k === 'W') return `<circle cx="${x}" cy="${y}" r="4" fill="${C.mut}" fill-opacity=".55"/>`;
+  if (k === 'E') return `<circle cx="${x}" cy="${y}" r="3.4" fill="none" stroke="${C.ink}" stroke-width="1.4"/>`;
+  return `<path d="M${x - 3.5} ${y - 3.5}L${x + 3.5} ${y + 3.5}M${x + 3.5} ${y - 3.5}L${x - 3.5} ${y + 3.5}" stroke="${C.red}" stroke-width="1.6" stroke-linecap="round"/>`;
+}
+
+K.stepper({
+  root: '#x', style: 'blueprint', viewBox: [380, 460],
+  title: 'A replay of recorded runs: one fictional S-Corporation, test-01, goes through four harness setups around two models. Gemma\'s wrong profit survives every extra step; Qwen was right from the first call.',
+  legend: [
+    {key: 'model', label: 'Model', color: 'violet'},
+    {key: 'req', label: 'Draft or request', color: 'blue'},
+    {key: 'fb', label: 'Checker feedback', color: 'amber'},
+    {key: 'ok', label: 'Matches answer key', color: 'green'},
+    {key: 'bad', label: 'Wrong or failed', color: 'red'},
+  ],
+  steps: [
+    { title: '1. Job and harness', keys: ['model', 'req', 'fb', 'ok'],
+      cap: 'Replay of recorded runs on one fictional company, test-01. Profit: $8,100 minus $3,700 of costs = $4,400, split 60/40. A workpaper counts only if all 9 fields match.',
+      draw: () => base({anim: true, wp: 'empty', on: ['list', 'review', 'chk']}),
+      start(s) {
+        s.at(1500, () => s.ring(G.books[0] + 2, G.books[1] + 130, G.books[2] - 4, 20, 'green'));
+        s.at(3300, () => { s.q('#gList').style.opacity = .26; s.q('#gReview').style.opacity = .26; s.q('#gChk').style.opacity = .26; });
+        s.at(3500, () => log(s, 'Faint parts: steps teams add', 'around the model, one at a time.'));
+      },
+      duration: 4400 },
+
+    { title: '2. Direct call', keys: ['model', 'req', 'ok', 'bad'],
+      cap: 'Gemma 4 31B reads the books once and writes the workpaper. Profit $3,400, which is $1,000 short, so both owner shares are wrong too. 7 of 9 fields right: not fully correct.',
+      draw: () => base({wp: 'hidden', cur: 0, msub: '1 call'}),
+      async start(s) {
+        log(s, '→ rules + books, one request', '');
+        await s.travel(G.pPrompt, 600, 'blue', {trail: false});
+        s.ring(G.model[0], G.model[1], G.model[2], G.model[3], 'violet');
+        await s.wait(500);
+        await s.travel(G.pOut, 400, 'blue');
+        fillDraft(s, DATA.gemma);
+        s.at(900, () => { log(s, '← 168 tokens, no working shown', '✗ profit 3,400; key says 4,400'); showRow(s, 0); });
+      },
+      duration: 4200 },
+
+    { title: '3. A longer checklist', keys: ['model', 'req', 'bad'],
+      cap: 'Same call plus a checklist of steps, such as "Cash draws are not wage deductions". No new facts. Gemma returns the same $3,400, as it did in all 8 of its test-01 runs.',
+      draw: () => base({wp: 'hidden', on: ['list'], done: 1, cur: 1, msub: '1 call'}),
+      async start(s) {
+        log(s, '→ rules + books + checklist', '');
+        s.travel(G.pPrompt, 600, 'blue', {trail: false});
+        await s.travel(G.pList, 700, 'blue');
+        s.ring(G.model[0], G.model[1], G.model[2], G.model[3], 'violet');
+        await s.wait(500);
+        await s.travel(G.pOut, 400, 'blue');
+        fillDraft(s, DATA.gemma);
+        s.at(900, () => { log(s, '← 340,000 cents again', '✗ still 1,000 short'); showRow(s, 1); });
+      },
+      duration: 4400 },
+
+    { title: '4. Self-review', keys: ['model', 'req', 'bad'],
+      cap: 'The draft goes back: "Review your previous answer… correct any mistakes." One more call. The reply is identical, as in 42 of Gemma\'s 48 review runs.',
+      draw: () => base({wp: 'g', on: ['review'], done: 2, cur: 2, msub: 'call 2 of 2'}),
+      async start(s) {
+        await s.wait(500);
+        log(s, '→ "Review your previous answer"', '');
+        await s.travel(G.pReview, 800, 'blue');
+        s.ring(G.model[0], G.model[1], G.model[2], G.model[3], 'violet');
+        await s.wait(600);
+        await s.travel(G.pOut, 400, 'blue');
+        sameDraft(s);
+        s.at(500, () => { log(s, '← same JSON, word for word', '✗ 7 of 9; profit unchanged'); showRow(s, 2); });
+      },
+      duration: 4200 },
+
+    { title: '5. Checker feedback', keys: ['model', 'req', 'fb', 'bad', 'ok'],
+      cap: 'A program checks format, year, sources and that 2,040 + 1,360 = 3,400. All pass, so it sends back an empty list, []. It never redoes the subtraction. The draft comes back unchanged.',
+      draw: () => base({wp: 'g', on: ['chk'], done: 3, cur: 3, msub: 'call 2 of 2'}),
+      async start(s) {
+        await s.wait(400);
+        log(s, '→ draft to the checker', '');
+        await s.travel(G.pToChk, 400, 'blue');
+        for (let i = 0; i < 4; i++) { s.at(i * 320, () => s.fadeIn('#ck' + i, 250)); }
+        await s.wait(1400);
+        s.ring(G.chk[0] + 2, G.chk[1] + 78, G.chk[2] - 4, 18, 'red');
+        log(s, '← checker: [] (no errors)', 'shares add up to the wrong profit');
+        await s.travel(G.pChkBack, 800, 'amber');
+        s.ring(G.model[0], G.model[1], G.model[2], G.model[3], 'violet');
+        await s.wait(500);
+        await s.travel(G.pOut, 400, 'blue');
+        sameDraft(s);
+        s.at(500, () => showRow(s, 3));
+      },
+      duration: 5400 },
+
+    { title: '6. Agent framework', keys: ['model', 'req', 'fb', 'bad'],
+      cap: 'Agent software lets the model call the checker as a tool, then submit. Gemma calls it, reads [] and submits $3,400. With Qwen this setup never ran: its host refused all 24 requests.',
+      draw: () => base({wp: 'hidden', on: ['chk'], done: 4, cur: 4, msub: '2 calls max'}),
+      async start(s) {
+        log(s, '→ call 1: validate_workpaper', '(tool call, draft as argument)');
+        s.travel(G.pPrompt, 500, 'blue', {trail: false});
+        await s.wait(700);
+        await s.travel(G.pChkBack.slice().reverse(), 800, 'violet');
+        for (let i = 0; i < 4; i++) { s.at(i * 250, () => s.fadeIn('#ck' + i, 250)); }
+        await s.wait(1100);
+        log(s, '← Observation: []', '→ call 2: final_answer');
+        await s.travel(G.pChkBack, 700, 'amber');
+        s.ring(G.model[0], G.model[1], G.model[2], G.model[3], 'violet');
+        await s.wait(400);
+        await s.travel(G.pOut, 400, 'blue');
+        fillDraft(s, DATA.gemma);
+        s.at(900, () => showRow(s, 4));
+      },
+      duration: 5600 },
+
+    { title: '7. The other model', keys: ['model', 'req', 'ok', 'bad'],
+      cap: 'Qwen3.8 Flash thinks for 1,930 tokens, then writes $4,400: fully correct in one call. Extra steps had nothing to fix, cost 2.4 to 2.7 times more, and 5 of 48 second calls came back empty.',
+      draw: () => base({model: 'q', wp: 'hidden', done: 5, qrun: true, msub: 'thinking'}),
+      async start(s) {
+        log(s, '→ rules + books, one request', '');
+        await s.travel(G.pPrompt, 600, 'blue', {trail: false});
+        s.ring(G.model[0], G.model[1], G.model[2], G.model[3], 'violet');
+        await s.count('#msub', DATA.qwen.think, {from: 0, du: 1400, post: ' tok'});
+        await s.travel(G.pOut, 400, 'blue');
+        fillDraft(s, DATA.qwen);
+        s.at(900, () => log(s, '✓ 9 of 9 match the answer key', '✗ agent framework: HTTP 400 x 24'));
+        for (let i = 0; i < 5; i++) s.at(1100 + i * 220, () => s.fadeIn('#tq' + i, 350));
+      },
+      duration: 5000 },
+
+    { title: '8. What to change', keys: ['ok', 'bad'],
+      cap: 'No step turned a wrong workpaper into a right one. Gemma\'s error is a sum, and nothing rechecked it. A step helps only if it can catch the error: here, a checker that recomputes profit (not tested).',
+      draw: () => board(true),
+      duration: 5200 },
+  ],
+});
+
+</script>
+</body></html>

@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Handoff timelines</title>
+<style>:root{color-scheme:dark}html,body{margin:0;background:#141517}body{padding:16px;min-height:100vh;box-sizing:border-box}</style>
+</head><body>
+<div id="x"></div>
+<script>
+/* explainer-kit v1. A small engine for animated, stepwise SVG explainers. No dependencies.
+   Exposes window.K. Read explainer-kit/SKILL.md for the API and the rules it encodes.
+   Every animation is tied to a "generation": moving to another step cancels all timers,
+   loops and tweens of the old step, so steps can never bleed into each other. */
+(function () {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const QS = new URLSearchParams(location.search);
+const REC = QS.has('record');
+const f = n => (+n).toFixed(1);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = { inOut: k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, out: k => 1 - Math.pow(1 - k, 3), linear: k => k };
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- styles: one object per look. ink colours draw lines and text; fill colours encode data
+   (fills were checked for colour-blind separation against their background). */
+const STYLES = {
+  chalkboard: { dark: 1, bg: '#1E2023', panel: '#17191B', ink: '#ECE7DA', mut: '#9A9A93', faint: '#55585E', line: '#4A4D53',
+    blue: '#9CC3E6', green: '#A8DDC3', amber: '#F2D98B', violet: '#C3B5E8', red: '#EBA494',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 1, texture: 1, hand: "'Caveat', cursive", handSize: 1.12, font: 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap' },
+  paper: { dark: 0, bg: '#FBF8F1', panel: '#F3EEE3', ink: '#22252A', mut: '#5F6368', faint: '#C9C3B6', line: '#BDB6A8',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: .7, texture: 0, hand: "'Kalam', cursive", handSize: 1, font: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap' },
+  editorial: { dark: 0, bg: '#FFFFFF', panel: '#F5F5F2', ink: '#1A1A1A', mut: '#5C5C5C', faint: '#D6D6D0', line: '#C4C4BE',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: 0, texture: 0, hand: "'Source Serif 4', Georgia, serif", handSize: .9, font: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap' },
+  blueprint: { dark: 1, bg: '#10243A', panel: '#0C1C2E', ink: '#E6EEF5', mut: '#93A8BC', faint: '#3A5672', line: '#4A6A89',
+    blue: '#8EC5F0', green: '#9BE0C0', amber: '#F5D58A', violet: '#C9B8F2', red: '#F2A08F',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 0, texture: 0, grid: 1, hand: "'IBM Plex Mono', ui-monospace, monospace", handSize: .78, font: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap' },
+};
+let ST = STYLES.chalkboard, ROUGH = 1;
+const C = {};                                   // active colours, e.g. K.C.ink, K.C.fill.blue
+function col(c) { if (!c) return C.ink; if (c[0] === '#' || c.startsWith('rgb') || c === 'none' || c === 'transparent') return c; if (c.startsWith('fill.')) return C.fill[c.slice(5)] || c; return C[c] || c; }
+function useStyle(name, root) {
+  ST = STYLES[name] || STYLES.chalkboard; ROUGH = ST.rough;
+  Object.keys(C).forEach(k => delete C[k]); Object.assign(C, ST, { fill: { ...ST.fill } });
+  injectCSS();
+  if (ST.font && !document.querySelector(`link[href="${ST.font}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ST.font; document.head.appendChild(l); }
+  if (root) {
+    const v = { bg: ST.bg, panel: ST.panel, ink: ST.ink, mut: ST.mut, faint: ST.faint, line: ST.line, blue: ST.blue, green: ST.green, amber: ST.amber, violet: ST.violet, red: ST.red, hand: ST.hand };
+    for (const k in v) root.style.setProperty('--k-' + k, v[k]);
+    root.classList.add('kx', 'kx-' + (name in STYLES ? name : 'chalkboard'));
+    if (ST.texture) { const r = rng(9); let s = ''; for (let i = 0; i < 140; i++) s += `<circle cx='${(r() * 240).toFixed(1)}' cy='${(r() * 240).toFixed(1)}' r='${(.4 + r() * .8).toFixed(2)}' fill='%23ffffff' fill-opacity='${(.02 + r() * .045).toFixed(3)}'/>`; root.style.backgroundImage = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>${s}</svg>")`; }
+    if (ST.grid) root.style.backgroundImage = `linear-gradient(${ST.faint}55 1px,transparent 1px),linear-gradient(90deg,${ST.faint}55 1px,transparent 1px)`, root.style.backgroundSize = '20px 20px';
+  }
+  return ST;
+}
+function fontsReady(ms = 1500) { return Promise.race([document.fonts ? document.fonts.ready.then(() => document.fonts.load(`20px ${ST.hand.split(',')[0]}`)) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
+
+/* ---------- hand-drawn geometry. Each shape takes a seed so its wobble is identical on every frame. */
+const J = (r, a) => (r() - .5) * 2 * a * ROUGH;
+function line(x1, y1, x2, y2, seed = 1, bow = 1.6) { const r = rng(seed); return `M${f(x1 + J(r, .5))} ${f(y1 + J(r, .5))} Q${f((x1 + x2) / 2 + J(r, bow))} ${f((y1 + y2) / 2 + J(r, bow))} ${f(x2)} ${f(y2)}`; }
+function rect(x, y, w, h, seed = 1) {
+  if (!ROUGH) return `M${f(x)} ${f(y)}H${f(x + w)}V${f(y + h)}H${f(x)}Z`;
+  const r = rng(seed), p = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(q => [q[0] + J(r, 1.3), q[1] + J(r, 1.3)]);
+  let d = `M${f(p[0][0])} ${f(p[0][1])}`;
+  for (let i = 0; i < 4; i++) { const A = p[i], B = p[(i + 1) % 4]; d += ` Q${f((A[0] + B[0]) / 2 + J(r, 1.5))} ${f((A[1] + B[1]) / 2 + J(r, 1.5))} ${f(B[0])} ${f(B[1])}`; }
+  return d + ` L${f(p[0][0] + (p[1][0] - p[0][0]) * .08)} ${f(p[0][1] + J(r, 1))}`;
+}
+function ellipse(cx, cy, rx, ry = rx, seed = 1) { const r = rng(seed); return `M${f(cx - rx)} ${f(cy)} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx + rx)} ${f(cy + J(r, .6))} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx - rx + 1.5 * ROUGH)} ${f(cy + .6 * ROUGH)}`; }
+function arrow(fx, fy, x, y, seed = 1, L = 8) { const a = Math.atan2(y - fy, x - fx), r = rng(seed), k = .5 + J(r, .06); return `M${f(x - L * Math.cos(a - k))} ${f(y - L * Math.sin(a - k))} L${f(x)} ${f(y)} L${f(x - L * Math.cos(a + k))} ${f(y - L * Math.sin(a + k))}`; }
+function poly(pts, seed = 1) { const r = rng(seed); return 'M' + pts.map((p, i) => `${f(p[0] + (i ? J(r, .6) : 0))} ${f(p[1] + (i ? J(r, .6) : 0))}`).join(' L'); }
+function curve(x1, y1, x2, y2, bend = .3) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1; return `M${f(x1)} ${f(y1)} Q${f(mx - dy * bend)} ${f(my + dx * bend)} ${f(x2)} ${f(y2)}`; }
+
+/* ---------- markup builders. Elements carry data-k (draw|fade), data-t (delay ms) and data-d (duration ms);
+   the engine reveals them in that order when a step opens, and shows them at once with reduced motion. */
+function P(d, c, t = 0, du = 600, w = 1.5, extra = '') { return `<path d="${d}" fill="none" stroke="${col(c)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" data-k="draw" data-t="${t}" data-d="${du}" ${extra}/>`; }
+function T(x, y, s, o = {}) {
+  const fam = o.h ? 'var(--k-hand)' : o.m ? 'var(--font-mono, ui-monospace, Menlo, monospace)' : 'var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)';
+  const z = (o.z || 12) * (o.h ? ST.handSize : 1);
+  return `<text${o.id ? ` id="${o.id}"` : ''} x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${f(z)}"${o.w ? ` font-weight="${o.w}"` : ''} fill="${col(o.c)}" style="font-family:${fam};font-variant-numeric:tabular-nums" data-k="fade" data-t="${o.t || 0}" data-d="${o.d || 450}"${o.extra ? ' ' + o.extra : ''}>${o.raw ? s : esc(s)}</text>`;
+}
+function F(shape, c, t = 0, o = {}) { return `<path d="${shape}" fill="${col(c)}" fill-opacity="${o.op == null ? .85 : o.op}" stroke="none" data-k="fade" data-t="${t}" data-d="${o.d || 450}"${o.id ? ` id="${o.id}"` : ''}/>`; }
+function reveal(svg) {
+  const els = [...svg.querySelectorAll('[data-k]')];
+  if (RM) { els.forEach(e => { e.style.opacity = 1; e.style.strokeDashoffset = 0; }); return 0; }
+  let end = 0;
+  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (e.dataset.k === 'draw') { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
+  svg.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (e.dataset.k === 'draw') { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
+  return end;
+}
+function finish(svg) { svg.querySelectorAll('[data-k]').forEach(e => { e.style.transition = 'none'; e.style.strokeDashoffset = 0; e.style.opacity = 1; }); }
+
+/* ---------- small DOM helpers */
+function mk(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const ICON = {
+  left: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  right: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
+  replay: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+let cssDone = false;
+function injectCSS() {
+  if (cssDone) return; cssDone = true;
+  const s = document.createElement('style');
+  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
+.kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
+.kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
+.kx-count{font-size:11px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kx-cap{font-size:13.5px;line-height:1.55;margin:6px 8px 8px;color:var(--k-ink)}
+.kx-act{display:flex;justify-content:center;align-items:center;gap:8px;min-height:44px;flex-wrap:wrap;margin:0 4px 4px}
+.kx-legend{display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px 12px;font-size:12px;color:var(--k-mut);margin:6px 8px 8px;min-height:40px}.kx-legend>span{transition:opacity .4s}
+.kx-sw{display:inline-block;width:12px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.kx-nav{display:flex;align-items:center;gap:8px}.kx button.kx-next{min-width:112px}.kx-act .kx-ctl{flex:1 1 100%}
+@media (max-width:480px){.kx{padding:12px 8px 10px}.kx button.kx-next{min-width:96px;padding:0 8px}.kx button.kx-dot{padding:10px 3px}.kx-nav{gap:6px}}
+.kx button{background:transparent;border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:0 12px;font:inherit;font-size:13px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.kx button:hover{border-color:var(--k-mut)}.kx button:focus-visible,.kx [role=button]:focus-visible{outline:2px solid var(--k-violet);outline-offset:2px}
+.kx button.pri{border-color:var(--k-violet);color:var(--k-violet)}.kx button[aria-pressed=true]{background:color-mix(in srgb,var(--k-violet) 18%,transparent)}
+.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
+.kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
+.kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
+.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:11px;line-height:17px;height:92px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
+.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1}
+.kx-time{font-size:11px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
+.kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
+.kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
+.kx-ripple{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid var(--k-ink);pointer-events:none;animation:kxrp .6s ease-out forwards}@keyframes kxrp{from{transform:scale(.3);opacity:.9}to{transform:scale(1.4);opacity:0}}
+.kx-recording .kx-nav button:not(.kx-dot),.kx-recording .kx-scrub button{visibility:hidden}
+.kx .sr-only,.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.kx *{transition:none!important;animation:none!important}}`;
+  document.head.appendChild(s);
+}
+
+/* ---------- step context: everything a step needs, bound to its generation */
+function makeCtx(eng, svg, i) {
+  const g = eng.gen, alive = () => g === eng.gen, dyn = svg.querySelector('.kx-dyn');
+  const q = s => svg.querySelector(s);
+  const pick = e => typeof e === 'string' ? q(e) : e;
+  const s = {
+    i, svg, dyn, q, alive, C, RM, root: eng.root, act: eng.act,
+    at(ms, fn) { const id = setTimeout(() => { if (alive()) fn(); }, ms); eng.timers.push(id); return id; },
+    wait(ms) { return new Promise(r => s.at(ms, () => { if (!(eng.inDemo && eng.touched)) r(); })); },   // an idle demo stops for good once the reader acts
+    loop(delay, fn) { s.at(delay, () => { let last = performance.now(); const t0 = last, st = {}; const k = n => { if (!alive()) return; st.dt = Math.min(.05, Math.max(0, (n - last) / 1000)); last = n; st.e = n - t0; if (fn(st) !== false) requestAnimationFrame(k); }; requestAnimationFrame(k); }); },
+    tween(du, fn, o = {}) { const ez = ease[o.ease || 'inOut']; return new Promise(res => s.at(o.delay || 0, () => { if (RM || du <= 0) { fn(1); res(); return; } const t0 = performance.now(); const k = n => { if (!alive()) return; const p = clamp((n - t0) / du); fn(ez(p)); if (p < 1) requestAnimationFrame(k); else res(); }; requestAnimationFrame(k); })); },
+    el(tag, attrs, parent) { return mk(tag, attrs, parent || dyn); },
+    drawIn(e, du = 500, delay = 0) { e = pick(e); if (!e || RM) return; const L = e.getTotalLength() + 1; e.style.transition = 'none'; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; e.getBoundingClientRect(); e.style.transition = `stroke-dashoffset ${du}ms cubic-bezier(.45,0,.55,1) ${delay}ms`; e.style.strokeDashoffset = 0; },
+    fadeIn(e, du = 400, delay = 0) { e = pick(e); if (!e) return; e.style.transition = 'none'; e.style.opacity = 0; e.getBoundingClientRect(); e.style.transition = `opacity ${du}ms ease ${delay}ms`; e.style.opacity = 1; },
+    fadeOut(e, du = 400, remove = true) { e = pick(e); if (!e) return; e.style.transition = `opacity ${du}ms`; e.style.opacity = 0; if (remove) setTimeout(() => e.remove(), du + 50); },
+    travel(path, du = 600, c = 'ink', o = {}) {   // a dot that moves along a path element or a list of points
+      let p = pick(path), temp = false;
+      if (Array.isArray(path)) { p = mk('path', { d: 'M' + path.map(q => q.join(' ')).join(' L'), fill: 'none', stroke: col(c), 'stroke-width': 1.6, 'stroke-opacity': o.trail === false ? 0 : .5, 'stroke-linecap': 'round' }, dyn); temp = true; if (o.trail !== false) s.drawIn(p, du); }
+      const d = mk('circle', { r: o.r || 3.6, fill: col(c) }, dyn), L = p.getTotalLength();
+      const done = () => { s.fadeOut(d, 300); if (temp && !o.keep) setTimeout(() => s.fadeOut(p, 450), 200); };
+      if (RM) { const e = p.getPointAtLength(L); d.setAttribute('cx', e.x); d.setAttribute('cy', e.y); done(); return Promise.resolve(); }
+      return s.tween(du, k => { const e = p.getPointAtLength(k * L); d.setAttribute('cx', f(e.x)); d.setAttribute('cy', f(e.y)); }, { delay: o.delay || 0 }).then(done);
+    },
+    ring(x, y, w, h, c = 'ink', o = {}) { const p = mk('path', { d: rect(x, y, w, h, Math.round(x * 7 + y)), fill: 'none', stroke: col(c), 'stroke-width': o.w || 2.4, 'stroke-linecap': 'round', class: 'pulse' }, dyn); p.style.opacity = 0; setTimeout(() => p.remove(), 1400); return p; },
+    write(x, y, text, o = {}) { const w = document.createElementNS(NS, 'g'); w.innerHTML = T(x, y, text, o); const t = w.firstChild; dyn.appendChild(t); t.removeAttribute('data-k'); s.fadeIn(t, o.d || 450, o.t || 0); return t; },
+    float(x, y, text, c = 'ink', z = 16) { const t = s.write(x, y, text, { h: 1, z, c }); if (!RM) { t.style.transition = 'transform 1.1s ease-out, opacity 1.1s ease-out'; requestAnimationFrame(() => requestAnimationFrame(() => { t.style.transform = 'translateY(-18px)'; t.style.opacity = 0; })); } setTimeout(() => t.remove(), 1200); },
+    swap(e, text, c) { e = pick(e); if (!e) return; e.style.transition = 'opacity .15s'; e.style.opacity = 0; s.at(160, () => { e.textContent = text; if (c) e.setAttribute('fill', col(c)); e.style.opacity = 1; }); },
+    count(e, to, o = {}) { e = pick(e); if (!e) return; const from = o.from != null ? o.from : (+e.dataset.v || 0), fmt = o.fmt || (v => Math.round(v).toLocaleString()); e.dataset.v = to; return s.tween(o.du || 900, k => { e.textContent = (o.pre || '') + fmt(lerp(from, to, k)) + (o.post || ''); }, { delay: o.delay || 0 }); },
+    bar(e, frac, du = 600, axis = 'x') { e = pick(e); if (!e) return; e.style.transformBox = 'fill-box'; e.style.transformOrigin = axis === 'x' ? '0 50%' : '50% 100%'; e.style.transition = RM ? 'none' : `transform ${du}ms cubic-bezier(.45,0,.55,1)`; e.style.transform = axis === 'x' ? `scaleX(${clamp(frac).toFixed(4)})` : `scaleY(${clamp(frac).toFixed(4)})`; },
+    btn(icon, label, fn, o = {}) { const b = document.createElement('button'); if (o.primary) b.className = 'pri'; b.innerHTML = (ICON[icon] || '') + esc(label); b.type = 'button'; b.onclick = e => { if (e.isTrusted) s.touched(); fn(b); }; eng.act.appendChild(b); return b; },
+    on(e, fn, label) { e = pick(e); e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0'); if (label) e.setAttribute('aria-label', label); e.style.cursor = 'pointer'; const h = ev => { if (ev.isTrusted) s.touched(); fn(ev); }; e.addEventListener('click', h); e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); h(ev); } }); return e; },
+    point(ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 }; },
+    drag(e, o) { e = pick(e); e.style.touchAction = 'none'; e.style.cursor = 'grab'; let on = false; e.addEventListener('pointerdown', ev => { on = true; e.setPointerCapture(ev.pointerId); s.touched(); o.move && o.move(s.point(ev), ev); }); e.addEventListener('pointermove', ev => { if (on && alive()) o.move && o.move(s.point(ev), ev); }); const up = ev => { if (!on) return; on = false; o.end && o.end(s.point(ev), ev); }; e.addEventListener('pointerup', up); e.addEventListener('pointercancel', up); return e; },
+    cap(text) { eng.cap.textContent = text; },
+    touched() { eng.touched = true; if (eng.stopAuto && !REC) eng.stopAuto(); },   // a reader who acts takes over from autoplay
+    tap(e) { e = pick(e); if (!e || !alive() || (eng.inDemo && eng.touched)) return; const r = e.getBoundingClientRect(), R = eng.root.getBoundingClientRect(), d = document.createElement('div'); d.className = 'kx-ripple'; d.style.left = (r.left + r.width / 2 - R.left) + 'px'; d.style.top = (r.top + r.height / 2 - R.top) + 'px'; eng.root.appendChild(d); setTimeout(() => d.remove(), 650); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); },
+    /* unit charts: one circle per item, keyed, so items keep their identity when they move */
+    units(items, o = {}) { const gU = mk('g', { class: 'kx-units' }, o.parent || dyn); s._units = items.map((it, j) => { const c = mk('circle', { cx: o.x0 || 0, cy: o.y0 || 0, r: o.r || 4, fill: col(o.fill || 'fill.blue') }, gU); c.style.transition = 'fill .5s, opacity .5s'; return { it, c, x: o.x0 || 0, y: o.y0 || 0, r: o.r || 4, j }; }); return s._units; },
+    arrange(layout, o = {}) { const U = s._units || [], du = o.du || 900, stg = o.stagger == null ? 4 : o.stagger, ez = ease[o.ease || 'inOut'];
+      const tg = U.map((u, j) => { const L = layout(u.it, j) || {}; if (L.fill) u.c.style.fill = col(L.fill); if (L.opacity != null) u.c.style.opacity = L.opacity; return { x0: u.x, y0: u.y, r0: u.r, x: L.x == null ? u.x : L.x, y: L.y == null ? u.y : L.y, r: L.r == null ? u.r : L.r, dl: (L.order == null ? j : L.order) * stg }; });
+      const tot = du + Math.max(0, ...tg.map(t => t.dl));
+      return s.tween(tot, k => { const ms = k * tot; U.forEach((u, j) => { const t = tg[j], p = ez(clamp((ms - t.dl) / du)); u.x = lerp(t.x0, t.x, p); u.y = lerp(t.y0, t.y, p); u.r = lerp(t.r0, t.r, p); u.c.setAttribute('cx', f(u.x)); u.c.setAttribute('cy', f(u.y)); u.c.setAttribute('r', f(u.r)); }); }, { ease: 'linear', delay: o.delay || 0 }); },
+  };
+  return s;
+}
+
+/* ---------- stepper: a lesson that moves one idea at a time, with fixed controls */
+const ALL = (window.EXPLAINERS = window.EXPLAINERS || []);
+function frame(root, o, kind) {
+  root = typeof root === 'string' ? document.querySelector(root) : root;
+  useStyle(o.style || 'chalkboard', root);
+  const [W, H] = o.viewBox || [380, 300];
+  const legend = (o.legend || []).map(l => `<span data-l="${l.key}"><span class="kx-sw" style="background:${col(l.color)}"></span>${esc(l.label)}</span>`).join('');
+  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div>
+<svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
+${kind === 'player' ? '<div class="kx-scrub"><button class="kx-pp" type="button"></button><input type="range" min="0" step="1" aria-label="Scrub the timeline"><span class="kx-time"></span></div>' : '<div class="kx-act"></div>'}
+${legend ? `<div class="kx-legend">${legend}</div>` : ''}<div class="kx-nav"><button class="kx-back" type="button" aria-label="Previous">${ICON.left}</button><div class="kx-dots"></div>${kind === 'stepper' ? `<button class="kx-replay" type="button" aria-label="Replay this step" title="Replay this step">${ICON.replay}</button>` : ''}<button class="kx-next" type="button"></button></div>`;
+  if (REC) root.classList.add('kx-recording');
+  const $ = s => root.querySelector(s);
+  return { root, W, H, svg: $('.kx-stage'), cap: $('.kx-cap'), act: $('.kx-act'), title: $('.kx-title'), count: $('.kx-count'), dots: $('.kx-dots'), next: $('.kx-next'), back: $('.kx-back'), replay: $('.kx-replay'), log: $('.kx-log'), $ };
+}
+function fixCaptionHeight(fr, texts) {   // reserve the tallest caption so nothing below it ever moves
+  const m = fr.cap.cloneNode(); m.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;min-height:0;width:${fr.cap.clientWidth}px`; m.removeAttribute('aria-live'); fr.cap.parentNode.appendChild(m);
+  let h = 0; texts.forEach(t => { m.textContent = t; h = Math.max(h, m.offsetHeight); }); m.remove(); fr.cap.style.minHeight = h + 'px';
+}
+function stepper(o) {
+  const fr = frame(o.root, o, 'stepper'), S = o.steps;
+  if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
+  const eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
+  let cur = 0, first = true, auto = null, ends = [];
+  eng.stopAuto = () => { auto = null; };
+  S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
+  const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
+  fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
+  function build(i) {
+    cur = i; eng.touched = false; const st = S[i], s = {};
+    fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
+    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = `Step ${i + 1} of ${S.length}`;
+    fr.svg.setAttribute('aria-label', (st.title || '') + '. ' + (st.alt || st.cap || ''));
+    [...fr.dots.children].forEach((d, j) => j === i ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current'));
+    fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !st.keys || st.keys.includes(e.dataset.l) ? '' : 'none');   // only this step's colours
+    fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : 'Next' + ICON.right;
+    fr.cap.style.transition = 'none'; fr.cap.style.opacity = 0; fr.cap.textContent = st.cap || '';
+    const revealEnd = reveal(fr.svg);
+    const ctx = makeCtx(eng, fr.svg, i);
+    ctx.at(st.capDelay == null ? 300 : st.capDelay, () => { fr.cap.style.transition = 'opacity .6s'; fr.cap.style.opacity = 1; });
+    if (st.start) st.start(ctx);
+    eng.inDemo = false;
+    if (st.demo && st.idleDemo && !REC && !st.ask) ctx.at(st.idleDemo, () => { if (!eng.touched) { eng.inDemo = true; Promise.resolve(st.demo(ctx)).finally(() => { eng.inDemo = false; }); } });
+    ends[i] = st.duration || revealEnd + 600;
+    eng.ctx = ctx;
+  }
+  function go(i, keepAuto) {
+    if (!keepAuto) auto = null;
+    eng.gen++; eng.timers.forEach(clearTimeout); eng.timers = [];
+    i = Math.max(0, Math.min(S.length - 1, i));
+    const g = eng.gen;
+    if (first || RM) { first = false; build(i); fr.svg.style.opacity = 1; }
+    else { fr.svg.style.opacity = 0; setTimeout(() => { if (g === eng.gen) { build(i); fr.svg.style.opacity = 1; } }, 230); }
+  }
+  fr.back.onclick = () => go(cur - 1);
+  fr.next.onclick = () => go(cur < S.length - 1 ? cur + 1 : 0);
+  fr.replay.onclick = () => go(cur);
+  document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('[role=button],input,button,textarea,select')) return; if (ALL.length > 1 && !fr.root.contains(document.activeElement)) return; if (e.key === 'ArrowRight') go(cur + 1); if (e.key === 'ArrowLeft') go(cur - 1); });
+  const api = {
+    kind: 'stepper', root: fr.root, get count() { return S.length; }, get current() { return cur; },
+    go: i => go(i), duration: i => S[i].duration || ends[i] || 4000, hasDemo: i => !!S[i].demo,
+    demo: i => { const c = eng.ctx; return c && c.i === i && S[i].demo ? Promise.resolve(S[i].demo(c)) : Promise.resolve(); },
+    demoDuration: i => S[i].demoDuration || 0,
+    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(hold); } },
+  };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { go(+(QS.get('step') || 1) - 1); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; });
+    else if (o.autoplay && !RM && !QS.has('step') && !QS.has('static')) { const run = () => api.autoplay().then(() => { if (o.autoplay === 'loop' && auto) run(); }); run(); } });
+  return api;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
+   so pause, scrub, replay and recording all work for free. Chapters label stretches of the timeline. */
+function player(o) {
+  const fr = frame(o.root, o, 'player'), eng = { gen: 0, timers: [], root: fr.root, act: null, cap: fr.cap, touched: false };
+  const CH = o.chapters || [{ at: 0, title: o.title || '', cap: '' }], D = o.duration;
+  const range = fr.$('.kx-scrub input'), pp = fr.$('.kx-pp'), tm = fr.$('.kx-time');
+  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1;
+  fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
+  const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
+  CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
+  fixCaptionHeight(fr, CH.map(c => c.cap || ''));
+  const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
+  function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !c.keys || c.keys.includes(e.dataset.l) ? '' : 'none'); }
+  function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
+  function draw() { range.value = t; tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
+  function seek(x) { t = clamp(x, 0, D); draw(); }
+  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n; t += dt * speed; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
+  function play() { if (t >= D) t = 0; if (RM) { seek(end(chapterAt(t)) - 1); return; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }  // reduced motion: jump to the end state of the chapter instead of animating
+  function pause() { playing = false; updPP(); }
+  function updPP() { pp.innerHTML = playing ? ICON.pause + 'Pause' : t >= D ? ICON.replay + 'Replay' : ICON.play + 'Play'; pp.setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  pp.onclick = () => playing ? pause() : play();
+  range.oninput = () => { pause(); seek(+range.value); };
+  fr.back.onclick = () => { seek(CH[Math.max(0, chapterAt(t) - (t - CH[chapterAt(t)].at < 600 ? 1 : 0))].at); };
+  fr.next.innerHTML = 'Next' + ICON.right; fr.next.onclick = () => { const k = chapterAt(t); seek(k < CH.length - 1 ? CH[k + 1].at : 0); play(); };
+  const end = i => i < CH.length - 1 ? CH[i + 1].at : D;
+  const api = { kind: 'player', root: fr.root, get count() { return CH.length; }, get current() { return chapterAt(t); }, go: i => { seek(CH[i].at); play(); }, duration: i => (end(i) - CH[i].at) / speed, hasDemo: () => false, demo: () => Promise.resolve(), seek, play, pause, get time() { return t; },
+    async autoplay() { seek(0); play(); while (t < D) await sleep(200); await sleep(o.hold || 2000); } };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if (o.autoplay !== false && !QS.has('static')) play(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  return api;
+}
+
+/* ---------- controls for explorables */
+let uid = 0;
+function slider(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent; const id = 'kx' + (++uid);
+  const w = document.createElement('div'); w.className = 'kx-ctl';
+  w.innerHTML = `<label for="${id}">${esc(o.label)}</label><output for="${id}"></output><input id="${id}" type="range" min="${o.min}" max="${o.max}" step="${o.step || 'any'}" value="${o.value}">`;
+  parent.appendChild(w); const inp = w.querySelector('input'), out = w.querySelector('output'), fmt = o.fmt || (v => v);
+  const upd = () => { out.textContent = fmt(+inp.value); o.oninput && o.oninput(+inp.value); };
+  inp.addEventListener('input', upd); upd();
+  return { el: w, input: inp, get value() { return +inp.value; }, set(v) { inp.value = v; upd(); } };
+}
+function toggle(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent;
+  const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', o.value ? 'true' : 'false'); b.innerHTML = esc(o.label); parent.appendChild(b);
+  b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', v); o.onchange && o.onchange(v); };
+  return b;
+}
+
+/* ---------- layout and number helpers */
+const grid = (j, o) => ({ x: (o.x0 || 0) + (j % o.cols) * (o.gap || 10), y: (o.y0 || 0) + Math.floor(j / o.cols) * (o.gapY || o.gap || 10) });
+function scale(d0, d1, r0, r1) { const s = v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0); s.invert = p => d0 + (p - r0) / (r1 - r0 || 1) * (d1 - d0); return s; }
+const fmt = {
+  int: v => Math.round(v).toLocaleString('en-US'),
+  pct: (v, d = 0) => (v * 100).toFixed(d) + '%',
+  usd: (v, d = 2) => (v < 0 ? '−' : '') + '$' + Math.abs(v).toFixed(d),
+  sec: v => v < 60 ? v.toFixed(0) + ' s' : Math.floor(v / 60) + ' min ' + Math.round(v % 60) + ' s',
+};
+/* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
+function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
+
+const K = { version: '1.0', NS, RM, C, STYLES, useStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
+window.K = K;
+})();
+</script>
+<script>
+/* ===== SCENE: everything below is the explainer itself. Edit freely. ===== */
+const {T, C, clamp, lerp} = K;
+/* handoff timelines. DATA is copied verbatim (by src/build.py) from evals/handoff-timelines/files/data.json, which
+   holds notebook 07's recorded runs (data/runs/L1, L2, L3 *.json) and data/comparison.csv. Every bar, arrow and
+   number below is computed from it. Nothing is invented; message arrows are drawn at their recorded times. */
+const DATA = {"runs": [{"level": "L1_sync_handoff", "wall_s": 120.21, "correct": true, "calls": {"llm": 17, "tool": 10}, "main_blocked_s_from_spans": 66.3, "agents": [{"id": "main", "role": "planner", "parent": null, "model": "claude-sonnet-5-5", "status": "done"}, {"id": "city_researcher#2", "role": "city_researcher", "parent": "main", "model": "claude-haiku-5-5", "status": "done"}, {"id": "city_researcher#3", "role": "city_researcher", "parent": "main", "model": "claude-haiku-5-5", "status": "done"}, {"id": "city_researcher#4", "role": "city_researcher", "parent": "main", "model": "claude-haiku-5-5", "status": "done"}], "spans": [{"agent": "main", "kind": "llm", "label": "think", "start": 0.0, "end": 5.57}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 5.57, "end": 12.39}, {"agent": "city_researcher#2", "kind": "tool", "label": "search_hotels", "start": 12.39, "end": 16.4}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 16.4, "end": 20.31}, {"agent": "city_researcher#2", "kind": "tool", "label": "get_weather", "start": 20.31, "end": 22.32}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 22.32, "end": 30.59}, {"agent": "main", "kind": "blocked", "label": "handoff to city_researcher#2", "start": 5.57, "end": 30.59}, {"agent": "main", "kind": "llm", "label": "think", "start": 30.59, "end": 36.46}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 36.46, "end": 40.21}, {"agent": "city_researcher#3", "kind": "tool", "label": "search_hotels", "start": 40.21, "end": 44.22}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 44.22, "end": 48.53}, {"agent": "city_researcher#3", "kind": "tool", "label": "get_weather", "start": 48.53, "end": 50.54}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 50.54, "end": 57.73}, {"agent": "main", "kind": "blocked", "label": "handoff to city_researcher#3", "start": 36.46, "end": 57.73}, {"agent": "main", "kind": "llm", "label": "think", "start": 57.73, "end": 63.16}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 63.16, "end": 67.11}, {"agent": "city_researcher#4", "kind": "tool", "label": "search_hotels", "start": 67.11, "end": 71.12}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 71.13, "end": 74.5}, {"agent": "city_researcher#4", "kind": "tool", "label": "get_weather", "start": 74.5, "end": 76.5}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 76.5, "end": 83.17}, {"agent": "main", "kind": "blocked", "label": "handoff to city_researcher#4", "start": 63.16, "end": 83.17}, {"agent": "main", "kind": "llm", "label": "think", "start": 83.17, "end": 87.64}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 87.64, "end": 90.65}, {"agent": "main", "kind": "llm", "label": "think", "start": 90.65, "end": 94.79}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 94.79, "end": 97.8}, {"agent": "main", "kind": "llm", "label": "think", "start": 97.8, "end": 102.22}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 102.22, "end": 105.22}, {"agent": "main", "kind": "llm", "label": "think", "start": 105.22, "end": 109.12}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 109.12, "end": 112.12}, {"agent": "main", "kind": "llm", "label": "think", "start": 112.12, "end": 120.21}], "events": [{"t": 5.57, "kind": "spawn", "from": "main", "to": "city_researcher#2", "text": "Research Lisbon for a May trip: 2 travellers sharing one room, 2 nights. Find the cheapest hotel rat"}, {"t": 30.59, "kind": "result", "from": "city_researcher#2", "to": "main", "text": "Chosen hotel: Baixa Rooms. Rating 4.1. Price EUR 96 per room per night (EUR 192 for 2 nights). Centr"}, {"t": 36.46, "kind": "spawn", "from": "main", "to": "city_researcher#3", "text": "Research Rome for a May trip: 2 travellers sharing one room, 2 nights. Find the cheapest hotel rated"}, {"t": 57.73, "kind": "result", "from": "city_researcher#3", "to": "main", "text": "Recommendation: Termini Inn (central, rated 4.0), EUR 104 per room per night, EUR 208 total for 2 ni"}, {"t": 63.16, "kind": "spawn", "from": "main", "to": "city_researcher#4", "text": "Research Prague for a May trip: 2 travellers sharing one room, 2 nights. Find the cheapest hotel rat"}, {"t": 83.17, "kind": "result", "from": "city_researcher#4", "to": "main", "text": "Prague, May, 2 travellers, 1 room, 2 nights.\n\nCheapest hotel rated 4.0+: Old Town Loft (4.7, central"}]}, {"level": "L2_async_spawn", "wall_s": 56.76, "correct": true, "calls": {"llm": 18, "tool": 10}, "main_blocked_s_from_spans": 0, "agents": [{"id": "main", "role": "planner", "parent": null, "model": "claude-sonnet-5-5", "status": "done"}, {"id": "city_researcher#2", "role": "city_researcher", "parent": "main", "model": "claude-haiku-5-5", "status": "done"}, {"id": "city_researcher#3", "role": "city_researcher", "parent": "main", "model": "claude-haiku-5-5", "status": "done"}, {"id": "city_researcher#4", "role": "city_researcher", "parent": "main", "model": "claude-haiku-5-5", "status": "done"}], "spans": [{"agent": "main", "kind": "llm", "label": "think", "start": 0.0, "end": 5.03}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 5.03, "end": 8.41}, {"agent": "main", "kind": "llm", "label": "think", "start": 5.03, "end": 10.5}, {"agent": "city_researcher#2", "kind": "tool", "label": "search_hotels", "start": 8.41, "end": 12.42}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 10.5, "end": 14.5}, {"agent": "main", "kind": "llm", "label": "think", "start": 10.5, "end": 15.13}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 12.42, "end": 16.45}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 15.13, "end": 18.37}, {"agent": "city_researcher#2", "kind": "tool", "label": "get_weather", "start": 16.45, "end": 18.45}, {"agent": "city_researcher#3", "kind": "tool", "label": "search_hotels", "start": 14.5, "end": 18.51}, {"agent": "main", "kind": "llm", "label": "think", "start": 15.13, "end": 19.25}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 18.51, "end": 21.83}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 19.25, "end": 22.26}, {"agent": "city_researcher#4", "kind": "tool", "label": "search_hotels", "start": 18.37, "end": 22.38}, {"agent": "city_researcher#3", "kind": "tool", "label": "get_weather", "start": 21.83, "end": 23.83}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 18.45, "end": 25.27}, {"agent": "main", "kind": "llm", "label": "think", "start": 22.26, "end": 26.3}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 22.38, "end": 26.6}, {"agent": "city_researcher#4", "kind": "tool", "label": "get_weather", "start": 26.6, "end": 28.6}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 26.3, "end": 29.3}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 23.83, "end": 30.6}, {"agent": "main", "kind": "llm", "label": "think", "start": 29.3, "end": 33.32}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 28.61, "end": 34.52}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 33.32, "end": 36.34}, {"agent": "main", "kind": "llm", "label": "think", "start": 36.34, "end": 40.93}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 40.93, "end": 43.94}, {"agent": "main", "kind": "llm", "label": "think", "start": 43.94, "end": 48.02}, {"agent": "main", "kind": "llm", "label": "think", "start": 48.02, "end": 56.76}], "events": [{"t": 5.03, "kind": "spawn", "from": "main", "to": "city_researcher#2", "text": "City: Lisbon. May trip, 2 nights, 2 travellers sharing one room. Find the cheapest hotel rated 4.0 o"}, {"t": 10.5, "kind": "spawn", "from": "main", "to": "city_researcher#3", "text": "City: Rome. May trip, 2 nights, 2 travellers sharing one room. Find the cheapest hotel rated 4.0 or "}, {"t": 15.13, "kind": "spawn", "from": "main", "to": "city_researcher#4", "text": "City: Prague. May trip, 2 nights, 2 travellers sharing one room. Find the cheapest hotel rated 4.0 o"}, {"t": 25.27, "kind": "result", "from": "city_researcher#2", "to": "main", "text": "Cheapest hotel rated 4.0+: Baixa Rooms (4.1, central), €96 per room per night, €192 for 2 nights. Ch"}, {"t": 30.6, "kind": "result", "from": "city_researcher#3", "to": "main", "text": "Rome, May, 2 nights, 1 room, 2 travellers (EUR, per room per night). Cheapest hotel rated 4.0+: Via "}, {"t": 34.52, "kind": "result", "from": "city_researcher#4", "to": "main", "text": "Prague, May, 2 nights, 1 room shared by 2 travellers. Cheapest hotel rated 4.0+: Old Town Loft (4.7,"}]}, {"level": "L3_progress_and_redirect", "wall_s": 68.77, "correct": true, "calls": {"llm": 25, "tool": 12}, "main_blocked_s_from_spans": 0.0, "agents": [{"id": "main", "role": "planner", "parent": null, "model": "claude-sonnet-5-5", "status": "done"}, {"id": "city_researcher#2", "role": "city_researcher", "parent": "main", "model": "claude-haiku-5-5", "status": "done"}, {"id": "city_researcher#3", "role": "city_researcher", "parent": "main", "model": "claude-haiku-5-5", "status": "done"}, {"id": "city_researcher#4", "role": "city_researcher", "parent": "main", "model": "claude-haiku-5-5", "status": "done"}], "spans": [{"agent": "main", "kind": "llm", "label": "think", "start": 0.0, "end": 5.65}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 5.65, "end": 8.75}, {"agent": "main", "kind": "llm", "label": "think", "start": 5.65, "end": 10.9}, {"agent": "city_researcher#2", "kind": "tool", "label": "search_hotels", "start": 8.75, "end": 12.75}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 10.9, "end": 14.52}, {"agent": "main", "kind": "llm", "label": "think", "start": 10.9, "end": 16.14}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 12.75, "end": 18.08}, {"agent": "city_researcher#3", "kind": "tool", "label": "search_hotels", "start": 14.52, "end": 18.53}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 16.14, "end": 19.97}, {"agent": "main", "kind": "llm", "label": "think", "start": 16.14, "end": 20.01}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 18.08, "end": 22.2}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 18.53, "end": 22.29}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 20.01, "end": 23.02}, {"agent": "city_researcher#4", "kind": "tool", "label": "search_hotels", "start": 19.97, "end": 23.97}, {"agent": "city_researcher#2", "kind": "tool", "label": "get_weather", "start": 22.2, "end": 24.21}, {"agent": "city_researcher#3", "kind": "tool", "label": "search_hotels", "start": 22.29, "end": 26.3}, {"agent": "main", "kind": "llm", "label": "think", "start": 23.02, "end": 27.45}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 23.97, "end": 27.58}, {"agent": "city_researcher#2", "kind": "llm", "label": "think", "start": 24.21, "end": 30.3}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 27.45, "end": 30.45}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 26.3, "end": 32.53}, {"agent": "city_researcher#4", "kind": "tool", "label": "search_hotels_backup", "start": 27.58, "end": 32.59}, {"agent": "main", "kind": "llm", "label": "think", "start": 30.45, "end": 34.69}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 34.69, "end": 37.7}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 32.53, "end": 38.02}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 32.59, "end": 39.97}, {"agent": "city_researcher#3", "kind": "tool", "label": "get_weather", "start": 38.02, "end": 40.03}, {"agent": "main", "kind": "llm", "label": "think", "start": 37.7, "end": 41.64}, {"agent": "main", "kind": "tool", "label": "search_flights", "start": 41.64, "end": 44.64}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 39.97, "end": 44.85}, {"agent": "city_researcher#3", "kind": "llm", "label": "think", "start": 40.03, "end": 46.29}, {"agent": "city_researcher#4", "kind": "tool", "label": "get_weather", "start": 44.85, "end": 46.86}, {"agent": "main", "kind": "llm", "label": "think", "start": 44.64, "end": 49.83}, {"agent": "city_researcher#4", "kind": "llm", "label": "think", "start": 46.86, "end": 53.7}, {"agent": "main", "kind": "llm", "label": "think", "start": 49.83, "end": 54.34}, {"agent": "main", "kind": "blocked", "label": "wait city_researcher#4", "start": 54.34, "end": 54.34}, {"agent": "main", "kind": "llm", "label": "think", "start": 54.34, "end": 59.74}, {"agent": "main", "kind": "llm", "label": "think", "start": 59.74, "end": 68.77}], "events": [{"t": 5.65, "kind": "spawn", "from": "main", "to": "city_researcher#2", "text": "Research Lisbon for a May stay of 2 nights for 2 travellers sharing one room. Find the cheapest hote"}, {"t": 10.9, "kind": "spawn", "from": "main", "to": "city_researcher#3", "text": "Research Rome for a May stay of 2 nights for 2 travellers sharing one room. Find the cheapest hotel "}, {"t": 16.14, "kind": "spawn", "from": "main", "to": "city_researcher#4", "text": "Research Prague for a May stay of 2 nights for 2 travellers sharing one room. Find the cheapest hote"}, {"t": 18.08, "kind": "progress", "from": "city_researcher#2", "to": "main", "text": "Lisbon search_hotels returned 3 hotels. Cheapest rated 4.0+ is Baixa Rooms (4.1, EUR 96/night, centr"}, {"t": 30.3, "kind": "result", "from": "city_researcher#2", "to": "main", "text": "Chosen hotel: Baixa Rooms, Lisbon. Rating 4.1. Price EUR 96 per room per night, for 2 nights and 2 t"}, {"t": 32.53, "kind": "progress", "from": "city_researcher#3", "to": "main", "text": "Hotel search done. Cheapest 4.0+: Via Appia Lodge, 4.0, EUR 98/night (outskirts). Central 4.0+: Term"}, {"t": 39.97, "kind": "alert", "from": "city_researcher#4", "to": "main", "text": "search_hotels failed for Prague with RuntimeError: hotel search service unavailable (HTTP 503). sear"}, {"t": 46.29, "kind": "result", "from": "city_researcher#3", "to": "main", "text": "Rome, 2 nights in May, 2 travellers, 1 room, prices in EUR per room per night.\n\nCheapest hotel rated"}, {"t": 49.83, "kind": "instruction", "from": "main", "to": "city_researcher#4", "text": "Proceed with the backup data, no need to retry search_hotels. Only Old Town Loft (4.7, EUR 131, cent"}, {"t": 53.7, "kind": "result", "from": "city_researcher#4", "to": "main", "text": "Prague, May, 2 nights, 2 travellers sharing one room.\n\nHotels rated 4.0+ (from search_hotels_backup;"}]}], "comparison": [{"level": "0 single agent", "wall s": 82.06, "agents": 1.0, "LLM calls": 11.0, "tool calls": 10.0, "LLM s (summed)": 51.95, "tool s (summed)": 30.11, "main blocked s": 0.0, "main blocked %": 0.0, "messages": 0.0, "correct": "True"}, {"level": "1 sync handoff", "wall s": 120.21, "agents": 4.0, "LLM calls": 17.0, "tool calls": 10.0, "LLM s (summed)": 90.13, "tool s (summed)": 30.08, "main blocked s": 66.3, "main blocked %": 0.55, "messages": 3.0, "correct": "True"}, {"level": "2 async spawn", "wall s": 56.76, "agents": 4.0, "LLM calls": 18.0, "tool calls": 10.0, "LLM s (summed)": 86.41, "tool s (summed)": 30.07, "main blocked s": 0.0, "main blocked %": 0.0, "messages": 3.0, "correct": "True"}, {"level": "3 progress + redirect", "wall s": 68.77, "agents": 4.0, "LLM calls": 25.0, "tool calls": 12.0, "LLM s (summed)": 127.27, "tool s (summed)": 39.1, "main blocked s": 0.0, "main blocked %": 0.0, "messages": 6.0, "correct": "True"}, {"level": "4 child asks parent", "wall s": 68.95, "agents": 4.0, "LLM calls": 21.0, "tool calls": 10.0, "LLM s (summed)": 112.23, "tool s (summed)": 30.07, "main blocked s": 0.0, "main blocked %": 0.0, "messages": 5.0, "correct": "True"}, {"level": "5 race + cancel", "wall s": 49.27, "agents": 4.0, "LLM calls": 17.0, "tool calls": 9.0, "LLM s (summed)": 74.31, "tool s (summed)": 47.78, "main blocked s": 15.73, "main blocked %": 0.32, "messages": 3.0, "correct": "True"}, {"level": "6 nested", "wall s": 65.23, "agents": 10.0, "LLM calls": 35.0, "tool calls": 10.0, "LLM s (summed)": 173.3, "tool s (summed)": 30.05, "main blocked s": 3.18, "main blocked %": 0.05, "messages": 9.0, "correct": "True"}]};
+const RUN = Object.fromEntries(DATA.runs.map(r => [r.level, r]));
+const SYNC = RUN.L1_sync_handoff, ASYNC = RUN.L2_async_spawn, PROG = RUN.L3_progress_and_redirect;
+
+// Helper ids -> city, read from each run's spawn message text ("Research Lisbon ...", "City: Rome ...").
+function cities(run) {
+  const m = {main: 'Planner'};
+  run.events.filter(e => e.kind === 'spawn').forEach(e => { m[e.to] = (e.text.match(/Lisbon|Rome|Prague/) || ['?'])[0]; });
+  return m;
+}
+const LANES = ['main', 'city_researcher#2', 'city_researcher#3', 'city_researcher#4'];   // planner, then helpers in spawn order
+const blockedSpans = run => run.spans.filter(s => s.agent === 'main' && s.kind === 'blocked' && s.end > s.start);
+const blockedSum = run => blockedSpans(run).reduce((a, s) => a + s.end - s.start, 0);
+const ownWork = run => run.spans.filter(s => s.agent === 'main' && s.kind !== 'blocked').reduce((a, s) => a + s.end - s.start, 0);
+const s1 = v => v.toFixed(1);
+
+/* ---- timeline (animation ms). 10x for the sync/async replays, 5x for the lost-message run. */
+const SP = 100, SP3 = 200;                        // ms of animation per real second
+const T0 = 0, T1 = 6500;                          // cast
+const T2 = T1 + SYNC.wall_s * SP + 3000;          // sync replay + hold
+const T3 = T2 + ASYNC.wall_s * SP + 3500;         // async replay + hold
+const T4 = T3 + 8000;                             // compare (static, reveals in two beats)
+const T5 = T4 + PROG.wall_s * SP3 + 4500;         // lost message replay + hold
+const D = T5 + 11000;                             // all seven runs
+
+/* ---- geometry. Two stacked panels share one time axis (0-125 s) so the two runs compare directly. */
+const X = s => 76 + s * 288 / 125;
+const PA = {title: 18, wl: 34, lanes: [46, 64, 82, 100], sum: 124};
+const PB = {title: 150, wl: 166, lanes: [176, 194, 212, 230], sum: 254};
+const AXIS = 268, BH = 12;
+const X3 = s => 76 + s * 288 / 70;
+const L3Y = [46, 72, 98, 124], AX3 = 146;
+
+const FILL = {get llm() { return C.fill.violet; }, get tool() { return C.fill.green; }};   // C is filled once the player sets its style
+const txt = (x, y, s, o = {}) => T(x, y, s, o);
+const tclip = (now, a, b) => Math.max(a, Math.min(now, b));
+
+function laneLabels(run, P) {
+  const nm = cities(run);
+  return LANES.map((id, i) => txt(12, P.lanes[i] + 4.5, nm[id], {a: 'start', z: 13, c: id === 'main' ? 'ink' : 'mut'})).join('');
+}
+function grid(P, x, ticks) {
+  return ticks.map(v => `<line x1="${x(v)}" x2="${x(v)}" y1="${P.lanes[0] - 9}" y2="${P.lanes[3] + 9}" stroke="${C.faint}" stroke-width=".7" stroke-dasharray="2 3"/>`).join('');
+}
+// Bars for one run up to time `now` (real seconds). Spans are clipped at now, so scrubbing back works.
+function bars(run, now, P, x, opts = {}) {
+  let h = '';
+  const yOf = id => P.lanes[LANES.indexOf(id)];
+  run.spans.forEach(sp => {
+    if (sp.start >= now || sp.end <= sp.start) return;
+    const y = yOf(sp.agent), x0 = x(sp.start), x1 = x(tclip(now, sp.start, sp.end)), w = Math.max(.6, x1 - x0 - .6);
+    if (sp.kind === 'blocked') h += `<rect x="${x0}" y="${y - BH / 2}" width="${w}" height="${BH}" fill="url(#hatch)" stroke="${C.fill.amber}" stroke-width=".9"/>`;
+    else h += `<rect x="${x0}" y="${y - BH / 2}" width="${w}" height="${BH}" rx="2" fill="${FILL[sp.kind]}"/>`;
+    if (opts.failed && opts.failed(sp)) h += `<rect x="${x0}" y="${y - BH / 2}" width="${w}" height="${BH}" rx="2" fill="none" stroke="${C.red}" stroke-width="1.6"/>`;
+  });
+  // messages: a vertical arrow at the recorded send time, from sender lane to receiver lane
+  run.events.forEach(e => {
+    if (e.t > now) return;
+    const xa = x(e.t), ya = yOf(e.from), yb = yOf(e.to);
+    if (ya == null || yb == null) return;
+    const down = yb > ya, y1 = ya + (down ? BH / 2 : -BH / 2), y2 = yb + (down ? -BH / 2 - 1 : BH / 2 + 1);
+    const c = opts.msgColor ? opts.msgColor(e) : C.blue;
+    h += `<line x1="${xa}" x2="${xa}" y1="${y1}" y2="${y2}" stroke="${c}" stroke-width="1.3"/>` +
+         `<path d="M${xa - 3} ${y2 + (down ? -4 : 4)} L${xa} ${y2} L${xa + 3} ${y2 + (down ? -4 : 4)}" fill="none" stroke="${c}" stroke-width="1.3"/>`;
+    const k = (now - e.t) / 1.2;            // a dot runs along the arrow for 1.2 s of run time after it is sent
+    if (k < 1) h += `<circle cx="${xa}" cy="${lerp(y1, y2, k)}" r="3.2" fill="${c}"/>`;
+  });
+  return h;
+}
+function nowLine(P, x, now) { return `<line x1="${x(now)}" x2="${x(now)}" y1="${P.lanes[0] - 10}" y2="${P.lanes[3] + 10}" stroke="${C.ink}" stroke-opacity=".55" stroke-width="1"/>`; }
+function waitLabels(run, now, P) {   // the length of each finished wait, above the planner lane
+  return blockedSpans(run).filter(b => b.end <= now).map(b => txt(X((b.start + b.end) / 2), P.wl, s1(b.end - b.start) + ' s', {z: 13, c: 'amber'})).join('');
+}
+function panel(run, now, P, name, o = {}) {
+  const waited = blockedSpans(run).reduce((a, b) => a + Math.max(0, tclip(now, b.start, b.end) - b.start), 0);
+  const done = now >= run.wall_s;
+  let h = `<g opacity="${o.dim ? .4 : 1}">` + txt(12, P.title, name, {h: 1, z: 18, a: 'start'}) + laneLabels(run, P) + grid(P, X, [30, 60, 90, 120]);
+  h += txt(368, P.title, 'planner waited ' + s1(waited) + ' s' + (done ? ' (' + Math.round(100 * blockedSum(run) / run.wall_s) + '%)' : ''), {a: 'end', z: 14, c: waited > 0 ? 'amber' : 'mut'});
+  h += bars(run, now, P, X) + waitLabels(run, now, P);
+  if (!done && now > 0 && !o.dim) h += nowLine(P, X, now);
+  if (done) h += txt(X(run.wall_s) + 4, P.lanes[0] + 4.5, '✓', {a: 'start', z: 13, c: 'green'});
+  if (o.sum) h += o.sum;
+  else if (done) h += txt(76, P.sum, '✓ final answer at ' + s1(run.wall_s) + ' s (correct)', {a: 'start', z: 13, c: 'green'});
+  return h + '</g>';
+}
+function axis(x, ticks, y, unitLast) {
+  let h = `<line x1="${x(0)}" x2="${x(ticks[ticks.length - 1])}" y1="${y}" y2="${y}" stroke="${C.mut}" stroke-width="1"/>`;
+  ticks.forEach((v, i) => { h += `<line x1="${x(v)}" x2="${x(v)}" y1="${y}" y2="${y + 4}" stroke="${C.mut}"/>` + txt(x(v), y + 17, v + (i === ticks.length - 1 ? unitLast : ''), {z: 13, c: 'mut'}); });
+  return h;
+}
+const sumLine = (run, P) => txt(76, P.sum, s1(ownWork(run)) + ' s working + ' + s1(blockedSum(run)) + ' s waiting = ' + s1(run.wall_s) + ' s', {a: 'start', z: 13, c: 'ink'});
+
+/* ---- the lost message (progress + redirect run) */
+const PRAGUE = 'city_researcher#4';
+const failSpan = PROG.spans.find(s => s.agent === PRAGUE && s.label === 'search_hotels');              // ends at the 503 failure
+const alertEv = PROG.events.find(e => e.kind === 'alert');
+const instrEv = PROG.events.find(e => e.kind === 'instruction');
+const lastCall = PROG.spans.filter(s => s.agent === PRAGUE && s.kind === 'llm').slice(-1)[0];          // Prague's last model call
+const pragueDone = PROG.events.filter(e => e.kind === 'result' && e.from === PRAGUE).slice(-1)[0];
+function lostScene(now) {
+  const P = {lanes: L3Y};
+  let h = txt(12, 18, 'A third run: helpers report progress', {h: 1, z: 18, a: 'start'});
+  h += laneLabels(PROG, P) + grid(P, X3, [20, 40, 60]);
+  h += bars(PROG, now, P, X3, {failed: s => s === failSpan && now >= failSpan.end,
+    msgColor: e => e === alertEv || e === instrEv ? C.red : C.blue});
+  if (now >= failSpan.end) h += txt(X3(failSpan.end) + 3, L3Y[3] - 9, '✗', {a: 'start', z: 14, c: 'red', w: 700});
+  if (now >= instrEv.t) {   // the reply lands inside a model call that had already started
+    const x0 = X3(lastCall.start), x1 = X3(lastCall.end);
+    h += `<rect x="${x0 - 2}" y="${L3Y[3] - BH / 2 - 3}" width="${x1 - x0 + 4}" height="${BH + 6}" rx="3" fill="none" stroke="${C.red}" stroke-dasharray="3 2" stroke-width="1.2"/>`;
+    h += txt(X3(instrEv.t), L3Y[3] + 4.5, '✗', {z: 14, c: 'ink', w: 700});
+  }
+  if (now < PROG.wall_s) h += nowLine(P, X3, now);
+  else h += txt(X3(PROG.wall_s) + 4, L3Y[0] + 4.5, '✓', {a: 'start', z: 13, c: 'green'});
+  h += axis(X3, [0, 20, 40, 60], AX3, ' s');
+  const lines = [
+    [failSpan.end, s1(failSpan.end) + ' s  ✗ Prague’s hotel search fails (HTTP 503)', 'ink'],
+    [alertEv.t, s1(alertEv.t) + ' s  Prague sends the planner an urgent report', 'ink'],
+    [instrEv.t, s1(instrEv.t) + ' s  Planner replies: go ahead with the backup', 'ink'],
+    [instrEv.t + 1.2, '✗ Never read: Prague’s last model call had', 'red'],
+    [instrEv.t + 1.2, '   begun at ' + s1(lastCall.start) + ' s, and no one told the planner', 'red'],
+    [pragueDone.t, s1(pragueDone.t) + ' s  Prague answers anyway; trip still correct', 'mut'],
+  ];
+  lines.forEach(([at, s, c], i) => { if (now >= at) h += txt(12, 182 + i * 20, s, {a: 'start', z: 13, c}); });
+  return h;
+}
+
+/* ---- all seven runs: planner working vs waiting, from comparison.csv */
+const NAMES = {'0 single agent': 'One agent', '1 sync handoff': 'Sync handoff', '2 async spawn': 'Async spawn', '3 progress + redirect': 'Progress reports',
+  '4 child asks parent': 'Child asks parent', '6 nested': 'Nested helpers', '5 race + cancel': 'Race (flights)'};
+const ORDER = ['0 single agent', '1 sync handoff', '2 async spawn', '3 progress + redirect', '4 child asks parent', '6 nested', '5 race + cancel'];
+const XB = s => 132 + s * 1.6;
+function allRuns(k) {   // k: 0..1 growth of the bars
+  let h = txt(12, 18, 'Finish time, one recorded run each', {h: 1, z: 18, a: 'start'});
+  ORDER.forEach((lv, i) => {
+    const r = DATA.comparison.find(c => c.level === lv), y = 44 + i * 24, w = r['wall s'] * k, b = r['main blocked s'] * k;
+    const race = lv.startsWith('5');
+    h += txt(12, y + 4.5, NAMES[lv], {a: 'start', z: 13, c: race ? 'mut' : 'ink'});
+    h += `<rect x="${XB(0)}" y="${y - 6}" width="${Math.max(0, XB(w - b) - XB(0))}" height="12" rx="2" fill="${C.mut}" opacity="${race ? .5 : .9}"/>`;
+    if (b > 0) h += `<rect x="${XB(w - b)}" y="${y - 6}" width="${XB(w) - XB(w - b)}" height="12" fill="url(#hatch)" stroke="${C.fill.amber}" stroke-width=".9"/>`;
+    if (k >= 1) h += txt(XB(w) + 5, y + 4.5, Math.round(r['wall s']) + ' s', {a: 'start', z: 13, c: lv.startsWith('1') ? 'amber' : race ? 'mut' : 'ink'});
+  });
+  if (k >= 1) {
+    const ok = DATA.comparison.filter(c => c.correct === 'True').length;
+    h += txt(12, 212, 'Grey: planner working. Hatched: planner waiting.', {a: 'start', z: 13, c: 'ink'});
+    h += txt(12, 236, `All ${ok} answers correct: correctness can’t rank them.`, {a: 'start', z: 13, c: 'mut'});
+    h += txt(12, 258, 'One run each; a few seconds may not repeat.', {a: 'start', z: 13, c: 'mut'});
+    h += txt(12, 280, 'Race planned flights only: not comparable.', {a: 'start', z: 13, c: 'mut'});
+  }
+  return h;
+}
+
+/* ---- event log, generated from the recorded events */
+function runLog(run, t0, sp, label) {
+  const nm = cities(run), L = [{t: t0 + 1, text: '• ' + label, c: 'mut'}];
+  const say = {spawn: e => `→ ${s1(e.t)} s planner → ${nm[e.to]} helper: start`, result: e => `← ${s1(e.t)} s ${nm[e.from]} helper answers`,
+    progress: e => `• ${s1(e.t)} s ${nm[e.from]} sends a progress note`, alert: e => `✗ ${s1(e.t)} s ${nm[e.from]}: search failed (503)`,
+    instruction: e => `→ ${s1(e.t)} s planner → ${nm[e.to]}: use backup`};
+  run.events.forEach(e => L.push({t: t0 + e.t * sp, text: say[e.kind] ? say[e.kind](e) : e.kind, c: e.kind === 'alert' || e.kind === 'instruction' ? 'red' : e.kind === 'result' ? 'blue' : 'ink'}));
+  blockedSpans(run).forEach(b => L.push({t: t0 + b.end * sp + 1, text: `• ${s1(b.end)} s planner resumes after ${s1(b.end - b.start)} s wait`, c: 'amber'}));
+  const fl = run.spans.find(s => s.agent === 'main' && s.label === 'search_flights');
+  if (fl) L.push({t: t0 + fl.start * sp, text: `→ ${s1(fl.start)} s planner starts flight searches`, c: 'green'});
+  L.push({t: t0 + run.wall_s * sp, text: `✓ ${s1(run.wall_s)} s final answer (correct)`, c: 'green'});
+  return L.sort((a, b) => a.t - b.t);
+}
+const LOG = [{t: 0, text: '• trip: Toronto → Lisbon → Rome → Prague → home', c: 'mut'}]
+  .concat(runLog(SYNC, T1, SP, 'sync handoff run'), runLog(ASYNC, T2, SP, 'async spawn run'))
+  .concat([{t: T3 + 1, text: '• finish = own work + waiting', c: 'mut'}])
+  .concat(runLog(PROG, T4, SP3, 'progress report run (5× slower)'))
+  .concat([{t: T4 + (instrEv.t + 1.2) * SP3, text: `✗ reply never read (last call began ${s1(lastCall.start)} s)`, c: 'red'},
+           {t: T5 + 1, text: '• all seven runs', c: 'mut'}])
+  .sort((a, b) => a.t - b.t);
+
+K.player({
+  root: '#x', style: 'chalkboard', viewBox: [380, 300], duration: D,
+  title: 'Replay of two recorded runs from notebook 07: a planner agent that hands each city to a helper and waits finishes in 120 s; one that starts all helpers and keeps working finishes in 57 s. A third run shows a reply that arrived too late to be read.',
+  legend: [
+    {key: 'llm', label: 'Model call', color: 'fill.violet'},
+    {key: 'tool', label: 'Search (flights, hotel, weather)', color: 'fill.green'},
+    {key: 'wait', label: 'Planner waiting for a helper', color: 'fill.amber'},
+    {key: 'msg', label: 'Message between agents', color: 'blue'},
+    {key: 'err', label: 'Failure or lost message', color: 'red'},
+  ],
+  chapters: [
+    {at: T0, title: 'Meet the cast',
+     cap: 'A planner model splits a 3-city trip. One helper per city finds a hotel and the weather; the planner searches flights itself. Bars will be model calls and searches from two recorded runs.'},
+    {at: T1, title: 'Sync: hand off, wait',
+     cap: 'The planner hands one city to a helper and stops until it answers. Hatched bars are the planner waiting: 25.0, 21.3 and 20.0 s. It gets back to its own work only at 83 s.'},
+    {at: T2, title: 'Async: start all, go on',
+     cap: 'Same task, same helpers. The planner starts all three, then searches flights while they work. Answers arrive at 25, 31 and 35 s, before it asks for them. It never waits.'},
+    {at: T3, title: 'Who waited for whom',
+     cap: 'Finish time = the planner’s own work + its waiting. Both planners worked 54-57 s. Sync added 66.3 s of waiting for helpers; async added none, so it finished in 57 s, not 120 s.'},
+    {at: T4, title: 'The reply nobody read',
+     cap: 'A third run (slowed to 5×). Prague’s hotel search fails and it alerts the planner. The planner’s reply lands after Prague’s last model call began, so it is never read.'},
+    {at: T5, title: 'All seven runs',
+     cap: 'Start helpers and keep the planner busy; wait only when you need an answer. Sync handoff was the one pattern slower than a single agent (120 s vs 82 s). Check that late messages get read.'},
+  ],
+  log: LOG,
+  clock: t => t < T1 ? 'ready' : t < T2 ? s1(Math.min((t - T1) / SP, SYNC.wall_s)) + ' s · 10×' : t < T3 ? s1(Math.min((t - T2) / SP, ASYNC.wall_s)) + ' s · 10×'
+    : t < T4 ? 'both done' : t < T5 ? s1(Math.min((t - T4) / SP3, PROG.wall_s)) + ' s · 5×' : 'all runs',
+  scene: () => `<defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="5" height="5" fill="${C.fill.amber}" fill-opacity=".22"/><rect width="2" height="5" fill="${C.fill.amber}"/></pattern></defs>`,
+  frame(t, s) {
+    let h = '';
+    if (t < T4) {
+      const nA = t < T1 ? 0 : Math.min((t - T1) / SP, SYNC.wall_s + .01);
+      const nB = t < T2 ? 0 : Math.min((t - T2) / SP, ASYNC.wall_s + .01);
+      const cmp = t >= T3, beat2 = t >= T3 + 2500;
+      h += panel(SYNC, nA, PA, 'Sync handoff', {dim: t >= T2 && t < T3, sum: cmp ? sumLine(SYNC, PA) : null});
+      h += panel(ASYNC, nB, PB, 'Async spawn', {dim: t < T2, sum: cmp && beat2 ? sumLine(ASYNC, PB) : null});
+      if (t < T1) {   // the cast: say who is who before anything moves
+        h += txt(76, PA.sum, 'Planner: Sonnet 5.5 · helpers: Haiku 5.5', {a: 'start', z: 13, c: 'mut'});
+        h += txt(76, PB.sum, 'Same task; only the hand-off differs', {a: 'start', z: 13, c: 'mut'});
+      }
+      if (cmp && beat2) {   // the async finish time marked inside the sync panel
+        const xa = X(ASYNC.wall_s);
+        h += `<line x1="${xa}" x2="${xa}" y1="${PA.lanes[3] + 8}" y2="${PA.lanes[0] - 8}" stroke="${C.green}" stroke-dasharray="3 3" stroke-width="1"/>`;
+      }
+      h += axis(X, [0, 30, 60, 90, 120], AXIS, ' s');
+    } else if (t < T5) {
+      h += lostScene(Math.min((t - T4) / SP3, PROG.wall_s + .01));
+    } else {
+      h += allRuns(clamp((t - T5) / 1800));
+    }
+    s.dyn.innerHTML = h;
+  },
+});
+
+</script>
+</body></html>

@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checking cheap invoice answers</title>
+<style>:root{color-scheme:light}html,body{margin:0;background:#F2F2EE}body{padding:16px;min-height:100vh;box-sizing:border-box}.kx .kx-legend{min-height:52px}</style>
+</head><body>
+<div id="x"></div>
+<script>
+/* explainer-kit v1. A small engine for animated, stepwise SVG explainers. No dependencies.
+   Exposes window.K. Read explainer-kit/SKILL.md for the API and the rules it encodes.
+   Every animation is tied to a "generation": moving to another step cancels all timers,
+   loops and tweens of the old step, so steps can never bleed into each other. */
+(function () {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const QS = new URLSearchParams(location.search);
+const REC = QS.has('record');
+const f = n => (+n).toFixed(1);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = { inOut: k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, out: k => 1 - Math.pow(1 - k, 3), linear: k => k };
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- styles: one object per look. ink colours draw lines and text; fill colours encode data
+   (fills were checked for colour-blind separation against their background). */
+const STYLES = {
+  chalkboard: { dark: 1, bg: '#1E2023', panel: '#17191B', ink: '#ECE7DA', mut: '#9A9A93', faint: '#55585E', line: '#4A4D53',
+    blue: '#9CC3E6', green: '#A8DDC3', amber: '#F2D98B', violet: '#C3B5E8', red: '#EBA494',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 1, texture: 1, hand: "'Caveat', cursive", handSize: 1.12, font: 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap' },
+  paper: { dark: 0, bg: '#FBF8F1', panel: '#F3EEE3', ink: '#22252A', mut: '#5F6368', faint: '#C9C3B6', line: '#BDB6A8',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: .7, texture: 0, hand: "'Kalam', cursive", handSize: 1, font: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap' },
+  editorial: { dark: 0, bg: '#FFFFFF', panel: '#F5F5F2', ink: '#1A1A1A', mut: '#5C5C5C', faint: '#D6D6D0', line: '#C4C4BE',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: 0, texture: 0, hand: "'Source Serif 4', Georgia, serif", handSize: .9, font: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap' },
+  blueprint: { dark: 1, bg: '#10243A', panel: '#0C1C2E', ink: '#E6EEF5', mut: '#93A8BC', faint: '#3A5672', line: '#4A6A89',
+    blue: '#8EC5F0', green: '#9BE0C0', amber: '#F5D58A', violet: '#C9B8F2', red: '#F2A08F',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 0, texture: 0, grid: 1, hand: "'IBM Plex Mono', ui-monospace, monospace", handSize: .78, font: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap' },
+};
+let ST = STYLES.chalkboard, ROUGH = 1;
+const C = {};                                   // active colours, e.g. K.C.ink, K.C.fill.blue
+function col(c) { if (!c) return C.ink; if (c[0] === '#' || c.startsWith('rgb') || c === 'none' || c === 'transparent') return c; if (c.startsWith('fill.')) return C.fill[c.slice(5)] || c; return C[c] || c; }
+function useStyle(name, root) {
+  ST = STYLES[name] || STYLES.chalkboard; ROUGH = ST.rough;
+  Object.keys(C).forEach(k => delete C[k]); Object.assign(C, ST, { fill: { ...ST.fill } });
+  injectCSS();
+  if (ST.font && !document.querySelector(`link[href="${ST.font}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ST.font; document.head.appendChild(l); }
+  if (root) {
+    const v = { bg: ST.bg, panel: ST.panel, ink: ST.ink, mut: ST.mut, faint: ST.faint, line: ST.line, blue: ST.blue, green: ST.green, amber: ST.amber, violet: ST.violet, red: ST.red, hand: ST.hand };
+    for (const k in v) root.style.setProperty('--k-' + k, v[k]);
+    root.classList.add('kx', 'kx-' + (name in STYLES ? name : 'chalkboard'));
+    if (ST.texture) { const r = rng(9); let s = ''; for (let i = 0; i < 140; i++) s += `<circle cx='${(r() * 240).toFixed(1)}' cy='${(r() * 240).toFixed(1)}' r='${(.4 + r() * .8).toFixed(2)}' fill='%23ffffff' fill-opacity='${(.02 + r() * .045).toFixed(3)}'/>`; root.style.backgroundImage = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>${s}</svg>")`; }
+    if (ST.grid) root.style.backgroundImage = `linear-gradient(${ST.faint}55 1px,transparent 1px),linear-gradient(90deg,${ST.faint}55 1px,transparent 1px)`, root.style.backgroundSize = '20px 20px';
+  }
+  return ST;
+}
+function fontsReady(ms = 1500) { return Promise.race([document.fonts ? document.fonts.ready.then(() => document.fonts.load(`20px ${ST.hand.split(',')[0]}`)) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
+
+/* ---------- hand-drawn geometry. Each shape takes a seed so its wobble is identical on every frame. */
+const J = (r, a) => (r() - .5) * 2 * a * ROUGH;
+function line(x1, y1, x2, y2, seed = 1, bow = 1.6) { const r = rng(seed); return `M${f(x1 + J(r, .5))} ${f(y1 + J(r, .5))} Q${f((x1 + x2) / 2 + J(r, bow))} ${f((y1 + y2) / 2 + J(r, bow))} ${f(x2)} ${f(y2)}`; }
+function rect(x, y, w, h, seed = 1) {
+  if (!ROUGH) return `M${f(x)} ${f(y)}H${f(x + w)}V${f(y + h)}H${f(x)}Z`;
+  const r = rng(seed), p = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(q => [q[0] + J(r, 1.3), q[1] + J(r, 1.3)]);
+  let d = `M${f(p[0][0])} ${f(p[0][1])}`;
+  for (let i = 0; i < 4; i++) { const A = p[i], B = p[(i + 1) % 4]; d += ` Q${f((A[0] + B[0]) / 2 + J(r, 1.5))} ${f((A[1] + B[1]) / 2 + J(r, 1.5))} ${f(B[0])} ${f(B[1])}`; }
+  return d + ` L${f(p[0][0] + (p[1][0] - p[0][0]) * .08)} ${f(p[0][1] + J(r, 1))}`;
+}
+function ellipse(cx, cy, rx, ry = rx, seed = 1) { const r = rng(seed); return `M${f(cx - rx)} ${f(cy)} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx + rx)} ${f(cy + J(r, .6))} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx - rx + 1.5 * ROUGH)} ${f(cy + .6 * ROUGH)}`; }
+function arrow(fx, fy, x, y, seed = 1, L = 8) { const a = Math.atan2(y - fy, x - fx), r = rng(seed), k = .5 + J(r, .06); return `M${f(x - L * Math.cos(a - k))} ${f(y - L * Math.sin(a - k))} L${f(x)} ${f(y)} L${f(x - L * Math.cos(a + k))} ${f(y - L * Math.sin(a + k))}`; }
+function poly(pts, seed = 1) { const r = rng(seed); return 'M' + pts.map((p, i) => `${f(p[0] + (i ? J(r, .6) : 0))} ${f(p[1] + (i ? J(r, .6) : 0))}`).join(' L'); }
+function curve(x1, y1, x2, y2, bend = .3) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1; return `M${f(x1)} ${f(y1)} Q${f(mx - dy * bend)} ${f(my + dx * bend)} ${f(x2)} ${f(y2)}`; }
+
+/* ---------- markup builders. Elements carry data-k (draw|fade), data-t (delay ms) and data-d (duration ms);
+   the engine reveals them in that order when a step opens, and shows them at once with reduced motion. */
+function P(d, c, t = 0, du = 600, w = 1.5, extra = '') { return `<path d="${d}" fill="none" stroke="${col(c)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" data-k="draw" data-t="${t}" data-d="${du}" ${extra}/>`; }
+function T(x, y, s, o = {}) {
+  const fam = o.h ? 'var(--k-hand)' : o.m ? 'var(--font-mono, ui-monospace, Menlo, monospace)' : 'var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)';
+  const z = (o.z || 12) * (o.h ? ST.handSize : 1);
+  return `<text${o.id ? ` id="${o.id}"` : ''} x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${f(z)}"${o.w ? ` font-weight="${o.w}"` : ''} fill="${col(o.c)}" style="font-family:${fam};font-variant-numeric:tabular-nums" data-k="fade" data-t="${o.t || 0}" data-d="${o.d || 450}"${o.extra ? ' ' + o.extra : ''}>${o.raw ? s : esc(s)}</text>`;
+}
+function F(shape, c, t = 0, o = {}) { return `<path d="${shape}" fill="${col(c)}" fill-opacity="${o.op == null ? .85 : o.op}" stroke="none" data-k="fade" data-t="${t}" data-d="${o.d || 450}"${o.id ? ` id="${o.id}"` : ''}/>`; }
+function reveal(svg) {
+  const els = [...svg.querySelectorAll('[data-k]')];
+  if (RM) { els.forEach(e => { e.style.opacity = 1; e.style.strokeDashoffset = 0; }); return 0; }
+  let end = 0;
+  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (e.dataset.k === 'draw') { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
+  svg.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (e.dataset.k === 'draw') { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
+  return end;
+}
+function finish(svg) { svg.querySelectorAll('[data-k]').forEach(e => { e.style.transition = 'none'; e.style.strokeDashoffset = 0; e.style.opacity = 1; }); }
+
+/* ---------- small DOM helpers */
+function mk(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const ICON = {
+  left: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  right: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
+  replay: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+let cssDone = false;
+function injectCSS() {
+  if (cssDone) return; cssDone = true;
+  const s = document.createElement('style');
+  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
+.kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
+.kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
+.kx-count{font-size:11px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kx-cap{font-size:13.5px;line-height:1.55;margin:6px 8px 8px;color:var(--k-ink)}
+.kx-act{display:flex;justify-content:center;align-items:center;gap:8px;min-height:44px;flex-wrap:wrap;margin:0 4px 4px}
+.kx-legend{display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px 12px;font-size:12px;color:var(--k-mut);margin:6px 8px 8px;min-height:40px}.kx-legend>span{transition:opacity .4s}
+.kx-sw{display:inline-block;width:12px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.kx-nav{display:flex;align-items:center;gap:8px}.kx button.kx-next{min-width:112px}.kx-act .kx-ctl{flex:1 1 100%}
+@media (max-width:480px){.kx{padding:12px 8px 10px}.kx button.kx-next{min-width:96px;padding:0 8px}.kx button.kx-dot{padding:10px 3px}.kx-nav{gap:6px}}
+.kx button{background:transparent;border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:0 12px;font:inherit;font-size:13px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.kx button:hover{border-color:var(--k-mut)}.kx button:focus-visible,.kx [role=button]:focus-visible{outline:2px solid var(--k-violet);outline-offset:2px}
+.kx button.pri{border-color:var(--k-violet);color:var(--k-violet)}.kx button[aria-pressed=true]{background:color-mix(in srgb,var(--k-violet) 18%,transparent)}
+.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
+.kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
+.kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
+.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:11px;line-height:17px;height:92px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
+.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1}
+.kx-time{font-size:11px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
+.kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
+.kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
+.kx-ripple{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid var(--k-ink);pointer-events:none;animation:kxrp .6s ease-out forwards}@keyframes kxrp{from{transform:scale(.3);opacity:.9}to{transform:scale(1.4);opacity:0}}
+.kx-recording .kx-nav button:not(.kx-dot),.kx-recording .kx-scrub button{visibility:hidden}
+.kx .sr-only,.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.kx *{transition:none!important;animation:none!important}}`;
+  document.head.appendChild(s);
+}
+
+/* ---------- step context: everything a step needs, bound to its generation */
+function makeCtx(eng, svg, i) {
+  const g = eng.gen, alive = () => g === eng.gen, dyn = svg.querySelector('.kx-dyn');
+  const q = s => svg.querySelector(s);
+  const pick = e => typeof e === 'string' ? q(e) : e;
+  const s = {
+    i, svg, dyn, q, alive, C, RM, root: eng.root, act: eng.act,
+    at(ms, fn) { const id = setTimeout(() => { if (alive()) fn(); }, ms); eng.timers.push(id); return id; },
+    wait(ms) { return new Promise(r => s.at(ms, () => { if (!(eng.inDemo && eng.touched)) r(); })); },   // an idle demo stops for good once the reader acts
+    loop(delay, fn) { s.at(delay, () => { let last = performance.now(); const t0 = last, st = {}; const k = n => { if (!alive()) return; st.dt = Math.min(.05, Math.max(0, (n - last) / 1000)); last = n; st.e = n - t0; if (fn(st) !== false) requestAnimationFrame(k); }; requestAnimationFrame(k); }); },
+    tween(du, fn, o = {}) { const ez = ease[o.ease || 'inOut']; return new Promise(res => s.at(o.delay || 0, () => { if (RM || du <= 0) { fn(1); res(); return; } const t0 = performance.now(); const k = n => { if (!alive()) return; const p = clamp((n - t0) / du); fn(ez(p)); if (p < 1) requestAnimationFrame(k); else res(); }; requestAnimationFrame(k); })); },
+    el(tag, attrs, parent) { return mk(tag, attrs, parent || dyn); },
+    drawIn(e, du = 500, delay = 0) { e = pick(e); if (!e || RM) return; const L = e.getTotalLength() + 1; e.style.transition = 'none'; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; e.getBoundingClientRect(); e.style.transition = `stroke-dashoffset ${du}ms cubic-bezier(.45,0,.55,1) ${delay}ms`; e.style.strokeDashoffset = 0; },
+    fadeIn(e, du = 400, delay = 0) { e = pick(e); if (!e) return; e.style.transition = 'none'; e.style.opacity = 0; e.getBoundingClientRect(); e.style.transition = `opacity ${du}ms ease ${delay}ms`; e.style.opacity = 1; },
+    fadeOut(e, du = 400, remove = true) { e = pick(e); if (!e) return; e.style.transition = `opacity ${du}ms`; e.style.opacity = 0; if (remove) setTimeout(() => e.remove(), du + 50); },
+    travel(path, du = 600, c = 'ink', o = {}) {   // a dot that moves along a path element or a list of points
+      let p = pick(path), temp = false;
+      if (Array.isArray(path)) { p = mk('path', { d: 'M' + path.map(q => q.join(' ')).join(' L'), fill: 'none', stroke: col(c), 'stroke-width': 1.6, 'stroke-opacity': o.trail === false ? 0 : .5, 'stroke-linecap': 'round' }, dyn); temp = true; if (o.trail !== false) s.drawIn(p, du); }
+      const d = mk('circle', { r: o.r || 3.6, fill: col(c) }, dyn), L = p.getTotalLength();
+      const done = () => { s.fadeOut(d, 300); if (temp && !o.keep) setTimeout(() => s.fadeOut(p, 450), 200); };
+      if (RM) { const e = p.getPointAtLength(L); d.setAttribute('cx', e.x); d.setAttribute('cy', e.y); done(); return Promise.resolve(); }
+      return s.tween(du, k => { const e = p.getPointAtLength(k * L); d.setAttribute('cx', f(e.x)); d.setAttribute('cy', f(e.y)); }, { delay: o.delay || 0 }).then(done);
+    },
+    ring(x, y, w, h, c = 'ink', o = {}) { const p = mk('path', { d: rect(x, y, w, h, Math.round(x * 7 + y)), fill: 'none', stroke: col(c), 'stroke-width': o.w || 2.4, 'stroke-linecap': 'round', class: 'pulse' }, dyn); p.style.opacity = 0; setTimeout(() => p.remove(), 1400); return p; },
+    write(x, y, text, o = {}) { const w = document.createElementNS(NS, 'g'); w.innerHTML = T(x, y, text, o); const t = w.firstChild; dyn.appendChild(t); t.removeAttribute('data-k'); s.fadeIn(t, o.d || 450, o.t || 0); return t; },
+    float(x, y, text, c = 'ink', z = 16) { const t = s.write(x, y, text, { h: 1, z, c }); if (!RM) { t.style.transition = 'transform 1.1s ease-out, opacity 1.1s ease-out'; requestAnimationFrame(() => requestAnimationFrame(() => { t.style.transform = 'translateY(-18px)'; t.style.opacity = 0; })); } setTimeout(() => t.remove(), 1200); },
+    swap(e, text, c) { e = pick(e); if (!e) return; e.style.transition = 'opacity .15s'; e.style.opacity = 0; s.at(160, () => { e.textContent = text; if (c) e.setAttribute('fill', col(c)); e.style.opacity = 1; }); },
+    count(e, to, o = {}) { e = pick(e); if (!e) return; const from = o.from != null ? o.from : (+e.dataset.v || 0), fmt = o.fmt || (v => Math.round(v).toLocaleString()); e.dataset.v = to; return s.tween(o.du || 900, k => { e.textContent = (o.pre || '') + fmt(lerp(from, to, k)) + (o.post || ''); }, { delay: o.delay || 0 }); },
+    bar(e, frac, du = 600, axis = 'x') { e = pick(e); if (!e) return; e.style.transformBox = 'fill-box'; e.style.transformOrigin = axis === 'x' ? '0 50%' : '50% 100%'; e.style.transition = RM ? 'none' : `transform ${du}ms cubic-bezier(.45,0,.55,1)`; e.style.transform = axis === 'x' ? `scaleX(${clamp(frac).toFixed(4)})` : `scaleY(${clamp(frac).toFixed(4)})`; },
+    btn(icon, label, fn, o = {}) { const b = document.createElement('button'); if (o.primary) b.className = 'pri'; b.innerHTML = (ICON[icon] || '') + esc(label); b.type = 'button'; b.onclick = e => { if (e.isTrusted) s.touched(); fn(b); }; eng.act.appendChild(b); return b; },
+    on(e, fn, label) { e = pick(e); e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0'); if (label) e.setAttribute('aria-label', label); e.style.cursor = 'pointer'; const h = ev => { if (ev.isTrusted) s.touched(); fn(ev); }; e.addEventListener('click', h); e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); h(ev); } }); return e; },
+    point(ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 }; },
+    drag(e, o) { e = pick(e); e.style.touchAction = 'none'; e.style.cursor = 'grab'; let on = false; e.addEventListener('pointerdown', ev => { on = true; e.setPointerCapture(ev.pointerId); s.touched(); o.move && o.move(s.point(ev), ev); }); e.addEventListener('pointermove', ev => { if (on && alive()) o.move && o.move(s.point(ev), ev); }); const up = ev => { if (!on) return; on = false; o.end && o.end(s.point(ev), ev); }; e.addEventListener('pointerup', up); e.addEventListener('pointercancel', up); return e; },
+    cap(text) { eng.cap.textContent = text; },
+    touched() { eng.touched = true; if (eng.stopAuto && !REC) eng.stopAuto(); },   // a reader who acts takes over from autoplay
+    tap(e) { e = pick(e); if (!e || !alive() || (eng.inDemo && eng.touched)) return; const r = e.getBoundingClientRect(), R = eng.root.getBoundingClientRect(), d = document.createElement('div'); d.className = 'kx-ripple'; d.style.left = (r.left + r.width / 2 - R.left) + 'px'; d.style.top = (r.top + r.height / 2 - R.top) + 'px'; eng.root.appendChild(d); setTimeout(() => d.remove(), 650); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); },
+    /* unit charts: one circle per item, keyed, so items keep their identity when they move */
+    units(items, o = {}) { const gU = mk('g', { class: 'kx-units' }, o.parent || dyn); s._units = items.map((it, j) => { const c = mk('circle', { cx: o.x0 || 0, cy: o.y0 || 0, r: o.r || 4, fill: col(o.fill || 'fill.blue') }, gU); c.style.transition = 'fill .5s, opacity .5s'; return { it, c, x: o.x0 || 0, y: o.y0 || 0, r: o.r || 4, j }; }); return s._units; },
+    arrange(layout, o = {}) { const U = s._units || [], du = o.du || 900, stg = o.stagger == null ? 4 : o.stagger, ez = ease[o.ease || 'inOut'];
+      const tg = U.map((u, j) => { const L = layout(u.it, j) || {}; if (L.fill) u.c.style.fill = col(L.fill); if (L.opacity != null) u.c.style.opacity = L.opacity; return { x0: u.x, y0: u.y, r0: u.r, x: L.x == null ? u.x : L.x, y: L.y == null ? u.y : L.y, r: L.r == null ? u.r : L.r, dl: (L.order == null ? j : L.order) * stg }; });
+      const tot = du + Math.max(0, ...tg.map(t => t.dl));
+      return s.tween(tot, k => { const ms = k * tot; U.forEach((u, j) => { const t = tg[j], p = ez(clamp((ms - t.dl) / du)); u.x = lerp(t.x0, t.x, p); u.y = lerp(t.y0, t.y, p); u.r = lerp(t.r0, t.r, p); u.c.setAttribute('cx', f(u.x)); u.c.setAttribute('cy', f(u.y)); u.c.setAttribute('r', f(u.r)); }); }, { ease: 'linear', delay: o.delay || 0 }); },
+  };
+  return s;
+}
+
+/* ---------- stepper: a lesson that moves one idea at a time, with fixed controls */
+const ALL = (window.EXPLAINERS = window.EXPLAINERS || []);
+function frame(root, o, kind) {
+  root = typeof root === 'string' ? document.querySelector(root) : root;
+  useStyle(o.style || 'chalkboard', root);
+  const [W, H] = o.viewBox || [380, 300];
+  const legend = (o.legend || []).map(l => `<span data-l="${l.key}"><span class="kx-sw" style="background:${col(l.color)}"></span>${esc(l.label)}</span>`).join('');
+  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div>
+<svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
+${kind === 'player' ? '<div class="kx-scrub"><button class="kx-pp" type="button"></button><input type="range" min="0" step="1" aria-label="Scrub the timeline"><span class="kx-time"></span></div>' : '<div class="kx-act"></div>'}
+${legend ? `<div class="kx-legend">${legend}</div>` : ''}<div class="kx-nav"><button class="kx-back" type="button" aria-label="Previous">${ICON.left}</button><div class="kx-dots"></div>${kind === 'stepper' ? `<button class="kx-replay" type="button" aria-label="Replay this step" title="Replay this step">${ICON.replay}</button>` : ''}<button class="kx-next" type="button"></button></div>`;
+  if (REC) root.classList.add('kx-recording');
+  const $ = s => root.querySelector(s);
+  return { root, W, H, svg: $('.kx-stage'), cap: $('.kx-cap'), act: $('.kx-act'), title: $('.kx-title'), count: $('.kx-count'), dots: $('.kx-dots'), next: $('.kx-next'), back: $('.kx-back'), replay: $('.kx-replay'), log: $('.kx-log'), $ };
+}
+function fixCaptionHeight(fr, texts) {   // reserve the tallest caption so nothing below it ever moves
+  const m = fr.cap.cloneNode(); m.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;min-height:0;width:${fr.cap.clientWidth}px`; m.removeAttribute('aria-live'); fr.cap.parentNode.appendChild(m);
+  let h = 0; texts.forEach(t => { m.textContent = t; h = Math.max(h, m.offsetHeight); }); m.remove(); fr.cap.style.minHeight = h + 'px';
+}
+function stepper(o) {
+  const fr = frame(o.root, o, 'stepper'), S = o.steps;
+  if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
+  const eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
+  let cur = 0, first = true, auto = null, ends = [];
+  eng.stopAuto = () => { auto = null; };
+  S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
+  const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
+  fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
+  function build(i) {
+    cur = i; eng.touched = false; const st = S[i], s = {};
+    fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
+    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = `Step ${i + 1} of ${S.length}`;
+    fr.svg.setAttribute('aria-label', (st.title || '') + '. ' + (st.alt || st.cap || ''));
+    [...fr.dots.children].forEach((d, j) => j === i ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current'));
+    fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !st.keys || st.keys.includes(e.dataset.l) ? '' : 'none');   // only this step's colours
+    fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : 'Next' + ICON.right;
+    fr.cap.style.transition = 'none'; fr.cap.style.opacity = 0; fr.cap.textContent = st.cap || '';
+    const revealEnd = reveal(fr.svg);
+    const ctx = makeCtx(eng, fr.svg, i);
+    ctx.at(st.capDelay == null ? 300 : st.capDelay, () => { fr.cap.style.transition = 'opacity .6s'; fr.cap.style.opacity = 1; });
+    if (st.start) st.start(ctx);
+    eng.inDemo = false;
+    if (st.demo && st.idleDemo && !REC && !st.ask) ctx.at(st.idleDemo, () => { if (!eng.touched) { eng.inDemo = true; Promise.resolve(st.demo(ctx)).finally(() => { eng.inDemo = false; }); } });
+    ends[i] = st.duration || revealEnd + 600;
+    eng.ctx = ctx;
+  }
+  function go(i, keepAuto) {
+    if (!keepAuto) auto = null;
+    eng.gen++; eng.timers.forEach(clearTimeout); eng.timers = [];
+    i = Math.max(0, Math.min(S.length - 1, i));
+    const g = eng.gen;
+    if (first || RM) { first = false; build(i); fr.svg.style.opacity = 1; }
+    else { fr.svg.style.opacity = 0; setTimeout(() => { if (g === eng.gen) { build(i); fr.svg.style.opacity = 1; } }, 230); }
+  }
+  fr.back.onclick = () => go(cur - 1);
+  fr.next.onclick = () => go(cur < S.length - 1 ? cur + 1 : 0);
+  fr.replay.onclick = () => go(cur);
+  document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('[role=button],input,button,textarea,select')) return; if (ALL.length > 1 && !fr.root.contains(document.activeElement)) return; if (e.key === 'ArrowRight') go(cur + 1); if (e.key === 'ArrowLeft') go(cur - 1); });
+  const api = {
+    kind: 'stepper', root: fr.root, get count() { return S.length; }, get current() { return cur; },
+    go: i => go(i), duration: i => S[i].duration || ends[i] || 4000, hasDemo: i => !!S[i].demo,
+    demo: i => { const c = eng.ctx; return c && c.i === i && S[i].demo ? Promise.resolve(S[i].demo(c)) : Promise.resolve(); },
+    demoDuration: i => S[i].demoDuration || 0,
+    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(hold); } },
+  };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { go(+(QS.get('step') || 1) - 1); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; });
+    else if (o.autoplay && !RM && !QS.has('step') && !QS.has('static')) { const run = () => api.autoplay().then(() => { if (o.autoplay === 'loop' && auto) run(); }); run(); } });
+  return api;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
+   so pause, scrub, replay and recording all work for free. Chapters label stretches of the timeline. */
+function player(o) {
+  const fr = frame(o.root, o, 'player'), eng = { gen: 0, timers: [], root: fr.root, act: null, cap: fr.cap, touched: false };
+  const CH = o.chapters || [{ at: 0, title: o.title || '', cap: '' }], D = o.duration;
+  const range = fr.$('.kx-scrub input'), pp = fr.$('.kx-pp'), tm = fr.$('.kx-time');
+  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1;
+  fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
+  const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
+  CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
+  fixCaptionHeight(fr, CH.map(c => c.cap || ''));
+  const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
+  function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !c.keys || c.keys.includes(e.dataset.l) ? '' : 'none'); }
+  function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
+  function draw() { range.value = t; tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
+  function seek(x) { t = clamp(x, 0, D); draw(); }
+  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n; t += dt * speed; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
+  function play() { if (t >= D) t = 0; if (RM) { seek(end(chapterAt(t)) - 1); return; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }  // reduced motion: jump to the end state of the chapter instead of animating
+  function pause() { playing = false; updPP(); }
+  function updPP() { pp.innerHTML = playing ? ICON.pause + 'Pause' : t >= D ? ICON.replay + 'Replay' : ICON.play + 'Play'; pp.setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  pp.onclick = () => playing ? pause() : play();
+  range.oninput = () => { pause(); seek(+range.value); };
+  fr.back.onclick = () => { seek(CH[Math.max(0, chapterAt(t) - (t - CH[chapterAt(t)].at < 600 ? 1 : 0))].at); };
+  fr.next.innerHTML = 'Next' + ICON.right; fr.next.onclick = () => { const k = chapterAt(t); seek(k < CH.length - 1 ? CH[k + 1].at : 0); play(); };
+  const end = i => i < CH.length - 1 ? CH[i + 1].at : D;
+  const api = { kind: 'player', root: fr.root, get count() { return CH.length; }, get current() { return chapterAt(t); }, go: i => { seek(CH[i].at); play(); }, duration: i => (end(i) - CH[i].at) / speed, hasDemo: () => false, demo: () => Promise.resolve(), seek, play, pause, get time() { return t; },
+    async autoplay() { seek(0); play(); while (t < D) await sleep(200); await sleep(o.hold || 2000); } };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if (o.autoplay !== false && !QS.has('static')) play(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  return api;
+}
+
+/* ---------- controls for explorables */
+let uid = 0;
+function slider(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent; const id = 'kx' + (++uid);
+  const w = document.createElement('div'); w.className = 'kx-ctl';
+  w.innerHTML = `<label for="${id}">${esc(o.label)}</label><output for="${id}"></output><input id="${id}" type="range" min="${o.min}" max="${o.max}" step="${o.step || 'any'}" value="${o.value}">`;
+  parent.appendChild(w); const inp = w.querySelector('input'), out = w.querySelector('output'), fmt = o.fmt || (v => v);
+  const upd = () => { out.textContent = fmt(+inp.value); o.oninput && o.oninput(+inp.value); };
+  inp.addEventListener('input', upd); upd();
+  return { el: w, input: inp, get value() { return +inp.value; }, set(v) { inp.value = v; upd(); } };
+}
+function toggle(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent;
+  const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', o.value ? 'true' : 'false'); b.innerHTML = esc(o.label); parent.appendChild(b);
+  b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', v); o.onchange && o.onchange(v); };
+  return b;
+}
+
+/* ---------- layout and number helpers */
+const grid = (j, o) => ({ x: (o.x0 || 0) + (j % o.cols) * (o.gap || 10), y: (o.y0 || 0) + Math.floor(j / o.cols) * (o.gapY || o.gap || 10) });
+function scale(d0, d1, r0, r1) { const s = v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0); s.invert = p => d0 + (p - r0) / (r1 - r0 || 1) * (d1 - d0); return s; }
+const fmt = {
+  int: v => Math.round(v).toLocaleString('en-US'),
+  pct: (v, d = 0) => (v * 100).toFixed(d) + '%',
+  usd: (v, d = 2) => (v < 0 ? '−' : '') + '$' + Math.abs(v).toFixed(d),
+  sec: v => v < 60 ? v.toFixed(0) + ' s' : Math.floor(v / 60) + ' min ' + Math.round(v % 60) + ' s',
+};
+/* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
+function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
+
+const K = { version: '1.0', NS, RM, C, STYLES, useStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
+window.K = K;
+})();
+</script>
+<script>
+/* ===== SCENE: everything below is the explainer itself. Edit freely. ===== */
+const {P, T, F, line, rect, arrow, C, fmt} = K;
+
+/* ---- DATA: copied from evals/invoice-checks/files/data.json and facts.md (econ notebook 21, 72 test invoices) ---- */
+const DATA = {
+  n: 72,                                   // summary.n
+  passed: 14,                              // invoices both checks accepted (invoice_rows: gpt_invocations 0); all 14 are HOLDs
+  expensiveCalls: 58,                      // summary.gpt_invocations for both check routes
+  cheapRight: 14,                          // summary: Qwen direct automatic_correct
+  checkCost: {                             // mean known_model_cost per invoice, USD (cost_lines; equal to the mean over invoice_rows)
+    repeat: 0.00021756527777777777,        // two Qwen calls, OpenRouter metered
+    claude: 0.02590069444444444,           // one Qwen call + Claude Opus 5.5 review at list price
+  },
+  reviewRoute: 0.8315,                     // cost_lines: Claude screen + review intercept per invoice (assumed USD 1 per person review)
+  passedIds: ['test-012','test-016','test-018','test-022','test-030','test-036','test-040','test-046','test-048','test-054','test-064','test-066','test-070','test-072'],
+  ex012: {amount: 1785.54, answers: ['HOLD', 'HOLD']},                   // facts.md, test-012
+  ex002: {right: 1171.39, answers: [145.67, 59.13]},                     // facts.md, test-002 (14567 and 5913 cents; GPT 117139)
+  looseGapWrong: 8,                        // facts.md: within USD 1 the repeat check would have paid 8 wrong answers
+  defaultPrice: 0.05,                      // README running example, an ASSUMED price per expensive call
+};
+const share = DATA.passed / DATA.n;                          // expensive calls skipped per invoice (0.1944)
+const sendOn = DATA.expensiveCalls / DATA.n;                 // expensive calls per invoice with a check (0.8056)
+const BE = {repeat: DATA.checkCost.repeat / share, claude: DATA.checkCost.claude / share};   // break-even price per call
+const wilsonLow = K.wilson(DATA.n, DATA.n)[0];
+
+/* ---- one formatter per kind of number, used by every label, readout and sentence ---- */
+const fmtP = G => { const c = G * 100; return (c < 1 ? c.toFixed(2) : c.toFixed(1)) + '¢'; };          // price per call
+const money = v => { const a = Math.abs(v); return '$' + (a < 10 ? a.toFixed(2) : Math.round(a).toLocaleString('en-US')); };
+const amt = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});   // invoice amounts, to the cent
+const int = v => Math.round(v).toLocaleString('en-US');
+const nice2 = v => { const p = Math.pow(10, Math.floor(Math.log10(v)) - 1); return Math.round(v / p) * p; };
+
+/* ---- the model: monthly bill of each route at price G per expensive call and vol invoices a month ---- */
+function model(G, vol) {
+  const r = {
+    none:   {check: 0, calls: vol * G},
+    repeat: {check: vol * DATA.checkCost.repeat, calls: vol * sendOn * G},
+    claude: {check: vol * DATA.checkCost.claude, calls: vol * sendOn * G},
+  };
+  for (const k in r) r[k].total = r[k].check + r[k].calls;
+  r.best = ['none', 'repeat', 'claude'].reduce((a, b) => r[b].total < r[a].total ? b : a);
+  r.saveRepeat = r.none.total - r.repeat.total;
+  r.saveClaude = r.none.total - r.claude.total;
+  return r;
+}
+window.MODEL = model; window.BE = BE;     // exposed for the number check in notes.md
+
+const NAME = {none: 'No check', repeat: 'Repeat check', claude: 'Claude check'};
+const ROUTE_COL = {none: 'blue', repeat: 'ink', claude: 'violet'};
+
+/* ---- shared drawing: the flow of one invoice (steps 1 and 2) ---- */
+function flow(inv) {
+  return P(rect(14, 14, 150, 80, 11), 'mut', 0, 500) +
+    T(24, 38, 'Invoice ' + inv.id, {a: 'start', z: 14, w: 600, t: 150}) +
+    T(24, 60, inv.line2, {a: 'start', z: 13, t: 250}) +
+    T(24, 80, inv.line3, {a: 'start', z: 13, c: 'mut', t: 350}) +
+    P(line(166, 54, 212, 54, 12), 'mut', 500, 300) + P(arrow(166, 54, 212, 54, 13), 'mut', 780, 120) +
+    P(rect(216, 14, 150, 80, 14), 'green', 600, 500) +
+    T(291, 40, 'Cheap AI model', {z: 14, w: 600, t: 800}) +
+    T(291, 60, 'asked twice', {z: 13, c: 'mut', t: 900}) +
+    T(291, 80, 'Qwen3.8 Flash', {z: 13, c: 'mut', t: 950}) +
+    `<g id="chips" opacity="0">` +
+      `<rect x="214" y="110" width="74" height="28" rx="5" fill="${C.panel}" stroke="${C.line}"/>` +
+      `<rect x="294" y="110" width="74" height="28" rx="5" fill="${C.panel}" stroke="${C.line}"/>` +
+      T(251, 129, inv.answers[0], {z: 13, w: 600}) + T(331, 129, inv.answers[1], {z: 13, w: 600}) +
+      T(206, 129, 'answers', {z: 13, a: 'end', c: 'mut'}) +
+    `</g>` +
+    P(line(291, 140, 250, 168, 15), 'mut', 1100, 300) + P(arrow(291, 140, 250, 168, 16), 'mut', 1380, 120) +
+    P(rect(80, 170, 240, 52, 17), 'amber', 1200, 500) +
+    T(200, 192, 'Do both answers match,', {z: 14, t: 1400}) +
+    T(200, 211, 'decision and cents?', {z: 14, t: 1450}) +
+    P(line(150, 222, 100, 262, 18), 'mut', 1600, 300) + P(arrow(150, 222, 100, 262, 19), 'mut', 1880, 120) +
+    P(line(250, 222, 283, 262, 20), 'mut', 1600, 300) + P(arrow(250, 222, 283, 262, 21), 'mut', 1880, 120) +
+    `<g id="yesbox">` + P(rect(14, 264, 172, 66, 22), 'green', 1700, 500) +
+      T(100, 289, 'Match', {z: 14, w: 600, c: 'green', t: 1900}) +
+      T(100, 311, 'use the cheap answer', {z: 13, t: 1950}) + `</g>` +
+    `<g id="nobox">` + P(rect(198, 264, 170, 66, 23), 'blue', 1700, 500) +
+      T(283, 289, 'No match', {z: 14, w: 600, c: 'blue', t: 1900}) +
+      T(283, 311, 'ask the expensive model', {z: 13, t: 1950}) + `</g>`;
+}
+const fade = (s, sel, op) => { const e = s.q(sel); e.style.transition = 'opacity .5s'; e.style.opacity = op; };
+
+/* ---- shared drawing: the savings chart and the monthly bills (steps 5 and 6) ---- */
+const XL = Math.log10(0.0005), XR = Math.log10(0.5);
+const X = G => K.lerp(56, 350, (Math.log10(G) - XL) / (XR - XL));
+const PY0 = 92, PY1 = 222;                        // plot top and bottom
+const BAR = {x: 112, w: 190, y: [300, 336, 372], h: 20};
+function chartFrame() {
+  const ticks = [[0.001, '0.1¢'], [0.01, '1¢'], [0.1, '10¢'], [0.5, '50¢']];
+  return `<rect x="${X(0.005).toFixed(1)}" y="${PY0}" width="${(X(0.25) - X(0.005)).toFixed(1)}" height="${PY1 - PY0}" fill="${C.panel}"/>` +
+    T(12, 80, 'Saved each month vs. no check (dashed)', {a: 'start', z: 13, c: 'mut'}) +
+    ticks.map(([g, l]) => `<line x1="${X(g)}" x2="${X(g)}" y1="${PY1}" y2="${PY1 + 4}" stroke="${C.mut}"/>` + T(X(g), PY1 + 18, l, {z: 13, c: 'mut'})).join('') +
+    `<line x1="56" x2="350" y1="${PY1}" y2="${PY1}" stroke="${C.line}"/>` +
+    T(203, PY1 + 36, 'price of one expensive call (log scale)', {z: 13, c: 'mut'}) +
+    `<g id="plot"></g>` +
+    T(12, 288, '', {a: 'start', z: 13, c: 'mut', id: 'billtitle'}) +
+    ['none', 'repeat', 'claude'].map((k, i) =>
+      T(12, BAR.y[i] + 15, NAME[k], {a: 'start', z: 13, id: 'bl' + k}) +
+      `<rect x="${BAR.x}" y="${BAR.y[i]}" width="${BAR.w}" height="${BAR.h}" fill="none" stroke="${C.faint}"/>` +
+      `<rect id="bc${k}" x="${BAR.x}" y="${BAR.y[i]}" width="0" height="${BAR.h}" fill="${C.fill.amber}"/>` +
+      `<rect id="bg${k}" x="${BAR.x}" y="${BAR.y[i]}" width="0" height="${BAR.h}" fill="${C.fill.blue}"/>` +
+      T(368, BAR.y[i] + 15, '', {a: 'end', z: 13, w: 600, id: 'bv' + k})).join('') +
+    T(12, 414, 'amber: cost of the checks · blue: expensive calls', {a: 'start', z: 13, c: 'mut'}) +
+    T(12, 22, '', {a: 'start', z: 15, w: 600, id: 'v1'}) +
+    T(12, 42, '', {a: 'start', z: 13, id: 'v2'}) +
+    T(12, 60, '', {a: 'start', z: 13, id: 'v3'});
+}
+function niceStep(span) { const p = Math.pow(10, Math.floor(Math.log10(span))); return [1, 2, 2.5, 5, 10].map(m => m * p).find(st => span / st <= 4); }
+function drawExplore(s, G, vol) {
+  const m = model(G, vol);
+  // saving per month against no check, drawn as a line over the whole price range
+  const sav = (k, g) => vol * (g - (DATA.checkCost[k] + sendOn * g));
+  const lo = sav('claude', 0.0005), hi = sav('repeat', 0.5);
+  const st = niceStep(hi - lo), y1 = Math.ceil(hi / st) * st;
+  let y0 = Math.floor(lo / st) * st;
+  if (lo - y0 < 0.15 * (y1 - y0)) y0 -= st;      // room under the lowest line for its label
+  const Y = v => K.lerp(PY1, PY0, (v - y0) / (y1 - y0));
+  let h = '';
+  for (let v = y0; v <= y1 + 1e-9; v += st) h += `<line x1="56" x2="350" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${C.faint}" stroke-width=".7"/>` +
+    T(52, Y(v) + 4.5, Math.abs(v) < 1e-9 ? '$0' : (v < 0 ? '−' : '') + money(v), {a: 'end', z: 13, c: 'mut'});
+  h += `<line x1="56" x2="350" y1="${Y(0)}" y2="${Y(0)}" stroke="${C.fill.blue}" stroke-width="1.6" stroke-dasharray="5 4"/>`;
+  ['claude', 'repeat'].forEach(k => {
+    let d = ''; for (let i = 0; i <= 80; i++) { const g = Math.pow(10, K.lerp(XL, XR, i / 80)); d += (i ? 'L' : 'M') + X(g).toFixed(1) + ' ' + Y(sav(k, g)).toFixed(1); }
+    h += `<path d="${d}" fill="none" stroke="${K.col(ROUTE_COL[k])}" stroke-width="${m.best === k ? 3 : 2}"/>`;
+    h += `<circle cx="${X(BE[k]).toFixed(1)}" cy="${Y(0).toFixed(1)}" r="4" fill="${C.bg}" stroke="${K.col(ROUTE_COL[k])}" stroke-width="2"/>`;
+  });
+  h += T(X(0.012), Y(sav('repeat', 0.012)) - 8, 'repeat check', {z: 13, c: 'ink'}) +
+       T(60, Y(sav('claude', 0.0005)) + 17, 'Claude check', {a: 'start', z: 13, c: 'violet'}) +
+       T(X(BE.repeat) - 2, Y(0) - 8, fmtP(BE.repeat), {a: 'end', z: 13, c: 'ink'}) +
+       T(X(BE.claude) + 6, Y(0) + 17, fmtP(BE.claude), {a: 'start', z: 13, c: 'violet'});
+  const cx = X(G);
+  h += `<line x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${PY0 - 2}" y2="${PY1}" stroke="${C.ink}" stroke-opacity=".55"/>`;
+  ['repeat', 'claude'].forEach(k => h += `<circle cx="${cx.toFixed(1)}" cy="${Y(sav(k, G)).toFixed(1)}" r="4.5" fill="${K.col(ROUTE_COL[k])}"/>`);
+  s.q('#plot').innerHTML = h;
+  // monthly bills
+  const max = Math.max(m.none.total, m.repeat.total, m.claude.total);
+  ['none', 'repeat', 'claude'].forEach(k => {
+    const wc = BAR.w * m[k].check / max, wg = BAR.w * m[k].calls / max;
+    s.q('#bc' + k).setAttribute('width', wc.toFixed(1));
+    const g = s.q('#bg' + k); g.setAttribute('x', (BAR.x + wc).toFixed(1)); g.setAttribute('width', wg.toFixed(1));
+    s.q('#bv' + k).textContent = money(m[k].total);
+    s.q('#bl' + k).setAttribute('font-weight', m.best === k ? 700 : 400);
+    s.q('#bl' + k).textContent = NAME[k] + (m.best === k ? ' ✓' : '');
+  });
+  s.q('#billtitle').textContent = `Monthly bill for ${int(vol)} invoices`;
+  s.q('#v1').textContent = `At ${fmtP(G)} a call: ${m.best === 'none' ? 'no check' : NAME[m.best].toLowerCase()} is cheapest`;
+  const say = (k, v) => Math.abs(v) < 0.005 ? `${NAME[k]}: breaks even with no check` : `${NAME[k]}: ${v >= 0 ? 'saves ' + money(v) : 'costs ' + money(v) + ' more'} a month vs. no check`;
+  s.q('#v2').textContent = say('repeat', m.saveRepeat);
+  s.q('#v3').textContent = say('claude', m.saveClaude);
+}
+function priceSlider(s, state, redraw) {
+  return K.slider(s.act, {label: 'Price of one expensive call (assumed)', min: XL, max: XR, step: 0.01, value: Math.log10(state.G),
+    fmt: v => fmtP(Math.pow(10, v)), oninput: v => { state.G = Math.pow(10, v); redraw(); }});
+}
+// a real pointer or key on a slider cancels the idle demo (scripted input events do not)
+const readerTakesOver = s => s.act.querySelectorAll('input').forEach(i => ['pointerdown', 'keydown'].forEach(ev => i.addEventListener(ev, () => s.touched())));
+async function sweep(s, inp, from, to, ms) {
+  const n = Math.round(ms / 40);
+  for (let i = 0; i <= n; i++) { inp.value = K.lerp(from, to, i / n); inp.dispatchEvent(new Event('input')); await s.wait(40); }
+}
+
+/* ---- captions, built from the computed numbers ---- */
+const CAP = {
+  c1: `A cheap AI model reads invoice test-012 twice. Both answers say HOLD, which is right, so that answer is used and the expensive model is never called.`,
+  c2: `Invoice test-002: the two cheap answers differ, so it goes to the expensive model, which pays the right ${amt(DATA.ex002.right)}. The other check tested, Claude reviewing the cheap answer, also rejected it.`,
+  c3: `All ${DATA.n} test invoices. The cheap model alone got ${DATA.cheapRight} right, all of them invoices to hold. Both checks passed exactly those ${DATA.passed} and sent the other ${DATA.expensiveCalls} on, so every route ended ${DATA.n} of ${DATA.n} right.`,
+  c4: `Each check skips the expensive model on ${DATA.passed} of ${DATA.n} invoices but costs something itself. It pays when the skipped calls are worth more than the checks. The ${fmtP(DATA.defaultPrice)} price is an assumption.`,
+  c5: `Watch the price sweep. Above the dashed line a check costs less than no check; each crosses it at its break-even price. Shaded: the 0.5¢ to 25¢ range the notebook assumed.`,
+  c6: `Your turn: set your expensive model's price and your monthly invoice count. The bills and the verdict change; the break-even prices do not depend on volume.`,
+  c7: `The repeat check pays once an expensive call costs more than ${fmtP(BE.repeat)}; a Claude check only above ${fmtP(BE.claude)}. Test on your own invoice mix before relying on either.`,
+};
+for (const k in CAP) if (CAP[k].length > 220) console.warn('caption too long', k, CAP[k].length);
+
+K.stepper({
+  root: '#x', style: 'editorial', viewBox: [380, 430],
+  title: 'When does checking a cheap AI model\'s invoice answers, and sending only doubtful invoices to an expensive model, cost less than using the expensive model on every invoice? Based on 72 test invoices.',
+  actHeight: 126,
+  legend: [
+    {key: 'cheap', label: 'cheap answer used', color: 'fill.green'},
+    {key: 'gpt', label: 'expensive model', color: 'fill.blue'},
+    {key: 'wrong', label: 'wrong answer', color: 'fill.red'},
+    {key: 'check', label: 'cost of checks', color: 'fill.amber'},
+    {key: 'rep', label: 'repeat check', color: 'ink'},
+    {key: 'cl', label: 'Claude check', color: 'violet'},
+  ],
+  steps: [
+    { title: '1. One invoice, asked twice', keys: ['cheap', 'gpt'], cap: CAP.c1,
+      draw: () => flow({id: 'test-012', line2: amt(DATA.ex012.amount) + ' to approve', line3: 'right answer: HOLD', answers: DATA.ex012.answers}),
+      start(s) {
+        s.at(2300, () => fade(s, '#chips', 1));
+        s.at(2600, async () => {
+          await s.travel([[291, 140], [250, 168]], 450, 'amber');
+          s.ring(80, 170, 240, 52, 'amber');
+          await s.wait(500);
+          fade(s, '#nobox', .3);
+          await s.travel([[150, 222], [100, 262]], 450, 'green');
+          s.ring(14, 264, 172, 66, 'green');
+          s.write(14, 362, '✓ Held correctly. No expensive call needed.', {a: 'start', z: 14, w: 600, c: 'green'});
+          s.write(14, 386, `The two cheap calls cost ${fmtP(DATA.checkCost.repeat)} an invoice`, {a: 'start', z: 13, t: 300});
+          s.write(14, 404, `on average across the ${DATA.n} test invoices.`, {a: 'start', z: 13, t: 300});
+        });
+      },
+      duration: 5200 },
+
+    { title: '2. When the answers differ', keys: ['cheap', 'gpt', 'wrong'], cap: CAP.c2,
+      draw: () => flow({id: 'test-002', line2: amt(DATA.ex002.right) + ' to pay', line3: 'right answer: PAY', answers: DATA.ex002.answers.map(amt)}),
+      start(s) {
+        s.at(2300, () => fade(s, '#chips', 1));
+        s.at(2600, async () => {
+          await s.travel([[291, 140], [250, 168]], 450, 'amber');
+          s.ring(80, 170, 240, 52, 'amber');
+          await s.wait(500);
+          fade(s, '#yesbox', .3);
+          await s.travel([[250, 222], [283, 262]], 450, 'blue');
+          s.ring(198, 264, 170, 66, 'blue');
+          s.write(283, 352, `pays ${amt(DATA.ex002.right)} ✓`, {z: 14, w: 600, c: 'blue'});
+          s.write(14, 380, `Without the check, the first cheap answer would`, {a: 'start', z: 13, t: 400, c: 'red'});
+          s.write(14, 398, `have underpaid by ${amt(DATA.ex002.right - DATA.ex002.answers[0])}.`, {a: 'start', z: 13, t: 400, c: 'red'});
+        });
+      },
+      duration: 5400 },
+
+    { title: '3. All 72 test invoices', keys: ['cheap', 'gpt', 'wrong'], cap: CAP.c3,
+      draw: () => T(12, 24, `Cheap model alone: ${DATA.cheapRight} of ${DATA.n} right`, {id: 'h1', a: 'start', z: 15, w: 600}) +
+        T(12, 44, `✓ ${DATA.cheapRight} right (all invoices to hold)   ✗ ${DATA.n - DATA.cheapRight} wrong amounts`, {id: 'h2', a: 'start', z: 13, c: 'mut'}) +
+        `<g id="after" opacity="0">` +
+          T(12, 176, `Check passed: ${DATA.passed}`, {a: 'start', z: 14, w: 600, c: 'green'}) +
+          T(12, 194, 'cheap answer used', {a: 'start', z: 13, c: 'mut'}) +
+          T(150, 176, `Check failed: ${DATA.expensiveCalls}`, {a: 'start', z: 14, w: 600, c: 'blue'}) +
+          T(150, 194, 'sent to the expensive model', {a: 'start', z: 13, c: 'mut'}) +
+          T(12, 342, `Final answers right: ${DATA.n} of ${DATA.n} with either check`, {a: 'start', z: 14, w: 600}) +
+          T(12, 364, 'Wrong answers let through: 0', {a: 'start', z: 13}) +
+          T(12, 382, 'Right answers sent on anyway: 0', {a: 'start', z: 13}) +
+          T(12, 404, 'Both checks made exactly the same split.', {a: 'start', z: 13, c: 'mut'}) +
+        `</g>`,
+      start(s) {
+        const ids = Array.from({length: DATA.n}, (_, i) => 'test-' + String(i + 1).padStart(3, '0'));
+        const items = ids.map(id => ({id, pass: DATA.passedIds.includes(id)}));
+        s.units(items, {r: 0, fill: 'faint', x0: 190, y0: 110});
+        const pos = j => ({x: 30 + (j % 18) * 19, y: 76 + Math.floor(j / 18) * 19});
+        s.arrange((it, j) => ({...pos(j), r: 6, fill: it.pass ? 'fill.green' : 'fill.red'}), {du: 700, stagger: 12});
+        s.at(3600, () => {
+          fade(s, '#after', 1);
+          let a = 0, b = 0;
+          s.arrange(it => it.pass ? (q => ({x: 22 + (q % 5) * 19, y: 216 + Math.floor(q / 5) * 19, order: q}))(a++)
+                                  : (q => ({x: 160 + (q % 11) * 19, y: 216 + Math.floor(q / 11) * 19, fill: 'fill.blue', order: q + 4}))(b++), {du: 1000, stagger: 14});
+        });
+      },
+      duration: 6200 },
+
+    { title: '4. The trade, at 5¢ a call', keys: ['check', 'gpt'], cap: CAP.c4,
+      draw: () => {
+        const m = model(DATA.defaultPrice, 10000), max = m.claude.total, W = 200, x0 = 12;
+        const rows = [['none', `${int(10000)} calls × ${fmtP(DATA.defaultPrice)}`],
+                      ['repeat', `${money(m.repeat.check)} checks + ${int(10000 * sendOn)} calls × ${fmtP(DATA.defaultPrice)}`],
+                      ['claude', `${money(m.claude.check)} checks + ${int(10000 * sendOn)} calls × ${fmtP(DATA.defaultPrice)}`]];
+        let h = T(12, 22, `Monthly bill for ${int(10000)} invoices`, {a: 'start', z: 15, w: 600}) +
+                T(12, 40, `price per expensive call: ${fmtP(DATA.defaultPrice)} (assumed)`, {a: 'start', z: 13, c: 'mut', t: 100});
+        rows.forEach(([k, sub], i) => {
+          const y = 56 + i * 56, wc = W * m[k].check / max, wg = W * m[k].calls / max;
+          h += T(x0, y + 14, NAME[k], {a: 'start', z: 14, w: 600, t: 300 + i * 500}) +
+               F(`M${x0 + 96} ${y}h${wc.toFixed(1)}v20h${-wc.toFixed(1)}Z`, 'fill.amber', 400 + i * 500, {op: 1}) +
+               F(`M${(x0 + 96 + wc).toFixed(1)} ${y}h${wg.toFixed(1)}v20h${-wg.toFixed(1)}Z`, 'fill.blue', 500 + i * 500, {op: 1}) +
+               T(368, y + 15, money(m[k].total), {a: 'end', z: 14, w: 600, t: 600 + i * 500}) +
+               T(x0, y + 37, sub, {a: 'start', z: 13, c: 'mut', t: 650 + i * 500});
+        });
+        const skipped = 10000 * share;
+        h += P(line(12, 222, 368, 224, 40), 'faint', 2000, 400, 1) +
+          T(12, 246, `Each check skips ${int(skipped)} expensive calls`, {a: 'start', z: 14, w: 600, t: 2300}) +
+          T(12, 264, `(${DATA.passed} of every ${DATA.n} invoices pass the check).`, {a: 'start', z: 13, t: 2350}) +
+          T(12, 288, 'Break-even price = cost of the checks ÷ calls skipped', {a: 'start', z: 13, t: 2700}) +
+          T(12, 308, `Repeat check: ${money(m.repeat.check)} ÷ ${int(skipped)} = ${fmtP(BE.repeat)} a call`, {a: 'start', z: 14, t: 3100}) +
+          T(12, 328, `Claude check: ${money(m.claude.check)} ÷ ${int(skipped)} = ${fmtP(BE.claude)} a call`, {a: 'start', z: 14, c: 'violet', t: 3400}) +
+          T(12, 360, `Not shown: cheap model alone (wrong on ${DATA.n - DATA.cheapRight} of ${DATA.n})`, {a: 'start', z: 13, c: 'mut', t: 3800}) +
+          T(12, 378, `and Claude check + person review (${money(DATA.reviewRoute * 10000)},`, {a: 'start', z: 13, c: 'mut', t: 3800}) +
+          T(12, 396, 'assuming $1 per review).', {a: 'start', z: 13, c: 'mut', t: 3800});
+        return h;
+      },
+      duration: 4400 },
+
+    { title: '5. Move the price', keys: ['check', 'gpt', 'rep', 'cl'], cap: CAP.c5,
+      draw: chartFrame,
+      start(s) {
+        const st = {G: DATA.defaultPrice, vol: 10000};
+        priceSlider(s, st, () => drawExplore(s, st.G, st.vol));
+        readerTakesOver(s);
+      },
+      demo: async s => {
+        const inp = s.act.querySelector('input');
+        await sweep(s, inp, XL, Math.log10(BE.repeat), 900); await s.wait(900);
+        await sweep(s, inp, Math.log10(BE.repeat), Math.log10(BE.claude), 2200); await s.wait(1100);
+        await sweep(s, inp, Math.log10(BE.claude), XR, 900); await s.wait(700);
+        await sweep(s, inp, XR, Math.log10(DATA.defaultPrice), 1100);
+      },
+      idleDemo: 2500, demoDuration: 8000, duration: 1200 },
+
+    { title: '6. Your price, your volume', keys: ['check', 'gpt', 'rep', 'cl'], cap: CAP.c6,
+      draw: chartFrame,
+      start(s) {
+        const st = {G: DATA.defaultPrice, vol: 10000};
+        const redraw = () => drawExplore(s, st.G, st.vol);
+        priceSlider(s, st, redraw);
+        K.slider(s.act, {label: 'Invoices per month (yours)', min: 3, max: 5.3, step: 0.01, value: 4,
+          fmt: v => int(nice2(Math.pow(10, v))), oninput: v => { st.vol = nice2(Math.pow(10, v)); redraw(); }});
+        readerTakesOver(s);
+      },
+      demo: async s => {
+        const [p, v] = s.act.querySelectorAll('input');
+        await sweep(s, p, Math.log10(DATA.defaultPrice), Math.log10(0.2), 1200); await s.wait(600);
+        await sweep(s, v, 4, 5, 1200); await s.wait(800);
+        await sweep(s, p, Math.log10(0.2), Math.log10(0.002), 1400);
+      },
+      idleDemo: 6000, demoDuration: 5600, duration: 1200 },
+
+    { title: '7. What to take away', keys: ['rep', 'cl'], cap: CAP.c7,
+      draw: () => {
+        const X2 = g => K.lerp(30, 350, (Math.log10(g) - XL) / (XR - XL)), ly = 70;
+        let h = T(12, 22, 'Where each check starts to pay', {a: 'start', z: 15, w: 600}) +
+          `<rect x="${X2(0.005).toFixed(1)}" y="${ly - 14}" width="${(X2(0.25) - X2(0.005)).toFixed(1)}" height="28" fill="${C.panel}"/>` +
+          P(line(30, ly, 350, ly, 50, 0), 'mut', 200, 600) +
+          [[0.001, '0.1¢'], [0.01, '1¢'], [0.1, '10¢'], [0.5, '50¢']].map(([g, l]) => `<line x1="${X2(g)}" x2="${X2(g)}" y1="${ly - 4}" y2="${ly + 4}" stroke="${C.mut}"/>` + T(X2(g), ly + 38, l, {z: 13, c: 'mut', t: 500})).join('') +
+          T(190, ly + 58, 'expensive call price (log scale; shaded: assumed)', {z: 13, c: 'mut', t: 600}) +
+          `<circle cx="${X2(BE.repeat).toFixed(1)}" cy="${ly}" r="5" fill="${C.ink}"/>` +
+          T(X2(BE.repeat) - 4, ly - 14, `repeat check pays above ${fmtP(BE.repeat)}`, {a: 'start', z: 13, t: 900}) +
+          `<circle cx="${X2(BE.claude).toFixed(1)}" cy="${ly}" r="5" fill="${C.violet}"/>` +
+          T(X2(BE.claude) + 6, ly + 22, `Claude check above ${fmtP(BE.claude)}`, {a: 'end', z: 13, c: 'violet', t: 1200});
+        const lim = [
+          [`Savings came only from the ${DATA.passed} invoices to hold. The`, `cheap model got none of the ${DATA.expensiveCalls} payments right.`],
+          [`If half as many passed the check, both break-even`, `prices would double (${fmtP(2 * BE.repeat)} and ${fmtP(2 * BE.claude)}).`],
+          [`Neither check let a wrong answer through, but ${DATA.n} of ${DATA.n}`, `still fits a true success rate as low as ${(wilsonLow * 100).toFixed(1)}%.`],
+          [`The repeat check needs agreement to the cent: allowing`, `a $1 gap would have paid ${DATA.looseGapWrong} wrong amounts.`],
+          [`Expensive price assumed (no metered bill); Claude at list`, `price; ${DATA.n} invoices from one generator.`],
+        ];
+        h += T(12, 162, 'Limits of this test', {a: 'start', z: 15, w: 600, t: 1600});
+        lim.forEach((L, i) => { const y = 188 + i * 46;
+          h += T(12, y, '•', {a: 'start', z: 13, t: 1800 + i * 300}) + T(24, y, L[0], {a: 'start', z: 13, t: 1800 + i * 300}) + T(24, y + 18, L[1], {a: 'start', z: 13, t: 1800 + i * 300}); });
+        return h;
+      },
+      duration: 3600 },
+  ],
+});
+
+</script>
+</body></html>

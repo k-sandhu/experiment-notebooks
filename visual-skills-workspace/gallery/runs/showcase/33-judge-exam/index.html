@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Judge exam dots</title>
+<style>:root{color-scheme:dark}html,body{margin:0;background:#141517}body{padding:16px;min-height:100vh;box-sizing:border-box}</style>
+</head><body>
+<div id="x"></div>
+<script>
+/* explainer-kit v1. A small engine for animated, stepwise SVG explainers. No dependencies.
+   Exposes window.K. Read explainer-kit/SKILL.md for the API and the rules it encodes.
+   Every animation is tied to a "generation": moving to another step cancels all timers,
+   loops and tweens of the old step, so steps can never bleed into each other. */
+(function () {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const QS = new URLSearchParams(location.search);
+const REC = QS.has('record');
+const f = n => (+n).toFixed(1);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = { inOut: k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, out: k => 1 - Math.pow(1 - k, 3), linear: k => k };
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- styles: one object per look. ink colours draw lines and text; fill colours encode data
+   (fills were checked for colour-blind separation against their background). */
+const STYLES = {
+  chalkboard: { dark: 1, bg: '#1E2023', panel: '#17191B', ink: '#ECE7DA', mut: '#9A9A93', faint: '#55585E', line: '#4A4D53',
+    blue: '#9CC3E6', green: '#A8DDC3', amber: '#F2D98B', violet: '#C3B5E8', red: '#EBA494',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 1, texture: 1, hand: "'Caveat', cursive", handSize: 1.12, font: 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap' },
+  paper: { dark: 0, bg: '#FBF8F1', panel: '#F3EEE3', ink: '#22252A', mut: '#5F6368', faint: '#C9C3B6', line: '#BDB6A8',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: .7, texture: 0, hand: "'Kalam', cursive", handSize: 1, font: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap' },
+  editorial: { dark: 0, bg: '#FFFFFF', panel: '#F5F5F2', ink: '#1A1A1A', mut: '#5C5C5C', faint: '#D6D6D0', line: '#C4C4BE',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: 0, texture: 0, hand: "'Source Serif 4', Georgia, serif", handSize: .9, font: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap' },
+  blueprint: { dark: 1, bg: '#10243A', panel: '#0C1C2E', ink: '#E6EEF5', mut: '#93A8BC', faint: '#3A5672', line: '#4A6A89',
+    blue: '#8EC5F0', green: '#9BE0C0', amber: '#F5D58A', violet: '#C9B8F2', red: '#F2A08F',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 0, texture: 0, grid: 1, hand: "'IBM Plex Mono', ui-monospace, monospace", handSize: .78, font: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap' },
+};
+let ST = STYLES.chalkboard, ROUGH = 1;
+const C = {};                                   // active colours, e.g. K.C.ink, K.C.fill.blue
+function col(c) { if (!c) return C.ink; if (c[0] === '#' || c.startsWith('rgb') || c === 'none' || c === 'transparent') return c; if (c.startsWith('fill.')) return C.fill[c.slice(5)] || c; return C[c] || c; }
+function useStyle(name, root) {
+  ST = STYLES[name] || STYLES.chalkboard; ROUGH = ST.rough;
+  Object.keys(C).forEach(k => delete C[k]); Object.assign(C, ST, { fill: { ...ST.fill } });
+  injectCSS();
+  if (ST.font && !document.querySelector(`link[href="${ST.font}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ST.font; document.head.appendChild(l); }
+  if (root) {
+    const v = { bg: ST.bg, panel: ST.panel, ink: ST.ink, mut: ST.mut, faint: ST.faint, line: ST.line, blue: ST.blue, green: ST.green, amber: ST.amber, violet: ST.violet, red: ST.red, hand: ST.hand };
+    for (const k in v) root.style.setProperty('--k-' + k, v[k]);
+    root.classList.add('kx', 'kx-' + (name in STYLES ? name : 'chalkboard'));
+    if (ST.texture) { const r = rng(9); let s = ''; for (let i = 0; i < 140; i++) s += `<circle cx='${(r() * 240).toFixed(1)}' cy='${(r() * 240).toFixed(1)}' r='${(.4 + r() * .8).toFixed(2)}' fill='%23ffffff' fill-opacity='${(.02 + r() * .045).toFixed(3)}'/>`; root.style.backgroundImage = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>${s}</svg>")`; }
+    if (ST.grid) root.style.backgroundImage = `linear-gradient(${ST.faint}55 1px,transparent 1px),linear-gradient(90deg,${ST.faint}55 1px,transparent 1px)`, root.style.backgroundSize = '20px 20px';
+  }
+  return ST;
+}
+function fontsReady(ms = 1500) { return Promise.race([document.fonts ? document.fonts.ready.then(() => document.fonts.load(`20px ${ST.hand.split(',')[0]}`)) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
+
+/* ---------- hand-drawn geometry. Each shape takes a seed so its wobble is identical on every frame. */
+const J = (r, a) => (r() - .5) * 2 * a * ROUGH;
+function line(x1, y1, x2, y2, seed = 1, bow = 1.6) { const r = rng(seed); return `M${f(x1 + J(r, .5))} ${f(y1 + J(r, .5))} Q${f((x1 + x2) / 2 + J(r, bow))} ${f((y1 + y2) / 2 + J(r, bow))} ${f(x2)} ${f(y2)}`; }
+function rect(x, y, w, h, seed = 1) {
+  if (!ROUGH) return `M${f(x)} ${f(y)}H${f(x + w)}V${f(y + h)}H${f(x)}Z`;
+  const r = rng(seed), p = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(q => [q[0] + J(r, 1.3), q[1] + J(r, 1.3)]);
+  let d = `M${f(p[0][0])} ${f(p[0][1])}`;
+  for (let i = 0; i < 4; i++) { const A = p[i], B = p[(i + 1) % 4]; d += ` Q${f((A[0] + B[0]) / 2 + J(r, 1.5))} ${f((A[1] + B[1]) / 2 + J(r, 1.5))} ${f(B[0])} ${f(B[1])}`; }
+  return d + ` L${f(p[0][0] + (p[1][0] - p[0][0]) * .08)} ${f(p[0][1] + J(r, 1))}`;
+}
+function ellipse(cx, cy, rx, ry = rx, seed = 1) { const r = rng(seed); return `M${f(cx - rx)} ${f(cy)} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx + rx)} ${f(cy + J(r, .6))} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx - rx + 1.5 * ROUGH)} ${f(cy + .6 * ROUGH)}`; }
+function arrow(fx, fy, x, y, seed = 1, L = 8) { const a = Math.atan2(y - fy, x - fx), r = rng(seed), k = .5 + J(r, .06); return `M${f(x - L * Math.cos(a - k))} ${f(y - L * Math.sin(a - k))} L${f(x)} ${f(y)} L${f(x - L * Math.cos(a + k))} ${f(y - L * Math.sin(a + k))}`; }
+function poly(pts, seed = 1) { const r = rng(seed); return 'M' + pts.map((p, i) => `${f(p[0] + (i ? J(r, .6) : 0))} ${f(p[1] + (i ? J(r, .6) : 0))}`).join(' L'); }
+function curve(x1, y1, x2, y2, bend = .3) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1; return `M${f(x1)} ${f(y1)} Q${f(mx - dy * bend)} ${f(my + dx * bend)} ${f(x2)} ${f(y2)}`; }
+
+/* ---------- markup builders. Elements carry data-k (draw|fade), data-t (delay ms) and data-d (duration ms);
+   the engine reveals them in that order when a step opens, and shows them at once with reduced motion. */
+function P(d, c, t = 0, du = 600, w = 1.5, extra = '') { return `<path d="${d}" fill="none" stroke="${col(c)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" data-k="draw" data-t="${t}" data-d="${du}" ${extra}/>`; }
+function T(x, y, s, o = {}) {
+  const fam = o.h ? 'var(--k-hand)' : o.m ? 'var(--font-mono, ui-monospace, Menlo, monospace)' : 'var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)';
+  const z = (o.z || 12) * (o.h ? ST.handSize : 1);
+  return `<text${o.id ? ` id="${o.id}"` : ''} x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${f(z)}"${o.w ? ` font-weight="${o.w}"` : ''} fill="${col(o.c)}" style="font-family:${fam};font-variant-numeric:tabular-nums" data-k="fade" data-t="${o.t || 0}" data-d="${o.d || 450}"${o.extra ? ' ' + o.extra : ''}>${o.raw ? s : esc(s)}</text>`;
+}
+function F(shape, c, t = 0, o = {}) { return `<path d="${shape}" fill="${col(c)}" fill-opacity="${o.op == null ? .85 : o.op}" stroke="none" data-k="fade" data-t="${t}" data-d="${o.d || 450}"${o.id ? ` id="${o.id}"` : ''}/>`; }
+function reveal(svg) {
+  const els = [...svg.querySelectorAll('[data-k]')];
+  if (RM) { els.forEach(e => { e.style.opacity = 1; e.style.strokeDashoffset = 0; }); return 0; }
+  let end = 0;
+  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (e.dataset.k === 'draw') { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
+  svg.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (e.dataset.k === 'draw') { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
+  return end;
+}
+function finish(svg) { svg.querySelectorAll('[data-k]').forEach(e => { e.style.transition = 'none'; e.style.strokeDashoffset = 0; e.style.opacity = 1; }); }
+
+/* ---------- small DOM helpers */
+function mk(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const ICON = {
+  left: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  right: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
+  replay: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+let cssDone = false;
+function injectCSS() {
+  if (cssDone) return; cssDone = true;
+  const s = document.createElement('style');
+  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
+.kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
+.kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
+.kx-count{font-size:11px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kx-cap{font-size:13.5px;line-height:1.55;margin:6px 8px 8px;color:var(--k-ink)}
+.kx-act{display:flex;justify-content:center;align-items:center;gap:8px;min-height:44px;flex-wrap:wrap;margin:0 4px 4px}
+.kx-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--k-mut);margin:6px 8px 8px}.kx-legend>span{transition:opacity .4s}
+.kx-sw{display:inline-block;width:12px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.kx-nav{display:flex;align-items:center;gap:8px}.kx button.kx-next{min-width:112px}.kx-act .kx-ctl{flex:1 1 100%}
+@media (max-width:480px){.kx{padding:12px 8px 10px}.kx button.kx-next{min-width:96px;padding:0 8px}.kx button.kx-dot{padding:10px 3px}.kx-nav{gap:6px}}
+.kx button{background:transparent;border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:0 12px;font:inherit;font-size:13px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.kx button:hover{border-color:var(--k-mut)}.kx button:focus-visible,.kx [role=button]:focus-visible{outline:2px solid var(--k-violet);outline-offset:2px}
+.kx button.pri{border-color:var(--k-violet);color:var(--k-violet)}.kx button[aria-pressed=true]{background:color-mix(in srgb,var(--k-violet) 18%,transparent)}
+.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
+.kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
+.kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
+.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:11px;line-height:17px;height:92px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
+.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1}
+.kx-time{font-size:11px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
+.kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
+.kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
+.kx-ripple{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid var(--k-ink);pointer-events:none;animation:kxrp .6s ease-out forwards}@keyframes kxrp{from{transform:scale(.3);opacity:.9}to{transform:scale(1.4);opacity:0}}
+.kx-recording .kx-nav button:not(.kx-dot),.kx-recording .kx-scrub button{visibility:hidden}
+.kx .sr-only,.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.kx *{transition:none!important;animation:none!important}}`;
+  document.head.appendChild(s);
+}
+
+/* ---------- step context: everything a step needs, bound to its generation */
+function makeCtx(eng, svg, i) {
+  const g = eng.gen, alive = () => g === eng.gen, dyn = svg.querySelector('.kx-dyn');
+  const q = s => svg.querySelector(s);
+  const pick = e => typeof e === 'string' ? q(e) : e;
+  const s = {
+    i, svg, dyn, q, alive, C, RM, root: eng.root, act: eng.act,
+    at(ms, fn) { const id = setTimeout(() => { if (alive()) fn(); }, ms); eng.timers.push(id); return id; },
+    wait(ms) { return new Promise(r => s.at(ms, () => { if (!(eng.inDemo && eng.touched)) r(); })); },   // an idle demo stops for good once the reader acts
+    loop(delay, fn) { s.at(delay, () => { let last = performance.now(); const t0 = last, st = {}; const k = n => { if (!alive()) return; st.dt = Math.min(.05, Math.max(0, (n - last) / 1000)); last = n; st.e = n - t0; if (fn(st) !== false) requestAnimationFrame(k); }; requestAnimationFrame(k); }); },
+    tween(du, fn, o = {}) { const ez = ease[o.ease || 'inOut']; return new Promise(res => s.at(o.delay || 0, () => { if (RM || du <= 0) { fn(1); res(); return; } const t0 = performance.now(); const k = n => { if (!alive()) return; const p = clamp((n - t0) / du); fn(ez(p)); if (p < 1) requestAnimationFrame(k); else res(); }; requestAnimationFrame(k); })); },
+    el(tag, attrs, parent) { return mk(tag, attrs, parent || dyn); },
+    drawIn(e, du = 500, delay = 0) { e = pick(e); if (!e || RM) return; const L = e.getTotalLength() + 1; e.style.transition = 'none'; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; e.getBoundingClientRect(); e.style.transition = `stroke-dashoffset ${du}ms cubic-bezier(.45,0,.55,1) ${delay}ms`; e.style.strokeDashoffset = 0; },
+    fadeIn(e, du = 400, delay = 0) { e = pick(e); if (!e) return; e.style.transition = 'none'; e.style.opacity = 0; e.getBoundingClientRect(); e.style.transition = `opacity ${du}ms ease ${delay}ms`; e.style.opacity = 1; },
+    fadeOut(e, du = 400, remove = true) { e = pick(e); if (!e) return; e.style.transition = `opacity ${du}ms`; e.style.opacity = 0; if (remove) setTimeout(() => e.remove(), du + 50); },
+    travel(path, du = 600, c = 'ink', o = {}) {   // a dot that moves along a path element or a list of points
+      let p = pick(path), temp = false;
+      if (Array.isArray(path)) { p = mk('path', { d: 'M' + path.map(q => q.join(' ')).join(' L'), fill: 'none', stroke: col(c), 'stroke-width': 1.6, 'stroke-opacity': o.trail === false ? 0 : .5, 'stroke-linecap': 'round' }, dyn); temp = true; if (o.trail !== false) s.drawIn(p, du); }
+      const d = mk('circle', { r: o.r || 3.6, fill: col(c) }, dyn), L = p.getTotalLength();
+      const done = () => { s.fadeOut(d, 300); if (temp && !o.keep) setTimeout(() => s.fadeOut(p, 450), 200); };
+      if (RM) { const e = p.getPointAtLength(L); d.setAttribute('cx', e.x); d.setAttribute('cy', e.y); done(); return Promise.resolve(); }
+      return s.tween(du, k => { const e = p.getPointAtLength(k * L); d.setAttribute('cx', f(e.x)); d.setAttribute('cy', f(e.y)); }, { delay: o.delay || 0 }).then(done);
+    },
+    ring(x, y, w, h, c = 'ink', o = {}) { const p = mk('path', { d: rect(x, y, w, h, Math.round(x * 7 + y)), fill: 'none', stroke: col(c), 'stroke-width': o.w || 2.4, 'stroke-linecap': 'round', class: 'pulse' }, dyn); p.style.opacity = 0; setTimeout(() => p.remove(), 1400); return p; },
+    write(x, y, text, o = {}) { const w = document.createElementNS(NS, 'g'); w.innerHTML = T(x, y, text, o); const t = w.firstChild; dyn.appendChild(t); t.removeAttribute('data-k'); s.fadeIn(t, o.d || 450, o.t || 0); return t; },
+    float(x, y, text, c = 'ink', z = 16) { const t = s.write(x, y, text, { h: 1, z, c }); if (!RM) { t.style.transition = 'transform 1.1s ease-out, opacity 1.1s ease-out'; requestAnimationFrame(() => requestAnimationFrame(() => { t.style.transform = 'translateY(-18px)'; t.style.opacity = 0; })); } setTimeout(() => t.remove(), 1200); },
+    swap(e, text, c) { e = pick(e); if (!e) return; e.style.transition = 'opacity .15s'; e.style.opacity = 0; s.at(160, () => { e.textContent = text; if (c) e.setAttribute('fill', col(c)); e.style.opacity = 1; }); },
+    count(e, to, o = {}) { e = pick(e); if (!e) return; const from = o.from != null ? o.from : (+e.dataset.v || 0), fmt = o.fmt || (v => Math.round(v).toLocaleString()); e.dataset.v = to; return s.tween(o.du || 900, k => { e.textContent = (o.pre || '') + fmt(lerp(from, to, k)) + (o.post || ''); }, { delay: o.delay || 0 }); },
+    bar(e, frac, du = 600, axis = 'x') { e = pick(e); if (!e) return; e.style.transformBox = 'fill-box'; e.style.transformOrigin = axis === 'x' ? '0 50%' : '50% 100%'; e.style.transition = RM ? 'none' : `transform ${du}ms cubic-bezier(.45,0,.55,1)`; e.style.transform = axis === 'x' ? `scaleX(${clamp(frac).toFixed(4)})` : `scaleY(${clamp(frac).toFixed(4)})`; },
+    btn(icon, label, fn, o = {}) { const b = document.createElement('button'); if (o.primary) b.className = 'pri'; b.innerHTML = (ICON[icon] || '') + esc(label); b.type = 'button'; b.onclick = e => { if (e.isTrusted) s.touched(); fn(b); }; eng.act.appendChild(b); return b; },
+    on(e, fn, label) { e = pick(e); e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0'); if (label) e.setAttribute('aria-label', label); e.style.cursor = 'pointer'; const h = ev => { if (ev.isTrusted) s.touched(); fn(ev); }; e.addEventListener('click', h); e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); h(ev); } }); return e; },
+    point(ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 }; },
+    drag(e, o) { e = pick(e); e.style.touchAction = 'none'; e.style.cursor = 'grab'; let on = false; e.addEventListener('pointerdown', ev => { on = true; e.setPointerCapture(ev.pointerId); s.touched(); o.move && o.move(s.point(ev), ev); }); e.addEventListener('pointermove', ev => { if (on && alive()) o.move && o.move(s.point(ev), ev); }); const up = ev => { if (!on) return; on = false; o.end && o.end(s.point(ev), ev); }; e.addEventListener('pointerup', up); e.addEventListener('pointercancel', up); return e; },
+    cap(text) { eng.cap.textContent = text; },
+    touched() { eng.touched = true; if (eng.stopAuto && !REC) eng.stopAuto(); },   // a reader who acts takes over from autoplay
+    tap(e) { e = pick(e); if (!e || !alive() || (eng.inDemo && eng.touched)) return; const r = e.getBoundingClientRect(), R = eng.root.getBoundingClientRect(), d = document.createElement('div'); d.className = 'kx-ripple'; d.style.left = (r.left + r.width / 2 - R.left) + 'px'; d.style.top = (r.top + r.height / 2 - R.top) + 'px'; eng.root.appendChild(d); setTimeout(() => d.remove(), 650); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); },
+    /* unit charts: one circle per item, keyed, so items keep their identity when they move */
+    units(items, o = {}) { const gU = mk('g', { class: 'kx-units' }, o.parent || dyn); s._units = items.map((it, j) => { const c = mk('circle', { cx: o.x0 || 0, cy: o.y0 || 0, r: o.r || 4, fill: col(o.fill || 'fill.blue') }, gU); c.style.transition = 'fill .5s, opacity .5s'; return { it, c, x: o.x0 || 0, y: o.y0 || 0, r: o.r || 4, j }; }); return s._units; },
+    arrange(layout, o = {}) { const U = s._units || [], du = o.du || 900, stg = o.stagger == null ? 4 : o.stagger, ez = ease[o.ease || 'inOut'];
+      const tg = U.map((u, j) => { const L = layout(u.it, j) || {}; if (L.fill) u.c.style.fill = col(L.fill); if (L.opacity != null) u.c.style.opacity = L.opacity; return { x0: u.x, y0: u.y, r0: u.r, x: L.x == null ? u.x : L.x, y: L.y == null ? u.y : L.y, r: L.r == null ? u.r : L.r, dl: (L.order == null ? j : L.order) * stg }; });
+      const tot = du + Math.max(0, ...tg.map(t => t.dl));
+      return s.tween(tot, k => { const ms = k * tot; U.forEach((u, j) => { const t = tg[j], p = ez(clamp((ms - t.dl) / du)); u.x = lerp(t.x0, t.x, p); u.y = lerp(t.y0, t.y, p); u.r = lerp(t.r0, t.r, p); u.c.setAttribute('cx', f(u.x)); u.c.setAttribute('cy', f(u.y)); u.c.setAttribute('r', f(u.r)); }); }, { ease: 'linear', delay: o.delay || 0 }); },
+  };
+  return s;
+}
+
+/* ---------- stepper: a lesson that moves one idea at a time, with fixed controls */
+const ALL = (window.EXPLAINERS = window.EXPLAINERS || []);
+function frame(root, o, kind) {
+  root = typeof root === 'string' ? document.querySelector(root) : root;
+  useStyle(o.style || 'chalkboard', root);
+  const [W, H] = o.viewBox || [380, 300];
+  const legend = (o.legend || []).map(l => `<span data-l="${l.key}"><span class="kx-sw" style="background:${col(l.color)}"></span>${esc(l.label)}</span>`).join('');
+  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div>
+<svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
+${kind === 'player' ? '<div class="kx-scrub"><button class="kx-pp" type="button"></button><input type="range" min="0" step="1" aria-label="Scrub the timeline"><span class="kx-time"></span></div>' : '<div class="kx-act"></div>'}
+${legend ? `<div class="kx-legend">${legend}</div>` : ''}<div class="kx-nav"><button class="kx-back" type="button" aria-label="Previous">${ICON.left}</button><div class="kx-dots"></div>${kind === 'stepper' ? `<button class="kx-replay" type="button" aria-label="Replay this step" title="Replay this step">${ICON.replay}</button>` : ''}<button class="kx-next" type="button"></button></div>`;
+  if (REC) root.classList.add('kx-recording');
+  const $ = s => root.querySelector(s);
+  return { root, W, H, svg: $('.kx-stage'), cap: $('.kx-cap'), act: $('.kx-act'), title: $('.kx-title'), count: $('.kx-count'), dots: $('.kx-dots'), next: $('.kx-next'), back: $('.kx-back'), replay: $('.kx-replay'), log: $('.kx-log'), $ };
+}
+function fixCaptionHeight(fr, texts) {   // reserve the tallest caption so nothing below it ever moves
+  const m = fr.cap.cloneNode(); m.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;min-height:0;width:${fr.cap.clientWidth}px`; m.removeAttribute('aria-live'); fr.cap.parentNode.appendChild(m);
+  let h = 0; texts.forEach(t => { m.textContent = t; h = Math.max(h, m.offsetHeight); }); m.remove(); fr.cap.style.minHeight = h + 'px';
+}
+function stepper(o) {
+  const fr = frame(o.root, o, 'stepper'), S = o.steps;
+  if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
+  const eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
+  let cur = 0, first = true, auto = null, ends = [];
+  eng.stopAuto = () => { auto = null; };
+  S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
+  const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
+  fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
+  function build(i) {
+    cur = i; eng.touched = false; const st = S[i], s = {};
+    fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
+    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = `Step ${i + 1} of ${S.length}`;
+    fr.svg.setAttribute('aria-label', (st.title || '') + '. ' + (st.alt || st.cap || ''));
+    [...fr.dots.children].forEach((d, j) => j === i ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current'));
+    fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !st.keys || st.keys.includes(e.dataset.l) ? 1 : .3);
+    fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : 'Next' + ICON.right;
+    fr.cap.style.transition = 'none'; fr.cap.style.opacity = 0; fr.cap.textContent = st.cap || '';
+    const revealEnd = reveal(fr.svg);
+    const ctx = makeCtx(eng, fr.svg, i);
+    ctx.at(st.capDelay == null ? 300 : st.capDelay, () => { fr.cap.style.transition = 'opacity .6s'; fr.cap.style.opacity = 1; });
+    if (st.start) st.start(ctx);
+    eng.inDemo = false;
+    if (st.demo && st.idleDemo && !REC) ctx.at(st.idleDemo, () => { if (!eng.touched) { eng.inDemo = true; Promise.resolve(st.demo(ctx)).finally(() => { eng.inDemo = false; }); } });
+    ends[i] = st.duration || revealEnd + 600;
+    eng.ctx = ctx;
+  }
+  function go(i, keepAuto) {
+    if (!keepAuto) auto = null;
+    eng.gen++; eng.timers.forEach(clearTimeout); eng.timers = [];
+    i = Math.max(0, Math.min(S.length - 1, i));
+    const g = eng.gen;
+    if (first || RM) { first = false; build(i); fr.svg.style.opacity = 1; }
+    else { fr.svg.style.opacity = 0; setTimeout(() => { if (g === eng.gen) { build(i); fr.svg.style.opacity = 1; } }, 230); }
+  }
+  fr.back.onclick = () => go(cur - 1);
+  fr.next.onclick = () => go(cur < S.length - 1 ? cur + 1 : 0);
+  fr.replay.onclick = () => go(cur);
+  document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('[role=button],input,button,textarea,select')) return; if (ALL.length > 1 && !fr.root.contains(document.activeElement)) return; if (e.key === 'ArrowRight') go(cur + 1); if (e.key === 'ArrowLeft') go(cur - 1); });
+  const api = {
+    kind: 'stepper', root: fr.root, get count() { return S.length; }, get current() { return cur; },
+    go: i => go(i), duration: i => S[i].duration || ends[i] || 4000, hasDemo: i => !!S[i].demo,
+    demo: i => { const c = eng.ctx; return c && c.i === i && S[i].demo ? Promise.resolve(S[i].demo(c)) : Promise.resolve(); },
+    demoDuration: i => S[i].demoDuration || 0,
+    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(hold); } },
+  };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { go(+(QS.get('step') || 1) - 1); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; });
+    else if (o.autoplay && !RM && !QS.has('step') && !QS.has('static')) { const run = () => api.autoplay().then(() => { if (o.autoplay === 'loop' && auto) run(); }); run(); } });
+  return api;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
+   so pause, scrub, replay and recording all work for free. Chapters label stretches of the timeline. */
+function player(o) {
+  const fr = frame(o.root, o, 'player'), eng = { gen: 0, timers: [], root: fr.root, act: null, cap: fr.cap, touched: false };
+  const CH = o.chapters || [{ at: 0, title: o.title || '', cap: '' }], D = o.duration;
+  const range = fr.$('.kx-scrub input'), pp = fr.$('.kx-pp'), tm = fr.$('.kx-time');
+  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1;
+  fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
+  const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
+  CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
+  fixCaptionHeight(fr, CH.map(c => c.cap || ''));
+  const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
+  function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !c.keys || c.keys.includes(e.dataset.l) ? 1 : .3); }
+  function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
+  function draw() { range.value = t; tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
+  function seek(x) { t = clamp(x, 0, D); draw(); }
+  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n; t += dt * speed; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
+  function play() { if (t >= D) t = 0; if (RM) { seek(end(chapterAt(t)) - 1); return; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }  // reduced motion: jump to the end state of the chapter instead of animating
+  function pause() { playing = false; updPP(); }
+  function updPP() { pp.innerHTML = playing ? ICON.pause + 'Pause' : t >= D ? ICON.replay + 'Replay' : ICON.play + 'Play'; pp.setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  pp.onclick = () => playing ? pause() : play();
+  range.oninput = () => { pause(); seek(+range.value); };
+  fr.back.onclick = () => { seek(CH[Math.max(0, chapterAt(t) - (t - CH[chapterAt(t)].at < 600 ? 1 : 0))].at); };
+  fr.next.innerHTML = 'Next' + ICON.right; fr.next.onclick = () => { const k = chapterAt(t); seek(k < CH.length - 1 ? CH[k + 1].at : 0); play(); };
+  const end = i => i < CH.length - 1 ? CH[i + 1].at : D;
+  const api = { kind: 'player', root: fr.root, get count() { return CH.length; }, get current() { return chapterAt(t); }, go: i => { seek(CH[i].at); play(); }, duration: i => (end(i) - CH[i].at) / speed, hasDemo: () => false, demo: () => Promise.resolve(), seek, play, pause, get time() { return t; },
+    async autoplay() { seek(0); play(); while (t < D) await sleep(200); await sleep(o.hold || 2000); } };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if (o.autoplay !== false && !QS.has('static')) play(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  return api;
+}
+
+/* ---------- controls for explorables */
+let uid = 0;
+function slider(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent; const id = 'kx' + (++uid);
+  const w = document.createElement('div'); w.className = 'kx-ctl';
+  w.innerHTML = `<label for="${id}">${esc(o.label)}</label><output for="${id}"></output><input id="${id}" type="range" min="${o.min}" max="${o.max}" step="${o.step || 'any'}" value="${o.value}">`;
+  parent.appendChild(w); const inp = w.querySelector('input'), out = w.querySelector('output'), fmt = o.fmt || (v => v);
+  const upd = () => { out.textContent = fmt(+inp.value); o.oninput && o.oninput(+inp.value); };
+  inp.addEventListener('input', upd); upd();
+  return { el: w, input: inp, get value() { return +inp.value; }, set(v) { inp.value = v; upd(); } };
+}
+function toggle(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent;
+  const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', o.value ? 'true' : 'false'); b.innerHTML = esc(o.label); parent.appendChild(b);
+  b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', v); o.onchange && o.onchange(v); };
+  return b;
+}
+
+/* ---------- layout and number helpers */
+const grid = (j, o) => ({ x: (o.x0 || 0) + (j % o.cols) * (o.gap || 10), y: (o.y0 || 0) + Math.floor(j / o.cols) * (o.gapY || o.gap || 10) });
+function scale(d0, d1, r0, r1) { const s = v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0); s.invert = p => d0 + (p - r0) / (r1 - r0 || 1) * (d1 - d0); return s; }
+const fmt = {
+  int: v => Math.round(v).toLocaleString('en-US'),
+  pct: (v, d = 0) => (v * 100).toFixed(d) + '%',
+  usd: (v, d = 2) => (v < 0 ? '−' : '') + '$' + Math.abs(v).toFixed(d),
+  sec: v => v < 60 ? v.toFixed(0) + ' s' : Math.floor(v / 60) + ' min ' + Math.round(v % 60) + ' s',
+};
+/* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
+function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
+
+const K = { version: '1.0', NS, RM, C, STYLES, useStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
+window.K = K;
+})();
+</script>
+<script>
+/* ===== SCENE: Judge exam, every pair a dot ===== */
+const {P, T, F, line, rect, ellipse, arrow, curve, poly, C} = K;
+/* DATA. Source folder: notebooks/judges/33-judge-exam/
+   PAIRS: one row per test pair, built from data/judgments.csv (correct, unreadable_type per judge and order)
+   and data/exam_v1.jsonl (family, error_source, tags). Row = [id, family index, natural?, outcome per judge, note].
+   Outcome letters, judge order as JN: b = right in both orders, o = right in one order only,
+   n = wrong in both orders, u = at least one reply unreadable. */
+const PAIRS = [["code-000",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-001",0,0,"bbbbbbbbo","worse code fails 5 of 64 hidden tests"],["code-002",0,1,"obbbbbbbb","worse code fails 1 of 64 hidden tests; written separately"],["code-003",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-004",0,0,"bbbbbbobb","worse code fails 2 of 64 hidden tests"],["code-005",0,1,"bbbbbbbbo","worse code fails 3 of 64 hidden tests; written separately"],["code-006",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-007",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-008",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-009",0,0,"bbbbbbbbb","worse code fails 6 of 64 hidden tests"],["code-010",0,1,"bbbboboon","worse code fails 2 of 64 hidden tests; written separately"],["code-011",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-012",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-013",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-014",0,0,"bbbbbbbbo","worse code fails 6 of 64 hidden tests"],["code-015",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-016",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-017",0,1,"bbbbboobb","worse code fails 3 of 64 hidden tests; written separately"],["code-018",0,1,"bbbbnnnon","worse code fails 6 of 64 hidden tests; written separately"],["code-019",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-020",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-021",0,0,"bbbbbbbbb","worse code fails 5 of 64 hidden tests"],["code-022",0,1,"bbbooooon","worse code fails 2 of 64 hidden tests; written separately"],["code-023",0,0,"bbbbbbbob","worse code fails 2 of 64 hidden tests"],["code-024",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-025",0,0,"bbbbbbboo","worse code fails 4 of 64 hidden tests"],["code-026",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-027",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-028",0,0,"bbbbbbobb","worse code fails 2 of 64 hidden tests"],["code-029",0,1,"bbbbnonon","worse code fails 2 of 64 hidden tests; written separately"],["code-030",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-031",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-032",0,0,"bbbbbbboo","worse code fails 2 of 64 hidden tests"],["code-033",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-034",0,0,"bbbbbbboo","worse code fails 2 of 64 hidden tests"],["code-035",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-036",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-037",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-038",0,1,"bbbbbboob","worse code fails 4 of 64 hidden tests; written separately"],["code-039",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-040",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-041",0,1,"bbbbnbnnn","worse code fails 1 of 64 hidden tests; written separately"],["code-042",0,1,"bbbooonon","worse code fails 6 of 64 hidden tests; written separately"],["code-043",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-044",0,0,"bbbbbbbbb","worse code fails 6 of 64 hidden tests"],["code-045",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-046",0,0,"bbbbbbboo","worse code fails 2 of 64 hidden tests"],["code-047",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-048",0,0,"bbbbbbbbo","worse code fails 2 of 64 hidden tests"],["code-049",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-050",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-051",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-052",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-053",0,1,"bbbooobbn","worse code fails 5 of 64 hidden tests; written separately"],["code-054",0,1,"bbbboonbn","worse code fails 5 of 64 hidden tests; written separately"],["code-055",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-056",0,0,"bbbbbbboo","worse code fails 2 of 64 hidden tests"],["code-057",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["code-058",0,1,"bbbooooon","worse code fails 2 of 64 hidden tests; written separately"],["code-059",0,0,"bbbbbbbbb","worse code fails 2 of 64 hidden tests"],["worked-000",1,0,"bbbbbnooo","one wrong digit at one step"],["worked-001",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-002",1,0,"bbbbboooo","one wrong digit at one step"],["worked-003",1,0,"bbbbboooo","one wrong digit at one step"],["worked-004",1,0,"bbbbbooon","one wrong digit at one step"],["worked-005",1,0,"bbbbboooo","one wrong digit at one step"],["worked-006",1,0,"bbbbboooo","one wrong digit at one step"],["worked-007",1,0,"bbbbboooo","one wrong digit at one step"],["worked-008",1,0,"bbbbboooo","one wrong digit at one step"],["worked-009",1,0,"bbbbboooo","one wrong digit at one step"],["worked-010",1,0,"bbbbboooo","one wrong digit at one step"],["worked-011",1,0,"bbbbboooo","one wrong digit at one step"],["worked-012",1,0,"bbbbbnooo","one wrong digit at one step"],["worked-013",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-014",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-015",1,0,"bbbbboooo","one wrong digit at one step"],["worked-016",1,0,"bbbbboooo","one wrong digit at one step"],["worked-017",1,0,"bbbbboooo","one wrong digit at one step"],["worked-018",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-019",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-020",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-021",1,0,"bbbbboooo","one wrong digit at one step"],["worked-022",1,0,"bbbbboooo","one wrong digit at one step"],["worked-023",1,0,"bbbbboono","one wrong digit at one step"],["worked-024",1,0,"bbbbboooo","one wrong digit at one step"],["worked-025",1,0,"bbbbboooo","one wrong digit at one step"],["worked-026",1,0,"bbbbboooo","one wrong digit at one step"],["worked-027",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-028",1,0,"ubbbboooo","one wrong digit at one step"],["worked-029",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-030",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-031",1,0,"bbubboooo","one wrong digit at one step"],["worked-032",1,0,"bbbbbnooo","one wrong digit at one step"],["worked-033",1,0,"bbbbboooo","one wrong digit at one step"],["worked-034",1,0,"bbbbboooo","one wrong digit at one step"],["worked-035",1,0,"bbbbbnooo","one wrong digit at one step"],["worked-036",1,0,"bbbbboooo","one wrong digit at one step"],["worked-037",1,0,"bbbbboooo","one wrong digit at one step"],["worked-038",1,0,"bbbbbnooo","one wrong digit at one step"],["worked-039",1,0,"bbbbboooo","one wrong digit at one step"],["worked-040",1,0,"bbbbboooo","one wrong digit at one step"],["worked-041",1,0,"bbbbboooo","one wrong digit at one step"],["worked-042",1,0,"bbbbboooo","one wrong digit at one step"],["worked-043",1,0,"bbbbboooo","one wrong digit at one step"],["worked-044",1,0,"bbbbboobo","one wrong digit at one step"],["worked-045",1,0,"bbbbboooo","one wrong digit at one step"],["worked-046",1,0,"bbbbboooo","one wrong digit at one step"],["worked-047",1,0,"bbbbboooo","one wrong digit at one step"],["worked-048",1,0,"bbbbboooo","one wrong digit at one step"],["worked-049",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-050",1,0,"bbbbbbooo","one wrong digit at one step"],["worked-051",1,0,"bbbbboooo","one wrong digit at one step"],["worked-052",1,0,"bbbbboooo","one wrong digit at one step"],["worked-053",1,0,"bbbbboooo","one wrong digit at one step"],["worked-054",1,0,"bbbbboooo","one wrong digit at one step"],["worked-055",1,0,"bbbbboooo","one wrong digit at one step"],["worked-056",1,0,"bbbbboooo","one wrong digit at one step"],["worked-057",1,0,"bbbbbnooo","one wrong digit at one step"],["worked-058",1,0,"bbbbboooo","one wrong digit at one step"],["worked-059",1,0,"bbbbboooo","one wrong digit at one step"],["instructions-000",2,0,"bobbuoooo","worse message has 723 words; rule says 722"],["instructions-001",2,0,"bbnbboboo","worse message has 718 words; rule says 719"],["instructions-002",2,0,"bnbbuoooo","worse message has 720 words; rule says 719"],["instructions-003",2,0,"bbbbuonno","worse message has 714 words; rule says 715"],["instructions-004",2,0,"bbbbubooo","worse message has 715 words; rule says 714"],["instructions-005",2,0,"bbbbuoooo","worse message has 723 words; rule says 724"],["instructions-006",2,0,"bbbouoooo","worse message has 722 words; rule says 723"],["instructions-007",2,0,"bbnbunnoo","worse message has 725 words; rule says 724"],["instructions-008",2,0,"bbnounooo","worse message has 722 words; rule says 723"],["instructions-009",2,0,"bbobobooo","worse message has 727 words; rule says 726"],["instructions-010",2,0,"bbboubboo","worse message has 726 words; rule says 727"],["instructions-011",2,0,"bobbuoono","worse message has 724 words; rule says 723"],["instructions-012",2,0,"bnbbubnoo","worse message has 719 words; rule says 718"],["instructions-013",2,0,"bbobuoboo","worse message has 719 words; rule says 720"],["instructions-014",2,0,"bbobubnoo","worse message has 726 words; rule says 725"],["instructions-015",2,0,"bbbbbbbbb","worse message breaks the opening rule"],["instructions-016",2,0,"bbbounobo","worse message has 718 words; rule says 717"],["instructions-017",2,0,"bbbbooooo","worse message has 722 words; rule says 723"],["instructions-018",2,0,"bboounobo","worse message has 721 words; rule says 722"],["instructions-019",2,0,"bobbbonoo","worse message has 721 words; rule says 720"],["instructions-020",2,0,"bbbbubbbb","worse message breaks the opening rule"],["instructions-021",2,0,"bobbbobno","worse message has 715 words; rule says 714"],["instructions-022",2,0,"bbbnunnoo","worse message has 714 words; rule says 715"],["instructions-023",2,0,"bonbboooo","worse message has 723 words; rule says 722"],["instructions-024",2,0,"boobboobo","worse message has 713 words; rule says 712"],["instructions-025",2,0,"bbbnubooo","worse message has 722 words; rule says 723"],["instructions-026",2,0,"bnobubnbo","worse message has 719 words; rule says 718"],["instructions-027",2,0,"bbnnubobo","worse message has 714 words; rule says 715"],["instructions-028",2,0,"bobbuonoo","worse message has 728 words; rule says 727"],["instructions-029",2,0,"bbobbnnoo","worse message has 720 words; rule says 721"],["instructions-030",2,0,"bboobbobo","worse message has 712 words; rule says 713"],["instructions-031",2,0,"bbbbuoono","worse message has 717 words; rule says 716"],["instructions-032",2,0,"bbbbuoboo","worse message has 711 words; rule says 712"],["instructions-033",2,0,"bobbuonno","worse message has 714 words; rule says 713"],["instructions-034",2,0,"bbnbubboo","worse message has 717 words; rule says 718"],["instructions-035",2,0,"bbbbubbbo","worse message has 714 words; rule says 713"],["instructions-036",2,0,"bbobuoboo","worse message has 718 words; rule says 717"],["instructions-037",2,0,"boboubbno","worse message has 713 words; rule says 714"],["instructions-038",2,0,"bbbbubbbb","worse message breaks the forbidden rule"],["instructions-039",2,0,"bbbouoobo","worse message has 711 words; rule says 712"],["instructions-040",2,0,"bobbboooo","worse message has 720 words; rule says 719"],["instructions-041",2,0,"bbbouoboo","worse message has 718 words; rule says 719"],["instructions-042",2,0,"bbbnboboo","worse message has 711 words; rule says 712"],["instructions-043",2,0,"bbbbboboo","worse message has 730 words; rule says 729"],["instructions-044",2,0,"bbbounono","worse message has 721 words; rule says 722"],["instructions-045",2,0,"bbbbubbbb","worse message breaks the forbidden rule"],["instructions-046",2,0,"bbbbunooo","worse message has 722 words; rule says 723"],["instructions-047",2,0,"bbbbubooo","worse message has 727 words; rule says 726"],["instructions-048",2,0,"bnbbuoobo","worse message has 727 words; rule says 726"],["instructions-049",2,0,"bbbbuoooo","worse message has 720 words; rule says 721"],["instructions-050",2,0,"boobbnouo","worse message has 726 words; rule says 725"],["instructions-051",2,0,"bbbbonbbo","worse message has 721 words; rule says 722"],["instructions-052",2,0,"bbbbubbbo","worse message breaks the no digits rule"],["instructions-053",2,0,"bbbnboooo","worse message has 726 words; rule says 727"],["instructions-054",2,0,"bbbbbnooo","worse message has 722 words; rule says 723"],["instructions-055",2,0,"bbbbubbbb","worse message breaks the forbidden rule"],["instructions-056",2,0,"bbbbboboo","worse message has 712 words; rule says 713"],["instructions-057",2,0,"bbbbuoooo","worse message has 718 words; rule says 717"],["instructions-058",2,0,"bbobbnooo","worse message has 718 words; rule says 719"],["instructions-059",2,0,"bobbboboo","worse message has 714 words; rule says 713"],["grounded-000",3,0,"bbbbbbooo","uses a withdrawn rate"],["grounded-001",3,0,"bbbbbbboo","uses a superseded unit count"],["grounded-002",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-003",3,0,"bbbbbbbbo","uses an unsigned rate"],["grounded-004",3,0,"bbbbbbbbo","uses a withdrawn rate"],["grounded-005",3,0,"bbbbbbbob","uses a superseded unit count"],["grounded-006",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-007",3,0,"bbbbbbbbo","uses an unsigned rate"],["grounded-008",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-009",3,0,"bbbbbbboo","uses a superseded unit count"],["grounded-010",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-011",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-012",3,0,"bbbbbbbbo","uses a withdrawn rate"],["grounded-013",3,0,"bbbbbbooo","uses a superseded unit count"],["grounded-014",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-015",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-016",3,0,"bbbbbbbbo","uses a withdrawn rate"],["grounded-017",3,0,"bbbbbboob","uses a superseded unit count"],["grounded-018",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-019",3,0,"bbbbbbbbo","uses an unsigned rate"],["grounded-020",3,0,"bbbbbbobo","uses a withdrawn rate"],["grounded-021",3,0,"bbbbbbboo","uses a superseded unit count"],["grounded-022",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-023",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-024",3,0,"bbbbbbbbo","uses a withdrawn rate"],["grounded-025",3,0,"bbbbbbooo","uses a superseded unit count"],["grounded-026",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-027",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-028",3,0,"bbbbbbbbo","uses a withdrawn rate"],["grounded-029",3,0,"bbbbbbboo","uses a superseded unit count"],["grounded-030",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-031",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-032",3,0,"bbbbbbboo","uses a withdrawn rate"],["grounded-033",3,0,"bbbbbbboo","uses a superseded unit count"],["grounded-034",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-035",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-036",3,0,"bbbbbbooo","uses a withdrawn rate"],["grounded-037",3,0,"bbbbbbbbo","uses a superseded unit count"],["grounded-038",3,0,"bbbbbbbbb","uses a neighbouring site's credit"],["grounded-039",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-040",3,0,"bbbbbbbbo","uses a withdrawn rate"],["grounded-041",3,0,"bbbbbbooo","uses a superseded unit count"],["grounded-042",3,0,"bbbbbbboo","uses a neighbouring site's credit"],["grounded-043",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-044",3,0,"bbbbbbboo","uses a withdrawn rate"],["grounded-045",3,0,"bbbbbbboo","uses a superseded unit count"],["grounded-046",3,0,"bbbbbbbbb","uses a neighbouring site's credit"],["grounded-047",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-048",3,0,"bbbbbbooo","uses a superseded unit count"],["grounded-049",3,0,"bbbbbbooo","uses a superseded unit count"],["grounded-050",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-051",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-052",3,0,"bbbbbbboo","uses a withdrawn rate"],["grounded-053",3,0,"bbbbbboob","uses a superseded unit count"],["grounded-054",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-055",3,0,"bbbbbbbbb","uses an unsigned rate"],["grounded-056",3,0,"bbbbbbboo","uses a withdrawn rate"],["grounded-057",3,0,"bbbbbbooo","uses a superseded unit count"],["grounded-058",3,0,"bbbbbbbbo","uses a neighbouring site's credit"],["grounded-059",3,0,"bbbbbbbbb","uses an unsigned rate"]];
+const JN = ['Muse', 'Opus', 'Sonnet', 'Sol', 'Haiku', 'DeepSeek', 'Luna', 'Decisions', 'Granite 8B'];
+const FAM = ['code', 'calculations', 'instructions', 'contract Q&A'];
+// data/summary.csv: accuracy over 480 judgments with 95% bootstrap interval (accuracy, ci_low, ci_high)
+const ACC = [[.99583, .98958, 1], [.95833, .93958, .975], [.95, .92917, .97083], [.95, .92708, .97083],
+  [.81042, .77708, .84167], [.75625, .72708, .78542], [.71458, .68125, .74583], [.69167, .6625, .72083], [.59375, .56458, .62292]];
+// data/code_error_source_summary.csv: accuracy on the 13 natural code pairs (26 judgments each)
+const NAT = [25 / 26, 26 / 26, 26 / 26, 22 / 26, 14 / 26, 17 / 26, 11 / 26, 17 / 26, 7 / 26];
+const OUT = {b: 'fill.blue', o: 'fill.amber', n: 'fill.red', u: '#6a6d73'};
+const NEUTRAL = '#c9c2b2';   // uncoloured pair, lighter than the grey for unreadable replies
+const idx = id => PAIRS.findIndex(p => p[0] === id);
+const both = j => PAIRS.filter(p => p[3][j] === 'b').length;
+const nBoth = p => p[3].split('').filter(c => c === 'b').length;
+
+/* ---- layouts (pure functions of the item) */
+const inFam = i => i - PAIRS[i][1] * 60;              // position inside its family band (families have 60 pairs each)
+function bigPos(i) { const f = PAIRS[i][1], w = inFam(i); return {x: 196 + (w % 15) * 10.6, y: 238 + (f * 4 + Math.floor(w / 15)) * 10.6 + f * 9, r: 3.9}; }
+const BX = [17.8, 141, 264.2], TOP = [4, 149, 294];
+function wafPos(j, i) { const f = PAIRS[i][1], w = inFam(i); return {x: BX[j % 3] + (w % 15) * 7, y: TOP[Math.floor(j / 3)] + 21 + (f * 4 + Math.floor(w / 15)) * 7 + f * 4, r: 2.6}; }
+// histogram: column = how many of the 9 judges were right in both orders; instructions pairs stacked first
+const HIST = (() => { const cols = {}; const pos = []; const ord = PAIRS.map((p, i) => i).sort((a, b) => (PAIRS[a][1] === 2 ? 0 : 1) - (PAIRS[b][1] === 2 ? 0 : 1) || a - b);
+  ord.forEach(i => { const k = nBoth(PAIRS[i]); const m = cols[k] = (cols[k] || 0); cols[k]++; pos[i] = {x: 36 + k * 34.4 + ((m % 4) - 1.5) * 8, y: 390 - Math.floor(m / 4) * 8, r: 3.3}; });
+  return {pos, cols}; })();
+
+/* ---- units helpers */
+const JUDGE_ITEMS = []; JN.forEach((n, j) => PAIRS.forEach((p, i) => JUDGE_ITEMS.push({j, i})));
+function place(s, U, fn) {                      // put units straight into a layout (start of a step = end of the last)
+  U.forEach(u => { const L = fn(u.it); u.c.style.transition = 'none'; u.x = L.x; u.y = L.y; u.r = L.r;
+    u.c.setAttribute('cx', L.x.toFixed(1)); u.c.setAttribute('cy', L.y.toFixed(1)); u.c.setAttribute('r', L.r);
+    if (L.fill) u.c.style.fill = K.col(L.fill); u.c.style.opacity = L.opacity == null ? 1 : L.opacity; });
+  s.svg.getBoundingClientRect(); U.forEach(u => u.c.style.transition = 'fill .5s, opacity .5s');
+}
+function wafLabels(t0, counts) {             // judge names and counts above the nine waffles
+  return JN.map((n, j) => { const x = BX[j % 3] - 2.6, y = TOP[Math.floor(j / 3)] + 12;
+    return T(x, y, n, {h: 1, z: 14, a: 'start', t: t0 + j * 60}) +
+      (counts ? T(x + 103.2, y, counts(j), {z: 12, a: 'end', c: 'mut', t: t0 + 300 + j * 60, id: 'cnt' + j}) : ''); }).join('');
+}
+const SHOW_COUNT = j => both(j) + '/240';
+
+K.stepper({
+  root: '#x', style: 'chalkboard', viewBox: [380, 448], hold: 2600,
+  title: 'Nine judge models each compared 240 answer pairs where code decides the better answer; each pair is a dot, coloured by whether the judge was right in both answer orders.',
+  legend: [
+    {key: 'b', label: 'right in both orders', color: 'fill.blue'},
+    {key: 'o', label: 'right in one order only', color: 'fill.amber'},
+    {key: 'n', label: 'wrong in both', color: 'fill.red'},
+    {key: 'u', label: 'no readable reply', color: '#6a6d73'},
+    {key: 'w', label: 'word-count pair', color: 'fill.violet'},
+  ],
+  extraCaptions: [
+    'Calculations (second band): Luna, the Decisions API and Granite were right in only one order on 58 to 60 of 60 pairs. They picked the same slot twice; no arithmetic behind it.',
+    'Tap any dot to open its pair. The card shows which of the nine judges got it right both times.',
+  ],
+  steps: [
+    /* 1 ---------------------------------------------------------------- */
+    { title: '1. One pair, one dot', keys: [],
+      cap: 'Two answers to the same task, and code (hidden tests, exact maths or a rule checker) says which is better. Each dot is one such pair: 240 pairs in four task families.',
+      draw: () =>
+        T(20, 26, 'Task: group event times into sessions.', {z: 13, a: 'start', t: 100}) +
+        T(20, 44, 'New session only when the gap is GREATER than 8.', {z: 13, a: 'start', t: 250}) +
+        P(rect(20, 58, 160, 92, 11), 'red', 500, 600) + P(rect(200, 58, 160, 92, 12), 'blue', 650, 600) +
+        T(100, 80, 'Answer A', {h: 1, z: 17, t: 900}) + T(280, 80, 'Answer B', {h: 1, z: 17, t: 1000}) +
+        T(100, 106, 'if gap >= 8:', {m: 1, z: 13, t: 1200}) + T(280, 106, 'if gap > 8:', {m: 1, z: 13, t: 1300}) +
+        T(100, 134, '✗ fails 2 of 64 tests', {z: 12.5, c: 'red', t: 1700}) + T(280, 134, '✓ passes all 64', {z: 12.5, c: 'blue', t: 1850}) +
+        T(280, 178, 'code decides: B is better', {h: 1, z: 17, t: 2200}) +
+        T(20, 178, 'pair code-000', {m: 1, z: 12, a: 'start', c: 'mut', t: 2200}) +
+        P(line(20, 198, 360, 198, 13, .4), 'faint', 2300, 400, 1) +
+        FAM.map((f, k) => T(184, 238 + (k * 4 + 1.5) * 10.6 + k * 9 + 4, f + ' · 60', {z: 12.5, a: 'end', c: 'mut', t: 3000 + k * 120})).join(''),
+      start(s) {
+        const U = s.units(PAIRS.map((p, i) => ({i})), {r: 0, fill: NEUTRAL, x0: 280, y0: 186});
+        s.at(2500, () => s.arrange(it => ({...bigPos(it.i), fill: it.i === 0 ? 'ink' : NEUTRAL, order: it.i === 0 ? 0 : 60 + it.i}), {du: 800, stagger: 3}));
+        s.at(4400, () => { const b = bigPos(0); s.el('circle', {cx: b.x, cy: b.y, r: 7.5, fill: 'none', stroke: K.C.ink, 'stroke-width': 1.4}); });
+      },
+      duration: 4800 },
+
+    /* 2 ---------------------------------------------------------------- */
+    { title: '2. Every judge, asked twice', keys: ['b', 'o', 'n', 'u'],
+      cap: 'Each judge saw the pair twice, with A and B swapped. On code-000, eight judges were right both times. Granite chose the second-shown answer both times, so it was right only once.',
+      draw: () => {
+        const p = PAIRS[0];
+        let m = T(20, 26, 'pair code-000', {m: 1, z: 12.5, a: 'start', c: 'mut'}) +
+          T(178, 26, 'better', {z: 12, c: 'mut'}) + T(178, 40, 'shown 2nd', {z: 12, c: 'mut'}) +
+          T(250, 26, 'better', {z: 12, c: 'mut'}) + T(250, 40, 'shown 1st', {z: 12, c: 'mut'}) +
+          T(330, 40, 'dot', {z: 12, c: 'mut'});
+        // order AB = better shown 2nd, BA = better shown 1st (data/judgments.csv, item test-code-000)
+        const R = ['✓✓', '✓✓', '✓✓', '✓✓', '✓✓', '✓✓', '✓✓', '✓✓', '✓✗'];
+        JN.forEach((n, j) => { const y = 70 + j * 29, t = 300 + j * 90;
+          m += T(20, y + 5, n, {h: 1, z: 16, a: 'start', t}) +
+            T(178, y + 5, R[j][0], {z: 15, c: R[j][0] === '✓' ? 'blue' : 'red', t: 1300 + j * 70}) +
+            T(250, y + 5, R[j][1], {z: 15, c: R[j][1] === '✓' ? 'blue' : 'red', t: 2100 + j * 70}) +
+            `<circle cx="330" cy="${y}" r="6.5" fill="${K.col(OUT[p[3][j]])}" data-k="fade" data-t="${2900 + j * 70}" data-d="400"/>`; });
+        m += P(line(20, 332, 360, 332, 21, .4), 'faint', 3500, 300, 1);
+        const key = [['b', 'right in both orders'], ['o', 'right in one order'], ['n', 'wrong in both orders'], ['u', 'no readable reply']];
+        key.forEach(([k, l], q) => { const x = q % 2 ? 200 : 24, y = 360 + Math.floor(q / 2) * 26;
+          m += `<circle cx="${x + 6}" cy="${y - 4}" r="6" fill="${K.col(OUT[k])}" data-k="fade" data-t="${3700 + q * 150}" data-d="400"/>` + T(x + 18, y, l, {z: 12.5, a: 'start', t: 3700 + q * 150}); });
+        return m;
+      },
+      start(s) { s.at(3400, () => s.ring(12, 70 + 8 * 29 - 14, 356, 28, 'amber')); },
+      duration: 4600 },
+
+    /* 3 ---------------------------------------------------------------- */
+    { title: '3. Nine judges, 240 pairs', keys: ['b', 'o', 'n', 'u'],
+      cap: 'Same pair, same cell in every grid. Muse was right both times on 238 of 240 pairs; Opus, Sonnet and Sol on 221 to 224. The cheaper judges are spotted with amber: their verdict followed the order.',
+      draw: () => wafLabels(1400, SHOW_COUNT),
+      start(s) {
+        const U = s.units(JUDGE_ITEMS, {r: 2.6, fill: NEUTRAL});
+        place(s, U, it => ({...bigPos(it.i), fill: NEUTRAL}));
+        s.arrange(it => ({...wafPos(it.j, it.i), order: it.j * 110 + it.i * .5}), {du: 900, stagger: 1, delay: 200})
+          .then(() => U.forEach(u => s.at(200 + u.it.j * 110, () => u.c.style.fill = K.col(OUT[PAIRS[u.it.i][3][u.it.j]]))));
+      },
+      duration: 4400 },
+
+    /* 4 ---------------------------------------------------------------- */
+    { title: '4. Misses cluster by task', keys: ['b', 'o', 'n', 'u'], actHeight: 44,
+      cap: 'Instructions (third band): all of Opus’s and Sonnet’s misses, and 15 of Sol’s 19, are messages one word over or under an exact count of about 720 words.',
+      draw: () => wafLabels(0, SHOW_COUNT),
+      start(s) {
+        const U = s.units(JUDGE_ITEMS, {r: 2.6});
+        place(s, U, it => ({...wafPos(it.j, it.i), fill: OUT[PAIRS[it.i][3][it.j]]}));
+        const marks = s.el('g', {});
+        const show = (f, cap) => {
+          U.forEach(u => u.c.style.opacity = PAIRS[u.it.i][1] === f ? 1 : .16);
+          marks.innerHTML = '';
+          const js = f === 2 ? [1, 2, 3] : [6, 7, 8];
+          js.forEach(j => { const a = wafPos(j, f * 60), b = wafPos(j, f * 60 + 59);
+            s.el('path', {d: K.rect(a.x - 5, a.y - 5, b.x - a.x + 10, b.y - a.y + 10, 40 + j), fill: 'none', stroke: K.C.ink, 'stroke-width': 1.3, 'stroke-linecap': 'round'}, marks); });
+          s.cap(cap); bs.forEach((b, q) => b.className = q === (f === 2 ? 0 : 1) ? 'pri' : '');
+        };
+        let manual = false;
+        const CAPS = ['Instructions (third band): all of Opus’s and Sonnet’s misses, and 15 of Sol’s 19, are messages one word over or under an exact count of about 720 words.',
+          'Calculations (second band): Luna, the Decisions API and Granite were right in only one order on 58 to 60 of 60 pairs. They picked the same slot twice; no arithmetic behind it.'];
+        const bs = [s.btn('', 'Word counts', () => { manual = true; show(2, CAPS[0]); }), s.btn('', 'Calculations', () => { manual = true; show(1, CAPS[1]); })];
+        s.at(700, () => show(2, CAPS[0]));
+        s.at(5600, () => { if (!manual) show(1, CAPS[1]); });
+      },
+      demo: async s => { s.tap(s.act.querySelectorAll('button')[0]); await s.wait(3500); s.tap(s.act.querySelectorAll('button')[1]); await s.wait(3000); },
+      demoDuration: 6500, duration: 10200 },
+
+    /* 5 ---------------------------------------------------------------- */
+    { title: '5. The hardest pairs', keys: ['b', 'o', 'n', 'u', 'w'],
+      cap: 'Now one dot per pair, stacked by how many of the 9 judges got it right both times. No pair beat all nine. The hard end is mostly word counts (violet).',
+      draw: () => {
+        let m = P(line(16, 400, 364, 400, 51, .3), 'mut', 0, 500, 1.2);
+        for (let k = 0; k < 10; k++) m += T(36 + k * 34.4, 416, String(k), {z: 13, c: 'mut', t: 200 + k * 30});
+        m += T(190, 436, 'judges (of 9) right in both orders', {z: 12.5, c: 'mut', t: 500});
+        for (let k = 2; k < 10; k++) { const n = HIST.cols[k]; m += T(36 + k * 34.4, 390 - Math.ceil(n / 4) * 8 - 2, String(n), {z: 12, c: 'ink', t: 2600 + k * 60}); }
+        m += T(22, 366, 'no pair beat', {h: 1, z: 14, a: 'start', c: 'mut', t: 2800}) + T(22, 385, 'all nine', {h: 1, z: 14, a: 'start', c: 'mut', t: 2850});
+        m += `<g id="card"></g>`;
+        return m;
+      },
+      start(s) {
+        const U = s.units(JUDGE_ITEMS, {r: 2.6});
+        place(s, U, it => ({...wafPos(it.j, it.i), fill: OUT[PAIRS[it.i][3][it.j]]}));
+        s.arrange(it => ({...HIST.pos[it.i], fill: PAIRS[it.i][1] === 2 ? 'fill.violet' : NEUTRAL, order: it.i * 2 + it.j * 4}), {du: 1000, stagger: 1, delay: 300});
+        const card = s.q('#card'), sel = s.el('circle', {r: 7, fill: 'none', stroke: K.C.ink, 'stroke-width': 1.6, opacity: 0});
+        const hint = s.write(190, 120, 'tap a dot to open its pair', {h: 1, z: 18, c: 'mut', t: 2600});
+        const open = i => {
+          const p = PAIRS[i], h = HIST.pos[i]; hint.style.display = 'none';
+          sel.setAttribute('cx', h.x); sel.setAttribute('cy', h.y); sel.setAttribute('opacity', 1);
+          let m = `<path d="${K.rect(14, 10, 352, 228, 70)}" fill="${K.C.panel}" stroke="${K.C.line}" stroke-width="1.2"/>` +
+            T(26, 36, p[0], {m: 1, z: 14, a: 'start'}) + T(354, 36, FAM[p[1]] + (p[2] ? ' · written separately' : ''), {z: 12, a: 'end', c: 'mut'}) +
+            T(26, 60, p[4].replace('; written separately', ''), {z: 13, a: 'start'});
+          JN.forEach((n, j) => { const x = 30 + (j % 3) * 112, y = 96 + Math.floor(j / 3) * 26;
+            m += `<circle cx="${x}" cy="${y - 4}" r="5.5" fill="${K.col(OUT[p[3][j]])}"/>` + T(x + 12, y, n, {z: 12.5, a: 'start'}); });
+          m += T(190, 200, nBoth(p) + ' of 9 judges right in both orders', {h: 1, z: 18});
+          card.innerHTML = m; card.querySelectorAll('[data-k]').forEach(e => e.style.opacity = 1);
+        };
+        const hits = s.el('g', {});
+        PAIRS.forEach((p, i) => { const h = HIST.pos[i]; const c = s.el('circle', {cx: h.x, cy: h.y, r: 4.6, fill: 'transparent', 'data-i': i}, hits);
+          c.style.cursor = 'pointer'; c.addEventListener('click', ev => { if (ev.isTrusted) s.touched(); open(i); }); });
+        s.on(s.el('rect', {x: 0, y: 0, width: 1, height: 1, fill: 'transparent'}), () => open(idx('instructions-008')), 'Open the hardest pair');
+        s.hits = hits;
+      },
+      demo: async s => { for (const id of ['instructions-008', 'code-041', 'code-022']) { s.tap(s.hits.querySelector(`[data-i="${idx(id)}"]`)); await s.wait(2600); } },
+      idleDemo: 4200, demoDuration: 8000, duration: 3600 },
+
+    /* 6 ---------------------------------------------------------------- */
+    { title: '6. How sure can we be?', keys: [],
+      cap: 'Share of 480 single verdicts right, with 95% intervals from resampling the pairs. Muse leads by about 4 points; Opus, Sonnet and Sol overlap and cannot be ranked on this exam.',
+      draw: () => {
+        const X = K.scale(.5, 1, 118, 318);
+        let m = '';
+        [.5, .75, 1].forEach((v, q) => m += P(line(X(v), 34, X(v), 336, 60 + q, .2), v === .5 ? 'mut' : 'faint', 0, 500, 1, v === .5 ? 'stroke-dasharray="4 4"' : '') + T(X(v), 352, Math.round(v * 100) + '%', {z: 12, c: 'mut', t: 200}));
+        m += T(X(.5), 368, 'coin flip', {h: 1, z: 14, c: 'mut', t: 300});
+        ACC.forEach((a, j) => { const y = 50 + j * 32;
+          m += T(20, y + 5, JN[j], {h: 1, z: 15, a: 'start', t: 200 + j * 60}) +
+            P(line(X(a[1]), y, X(a[2]), y, 70 + j, 0), 'ink', 900 + j * 80, 500, 2.4) +
+            T(366, y + 5, (a[0] * 100).toFixed(1) + '%', {z: 12.5, a: 'end', t: 1900 + j * 80}); });
+        m += P(rect(10, 50 + 32 - 13, 360, 3 * 32 - 6, 75), 'amber', 2600, 700, 1.3);
+        m += T(190, 398, 'overlapping intervals: no ranking', {h: 1, z: 16, c: 'amber', t: 3000});
+        m += T(190, 420, 'Muse vs Opus on the same pairs: +3.8 points (1.9 to 5.8)', {z: 12, c: 'mut', t: 3300});
+        return m;
+      },
+      start(s) {
+        const X = K.scale(.5, 1, 118, 318);
+        s.units(ACC.map((a, j) => ({a, j})), {r: 4.6, fill: 'ink', x0: X(.5)});
+        s._units.forEach(u => { u.y = 50 + u.it.j * 32; u.c.setAttribute('cy', u.y); });
+        s.arrange(it => ({x: X(it.a[0]), y: 50 + it.j * 32, order: it.j * 60}), {du: 900, stagger: 1, delay: 1000});
+      },
+      duration: 4000 },
+
+    /* 7 ---------------------------------------------------------------- */
+    { title: '7. The catch: one-edit pairs', keys: ['b', 'o', 'n', 'u'],
+      cap: '227 of 240 pairs are a right answer and a copy with one small edit, easy to spot side by side. On the 13 code pairs written separately (bright), the cheaper judges fell to 27% to 65% right.',
+      draw: () => wafLabels(0, j => SHOW_COUNT(j)),
+      start(s) {
+        const U = s.units(JUDGE_ITEMS, {r: 2.6});
+        place(s, U, it => ({...wafPos(it.j, it.i), fill: OUT[PAIRS[it.i][3][it.j]]}));
+        s.at(900, () => U.forEach(u => { if (!PAIRS[u.it.i][2]) u.c.style.opacity = .13; }));
+        s.at(1500, () => JN.forEach((n, j) => s.swap('#cnt' + j, Math.round(NAT[j] * 100) + '%', NAT[j] > .9 ? 'blue' : NAT[j] > .7 ? 'ink' : 'red')));
+        s.at(1400, () => U.forEach(u => { if (PAIRS[u.it.i][2]) { const r = s.el('circle', {cx: u.x, cy: u.y, r: 4.6, fill: 'none', stroke: K.C.ink, 'stroke-width': .8, opacity: .7}); } }));
+      },
+      duration: 3200 },
+
+    /* 8 ---------------------------------------------------------------- */
+    { title: '8. What to do with a judge', keys: [],
+      cap: 'A strong judge is reliable for settling a small, local difference. Swap the order and let code check anything countable. Two answers that differ everywhere still need their own test.',
+      draw: () => {
+        const rows = [
+          ['Ask twice, swap the order', 'A verdict that flips with the order is no verdict.', 'swap'],
+          ['Let code count', 'Word counts tripped even the strongest judges.', 'count'],
+          ['Strong judges, small diffs', '95% to 99.6% when one edit separates the answers.', 'diff'],
+        ];
+        let m = '';
+        rows.forEach(([h, sub, kind], q) => { const y = 40 + q * 132, t = 300 + q * 900;
+          m += P(rect(16, y - 20, 348, 112, 80 + q), 'faint', t, 600, 1.2) + T(108, y + 18, h, {h: 1, z: 20, a: 'start', t: t + 200}) +
+            T(108, y + 44, sub.split(' ').slice(0, 5).join(' '), {z: 12.5, a: 'start', c: 'mut', t: t + 400}) +
+            T(108, y + 62, sub.split(' ').slice(5).join(' '), {z: 12.5, a: 'start', c: 'mut', t: t + 400});
+          if (kind === 'swap') m += T(64, y + 14, 'A  B', {m: 1, z: 15, t: t + 300}) + T(64, y + 40, '⇅', {z: 18, c: 'amber', t: t + 400}) + T(64, y + 66, 'B  A', {m: 1, z: 15, t: t + 500});
+          if (kind === 'count') m += T(64, y + 22, '719?', {h: 1, z: 20, c: 'violet', t: t + 300}) + T(64, y + 54, 'len(words)', {m: 1, z: 12, t: t + 500});
+          if (kind === 'diff') m += T(64, y + 22, '> 8', {m: 1, z: 15, c: 'blue', t: t + 300}) + T(64, y + 54, '>= 8', {m: 1, z: 15, c: 'red', t: t + 500});
+        });
+        return m;
+      },
+      duration: 3600 },
+  ],
+});
+
+</script>
+</body></html>
