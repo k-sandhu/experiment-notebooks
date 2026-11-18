@@ -324,6 +324,14 @@ A person sharing an AI news article can open a new chat for every draft or stay 
 |---|---|---|---|
 | 40 | [Changing LinkedIn prose and checking the classifier](notebooks/40-linkedin-writing-habits/) | Drafts can repeat hooks, transitions and endings. Four writers produce five posts from 20 frozen AI articles under a minimal request and prose constraints: 400 effective replies per condition. Three paid decision models classify 40 overlapping patterns in six locations. Does the measured change depend on the classifier? | Negative-contrast labels fall from 289 to 31 with OpenAI Decisions, 85 to 3 with Jev, and 48 to 1 with Mercury (400 paired replies each). Remaining noun-heavy counts range from 0 to 314/400 across classifiers. There are 108 new-condition tag failures; 292 valid-body pairs are reported separately. These are exploratory model judgments, with no human quality validation. |
 
+## Studying waiting and capacity
+
+A cashier can finish work quickly and still leave a long line when shoppers arrive together. In a system with more than one stage, adding a worker only helps the work that reaches that worker. These simulations replay the same synthetic demand with two staffing levels to show where waiting changes.
+
+| Notebook | Goal and question | Headline result |
+| --- | --- | --- |
+| [47 · Six queue simulations](notebooks/47-queue-simulations/) | Long waits can keep shoppers in line, leave tickets in review and cause callers to hang up. In 240 matched synthetic operating periods each for a blood testing lab, checkout, software team, bank call center, passport office and customs counter, what changes when one worker or analyzer is added? | Long waits fell in every simulated period. The average long-wait cutoff fell from 49.7 to 3.7 minutes at checkout and from 11.2 to 2.1 staffed hours for tickets. The share of bank callers who hung up fell from 19.5% to 11.1%. |
+
 ## Planned experiments
 
 Experiments that are written up but not built yet are open issues with the
