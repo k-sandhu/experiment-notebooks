@@ -32,11 +32,17 @@ Files (paths relative to this skill's folder):
    For a claude.ai chat widget add `--fragment` (no html/head/body) and pass the file's text to the widget tool.
    For the user's own colours and fonts, write a theme file and pass `--theme THEME.json` instead of
    `--style` (see `references/themes.md`); the scaffold checks the theme first and refuses one that fails.
-3. **Write the scene.** Read `references/api.md`, then build each storyboard step. Put data in a
-   `const DATA = {...}` near the top of the scene, copied from the source files, with a comment saying
-   where each value comes from. Compute every number shown on screen from DATA so text and drawing agree.
+   When the data is in a JSON file, add `--data FILE.json`: the scaffold embeds it unchanged as
+   `const DATA`, so no number is retyped by hand.
+3. **Write the scene.** Read `references/api.md`, then build each storyboard step. Use the embedded
+   `DATA`, or put a `const DATA = {...}` near the top of the scene, copied from the source files, with a
+   comment saying where each value comes from. Compute every number shown on screen from DATA, in code,
+   so text and drawing agree and nothing is rounded twice.
 4. **Check.** `python scripts/render_check.py OUT.html` (needs Python Playwright). Fix every FAIL.
-   Read every WARN and fix it unless you can say why it is harmless.
+   Read every WARN and fix it unless you can say why it is harmless. Besides layout it measures text
+   contrast from the pixels, finds blank bands and clipped text, and uses every slider, option and
+   tappable mark on each step, checking the layout in each state and whether text still names an old
+   value. Each check in it comes from a fault that reviewers marked down in tested explainers.
 5. **Look.** Open the contact sheets it prints (`qa_<name>/sheet_w360.png` and `sheet_w560.png`) with
    your image viewer or Read tool. Check each step against its storyboard line: is the one idea visible,
    is the active thing highlighted, does the caption match what is on screen, is anything cramped? The
@@ -63,9 +69,19 @@ If Playwright or ffmpeg is missing, say so and skip that step rather than claimi
 ## Rules you must follow in the scene
 
 - **Text size.** The drawing is 380 units wide and renders about 310 px wide on a small phone, so
-  1 unit is about 0.82 px. Use at least 13 units for any label (axis ticks included), 14-15 for labels a reader
-  must read, 18-26 for handwritten headings. Reviewers consistently called 10-11 px chart text too small on a phone;
-  if a chart cannot fit its labels at 13 units, it has too many labels: cut ticks, abbreviate, or split the chart. Body text belongs in the caption (HTML), not in the drawing.
+  1 unit is about 0.82 px. Use at least 14 units for any label (axis ticks included; about 11.5 px on
+  screen), 15-16 for labels a reader must read, 18-26 for handwritten headings. Reviewers marked down
+  10-12 px chart text in every round; if a chart cannot fit its labels at 14 units, it has too many labels:
+  cut ticks, abbreviate, or split the chart. Body text belongs in the caption (HTML), not in the drawing.
+- **Contrast.** Text must stay readable when dimmed: dim shapes to 30% if you like, but never take text
+  below 50% opacity on the built-in styles, and never put grey text on a mid-tone fill. The check measures
+  contrast from the screenshot and warns under 3:1.
+- **Crowded charts on a phone.** At about 310 px, three overlapping lines are a tangle. Show the stretch
+  that matters (zoom the axis to the forecast week, not three weeks), put at most three series in one
+  chart, label lines at their ends instead of in a legend, and give a comparison its own step when it
+  needs more. Reviewers flagged overlapping lines in three rounds running.
+- **No empty bands.** A step whose drawing fills only half the frame leaves a hole above the controls.
+  Size the viewBox height to the busiest step, and give quiet steps a larger drawing, not more space.
 - **Fit.** Keep every element inside the viewBox with a 12-unit margin. Long labels: shorten them, or
   move the detail to the caption. Never let text cross a line or another label; the check reports it.
 - **Colour.** Use the style's named colours (`'blue'`, `'green'`, `'amber'`, `'violet'`, `'red'` for

@@ -25,14 +25,22 @@ reviewing real explainers frame by frame on a phone; the sources are named where
   appear or leave fade (Heer and Robertson 2007). Stage big transitions: move first, then recolour.
 - **Give control.** Every step can be replayed; the timeline can be paused and scrubbed. Animation the
   reader controls is understood better than animation that runs past them (Tversky et al. 2002).
+- **Time to read.** Autoplay holds each step at least as long as an average reader needs for its caption
+  (about 230 ms a word plus a second), and the player pauses at the end of each chapter for the same
+  reason and offers 0.5x / 1x / 2x. Do not turn these off for a reader-facing page; set `chapterHold: 0`
+  only for a recording that has its own pacing.
+- **Overlays.** A callout or tooltip must not cover the marks it explains or the rows the reader is
+  comparing: place it in free space or beside the item. Accept taps while it animates (cancel and redraw)
+  rather than ignoring them.
 
 ## Layout
 
 - **Fixed frame.** The drawing has a fixed size; the caption reserves the tallest caption's height; the
   action row reserves its height. Back, the step dots and Next must sit in the same place on every step.
   A Next button that moves is the most common fault in reviewed explainers.
-- **One focal area per step.** Put the thing that changes near the centre. Dim the rest to about 30%
-  rather than hiding it, so the reader keeps the map.
+- **One focal area per step.** Put the thing that changes near the centre. Dim the rest rather than
+  hiding it, so the reader keeps the map: shapes to about 30%, text to no less than 50%, so a dimmed label
+  can still be read.
 - **Labels on the marks.** Put names next to the things they name, not in a distant key (spatial
   contiguity, Mayer). The legend is for colour meanings only.
 - **Margins.** 12 units inside the viewBox edge. Text anchored at `'end'` near the right edge must end by
@@ -45,7 +53,10 @@ reviewing real explainers frame by frame on a phone; the sources are named where
 
 - Handwritten font for headings and short labels only (2-5 words). Sans-serif for numbers and anything
   longer. Tabular figures for numbers that change (the kit sets them).
-- Minimum 13 units in the drawing (axis ticks included), 14-15 for labels the reader must read, 18-26 for headings.
+- Minimum 14 units in the drawing (axis ticks included), 15-16 for labels the reader must read, 18-26 for headings.
+- Every term on screen is either everyday language or explained the first time it appears. A name like
+  "No check" or "the reviewer" must say what it is ("expensive model on every invoice", "a stronger paid
+  model that reviews the answer").
 - No internal names on screen ("level 3", "L2_async", "cfg_b"). Use the reader's words for each run or option.
 - Captions are HTML text at 13.5 px: one or two sentences, 220 characters at most, that say what to look
   at ("Watch the context bar...") rather than restating the title.

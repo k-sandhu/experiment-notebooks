@@ -45,7 +45,9 @@ Read `explainer-kit/references/api.md` before building. Default style: `blueprin
    dots interpolated between sender and receiver lanes at their send/receive times, a "now" line.
    Never keep state between frames; scrubbing backwards must work.
 5. Chapters mark the moments worth stopping at: setup, first handoff, the bottleneck, the failure,
-   the finish. Each chapter's caption says what to look at in that stretch.
+   the finish. Each chapter's caption says what to look at in that stretch. The player pauses at the end
+   of each chapter long enough to read its caption, and the reader can slow it to 0.5x; give the key
+   chapter (the arithmetic, the moment it breaks) at least 6 s of animation so it is not a flash.
 6. Compare runs by showing them with identical layout and the same time scale: either several runs
    stacked (small multiples, shared clock), or chapter buttons that switch runs. Mark each run's finish
    time with a flag and the number ("done at 31.4 s").

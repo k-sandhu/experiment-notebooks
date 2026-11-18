@@ -46,11 +46,15 @@ flowchart LR
   scene and never retypes boilerplate. `--fragment` produces a claude.ai chat widget instead of a page.
 - `kit.js` (window.K): hand-drawn shapes with fixed wobble, draw-in reveals in reading order, travelling
   dots, pulse rings, counters, a stepper whose Back/Next never move, a scrubbable timeline player for
-  replays, unit-chart motion that keeps each item's identity, sliders, Wilson intervals, reduced-motion
+  replays that pauses at the end of each part long enough to read its caption and has a speed control, unit-chart motion that keeps each item's identity, sliders, Wilson intervals, reduced-motion
   support, and a `window.EXPLAINER` hook that the scripts use to drive any explainer.
 - `render_check.py` opens the page at 360 px and 560 px, walks every step, saves frames and contact
   sheets, and fails on console errors, sideways scrolling, text outside the drawing, controls that move,
-  and blank frames; it warns on overlapping or tiny text and on height changes.
+  and blank frames. It warns on overlapping, small (under 11 px) or faint text (contrast measured from the
+  pixels), clipped text, blank bands and height changes. It also uses each step like a reader: sets every
+  slider to its minimum, middle and maximum, presses every option and a few tappable marks, re-checks the
+  layout in each state, and warns when a control changes nothing or text still names an old value.
+- `scaffold.py --data FILE.json` embeds the data unchanged, so the model never retypes a number.
 - `record.py` plays every step with its scripted demo taps and writes a sharp MP4 and a GIF.
 
 Four styles: `chalkboard` (the original look), `paper`, `editorial` and `blueprint`, or a custom theme with

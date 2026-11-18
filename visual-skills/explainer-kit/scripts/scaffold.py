@@ -6,7 +6,10 @@ an optional Google Font, so the file works as a local page, a published artifact
 
 usage:
   python scaffold.py OUT.html --kind stepper|player|explorable [--style chalkboard|paper|editorial|blueprint]
-                     [--theme THEME.json [--force]] [--title "Short name"] [--fragment] [--viewbox 380x300]
+                     [--data DATA.json] [--theme THEME.json [--force]] [--title "Short name"] [--fragment] [--viewbox 380x300]
+
+--data embeds a JSON file as `const DATA = {...}` at the top of the scene, unchanged, so numbers are
+never retyped by hand. Compute everything on screen from DATA.
 
 --theme uses your own colours and fonts instead of a built-in style (format in references/themes.md).
 The theme is checked first with check_theme.py; a failing theme is refused unless --force is given.
@@ -28,7 +31,7 @@ DARK = {"chalkboard": True, "paper": False, "editorial": False, "blueprint": Tru
 SCENES = {
     "stepper": r"""
 const {P, T, F, line, rect, ellipse, arrow, curve, poly, C} = K;
-// Coordinates are viewBox units. Keep text >= 11 units and inside the box.
+// Coordinates are viewBox units. Keep text >= 14 units (about 11 px on a 360 px phone) and inside the box.
 K.stepper({
   root: '#x', style: __STYLE__, viewBox: [__W__, __H__],
   title: 'One sentence that describes the whole lesson for screen readers.',
@@ -81,7 +84,7 @@ K.player({
   ],
   log: [{t: 500, text: '• planner starts', c: 'violet'}, {t: 4200, text: '→ send task to Helper A', c: 'green'}],
   clock: t => (t / 1000 * 10).toFixed(0) + ' s of the real run',   // say how compressed time is
-  scene: () => LANES.map((n, i) => T(16, 64 + i * 50, n, {a: 'start', z: 13, c: 'mut'}) + P(line(90, 60 + i * 50, 364, 60 + i * 50, 10 + i), 'faint', 200 * i, 600, 1)).join(''),
+  scene: () => LANES.map((n, i) => T(16, 64 + i * 50, n, {a: 'start', z: 14, c: 'mut'}) + P(line(90, 60 + i * 50, 364, 60 + i * 50, 10 + i), 'faint', 200 * i, 600, 1)).join(''),
   frame(t, s) {
     s.dyn.innerHTML = '';                 // redraw the moving layer from scratch
     const x = v => 90 + v / D * 274;
@@ -106,7 +109,7 @@ K.stepper({
     { title: '1. The question', keys: ['a', 'b'], cap: 'Set up the decision the reader will explore.',
       draw: () => T(20, 40, 'What changes the answer?', {h: 1, z: 24, a: 'start'}), duration: 1200 },
     { title: '2. Try it', keys: ['a', 'b'], cap: 'Move the slider. Say what to look for and where the answer flips.',
-      draw: () => T(20, 40, 'Move the price', {h: 1, z: 24, a: 'start'}) + `<rect id="b1" x="40" y="80" width="300" height="20" fill="${C.fill.blue}"/>` + T(40, 125, '', {id: 'v', a: 'start', z: 13}),
+      draw: () => T(20, 40, 'Move the price', {h: 1, z: 24, a: 'start'}) + `<rect id="b1" x="40" y="80" width="300" height="20" fill="${C.fill.blue}"/>` + T(40, 125, '', {id: 'v', a: 'start', z: 14}),
       start(s) {
         const draw = v => { const m = model({a: v, b: 2}); s.bar('#b1', m.cost / 20, 150); s.q('#v').textContent = 'cost ' + fmt.usd(m.cost); };
         K.slider(s.act, {label: 'Price', min: 0, max: 10, step: .1, value: 3, fmt: v => fmt.usd(v), oninput: v => { s.touched(); draw(v); }});
@@ -172,6 +175,7 @@ def main():
     ap.add_argument("--style", choices=sorted(PAGE_BG), default="chalkboard")
     ap.add_argument("--theme", help="JSON file with your own colours and fonts; overrides --style")
     ap.add_argument("--force", action="store_true", help="build with a theme that fails the check")
+    ap.add_argument("--data", help="JSON file to embed unchanged as const DATA in the scene")
     ap.add_argument("--title", default="Explainer")
     ap.add_argument("--viewbox", default="380x300")
     ap.add_argument("--fragment", action="store_true")
@@ -183,6 +187,14 @@ def main():
     else:
         style, page_bg, dark, label = f"'{a.style}'", PAGE_BG[a.style], DARK[a.style], f"style={a.style}"
     scene = SCENES[a.kind].replace("__STYLE__", style).replace("__W__", str(w)).replace("__H__", str(h)).strip()
+    if a.data:
+        raw = pathlib.Path(a.data).read_text(encoding="utf-8")
+        data = json.dumps(json.loads(raw), ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+        if len(data) > 400_000:
+            print(f"note: {a.data} is {len(data):,} characters; embed only the fields the explainer shows")
+        head, rest = scene.split("\n", 1)
+        note = f"// DATA is {pathlib.Path(a.data).name}, embedded unchanged by scaffold.py --data. Show numbers computed from it."
+        scene = "\n".join([head, note, f"const DATA = {data};", rest])
     tpl = FRAGMENT if a.fragment else PAGE
     html = (tpl.replace("__TITLE__", a.title).replace("__SCHEME__", "dark" if dark else "light")
                .replace("__PAGEBG__", page_bg).replace("__KIT__", KIT.strip()).replace("__SCENE__", scene))

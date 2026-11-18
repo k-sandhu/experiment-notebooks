@@ -21,6 +21,11 @@ Then write down:
 - **The reader.** What they already know, where they will see this (phone feed, GIF in a post, an
   artifact page, a slide), and how long they will give it. A LinkedIn reader gives 10 seconds before
   deciding; a lesson reader gives two minutes.
+- **What the reader does not know yet.** List every term, actor and number the explainer will show,
+  and mark the ones a newcomer would not know ("planner agent", "break-even", "Wilson interval", the name
+  of a model). Each one gets a plain explanation the first time it appears, on screen or in the caption.
+  Reviewers marked down unexplained terms and labels that could be read two ways ("No check") in every
+  round.
 - **The misconception.** What would this reader believe before seeing it? The explainer exists to move
   them from that belief to the message. ("Zero violations means safe." "Deep focus is always best.")
 - **The evidence.** Which numbers, items or events prove the message, and the file each comes from.

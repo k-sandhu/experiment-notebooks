@@ -124,7 +124,7 @@ function injectCSS() {
 .kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
 .kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
 .kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
-.kx-count{font-size:11px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kx-count{font-size:12px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
 .kx-cap{font-size:13.5px;line-height:1.55;margin:6px 8px 8px;color:var(--k-ink)}
 .kx-act{display:flex;justify-content:center;align-items:center;gap:8px;min-height:44px;flex-wrap:wrap;margin:0 4px 4px}
 .kx-legend{display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px 12px;font-size:12px;color:var(--k-mut);margin:6px 8px 8px;min-height:40px}.kx-legend>span{transition:opacity .4s}
@@ -137,9 +137,9 @@ function injectCSS() {
 .kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
 .kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
 .kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
-.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:11px;line-height:17px;height:92px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
-.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1}
-.kx-time{font-size:11px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:12px;line-height:18px;height:98px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
+.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1;min-width:60px}.kx button.kx-speed{min-width:46px;padding:0 6px;font-variant-numeric:tabular-nums}
+.kx-time{font-size:12px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
 .kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
 .kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
 .kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
@@ -265,7 +265,7 @@ function stepper(o) {
     go: i => go(i), duration: i => S[i].duration || ends[i] || 4000, hasDemo: i => !!S[i].demo,
     demo: i => { const c = eng.ctx; return c && c.i === i && S[i].demo ? Promise.resolve(S[i].demo(c)) : Promise.resolve(); },
     demoDuration: i => S[i].demoDuration || 0,
-    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(hold); } },
+    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(Math.max(hold, readMs(S[i].cap) - api.duration(i))); } },
   };
   let resolveReady; api.ready = new Promise(r => resolveReady = r);
   ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
@@ -274,6 +274,8 @@ function stepper(o) {
   return api;
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* Time an average reader needs for a caption on a phone: about 230 ms a word plus a second to find it. */
+const readMs = cap => 1000 + 230 * String(cap || '').split(/\s+/).filter(Boolean).length;
 
 /* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
    so pause, scrub, replay and recording all work for free. Chapters label stretches of the timeline. */
@@ -281,19 +283,28 @@ function player(o) {
   const fr = frame(o.root, o, 'player'), eng = { gen: 0, timers: [], root: fr.root, act: null, cap: fr.cap, touched: false };
   const CH = o.chapters || [{ at: 0, title: o.title || '', cap: '' }], D = o.duration;
   const range = fr.$('.kx-scrub input'), pp = fr.$('.kx-pp'), tm = fr.$('.kx-time');
-  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1;
+  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1, holdUntil = 0, heldAt = -1;
+  // Pause at the end of each part while playing, long enough to read its caption, unless chapterHold is 0.
+  const holdFor = k => o.chapterHold === 0 ? 0 : typeof o.chapterHold === 'number' ? o.chapterHold : Math.min(8000, Math.max(1500, readMs(CH[k].cap) - (end(k) - CH[k].at) / speed));
+  const SPEEDS = o.speeds === false ? null : o.speeds || [0.5, 1, 2];
+  if (SPEEDS) { const sb = document.createElement('button'); sb.type = 'button'; sb.className = 'kx-speed'; const lab = () => { sb.textContent = speed + '×'; sb.setAttribute('aria-label', 'Playback speed ' + speed + ' times'); };
+    lab(); sb.onclick = () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] || 1; lab(); eng.touched = true; }; tm.after(sb); }
   fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
   const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
   CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
   fixCaptionHeight(fr, CH.map(c => c.cap || '')); fontsReady().then(() => fixCaptionHeight(fr, CH.map(c => c.cap || '')));
   const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
   function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !c.keys || c.keys.includes(e.dataset.l) ? '' : 'none'); }
-  function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
+  function logTo(x) { if (!fr.log || !o.log) return; const from = o.logScope === 'all' ? -Infinity : CH[chapterAt(x)].at; const L = o.log.filter(e => e.t <= x && e.t >= from).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
   function draw() { range.value = t; tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
-  function seek(x) { t = clamp(x, 0, D); draw(); }
-  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n; t += dt * speed; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
+  function seek(x) { t = clamp(x, 0, D); holdUntil = 0; heldAt = -1; draw(); }
+  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n;
+    if (n < holdUntil) { requestAnimationFrame(tick); return; }
+    const k = chapterAt(t), nt = t + dt * speed;
+    if (k < CH.length - 1 && k !== heldAt && nt >= end(k) && t < end(k)) { const h = holdFor(k); heldAt = k; if (h > 0) { t = end(k) - 1; holdUntil = n + h; draw(); requestAnimationFrame(tick); return; } }
+    t = nt; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
   function play() { if (t >= D) t = 0; if (RM) { seek(end(chapterAt(t)) - 1); return; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }  // reduced motion: jump to the end state of the chapter instead of animating
-  function pause() { playing = false; updPP(); }
+  function pause() { playing = false; holdUntil = 0; updPP(); }
   function updPP() { pp.innerHTML = playing ? ICON.pause + 'Pause' : t >= D ? ICON.replay + 'Replay' : ICON.play + 'Play'; pp.setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
   pp.onclick = () => playing ? pause() : play();
   range.oninput = () => { pause(); seek(+range.value); };

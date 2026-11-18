@@ -19,7 +19,7 @@ A lesson of steps with Back, step dots, Replay and Next. Options:
 | `style` | `'chalkboard'` (default), `'paper'`, `'editorial'`, `'blueprint'`, or a theme object with your own colours and fonts (`references/themes.md`; `scaffold.py --theme` writes it in for you). |
 | `viewBox` | `[w, h]`, default `[380, 300]`. Keep 380 wide for phones and GIFs; height 260-440. |
 | `title` | One sentence describing the whole explainer, read by screen readers. |
-| `legend` | `[{key, label, color}]`. Steps list the keys they use; others dim to 30%. |
+| `legend` | `[{key, label, color}]`. Steps list the keys they use; the others are hidden on that step. |
 | `steps` | Array of step objects (below). |
 | `actHeight` | Reserved height in px of the action row (default 44). Use 76 for a slider, more for two. |
 | `hold` | Pause after each step in autoplay/recording (default 2200). |
@@ -56,9 +56,12 @@ Use it for replays of recorded runs and anything where the reader should be able
 | `scene(K)` | Static markup drawn once (lanes, boxes, axes, labels). |
 | `frame(t, s)` | Draws the moving layer for time `t`. Must be a pure function of `t`: clear `s.dyn` and redraw, never accumulate state. |
 | `chapters` | `[{at, title, cap, keys}]`: stretches of the timeline with their own heading and caption. |
-| `log` | Optional `[{t, text, c}]` events; the last 6 with `t <= now` show in a terminal-like panel. Start text with `→` call, `←` result, `✗` error, `✓` done, `•` note. |
+| `log` | Optional `[{t, text, c}]` events; the last 6 with `t <= now` in the current chapter show in a terminal-like panel. Start text with `→` call, `←` result, `✗` error, `✓` done, `•` note. |
+| `logScope` | `'part'` (default): the log shows only the current chapter's events. `'all'`: keep earlier chapters' lines. |
+| `chapterHold` | Pause at the end of each chapter while playing. Default: long enough to read that chapter's caption (1.5-8 s). A number sets a fixed hold in ms; `0` turns it off. |
 | `clock(t)` | Optional readout text, e.g. `t => (t / 1000 * 10).toFixed(0) + ' s of the real run'`. |
-| `speed` | Playback speed multiplier (default 1). |
+| `speed` | Starting playback speed (default 1). |
+| `speeds` | Speeds the reader can cycle with the speed button (default `[0.5, 1, 2]`); `false` hides the button. |
 | `autoplay` | Start playing on load (default true). |
 
 api: `go(i)` (jump to chapter i and play), `seek(t)`, `play()`, `pause()`, `time`, `count`, `duration(i)`.
