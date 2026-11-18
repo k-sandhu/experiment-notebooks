@@ -433,7 +433,7 @@ def main():
     summary = {"page": str(page), "explainer": info, "results": [{"level": l, "check": c, "detail": m} for l, c, m in res],
                "sheets": [r["sheet"] for r in runs], "runs": runs}
     (out / "report.json").write_text(json.dumps(summary, indent=1, default=str), encoding="utf-8")
-    kind = f"{info['kind']} with {info['count']} steps" if info else "page without explainer-kit (stepped by its Next button, if any)"
+    kind = ("figure (one view)" if info["kind"] == "figure" else f"{info['kind']} with {info['count']} steps") if info else "page without explainer-kit (stepped by its Next button, if any)"
     print(f"render_check: {page.name}: {kind}")
     fails = [r for r in res if r[0] == "FAIL"]
     for lvl in ("FAIL", "WARN"):

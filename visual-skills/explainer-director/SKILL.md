@@ -48,6 +48,7 @@ Then write down:
 |---|---|---|
 | A social feed post (LinkedIn, X), a GIF or MP4 | **Self-playing card**: 30-60 s, plays and loops by itself (`autoplay: 'loop'`), a bold one-line hook in the first frame, no tap needed to get the point; record it with `record.py` | Feed readers do not tap through steps; the first two seconds decide whether they stay |
 | An artifact page, a README, a link people open | **Reader-paced**: Next, replay, hands-on steps | The reader chose to be there and will spend minutes |
+| A figure inside an article, a README section or a doc, next to text that explains it | **Standalone figure**: one view, no steps (`--kind figure`), at most one control or a short loop with a Pause button | The text carries the sequence; a Next button inside a paragraph is one control too many |
 | A slide or a talk | **Short loop or a few static frames** | The presenter is the pace |
 | A chat reply (claude.ai widget) | Reader-paced, compact (3-6 steps) | Sits inline with text |
 
@@ -56,7 +57,8 @@ card, not a tap-through page:
 
 - **Fixed size.** One fixed-aspect drawing (4:5 portrait, for example a 400 x 500 viewBox, or 1:1) that
   never scrolls and never changes height. Each scene is a slide that would work as a still image in a
-  carousel post. Use `--viewbox 400x500` and `autoplay: 'loop'`.
+  carousel post. Use `--viewbox 400x500` and `--controls none` (plays and loops by itself, with only a
+  Pause button; the same as `autoplay: 'loop'` without Back, dots and Next).
 - **Legible when scaled down.** The card is shown about 360 px wide on a phone, so every label, tick and
   tag is at least 13 units in a 400-unit-wide card (about 12 px on screen). If a grid's labels would need
   to be smaller, show fewer columns or put the grid on its own slide. Tiny labels inside a postable card
@@ -74,7 +76,8 @@ one step where the reader plays the model, one where they guess, one that replay
 primary form from the table, then add at most two borrowed moments.
 
 Do not animate when nothing changes. If the message is one comparison of a few numbers, an annotated
-static chart is clearer (use the `dataviz` skill if available). Animation helps when it shows change,
+static chart is clearer (use the `dataviz` skill if available). If one view with one control makes the
+point, build a figure, not a two-step lesson. Animation helps when it shows change,
 sequence or cause, and when the reader can control it (Tversky, Morrison and Betrancourt, 2002,
 "Animation: can it facilitate?").
 

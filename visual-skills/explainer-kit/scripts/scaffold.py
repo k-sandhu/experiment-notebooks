@@ -5,8 +5,15 @@ The model then edits only the SCENE block at the bottom. Nothing is fetched at r
 an optional Google Font, so the file works as a local page, a published artifact or a GIF source.
 
 usage:
-  python scaffold.py OUT.html --kind stepper|player|explorable [--style chalkboard|paper|editorial|blueprint]
-                     [--data DATA.json] [--theme THEME.json [--force]] [--title "Short name"] [--fragment] [--viewbox 380x300]
+  python scaffold.py OUT.html --kind stepper|player|explorable|figure [--style chalkboard|paper|editorial|blueprint]
+                     [--controls full|minimal|none] [--data DATA.json] [--theme THEME.json [--force]]
+                     [--title "Short name"] [--fragment] [--viewbox 380x300]
+
+--kind figure is one standalone view with no steps: a drawing, optional live controls and an
+optional looping animation with a pause button. Use it for a figure inside an article.
+
+--controls sets how much navigation the reader gets: full (default for stepper and player), minimal
+(Back and Next, or play and scrub), none (plays by itself with only a pause button; default for figure).
 
 --data embeds a JSON file as `const DATA = {...}` at the top of the scene, unchanged, so numbers are
 never retyped by hand. Compute everything on screen from DATA.
@@ -95,6 +102,31 @@ K.player({
   },
 });
 """,
+    "figure": r"""
+const {P, T, F, line, rect, ellipse, arrow, curve, poly, C, scale, fmt, clamp} = K;
+// A figure is one standalone view: no steps, no Next button. The drawing reveals once; controls in the
+// action row (sliders, toggles) or taps on the drawing change it live. For continuous motion, add
+// duration and frame(t, s) (a pure function of t, like a player): it loops, with a pause button.
+function model(p) { return {share: clamp(1 - (p.conf - 50) / 62.5)}; }   // illustrative; keep the model pure so numbers and drawing agree
+K.figure({
+  root: '#x', style: __STYLE__, viewBox: [__W__, __H__],
+  title: 'Short heading for the figure',          // leave out for a figure that sits under an article heading
+  cap: 'One or two sentences: what the figure shows and what to try.',
+  alt: 'What a screen reader should hear: the point of the figure, with its numbers.',
+  legend: [{key: 'a', label: 'Handled automatically', color: 'fill.blue'}, {key: 'b', label: 'Sent to a person', color: 'fill.amber'}],
+  actHeight: 64,
+  draw: () =>
+    T(20, 40, 'Share handled automatically', {h: 1, z: 20, a: 'start'}) +
+    `<rect x="20" y="80" width="340" height="28" rx="3" fill="${C.fill.amber}"/>` +
+    `<rect id="auto" x="20" y="80" width="340" height="28" rx="3" fill="${C.fill.blue}"/>` +
+    T(20, 140, '', {id: 'v', a: 'start', z: 16}),
+  start(s) {
+    const show = v => { const m = model({conf: v}); s.bar('#auto', m.share, 150); s.q('#v').textContent = fmt.pct(m.share) + ' handled without a person'; };
+    K.slider(s.act, {label: 'Confidence needed to skip review', min: 50, max: 99, step: 1, value: 80, fmt: v => v + '%', oninput: v => { s.touched(); show(v); }});
+  },
+  // duration: 6000, frame(t, s) { s.dyn.innerHTML = ''; /* draw the moving layer for time t */ },
+});
+""",
     "explorable": r"""
 const {P, T, F, line, rect, ellipse, arrow, curve, poly, C, scale, fmt} = K;
 // An explorable is a live model: every control change recomputes the model and redraws.
@@ -173,20 +205,23 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--kind", choices=sorted(SCENES), default="stepper")
     ap.add_argument("--style", choices=sorted(PAGE_BG), default="chalkboard")
+    ap.add_argument("--controls", choices=["full", "minimal", "none"], help="navigation the reader gets (default: full; none for a figure)")
     ap.add_argument("--theme", help="JSON file with your own colours and fonts; overrides --style")
     ap.add_argument("--force", action="store_true", help="build with a theme that fails the check")
     ap.add_argument("--data", help="JSON file to embed unchanged as const DATA in the scene")
     ap.add_argument("--title", default="Explainer")
-    ap.add_argument("--viewbox", default="380x300")
+    ap.add_argument("--viewbox", default=None, help="drawing size in units (default 380x300; 380x170 for a figure)")
     ap.add_argument("--fragment", action="store_true")
     a = ap.parse_args()
-    w, h = (int(v) for v in a.viewbox.lower().split("x"))
+    w, h = (int(v) for v in (a.viewbox or ("380x170" if a.kind == "figure" else "380x300")).lower().split("x"))
     if a.theme:
         style, page_bg, dark = load_theme(a.theme, a.force)
         label = f"theme={a.theme}"
     else:
         style, page_bg, dark, label = f"'{a.style}'", PAGE_BG[a.style], DARK[a.style], f"style={a.style}"
     scene = SCENES[a.kind].replace("__STYLE__", style).replace("__W__", str(w)).replace("__H__", str(h)).strip()
+    if a.controls:
+        scene = scene.replace("root: '#x', ", f"root: '#x', controls: '{a.controls}', ", 1)
     if a.data:
         raw = pathlib.Path(a.data).read_text(encoding="utf-8")
         data = json.dumps(json.loads(raw), ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")

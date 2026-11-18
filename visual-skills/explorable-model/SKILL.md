@@ -10,7 +10,9 @@ states the rule; an explorable lets the reader find it. When the reader drags a 
 winner change, the threshold stops being a fact they were told and becomes something they discovered
 (Bret Victor, "Explorable Explanations", 2011).
 
-Build with `explainer-kit` (`scaffold.py --kind explorable`, which is a stepper with a slider row).
+Build with `explainer-kit` (`scaffold.py --kind explorable`, which is a stepper with a slider row). When
+the whole explorable is one view and one or two knobs with no setup steps, for example a figure inside an
+article, use `--kind figure` instead: the same slider row, no Next or Back.
 
 ## Design the model before the picture
 

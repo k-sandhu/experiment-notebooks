@@ -1,6 +1,6 @@
 ---
 name: explainer-kit
-description: Engine, styles (four built-in looks or a custom theme with the user's own brand colours and fonts) and quality checks for animated and interactive SVG explainers delivered as one self-contained HTML file (artifact page, claude.ai widget, or GIF/MP4). Provides a scaffold script, a small JavaScript engine (hand-drawn shapes, draw-in reveals, travelling dots, step lessons with fixed controls, a scrubbable timeline player, unit-chart motion, sliders), a render check that walks every step at phone and desktop widths and flags overlaps, moving controls and errors, and a recorder that turns the explainer into MP4 and GIF. Use it whenever you build any animated diagram, step-by-step lesson, interactive explainer or explainer GIF, together with the form skill chosen by explainer-director.
+description: Engine, styles (four built-in looks or a custom theme with the user's own brand colours and fonts) and quality checks for animated and interactive SVG explainers delivered as one self-contained HTML file (artifact page, claude.ai widget, or GIF/MP4). Provides a scaffold script, a small JavaScript engine (hand-drawn shapes, draw-in reveals, travelling dots, step lessons with fixed controls, a scrubbable timeline player, standalone one-view figures, unit-chart motion, sliders), a render check that walks every step at phone and desktop widths and flags overlaps, moving controls and errors, and a recorder that turns the explainer into MP4 and GIF. Use it whenever you build any animated diagram, step-by-step lesson, interactive explainer or explainer GIF, together with the form skill chosen by explainer-director.
 ---
 
 # Explainer kit
@@ -14,7 +14,7 @@ Files (paths relative to this skill's folder):
 
 | File | Use |
 |---|---|
-| `scripts/scaffold.py` | Start a new explainer with the engine inlined. Kinds: `stepper`, `player`, `explorable`. |
+| `scripts/scaffold.py` | Start a new explainer with the engine inlined. Kinds: `stepper`, `player`, `explorable`, `figure`. |
 | `scripts/check_theme.py` | Check a custom theme's colours (contrast, colour-blind separation) before building with it. |
 | `references/themes.md` | Custom themes: your own colours and fonts in a JSON file. Read when the user names a brand, colours or fonts. |
 | `assets/kit.js` | The engine itself (window.K). Inlined by the scaffold; read it only to debug. |
@@ -34,6 +34,10 @@ Files (paths relative to this skill's folder):
    `--style` (see `references/themes.md`); the scaffold checks the theme first and refuses one that fails.
    When the data is in a JSON file, add `--data FILE.json`: the scaffold embeds it unchanged as
    `const DATA`, so no number is retyped by hand.
+   For one figure with no steps (inside an article, a README, a doc), use `--kind figure`: no Next or Back,
+   optional live controls and an optional looping animation with a Pause button. `--controls
+   full|minimal|none` sets how much navigation a stepper or player shows: `minimal` keeps only Back and
+   Next (or play and scrub), `none` plays and loops by itself with only a Pause button.
 3. **Write the scene.** Read `references/api.md`, then build each storyboard step. Use the embedded
    `DATA`, or put a `const DATA = {...}` near the top of the scene, copied from the source files, with a
    comment saying where each value comes from. Compute every number shown on screen from DATA, in code,
@@ -62,6 +66,9 @@ If Playwright or ffmpeg is missing, say so and skip that step rather than claimi
 - Reduced motion: reveals appear at once, travelling dots jump to the end, the player jumps chapter to
   chapter. Write steps so their final state carries the meaning without the motion.
 - An idle demo stops for good as soon as the reader taps, drags or presses anything; `autoplay` stops too.
+- Anything that moves by itself for more than a few seconds has a Pause button: `controls: 'none'` keeps
+  one, and a figure with `frame()` gets one. Under reduced motion a stepper or player with `controls: 'none'`
+  shows Back and Next (or the scrub bar) instead, and a figure shows one still frame.
 - `?step=N` opens at step N; `?record=1` autoplays every step with its demo and hides the buttons.
 - `window.EXPLAINER` (and `window.EXPLAINERS` for several on one page) lets the scripts drive any
   explainer built with the kit. Keep it; it is how the checks and the recorder work.

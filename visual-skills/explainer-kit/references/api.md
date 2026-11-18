@@ -5,7 +5,7 @@ Colours are names from the active style (`'ink'`, `'mut'`, `'faint'`, `'blue'`, 
 `'violet'`, `'red'`, data fills `'fill.blue'` ... `'fill.red'`) or any CSS colour. `K.C` holds the active
 values, e.g. `K.C.fill.green`, for use inside template strings.
 
-Contents: 1 Engines (stepper, player) · 2 Drawing (shapes, markup builders) · 3 Step context `s`
+Contents: 1 Engines (stepper, player, figure) · 2 Drawing (shapes, markup builders) · 3 Step context `s`
 (motion, text, interaction, units) · 4 Controls (slider, toggle) · 5 Helpers · 6 Patterns
 
 ## 1. Engines
@@ -24,6 +24,7 @@ A lesson of steps with Back, step dots, Replay and Next. Options:
 | `actHeight` | Reserved height in px of the action row (default 44). Use 76 for a slider, more for two. |
 | `hold` | Pause after each step in autoplay/recording (default 2200). |
 | `autoplay` | `true` plays every step once on load; `'loop'` repeats. A reader who taps anything takes over. Use for feed posts and GIF-like cards. |
+| `controls` | How much navigation the reader gets. `'full'` (default): Back, step dots, Replay, Next. `'minimal'`: Back and Next only. `'none'`: no navigation; the lesson plays and loops by itself (autoplay defaults to `'loop'`) with only a Pause/Play button. Under reduced motion `'none'` shows Back and Next instead, because the lesson cannot play itself. |
 | `extraCaptions` | Captions you will set at run time with `s.cap()`, so their height is reserved. |
 
 Step object:
@@ -43,7 +44,7 @@ Step object:
 | `demoDuration` | ms the demo takes (recording waits this long). |
 | `alt` | Text alternative for the drawing if the caption is not enough. |
 
-The returned api (also `window.EXPLAINER`): `go(i)`, `count`, `current`, `duration(i)`, `demo(i)`, `autoplay()`, `ready` (Promise).
+The returned api (also `window.EXPLAINER`): `go(i)`, `count`, `current`, `duration(i)`, `demo(i)`, `autoplay()`, `play()` and `pause()` (autoplay), `ready` (Promise).
 
 ### K.player(options) → api
 A scrubbable timeline: Play/Pause, a scrub bar, a time readout, chapter dots and an optional event log.
@@ -63,8 +64,35 @@ Use it for replays of recorded runs and anything where the reader should be able
 | `speed` | Starting playback speed (default 1). |
 | `speeds` | Speeds the reader can cycle with the speed button (default `[0.5, 1, 2]`); `false` hides the button. |
 | `autoplay` | Start playing on load (default true). |
+| `controls` | `'full'` (default): Play/Pause, scrub bar, time, speed, chapter dots, Back and Next. `'minimal'`: Play/Pause, scrub bar and time. `'none'`: only Pause/Play; the replay loops. Under reduced motion `'none'` shows the scrub bar instead. |
+| `loop` | Start again after a pause at the end (default: on for `controls: 'none'`, off otherwise). |
 
 api: `go(i)` (jump to chapter i and play), `seek(t)`, `play()`, `pause()`, `time`, `count`, `duration(i)`.
+
+### K.figure(options) → api
+One standalone figure with no steps, for an idea that fits one view: a figure inside an article, a README
+or a doc, where the surrounding text carries the sequence. The drawing reveals once. Live controls go in
+the action row (`s.act`) or on the drawing (`s.on`, `s.drag`). For continuous motion give `frame(t, s)`
+and `duration`: it loops with a Pause button, stops while scrolled out of view, and under reduced motion
+shows one still frame. With the defaults a figure has no buttons of its own at all.
+
+| Option | Meaning |
+|---|---|
+| `root`, `style`, `viewBox`, `legend`, `actHeight`, `extraCaptions` | As for the stepper. Size the viewBox to the drawing (`scaffold.py --kind figure` uses 380 x 170). |
+| `title` | Heading above the figure. Leave it out when the figure sits under an article heading; the header row then disappears. |
+| `cap` | Caption under the figure (optional; an empty caption takes no space). |
+| `alt` | What a screen reader should hear: the point of the figure, with its numbers. |
+| `keys` | Legend keys to show (default all). |
+| `draw(K)`, `start(s)`, `demo(s)`, `idleDemo`, `demoDuration` | As for a step. |
+| `frame(t, s)`, `duration` | Optional looping animation, drawn from `t` like a player frame (pure function of `t`). Keep endless motion here, not in `s.loop`, so the Pause button can stop it. |
+| `loop` | `false` plays the animation once (default: loop). `hold` sets the pause between loops (default 1200). |
+| `still` | Time shown under reduced motion (default: the last frame). |
+| `reveal` | `false` shows the drawing at once instead of drawing it in. |
+| `controls` | `'none'` (default): no Replay button. `'minimal'` or `'full'`: add a Replay button that redraws the figure from the start. A looping animation always keeps its Pause button. |
+| `autoplay` | `false` waits for Play before the animation starts. |
+
+api: `go(0)` (redraw), `play()`, `pause()`, `seek(t)`, `time`, `count` (1), `duration()`, `demo()`, `ready`.
+Several figures can share a page; give each its own root.
 
 ## 2. Drawing
 
@@ -131,7 +159,7 @@ Units (one mark per item; marks keep identity when they move):
 - `K.slider(parent, {label, min, max, step, value, fmt, oninput})` → `{el, input, value, set(v)}`. A labelled range input with a live value readout; `oninput(v)` runs at once and on every change.
 - `K.toggle(parent, {label, value, onchange})` → button with `aria-pressed`.
 
-Place them in `s.act` and set `actHeight` on the stepper so the controls below never move.
+Place them in `s.act` and set `actHeight` on the stepper or figure so the controls below never move.
 
 ## 5. Helpers
 
