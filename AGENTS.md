@@ -398,6 +398,11 @@ no notebook and does not know the topic or tools:
 - Notebook 41 has an owner-requested exception, authorized on 2026-11-03: Google's
   `google/gemini-4-argon:batch` may be called through OpenRouter's Batch API for its direct-weight MLP
   comparison. Pin the canonical dated slug and provider. This does not change other closed-model routes.
+- Notebook 48 has an owner-requested exception, authorized on 2026-11-18: its Claude Sonnet 5.5 replies were
+  collected through Claude Code subagents (one subagent per prompt, launched by a workflow script) because
+  `claude -p` was signed out on the machine. Subagents carry standing context and report no token counts, so
+  the notebook measures work in characters and says so in its limitations and `data/PROTOCOL.md`. This does
+  not change the route for other notebooks.
 - Anything that costs money has a size knob (`N_...`, `MODELS`) at the top of the notebook. Defaults stay
   small. Print the spend at the end.
 - Cache every model response on disk, keyed by the full request, and store the request (model, prompt or
