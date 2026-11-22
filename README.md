@@ -36,9 +36,9 @@ plain numbers.
 Each test is small on purpose, tens to hundreds of items with known right answers: enough to show where a method
 breaks and what to test at scale, not enough to rank models in general. When every method scores near the top or
 near the bottom, the README says that the test cannot rank them. Replies a program could not read are counted
-apart from wrong answers. Test data is new, either written for the experiment or published after the models were
-trained, so a model cannot score well by remembering it (notebooks 01-04 and 06 predate this rule; see
-[Data and licences](#data-and-licences)). Every notebook runs end to end and is committed with its outputs. Every
+apart from wrong answers. Test data is generally written for the experiment or published after the models were
+trained. Studies that use older public facts explain possible training exposure in [Data and licences](#data-and-licences).
+Every notebook runs end to end and is committed with its outputs. Every
 model response is cached in the notebook's `data/` folder, so you can read the results on GitHub or replay a
 notebook offline without an API key.
 
@@ -77,6 +77,16 @@ the model for repair.
 | # | Notebook | Goal and question | Headline result |
 |---|---|---|---|
 | 31 | [Self-repairing scrapers](notebooks/31-self-repairing-scrapers/) | A finance team must notice new releases on 20 outside organisations' news pages and record each headline, date, author and text. On 20 fictional, differently built sites over four weekly runs with six redesigns (593 release-weeks), can a model write one extraction program per site, fix it when free automatic rules or a stronger model's review flag a problem, and keep it working? Which checks catch which errors, and how does this compare with a model reading every page? Writers: Claude Haiku 5.5, Claude Sonnet 5.5 and the small open-weight Granite 4.2 8B; reviewer Claude Opus 5.5. | Claude Haiku and Sonnet wrote correct programs for 19 and 20 of 20 sources at once; the free rules caught every break after the redesigns and one repair fixed each, so every release-week was right for $0.28 (Haiku) or $1.76 (Sonnet) over four weeks. Granite: 4 of 20 at once, 9 after three repairs, and its errors went unnoticed in 22 source-weeks with rules only against 1 with the review. On 135 planted errors the rules flagged 48 and the review all 135. Reading every page cost $4.25 with Sonnet (all right) and $0.23 with Haiku (94.4% right) |
+
+## Finding acquisition candidates
+
+A buyer looking for a pressure and temperature calibration lab needs both services in one operating business.
+A directory can identify labs and their specialties. Company sites and acquisition notices help check which
+firms still operate independently and which names refer to branches of a group.
+
+| # | Notebook | Goal and question | Headline result |
+|---|---|---|---|
+| 46 | [Public-data deal sourcing in the U.S. and Canada](notebooks/46-us-canada-deal-sourcing/) | On six briefs for industrial calibration and commercial fire-alarm services in Michigan, Ohio, Ontario and Québec, can Sol and Luna find independent businesses from the public web or screen a starting list? On 24 shared companies, can they verify the location, ownership and specific services from the web or from the same supplied sources? | Web search found seven distinct businesses outside the starting list that passed the evidence review. Both models left their ownership unresolved. On 146 company-profile fields, the models matched 137 and 139 from web search, and 144 and 143 from source packets after a parser repair restored six otherwise complete Luna profiles. The starting directory was small and analyst time was not measured. |
 
 ## Collecting data for training models
 
@@ -412,6 +422,7 @@ command-line tool installed and signed in.
 | [38](notebooks/38-long-text-edits/) | Nothing extra; every merge method runs again on the cached replies (needs `git`, and GNU `patch` for that method) | `NB_LIVE=1`; `NB_N_DOCS` and `NB_MODELS` set the size; capped at 3,000 CLI calls, USD 80 of Claude list price and USD 15 of OpenRouter spend | `OPENROUTER_API_KEY`; `claude`, `codex` |
 | [39](notebooks/39-rust-vs-python/) | Nothing extra; the notebook reads the saved programs and measurements | `python -m bench.sessions run-all --kind main` and `--kind langs`, `python -m bench.oneshot run --protocol v2` and `export` (all skipped while the saved results match their request hashes; new sessions need `OPENROUTER_API_KEY` for the open-weight models), then `python -m bench.measure all` and `anchor --authors opus55`: about seven hours of local timing on mains power, Windows only | `claude`, `codex`, `muse`; Rust 1.99, MSVC 19.40, Go 1.27, .NET SDK 8, Java 23, Node.js 22, Python 3.13 with NumPy 2.2 |
 | [45](notebooks/45-handwritten-forest-lstm/) | Nothing extra; the notebook reads the saved replies and trained reference weights | `NB45_FRESH=1` and delete the reply files to replace; `MODELS`, `TASKS` and `N_REPEATS` set the size (the full set of 144 requests cost about US$118 at list prices plus a Muse subscription) | `OPENROUTER_API_KEY`; `claude`, `codex`, `muse` |
+| [46](notebooks/46-us-canada-deal-sourcing/) | Nothing extra; the notebook reads the saved CLI replies and public-source notes | In a copy, set `LIVE=True` for missing CLI requests and revalidate any newly returned leads | `codex` with live search |
 
 ## Data and licences
 
@@ -466,6 +477,7 @@ here with their data and caches.
 | 42 | Synthetic SQL schemas, teacher-generated parameters, frozen GloVe subset and pinned Pythia diagnostic statistics | Schema requests authored for the experiment; pretrained vectors/reference are older inputs, not fresh target data | GloVe pretrained vectors PDDL; Pythia Apache 2.0; exact subset and pinned reference provenance retained |
 | 44 | Twelve fictional business and public-sector briefs (data tables and analyst notes) generated in code with exact answers | Fresh: generated 5 November 2026 | This repository |
 | 45 | Synthetic classification rows (four tasks, 200 to 1,500 labelled rows and 5,000 hidden rows each) and two 700-day daily-sales series, generated in code from fixed seeds | Fresh: generated 9 November 2026 (two sets reproduce the 5 November pilot) | This repository |
+| 46 | Six new acquisition briefs, 24 company evidence packets, and sourced checks for names returned by open-web searches | Briefs and evidence packets assembled 17 November 2026. Several public facts and transaction announcements predate the models' cutoffs | Source URLs, dates where given and rights per entry in the notebook's `data/` folder. Factual paraphrases only |
 
 ## For AI agents
 
