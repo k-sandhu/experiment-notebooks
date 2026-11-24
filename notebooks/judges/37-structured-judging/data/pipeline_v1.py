@@ -182,7 +182,25 @@ def freeze_test():
  hashes={name:filehash(DATA/name) for name in names}
  value=dict(version=PROTOCOL,source_commit=SOURCE_COMMIT,seed=SEED,hash_normalization='CRLF to LF',hashes=hashes,items=240,polished=len(load(DATA/'polished_v1.json')),checklist_candidates_visible=False)
  path=DATA/'freeze_record.json'
- if path.exists():assert load(path)['hashes']==hashes,'Frozen material changed'
+ if path.exists():
+  expected=dict(load(path)['hashes'])
+  amendment=DATA/'resume_transport_amendment_20261124.json'
+  if amendment.exists():
+   changes=load(amendment)
+   assert filehash(path)==changes['original_freeze_sha256_lf']
+   for name,change in changes['files'].items():
+    assert name in ('implementation_v1.py','pipeline_v1.py')
+    assert expected[name]==change['before']==filehash(DATA/change['original_snapshot'])
+    expected[name]=change['after']
+  rate_amendment=DATA/'cli429_transport_amendment.json'
+  if rate_amendment.exists():
+   changes=load(rate_amendment)
+   assert filehash(path)==changes['original_freeze_sha256_lf']
+   for name,change in changes['files'].items():
+    assert name in ('implementation_v1.py','pipeline_v1.py')
+    assert expected[name]==change['before']==filehash(DATA/change['original_snapshot'])
+    expected[name]=change['after']
+  assert expected==hashes,'Frozen material changed beyond recorded transport amendments'
  else:
   assert LIVE;save(path,dict(value,frozen_at=now()));log('test_frozen',**value)
  return load(path)

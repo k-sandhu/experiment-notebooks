@@ -105,10 +105,22 @@ program that simply picks the version with fewer long words matched the owner on
 examples taught was a preference for plain words. Almost every merged version was drafted by Claude, so the judges
 may be learning that rewriter's habits as much as the owner's taste.
 
+### Does a rubric or checklist help a judge? (37)
+
+[Notebook 37](37-structured-judging/) gave three judges notebook 33's 240 pairs under five sets of instructions: a
+bare "which is better?", notebook 33's prompt, a general rubric, a checklist Claude Opus 5.5 wrote for each task
+without seeing the answers, and separate scoring of each answer against that checklist. No structure measurably beat
+notebook 33's short prompt, whose key line is that correctness comes first. The rubric and checklist moved accuracy
+by -3.3 to +3.8 points, inside every interval, while separate scoring cost GPT-6.1 Sol 22 points and Granite 4.2 8B
+42, mostly because answers seen alone tied. GPT-6 Luna and Granite stayed at chance on long calculations whatever
+they were told, choosing by position, and Granite picked a wrong calculation that ended "The result was checked." in
+all 30 pairs where one was offered. As with notebook 33, 227 of the 240 pairs are a copy with one planted edit, so
+the result says little about answers that differ everywhere.
+
 ## Experiments in progress
 
-These three experiments share one aim: to find out how a team should combine, set up and instruct judges. All of
-them reuse notebook 33's exam, unchanged.
+These two experiments share one aim: to find out how a team should combine and set up judges. Both reuse notebook
+33's exam, unchanged.
 
 - A weaker model as tie-breaker (34, [issue #95](https://github.com/k-sandhu/experiment-notebooks/issues/95)).
   Where the two strongest judges disagree, can a cheaper model settle it, alone or after reading both judges'
@@ -119,6 +131,3 @@ them reuse notebook 33's exam, unchanged.
   One part of the grading set-up changes at a time: one answer graded alone or two compared, one answer order or
   both, reasoning before or after the verdict, one reply or a majority of five, low or high reasoning effort, a
   strict output format, and solving the task before judging it.
-- Structured instructions (37, [issue #98](https://github.com/k-sandhu/experiment-notebooks/issues/98)). Free-form
-  instructions against a general rubric, a checklist written for each item, and separate scoring of each checklist
-  question, with the hardest look at pairs where the worse answer is longer or more polished.

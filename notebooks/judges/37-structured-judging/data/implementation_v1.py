@@ -88,6 +88,7 @@ CACHE_PATH = DATA/'cache_requests.jsonl'
 ATTEMPT_PATH = DATA/'nonfinal_attempts.jsonl'
 QUOTA_PATTERN = re.compile(r'usage\s+limit|hit\s+your\s+usage\s+limit|try\s+again\s+at|quota|credit\s+balance|insufficient\s+credits',re.I)
 class CollectorQuotaStop(RuntimeError):pass
+class CollectorRateLimitStop(RuntimeError):pass
 collector_stop=threading.Event()
 def response_diagnostics(out):
  return '\n'.join(v if isinstance(v,str) else json.dumps(v,ensure_ascii=False,default=str) for k,v in out.items() if k in ('text','stdout','stderr','error','raw'))
@@ -124,6 +125,16 @@ def error_channels(out):
 def quota_message(out):
  diagnostic=error_channels(out);match=QUOTA_PATTERN.search(diagnostic)
  return diagnostic[max(0,match.start()-150):match.end()+1200] if match else None
+def cli429_message(out,backend='codex'):
+ if backend not in ('codex','claude','muse'):return None
+ if out.get('text','').strip() or out.get('error')=='TimeoutExpired':return None
+ raw=out.get('raw')
+ if isinstance(raw,list) and any(isinstance(e,dict) and isinstance(e.get('item'),dict) and e['item'].get('type')=='agent_message' and e['item'].get('text','').strip() for e in raw):return None
+ diagnostic=error_channels(out)
+ if re.search(r'usage.policy|acceptable.use|Details:\s*\[bio\]',diagnostic,re.I):return None
+ match=re.search(r'exceeded\s+retry\s+limit[^\n]{0,300}\b429\b',diagnostic,re.I)
+ return diagnostic[max(0,match.start()-150):match.end()+1200] if match else None
+
 NONFINAL=[]
 if ATTEMPT_PATH.exists():
  NONFINAL=[json.loads(line) for line in ATTEMPT_PATH.read_text(encoding='utf-8').splitlines() if line.strip()]
@@ -135,10 +146,11 @@ for cache_file in [DATA/'cache_requests.jsonl.gz',CACHE_PATH,*sorted(DATA.glob('
   for line in stream:
    r=json.loads(line);assert r['key']==digest(r['request'])
    if quota_message(r['response']):continue
+   assert not cli429_message(r['response'],r['request']['backend']),'Nonfinal CLI429 remains in final cache'
    assert r['key'] not in CACHE
    CACHE[r['key']]=r
 cache_lock=threading.RLock(); key_locks=defaultdict(threading.Lock)
-gates={b:threading.Semaphore(n) for b,n in dict(claude=2,codex=2,muse=1).items()}
+gates={b:threading.Semaphore(n) for b,n in dict(claude=2,codex=1,muse=1).items()}
 for s in [*JUDGES.values(),*WRITERS.values()]:
  if s['backend'] in ('openrouter','decisions'): gates[s['model']]=threading.Semaphore(3)
 new_calls=0; pending_usd=0.; used_keys=set()
@@ -146,6 +158,7 @@ def accounted_openrouter():
  interrupted=load(DATA/'interrupted_attempts.json')['total_reservation_usd'] if (DATA/'interrupted_attempts.json').exists() else 0.
  return interrupted+sum(float(r['response'].get('cost') or r['response'].get('unpriced_reservation') or 0) for r in [*CACHE.values(),*NONFINAL] if r['request']['backend'] in ('openrouter','decisions'))
 def require_running():
+ if LIVE and (DATA/'cli429_stop_record.json').exists():raise CollectorRateLimitStop('Collector stopped on exhausted CLI429; run a fresh one-call smoke before resuming')
  if collector_stop.is_set() or (LIVE and (DATA/'quota_stop.json').exists()):raise CollectorQuotaStop('Collector stopped after a usage/quota limit; resume later from cache')
 def record_nonfinal(row,disposition):
  row=dict(row,disposition=disposition,recorded_at=now())
@@ -160,6 +173,16 @@ def cli_estimate(row):
   return ((inp-cached)*ri+cached*ri*.05+out*ro)/1e6,'reported Codex tokens at public list prices'
  if backend=='muse':return (len(req['prompt'])/4*4+len(o.get('text',''))/4*20)/1e6,'proxy only: chars/4 at Muse Wonder 4/20; Full price unavailable; hidden reasoning omitted'
  return None,'reported OpenRouter usage cost'
+def cli_executable(backend):
+ if backend=='codex':
+  if os.environ.get('NB_CODEX_EXE'):return os.environ['NB_CODEX_EXE']
+  wrapper=shutil.which('codex.cmd') or shutil.which('codex')
+  if wrapper:
+   native=Path(wrapper).parent/'node_modules/@openai/codex/node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe'
+   if native.is_file():return str(native)
+  return shutil.which('codex.exe') or shutil.which('codex')
+ return shutil.which(backend+'.cmd') or shutil.which(backend)
+
 def transport(req):
  assert LIVE,'Model transport is disabled in replay'
  backend=req['backend']
@@ -173,7 +196,7 @@ def transport(req):
   return dict(text=msg.get('content') or '',raw=raw,status=response.status_code,usage=raw.get('usage',{}),
    cost=raw.get('usage',{}).get('cost'),finish_reason=choices[0].get('finish_reason') if choices else None)
  with tempfile.TemporaryDirectory(prefix='nb37_cli_',dir=TMP) as tmp:
-  exe=shutil.which(backend+'.cmd') or shutil.which(backend)
+  exe=cli_executable(backend)
   env={k:v for k,v in os.environ.items() if k not in ('FORCE_COLOR',)};env['NO_COLOR']='1'
   if backend=='muse':
    pf=Path(tmp)/'prompt.txt';pf.write_text(req['prompt'],encoding='utf-8')
@@ -224,6 +247,17 @@ def ask(spec,prompt,purpose,budget=1600,temperature=0,choices=None,state=None):
  base=request_for(spec,prompt,purpose,budget,temperature,choices,state)
  base_key=digest(base)
  with key_locks[base_key]:
+  # Reuse a returned outcome after retired transient attempts without re-calling it.
+  available=[]
+  for index in range(3):
+   prior=copy.deepcopy(base);prior['attempt']=index
+   if index and prior['backend']=='openrouter':prior['payload']['max_tokens']=min(6400,budget*2**index)
+   prior_key=digest(prior)
+   if prior_key in CACHE:
+    available.append(prior_key)
+    if not retry_required(CACHE[prior_key]['response']) or index==2:
+     used_keys.update(available)
+     return dict(**CACHE[prior_key],attempt_keys=available)
   attempts=[]
   for attempt in range(3):
    require_running()
@@ -258,6 +292,14 @@ def ask(spec,prompt,purpose,budget=1600,temperature=0,choices=None,state=None):
      row=dict(key=key,request=req,response=out)
      with cache_lock:
       with (DATA/'attempt_lifecycle.jsonl').open('a',encoding='utf-8') as f:f.write(canonical(dict(at=now(),event='returned',key=key,quota_limit=bool(quota_message(out))))+'\n')
+      limit=cli429_message(out,req['backend'])
+      if limit:
+       collector_stop.set()
+       record_nonfinal(row,'exhausted_cli429_no_reply')
+       stop=dict(at=now(),key=key,model=req['model'],purpose=purpose,message=limit,resumable=True,scored_outcome=False)
+       save(DATA/'cli429_stop_record.json',stop)
+       log('exhausted_cli429_stop',**{k:v for k,v in stop.items() if k!='at'})
+       raise CollectorRateLimitStop(limit)
       quota=quota_message(out)
       if quota or collector_stop.is_set():
        if quota:

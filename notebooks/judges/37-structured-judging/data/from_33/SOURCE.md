@@ -2,6 +2,8 @@
 
 Notebook33 supplied commit: `cf854303`, branch `add-33-judge-exam`. Source checkout moved to D: and was reverified on2026-10-30. Source checkout is read only. SHA-256 normalizes CRLF to LF. Copied source artifacts are unchanged.
 
+Reverified all 13 copies and the source freeze hashes against the moved checkout on 2026-11-24 before resuming collection. See `../resume_validation_20261124.json`. No copied artifact was changed.
+
 - `exam_v1.jsonl`: `D:\projects\experiment_notebooks\worktrees\33-judge-exam\notebooks\judges\33-judge-exam\data\exam_v1.jsonl`; SHA-256 `c1c88cfb0bfee1ea0724579c1324f1b0903170afd8ccebec5c183de7c4fe5ae0`
 - `prompt_templates.json`: `D:\projects\experiment_notebooks\worktrees\33-judge-exam\notebooks\judges\33-judge-exam\data\prompt_templates.json`; SHA-256 `62e9ee0b98b60c306c3e2453b062602de1d9c1901838c64ac31a443c51831f0b`
 - `generator_v1.py`: `D:\projects\experiment_notebooks\worktrees\33-judge-exam\notebooks\judges\33-judge-exam\data\generator_v1.py`; SHA-256 `33f49fbea214d0d9e8b8e7755619e95df32e1731630377a82180b0d4f5ab42ab`
