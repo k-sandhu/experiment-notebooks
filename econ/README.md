@@ -3,12 +3,13 @@
 Economic decisions rest on numbers, and the number that is easiest to collect is often not the one the decision
 needs. An invoice states an amount, but what an organisation owes depends on what was delivered, returned or
 disputed. A government report can show an approved budget, a cost recorded in the accounts and a cash payment
-for the same programme, and only one of them answers "how much was paid?". The two experiments in this folder
+for the same programme, and only one of them answers "how much was paid?". Two experiments in this folder
 test language models on that kind of measurement, and both put a price on an extra step meant to make the work
-checkable.
+checkable. A third asks an older question about work itself: when one case is divided among several workers,
+here AI agents, does each added worker add output?
 
 Each experiment is self-contained: its own notebook, inputs, cached model responses, results, figures and a
-README that explains the topic from the beginning. Start with either README; neither depends on the other or on
+README that explains the topic from the beginning. Start with any README; none depends on the others or on
 this page.
 
 ## The cost of checking an assistant's work (21)
@@ -39,30 +40,59 @@ Every completed answer was right, 131 of 131, with both methods. All 36 answers 
 said the amount was not disclosed. The ledger added about 2.5 seconds per answer for GPT and Claude and changed
 no answer, and 74 of its 76 quoted passages appear word for word in the source.
 
-## What the two results have in common
+## Splitting one case among several agents (48)
 
-Both experiments priced a step that shows the work: a second opinion in 21, a list of figures and quotations
-in 22. In neither did the step buy measurable accuracy, for opposite reasons. In 21 the cheap model was so far
+An office case often passes down a line: one person reads the notice, another checks it against the register,
+a third works out the amount, a fourth approves the payment. Each sees their own documents and whatever the
+last person wrote down. A company trying AI agents can copy that line, one agent per job, or give one agent
+the whole case. The experiment generated 80 cases with exact answers (capital call notices, equipment credit
+applications, laboratory billing claims and trade allocations, 20 each), cut each into eight steps, and ran
+Claude Sonnet 5.5 as one agent with everything, as lines of 2, 4 and 8 agents, as four agents sharing one
+record, and as a line of four followed by a GPT-6.1 Terra checker.
+
+One agent with every document got 67 of 80 cases fully right. Lines of 2, 4 and 8 got 59, 60 and 47, while
+reading and writing up to 4.4 times as much per case, so correct output grew far more slowly than the team.
+The shared record got 79 and the line with a checker 80. Two follow-up arms, chosen after seeing those
+results, show that neither gain came from the shape of the team: GPT-6.1 Terra alone got 78, and Sonnet
+followed by three reviewers who each redid the whole case got 80, with 67, 78, 80 and 80 cases right after
+each pass. These counts score each agent's final answer. Some agents wrote an answer and then corrected it;
+scoring the first answer instead, as planned before the run, gives 65 for one agent and 54, 57 and 39 for the
+lines, and the same order.
+
+## What the three results have in common
+
+Experiments 21 and 22 priced a step that shows the work: a second opinion in 21, a list of figures and
+quotations in 22. In neither did the step buy measurable accuracy, for opposite reasons. In 21 the cheap model was so far
 off that any check caught its mistakes, so nothing separated a cheap check from an expensive one. That is a
 floor for the cheap model and a ceiling for the checks. In 22 the models were already right on every completed
 answer, so there were no mistakes for the ledger to prevent. Both tests were too easy in one direction to answer
 their own question, and each README says which harder test would.
 
+Experiment 48 did separate its arms, and it puts the same question to an added worker instead of an added
+step. A worker who sees only part of the case lowered accuracy at every team size. A reviewer who sees the
+whole case raised it, from 67 to 78 of 80 with one review. Its limit is the other end of the scale: the three
+best arms scored 78 to 80 of 80, a ceiling, so the test cannot rank them.
+
 | Notebook | The problem | The question | The answer in plain words |
 |---|---|---|---|
 | [21. The cost of checking an assistant's work](21-verification-costs/) | A cheap model saves money on invoice payments only if checking it costs less than the expensive calls it avoids | On 72 made-up invoices, does asking the cheap model twice, or having a stronger model review it, cost less than using the expensive model on every invoice, and above what price per expensive call? | The cheap model got no payment amount right, so checks saved a call only on the 14 holds. Asking twice pays off above USD 0.0011 per expensive call, a Claude review above USD 0.1332. The checks never met a hard mistake |
 | [22. Reading what government spending figures mean](22-fiscal-implementation/) | A report shows budgets, expenses and cash payments side by side, and only one answers a given question | On 22 questions about 8 recent government reports, does listing each figure with its source passage give more correct answers than asking for the figure directly? | Both methods were right on every completed answer (131 of 131), a ceiling, so the test cannot tell them apart. The ledger cost a few seconds per answer |
+| [48. Splitting one case among several agents](48-agent-team-designs/) | Giving each existing job to its own AI agent passes a case down a line where each agent sees only its part | On 80 made-up office cases cut into eight steps, does the way Claude Sonnet 5.5 agents are organised change how many cases come out fully right? | One agent with everything got 67 of 80. Lines of 2, 4 and 8 agents got 59, 60 and 47 while doing up to 4.4 times the reading and writing. A second full look fixed it: one reviewer brought the single agent to 78, two to 80 |
 
-## Limits that apply to both
+## Limits
 
 An exact answer on these records is evidence about the tested conditions, not about all invoices or all public
 budgets. In 21, the loss assigned to a wrong payment is a stated assumption, not an observed business loss. In
 22, working out which figure is a cash payment does not estimate the effect of government spending on the
-economy, and the models were given the right pages rather than asked to find them.
+economy, and the models were given the right pages rather than asked to find them. In 48, every answer can be
+worked out from about a dozen short documents that fit in one prompt, which favours one agent holding
+everything; no people, sign-offs or separation of duties were part of the test; and one model family ran
+every team.
 
 ## Reproducing the results
 
 Install the repository's [requirements](../requirements.txt), change into an experiment's folder and run
 `python -m jupyter nbconvert --to notebook --execute --inplace <notebook-name>.ipynb`. By default each notebook
 replays its saved responses and makes no model calls. Spend, call counts and the settings for collecting new
-responses are in each experiment's README and its `data/PROTOCOL.md`.
+responses are in each experiment's README and its `data/PROTOCOL.md`. Experiment 48 collected its Claude
+replies through Claude Code subagents, so new replies for it are gathered in rounds as its README describes.

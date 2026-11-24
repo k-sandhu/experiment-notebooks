@@ -80,26 +80,41 @@ GPT-6 Astra last of six; giving every writer the same judges put it first. The O
 282 drafts higher than the Claude judge, by 9.01 points on average, so the precaution ranked writers partly by
 which judge they drew.
 
+### Which models make reliable judges (33)
+
+[Notebook 33](33-judge-exam/) built an exam of 240 answer pairs in which code decides which answer is better: Python functions
+checked by hidden tests, long calculations with an exact answer, 720-word messages with seven checkable rules, and
+answers drawn from a fictional contract register. Nine judges saw every pair in both orders. Muse Wonder Full picked
+the better answer in 99.6% of judgments, Claude Opus 5.5 in 95.8%, Claude Sonnet 5.5 and GPT-6.1 Sol in 95.0%; the
+cheaper judges scored 59% to 81%. The strong judges' remaining errors were almost all one-word miscounts of a
+message that had to be exactly about 720 words long, and the cheaper judges were at chance on calculations. Judges
+graded work they could not do: Muse solved 1 of 60 calculations exactly but picked the right one in 119 of 120
+judgments. The caveat is the exam's construction: in 227 of 240 pairs the worse answer is a copy of the better one
+with one planted edit, so a judge can check only the place where they differ. On the 13 pairs of independently
+written code, the cheaper judges fell to 27% to 65%.
+
+### Teaching a judge one person's taste (35)
+
+[Notebook 35](35-judge-taste/) asked whether a judge can learn what one editor prefers when two versions of a
+paragraph both follow the written rules. The test pairs came from this repository's own README rewrites: 42
+paragraph pairs from eight READMEs, each an earlier version and the version the owner merged. With no guidance,
+Claude Opus 5.5 picked the merged version on 73% of judgments and GPT-6.1 Sol on 60%. Eight of the owner's past
+choices in the prompt raised them to 92% and 82%, while the written style rules alone changed nothing clear. Claude
+Haiku 5.5 and Qwen3.5-9B gained nothing from any guidance and tended to pick whichever version came second. A
+program that simply picks the version with fewer long words matched the owner on 83% of pairs, so much of what the
+examples taught was a preference for plain words. Almost every merged version was drafted by Claude, so the judges
+may be learning that rewriter's habits as much as the owner's taste.
+
 ## Experiments in progress
 
-These five experiments share one aim: to find out how a team should choose, combine and instruct judges. Four of
-them use one exam, built in notebook 33, of answer pairs where code decides which answer is better and where the
-pairs are hard enough that strong judges make mistakes.
+These three experiments share one aim: to find out how a team should combine, set up and instruct judges. All of
+them reuse notebook 33's exam, unchanged.
 
-- Which models make reliable judges (33, [issue #94](https://github.com/k-sandhu/experiment-notebooks/issues/94)).
-  About ten judges, from Claude Opus 5.5 and GPT-6.1 Sol down to small open-weight models and the Decisions API,
-  grade the same 240 pairs: code checked by hidden tests, worked solutions to new word problems, answers that must
-  follow several checkable instructions, and answers drawn from long source documents. Each judge also tries to
-  solve the code and word problems itself, to test whether a judge can grade answers it cannot produce.
 - A weaker model as tie-breaker (34, [issue #95](https://github.com/k-sandhu/experiment-notebooks/issues/95)).
   Where the two strongest judges disagree, can a cheaper model settle it, alone or after reading both judges'
   reasons? This is the setting of debate studies such as
   [Khan et al. (2024)](https://arxiv.org/abs/2402.06782), in which a weaker judge decides between stronger models'
   arguments.
-- Teaching a judge one person's taste (35, [issue #96](https://github.com/k-sandhu/experiment-notebooks/issues/96)).
-  This repository's owner had every README rewritten to a stricter house style and merged the versions they
-  accepted. Can a judge pick the accepted paragraph with no guidance, with the written style rules, with examples
-  of past choices, or with a rubric distilled from those examples?
 - How to build a judging harness (36, [issue #97](https://github.com/k-sandhu/experiment-notebooks/issues/97)).
   One part of the grading set-up changes at a time: one answer graded alone or two compared, one answer order or
   both, reasoning before or after the verdict, one reply or a majority of five, low or high reasoning effort, a

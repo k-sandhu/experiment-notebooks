@@ -1,0 +1,58 @@
+{
+  "purpose": "All possible main inputs pre-audited before difficulty selection; none has a model prediction yet",
+  "n_potential_main_cases": 1056,
+  "levels": [
+    {
+      "level": 1,
+      "n_cases": 264,
+      "n_collection": 240,
+      "n_audit": 24,
+      "file": "potential_main_level_1.jsonl.gz",
+      "compressed_sha256": "83e827cbb1750eaca32bfdcacf8e8808644c8b83a43a42d8bd86c2df10060d16",
+      "uncompressed_sha256": "61935ff736b55613e9479d59ed14a46f74c08e4d6570a5bdc7218c3cf529240b",
+      "bytes": 1208760,
+      "words_min": 2749,
+      "words_max": 2956
+    },
+    {
+      "level": 2,
+      "n_cases": 264,
+      "n_collection": 240,
+      "n_audit": 24,
+      "file": "potential_main_level_2.jsonl.gz",
+      "compressed_sha256": "abb54caa28c02f97fdfe16d8fb957b286700c4b9d4f565d94956787b944c508f",
+      "uncompressed_sha256": "d727ac2494137d3550c64388b254b8b4fb68dc2226fdd735469aaa008fb53bd4",
+      "bytes": 1498721,
+      "words_min": 4217,
+      "words_max": 4336
+    },
+    {
+      "level": 3,
+      "n_cases": 264,
+      "n_collection": 240,
+      "n_audit": 24,
+      "file": "potential_main_level_3.jsonl.gz",
+      "compressed_sha256": "fbaa180c387ff866a642c0b9d34b717f4b00281d588c161fcbae136730d7409f",
+      "uncompressed_sha256": "e390a1292e282489933b945f4f8b74f89bd35805a1c632859e2c456660dca9b4",
+      "bytes": 1948398,
+      "words_min": 6931,
+      "words_max": 7050
+    },
+    {
+      "level": 4,
+      "n_cases": 264,
+      "n_collection": 240,
+      "n_audit": 24,
+      "file": "potential_main_level_4.jsonl.gz",
+      "compressed_sha256": "13ff75123e289923d2cc401898fcbcc479e8447d13ff8a7d1e8d90148f5b15d3",
+      "uncompressed_sha256": "02e8f4c3165dac77cc2ee5350c47ddd0175e2cfdc0594b96f4c9a9f9a74ad247",
+      "bytes": 2356035,
+      "words_min": 9645,
+      "words_max": 9764
+    }
+  ],
+  "task_instructions": "Reconcile the target ORDER and LINE as of the packet cutoff. Return exactly\n{case_id, answer, evidence}; answer has exactly order_id (string), sku (string),\nquantity_units (integer or null), unit_price_cents (integer or null), currency\n(three-letter string or null), ship_date (YYYY-MM-DD or null), status\n(active/cancelled/ambiguous). evidence has the same seven keys; each value is a\nnonempty list of distinct document IDs P01 through P06. A batch wrapper may ask\nfor a results array.\n\nRead all tables and use only the requested order/line. The same SKU can occur\non another line or order. quantity_units is OPEN individual units: current\napproved ordered demand minus NET allocated dispatched units, where accepted\nreturns reduce net dispatch. This packet's order remains active; shipment VOID,\nREVERSAL and RETURN do not cancel the purchase order.\n\nCommercial terms: resolve every field independently. An approved row qualifies\nonly if BOTH recorded and effective UTC timestamps are at or before cutoff\n(inclusive). Within a field: a line override beats an order default, then higher\nauthority wins (3 Controller, 2 Buyer, 1 Planner), then later effective timestamp,\nthen higher revision. Recorded timestamp filters availability only. INHERIT or\nunstated fields do not clear old values. The signed order has authority 0 and\nits issue timestamp. Other-line, unapproved, recorded-late and future-effective\nrows do not apply. This packet has no unresolved equal-priority conflicts.\n\nPhysical movements: group by logical Event ID across ingestion copies. Select\nthe HIGHEST ROW REVISION among copies recorded by cutoff; exact same-revision\ncopies count once. That selected row wholly replaces prior rows. Only then test\nits state, order and occurred timestamp. Selected VOID, another order and\noccurred-after-cutoff rows contribute zero; never fall back to an older revision.\nA POSTED, timely REVERSAL removes the referenced logical shipment, including its\nselected correction, ONCE. Multiple active reversals of the same shipment do not\nremove it twice. A VOID reversal has no effect. It is a control record, not a\nsecond negative quantity. Returns against removed/VOID shipments contribute zero.\n\nFor an active SHIP, select the exact SKU/UOM factor with latest effective_from\ndate on or before the SELECTED shipment's occurred calendar date. Select the\nallocation key's latest effective_from date on or before that SAME date. Multiply\nshipment quantity by individual-units-per-UOM and the target line's percent/100.\nAn allocation entirely to another line contributes zero. All contributions are\nwhole individual units; do not round allocations. Allocation shares total 100%.\nA RETURN is a positive accepted quantity in its ORIGINAL shipment handling units.\nUse the referenced SELECTED shipment's SKU, UOM, occurred date and allocation key,\nincluding that date's UOM and allocation versions, irrespective of return date.\nSubtract its converted allocated units from net dispatch. Do not use the original\nsuperseded row or the return date's new packaging/allocation schedule.\n\nPricing: use the resolved price plan and the highest tier minimum not exceeding\nCURRENT ORDERED demand, BEFORE movements. gross_cents is for an entire price pack\nof pack_units individual units, independent of warehouse UOM. Divide by pack_units;\napply tier rebate A then rebate B sequentially to that gross unit amount, using\nbasis points (100 bps = 1%). Then ADD fee_cents per individual unit and\npack_fee_cents/pack_units and SUBTRACT credit_cents per individual unit. These fees\nand credits are after rebates. Keep exact rational/decimal precision and round\nONCE at the final per-unit result to the nearest integer cent, exact halves UP.\nNever round a pack conversion, rebate or fractional-cent adjustment earlier.\nCurrency and requested ship date come from independently resolved commercial terms.\n\nEvidence: sources are P01 signed order/defaults/status, P02 approvals, P03 UOM,\nP04 dated allocations, P05 price schedules, P06 movement history. Cite sources\nneeded for current fields and arithmetic. Quantity requires current ordered\nterms plus P03/P04/P06; P01 is also needed if its ordered demand remains current.\nPrice requires the resolved plan, ordered demand for its tier and P05. SKU and\nactive order status are in P01. Order ID is stated in the packet header and P01.\nRelevant additional P01-P06 context is allowed without penalty; cite whole source\ngroups, not individual row IDs. Citation ordering is irrelevant. Do not omit\nneeded calculation sources merely because the numeric answer is correct.\n",
+  "instruction_sha256": "0d74782473e7b1b8079f76f004aa87d0d2341bb8c37e4210b5b85acf3d7567b8",
+  "generation": "Programmatic fictional records; no model was asked to write a test packet",
+  "warning": "Preflight pass is source/key consistency, not model accuracy or training evidence"
+}
