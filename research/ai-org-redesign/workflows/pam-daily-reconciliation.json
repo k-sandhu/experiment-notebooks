@@ -1,0 +1,1634 @@
+{
+  "schema_version": "0.2",
+  "id": "pam-daily-reconciliation",
+  "name": "Reconcile positions and cash daily",
+  "org": "public-asset-manager",
+  "process": "daily-reconciliation",
+  "sector": "public-sector institutional asset management",
+  "function": "investment operations (reconciliations)",
+  "summary": "Every business day the reconciliations team checks the model manager's investment book of record against the custodian, external managers and derivative counterparties for positions, cash and transactions across a few hundred pool, client and mandate accounts. A reconciliation tool matches most items automatically; analysts first clear the accounts that feed unit prices and risk so positions can be released by mid-morning, then investigate the remaining breaks, assign them to owning teams, book or request corrections and update the ageing log for the manager's sign-off. Breaks that age or grow are escalated, and late files, corporate actions and external manager timing differences are the main sources of work.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A provincial not-for-profit asset manager of about 240 staff with one global custodian, about 120 external managers, four to five pools, five client portfolios and derivative overlays.",
+    "org_size_employees": 242,
+    "notes": "A vendor reconciliation tool with spreadsheets for some manager and derivative reconciliations; daily cadence on business days. 2021 state."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one business day's reconciliation across all accounts",
+  "trigger": "The business day closes and the custodian, managers and counterparties send their end-of-day files.",
+  "end_state": "Positions are released to pricing, risk and performance, every break has an owner and comment, and the manager has signed off the day, with aged or material breaks escalated.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 20,
+      "mode": 21,
+      "high": 23
+    },
+    "seasonality": "One cycle per business day; month ends add monthly manager reconciliations and accounting cut-off pressure, and manager transitions and pool launches add new accounts and breaks.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "bci_fs21"
+      ],
+      "note": "Organisation file business days driver; a peer provincial manager monitors pool cash and liquidity daily."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "custodian",
+        "object": "custodian_statement",
+        "share": 0.7
+      },
+      {
+        "from": "external_managers",
+        "object": "manager_report",
+        "share": 0.1
+      },
+      {
+        "from": "trade-settlement-fails",
+        "object": "settlement_status",
+        "share": 0.1
+      },
+      {
+        "from": "corporate-actions",
+        "object": "corporate_action_notice",
+        "share": 0.05
+      },
+      {
+        "from": "investment-data-management",
+        "object": "security_reference_data",
+        "share": 0.05
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "pool-unit-pricing",
+        "object": "reconciled_positions"
+      },
+      {
+        "outcome": "any",
+        "to": "fund-accounting-close",
+        "object": "reconciled_positions"
+      },
+      {
+        "outcome": "any",
+        "to": "daily-risk-limit-monitoring",
+        "object": "reconciled_positions"
+      },
+      {
+        "outcome": "any",
+        "to": "performance-attribution",
+        "object": "reconciled_positions"
+      },
+      {
+        "outcome": "any",
+        "to": "data-warehouse-operations",
+        "object": "reconciled_positions"
+      },
+      {
+        "outcome": "any",
+        "to": "trade-settlement-fails",
+        "object": "reconciliation_breaks"
+      },
+      {
+        "outcome": "signed_off_with_escalation",
+        "to": "enterprise-operational-risk",
+        "object": "reconciliation_breaks"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "reconciliation_analyst",
+      "title": "Analyst, reconciliations and corporate actions",
+      "department": "Reconciliations and corporate actions",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.4,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 56,
+        "high": 95
+      },
+      "occupation_code": "NOC 11109",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jb11101"
+        ],
+        "note": "Four analysts split between daily reconciliation and corporate actions; about 2.4 FTE on reconciliation is an author estimate. Cost from the organisation file."
+      }
+    },
+    {
+      "id": "mgr_reconciliations",
+      "title": "Manager, reconciliations and corporate actions",
+      "department": "Reconciliations and corporate actions",
+      "layer": "manager",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 90,
+        "high": 135
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jb10010"
+        ],
+        "note": "Daily review, sign-off and escalations; author estimate. Cost from the organisation file."
+      }
+    },
+    {
+      "id": "trade_settlement_analyst",
+      "title": "Analyst, trade support and settlements",
+      "department": "Trade support and settlements",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.15,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 56,
+        "high": 95
+      },
+      "occupation_code": "NOC 11109",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jb11101"
+        ],
+        "note": "Trade-related break resolution; author estimate. Cost from the organisation file."
+      }
+    },
+    {
+      "id": "head_investment_operations",
+      "title": "Vice president, investment operations",
+      "department": "Investment operations",
+      "layer": "director",
+      "fte_on_process": 0.01,
+      "loaded_cost_per_hour": {
+        "low": 180,
+        "mode": 240,
+        "high": 320
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Reviews escalations a few times a month; author estimate."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "oms_ibor",
+      "name": "Order management, pre-trade compliance and investment book of record platform (vendor software as a service)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "recon_tool",
+      "name": "Reconciliation tool",
+      "kind": "workflow"
+    },
+    {
+      "id": "custodian_portal",
+      "name": "Custodian portal (custody, accounting records, net asset value reports, cash and corporate action notices)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Excel workbooks and models",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, video calls and collaboration suite",
+      "kind": "communication"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Capture close-of-business positions in the book of record",
+      "description": "At the end of each business day the investment book of record finalises positions, cash balances and transactions for every pool, client and external mandate account, and a scheduled extract is prepared for the reconciliation tool. Weekend and holiday days are skipped and Friday's positions are reconciled on Monday.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "trades, cash and corporate action bookings"
+      ],
+      "outputs": [
+        "IBOR extract"
+      ],
+      "systems": [
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A late trade or corporate action is not booked before the extract.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.77,
+          "condition": "next day is a business day"
+        },
+        {
+          "to": "s02",
+          "prob": 0.23,
+          "condition": "weekend or holiday follows"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Calendar share of Fridays and pre-holiday days; author estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Hold over the weekend or holiday",
+      "description": "When the business day is a Friday or precedes a holiday, the files are reconciled on the next business day, so the cycle waits through the non-business days with no work done.",
+      "role": "system",
+      "kind": "external_wait",
+      "inputs": [
+        "IBOR extract"
+      ],
+      "outputs": [
+        "IBOR extract"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 2880,
+        "high": 4320
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "next business day"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Two days for a weekend, three for a long weekend."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Custodian, managers and counterparties deliver overnight files",
+      "description": "Overnight the custodian sends position, cash and transaction statements for all custody accounts (SWIFT statement messages and flat files), external managers send their daily holdings files for mandates that provide them, and clearing brokers and swap counterparties send position and margin statements.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "end-of-day records"
+      ],
+      "outputs": [
+        "custodian statements",
+        "manager files",
+        "broker statements"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 480,
+        "mode": 600,
+        "high": 780
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A file arrives truncated or for the wrong date.",
+        "typically_caught_at": "s05"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Custodian's CSAE 3416 / SOC 1 controls over completeness and accuracy of client reporting",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "files sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "autorek",
+          "csae"
+        ],
+        "note": "Regular feeds from custody systems into the reconciliation tool and service organisation control reports are described; arrival times are author estimates."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Load files and run automatic matching",
+      "description": "The reconciliation tool loads the external files and the IBOR extract, maps security identifiers and accounts, and matches positions, cash balances and transactions by rule, leaving the unmatched items as breaks carried forward with their age.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "custodian statements",
+        "manager files",
+        "broker statements",
+        "IBOR extract"
+      ],
+      "outputs": [
+        "matched items",
+        "break list"
+      ],
+      "systems": [
+        "recon_tool"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "matching complete"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "autorek",
+          "smartstream"
+        ],
+        "note": "Automatic matching and carrying forward of breaks are described by both vendors; run time is an author estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Check every expected file has loaded",
+      "description": "The first analyst in opens the tool's load monitor and confirms that every expected custodian, manager and broker file arrived for the right date with plausible record counts, and that the matching run completed for all account groups.",
+      "role": "reconciliation_analyst",
+      "kind": "validation",
+      "inputs": [
+        "load monitor"
+      ],
+      "outputs": [
+        "completeness confirmation"
+      ],
+      "systems": [
+        "recon_tool"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A stale file loaded as today's is not noticed.",
+        "typically_caught_at": "s11"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Reconciliation procedure: daily completeness check of all expected data sources before breaks are worked",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.85,
+          "condition": "all files loaded"
+        },
+        {
+          "to": "s06",
+          "prob": 0.15,
+          "condition": "a file is missing, late or wrong"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; with about 120 external managers and several counterparties a missing file most days is common."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Chase missing or late files and reload",
+      "description": "The analyst emails the custodian, external manager or broker for the missing or corrected file, loads it when it arrives and re-runs matching for that account group; accounts without a file are marked as not reconciled for the day.",
+      "role": "reconciliation_analyst",
+      "kind": "communication",
+      "inputs": [
+        "missing file list"
+      ],
+      "outputs": [
+        "reloaded file"
+      ],
+      "systems": [
+        "recon_tool",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "file reloaded or account marked"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Triage breaks on pool and pricing-critical accounts",
+      "description": "Before working the full list, the analyst filters the breaks on accounts that feed the pool unit prices and the daily risk and limit run, sorts them by value, and decides for each whether it is a timing item, such as a trade not yet settled, or a real difference that would change a price or exposure.",
+      "role": "reconciliation_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "break list"
+      ],
+      "outputs": [
+        "pricing impact assessment"
+      ],
+      "systems": [
+        "recon_tool",
+        "oms_ibor",
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A real break is classed as timing and released.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.9,
+          "condition": "no material break on pricing-critical accounts"
+        },
+        {
+          "to": "s08",
+          "prob": 0.1,
+          "condition": "material break could change a unit price"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "smartstream",
+          "fundcount"
+        ],
+        "note": "Breaks that misstate NAV and stop-the-line for unreconciled positions are described; triage order and times are author estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Escalate a break that holds up pricing",
+      "description": "The manager of reconciliations reviews the material break with the unit pricing manager and the owning team, agrees whether the custodian or the model manager record is right and whether the NAV must be adjusted before the price is approved, and records the decision.",
+      "role": "mgr_reconciliations",
+      "kind": "judgment",
+      "inputs": [
+        "pricing impact assessment"
+      ],
+      "outputs": [
+        "break decision"
+      ],
+      "systems": [
+        "recon_tool",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "decision recorded"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Release reconciled positions to pricing, risk and performance",
+      "description": "The analyst marks the pricing-critical account groups as reconciled in the tool and emails the release note listing any open breaks and their expected impact to unit pricing, portfolio risk, performance and investment accounting.",
+      "role": "reconciliation_analyst",
+      "kind": "communication",
+      "inputs": [
+        "pricing impact assessment"
+      ],
+      "outputs": [
+        "reconciled positions release"
+      ],
+      "systems": [
+        "recon_tool",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Operations procedure: positions released downstream only after daily reconciliation, with open breaks disclosed (reconciliations in each pricing cycle, RG 94 good practice)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "released"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "rg94",
+          "fundcount"
+        ],
+        "note": "Reconciliation before pricing and release with disclosure of explained items are described."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Investigate cash breaks across all accounts",
+      "description": "The analyst works the unmatched cash items: dividends and coupons received but not booked or booked at the wrong amount, withholding tax differences, fees and expenses, FX settlements and transfers between accounts, using custodian cash statements, the corporate action calendar and the book of record.",
+      "role": "reconciliation_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "break list",
+        "custodian cash statements"
+      ],
+      "outputs": [
+        "cash break diagnoses"
+      ],
+      "systems": [
+        "recon_tool",
+        "custodian_portal",
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 75,
+        "mode": 120,
+        "high": 240
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Break given the wrong cause and sent to the wrong owner.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "cash breaks diagnosed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "smartstream",
+          "autorek"
+        ],
+        "note": "Cash reconciliation and break labelling are described; times for about 250 accounts are author estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Investigate position and transaction breaks",
+      "description": "A second analyst works the quantity differences: trades booked in one record and not the other, failed or partial settlements, corporate actions applied differently, security identifier mapping errors and manager trades not yet reported, comparing custodian transaction statements with the book of record.",
+      "role": "reconciliation_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "break list",
+        "custodian transaction statements"
+      ],
+      "outputs": [
+        "position break diagnoses"
+      ],
+      "systems": [
+        "recon_tool",
+        "custodian_portal",
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 90,
+        "mode": 180,
+        "high": 300
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A corporate action difference is left to age as a timing item.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "position breaks diagnosed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "smartstream"
+        ],
+        "note": "Positions, transactions and corporate actions as reconciliation dimensions are described; times are author estimates."
+      },
+      "concurrent_with": [
+        "s10"
+      ]
+    },
+    {
+      "id": "s12",
+      "name": "Reconcile derivatives, collateral and FX forwards",
+      "description": "The analyst agrees futures positions and variation margin with the clearing broker statements, and swap and FX forward positions, valuations and collateral balances with counterparty statements, investigating differences in trade population, notional or price.",
+      "role": "reconciliation_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "broker and counterparty statements"
+      ],
+      "outputs": [
+        "derivative break diagnoses"
+      ],
+      "systems": [
+        "recon_tool",
+        "spreadsheets",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 75,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A missing forward is not caught until the counterparty calls for collateral.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "derivatives reconciled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Overlay programs use futures, FX forwards and swaps; author estimate."
+      },
+      "concurrent_with": [
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "id": "s13",
+      "name": "Reconcile external manager records to the custodian",
+      "description": "For mandates whose managers send daily holdings, the analyst compares the manager's positions and cash with the custodian's, and chases the manager about trades it has not yet instructed or reported; monthly-reporting managers are reconciled at month end.",
+      "role": "reconciliation_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "manager files",
+        "custodian statements"
+      ],
+      "outputs": [
+        "manager break diagnoses"
+      ],
+      "systems": [
+        "recon_tool",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 90,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A manager-side booking error is left open.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "manager accounts reconciled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 120 external managers in 2020 (organisation file); daily versus monthly split is an author estimate."
+      },
+      "concurrent_with": [
+        "s10"
+      ]
+    },
+    {
+      "id": "s14",
+      "name": "Assign breaks to owning teams",
+      "description": "The analyst gives each new break a reason code and an owner in the tool: trade support for settlement and trade booking breaks, cash operations for cash items, corporate actions, investment data management for security mapping, the custodian or the external manager, and sends the daily break report to the owners.",
+      "role": "reconciliation_analyst",
+      "kind": "coordination",
+      "inputs": [
+        "break diagnoses"
+      ],
+      "outputs": [
+        "reconciliation break report"
+      ],
+      "systems": [
+        "recon_tool",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Break sent to the wrong owner and sits unworked.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "assigned"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "autorek"
+        ],
+        "note": "Routing break cases to resolvers inside or outside the firm is described; time is an author estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Trade support resolves settlement-related breaks",
+      "description": "A trade support analyst checks the assigned trade and settlement breaks against settlement status and broker confirmations, fixes booking errors or explains them as pending settlements, and updates the break comment.",
+      "role": "trade_settlement_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "reconciliation break report"
+      ],
+      "outputs": [
+        "resolved or explained trade breaks"
+      ],
+      "systems": [
+        "oms_ibor",
+        "custodian_portal",
+        "recon_tool"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A booking fix creates a new break.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "trade breaks worked"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Book or request corrections in the book of record",
+      "description": "The reconciliation analyst prepares the corrections for breaks where the model manager's record is wrong, such as a missed dividend, a corporate action entitlement or a fee, and they are entered by the owning team or entered and approved by a second person.",
+      "role": "reconciliation_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "break diagnoses"
+      ],
+      "outputs": [
+        "correcting entries"
+      ],
+      "systems": [
+        "oms_ibor",
+        "recon_tool"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Correction posted to the wrong account or date.",
+        "typically_caught_at": "s18"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Operations procedure: manual adjustments to the book of record entered by one person and approved by another",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "corrections booked or requested"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Raise queries with the custodian",
+      "description": "For breaks where the custodian's record looks wrong, such as unbooked income, a misapplied corporate action or a missing transfer, the analyst opens a query with the custodian's client service team with evidence and a requested correction date.",
+      "role": "reconciliation_analyst",
+      "kind": "communication",
+      "inputs": [
+        "break diagnoses"
+      ],
+      "outputs": [
+        "custodian queries"
+      ],
+      "systems": [
+        "custodian_portal",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "queries raised"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "autorek"
+        ],
+        "note": "Breaks routed to resolvers outside the firm are described; time is an author estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Re-run matching after corrections",
+      "description": "The tool reloads the corrected book of record extract and re-runs matching so that fixed breaks close and only open items remain on the ageing report.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "correcting entries"
+      ],
+      "outputs": [
+        "updated break list"
+      ],
+      "systems": [
+        "recon_tool",
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.85,
+          "condition": "corrections cleared the breaks"
+        },
+        {
+          "to": "s16",
+          "prob": 0.15,
+          "condition": "a correction did not clear its break"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "autorek"
+        ],
+        "note": "Breaks carried forward until resolved are described; the 15% share of days with a correction that fails to clear is an author estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Update the break ageing log and commentary",
+      "description": "The analyst updates the comment, owner and expected resolution date on every open break, and prepares the daily summary of breaks by age band, value and owner for the manager.",
+      "role": "reconciliation_analyst",
+      "kind": "drafting",
+      "inputs": [
+        "updated break list"
+      ],
+      "outputs": [
+        "break ageing report"
+      ],
+      "systems": [
+        "recon_tool",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "report ready"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "smartstream"
+        ],
+        "note": "Break ageing dashboards are described; time is an author estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Manager reviews break ageing and signs off the day",
+      "description": "The manager of reconciliations reviews the ageing report, challenges old or large breaks and weak comments, checks that every account group was reconciled or has a documented reason, and signs off the day's reconciliation in the tool.",
+      "role": "mgr_reconciliations",
+      "kind": "review",
+      "inputs": [
+        "break ageing report"
+      ],
+      "outputs": [
+        "daily reconciliation sign-off"
+      ],
+      "systems": [
+        "recon_tool"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 35,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 300
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting for the pools and client portfolios: daily reconciliation to the custodian, reviewed and signed off, as relied on by external auditors and expected alongside the custodian's CSAE 3416 report",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.8,
+          "condition": "signed off with breaks within tolerance",
+          "outcome": "reconciled_signed_off"
+        },
+        {
+          "to": "s21",
+          "prob": 0.12,
+          "condition": "aged or material breaks beyond tolerance"
+        },
+        {
+          "to": "s19",
+          "prob": 0.08,
+          "condition": "comments or owners not good enough; returned to the analyst"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "autorek",
+          "csae"
+        ],
+        "note": "Sign-off evidence for auditors and service organisation reports are described; the 12% escalation and 8% return rates are author estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Prepare the escalation for aged or material breaks",
+      "description": "The manager writes up breaks past the ageing tolerance or above the value limit with their cause, owner and plan, proposes write-offs or adjustments where recovery is unlikely, and logs a risk incident when a break reflects a control failure.",
+      "role": "mgr_reconciliations",
+      "kind": "drafting",
+      "inputs": [
+        "break ageing report"
+      ],
+      "outputs": [
+        "escalation note",
+        "risk incident report"
+      ],
+      "systems": [
+        "spreadsheets",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "escalation prepared"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Vice president reviews the escalation",
+      "description": "The vice president of investment operations reviews the escalated breaks, approves write-offs or adjustments within authority, pushes owners or the custodian for resolution and reports persistent breaks to enterprise risk.",
+      "role": "head_investment_operations",
+      "kind": "review",
+      "inputs": [
+        "escalation note"
+      ],
+      "outputs": [
+        "escalation decision"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Operations break escalation and write-off authority policy",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "escalation decided",
+          "outcome": "signed_off_with_escalation"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Weekend or holiday hold",
+      "share_of_cases": 0.23,
+      "description": "Friday and pre-holiday positions are reconciled on the next business day.",
+      "path": [
+        "s01",
+        "s02",
+        "s03"
+      ]
+    },
+    {
+      "name": "Missing or late file",
+      "share_of_cases": 0.15,
+      "description": "A custodian, manager or broker file is missing or wrong and must be chased and reloaded.",
+      "path": [
+        "s05",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Material break holds up pricing",
+      "share_of_cases": 0.1,
+      "description": "A break on a pool account could change a unit price and is escalated before positions are released.",
+      "path": [
+        "s07",
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Aged or material breaks escalated",
+      "share_of_cases": 0.12,
+      "description": "Breaks past the ageing tolerance or value limit are written up and reviewed by the vice president, sometimes with a write-off or risk incident.",
+      "path": [
+        "s20",
+        "s21",
+        "s22"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.0,
+        "p90": 3.2
+      },
+      "unit": "calendar days from close of business to manager sign-off of the day's reconciliation",
+      "population": "Daily custody reconciliation at institutional asset managers",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Files overnight, positions released mid-morning and sign-off by late afternoon of the next business day (about 0.95 days); Friday and pre-holiday days add two to three days. No published benchmark found."
+      }
+    },
+    {
+      "metric": "client_money_reconciliation_frequency",
+      "value": 1,
+      "unit": "reconciliations per business day (external custody reconciliation at least monthly)",
+      "population": "UK firms holding client money and custody assets under FCA CASS",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "autorek"
+        ],
+        "note": "Stated in the source; shown as a regulatory reference point, not a rule binding the model manager."
+      }
+    },
+    {
+      "metric": "firms_relying_on_spreadsheets_for_reconciliation",
+      "value": 0.57,
+      "unit": "share of asset management firms using spreadsheets or a mix of in-house and legacy systems",
+      "population": "AutoRek survey of asset management firms (published 2025, after the reference period)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ftf"
+        ],
+        "note": "Stated in the source."
+      }
+    },
+    {
+      "metric": "auto_match_rate",
+      "value": {
+        "low": 0.9,
+        "mode": 0.95,
+        "high": 0.98
+      },
+      "unit": "share of position and cash items matched automatically",
+      "population": "This workflow",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate for a vendor tool with mature matching rules; no published rate opened."
+      }
+    },
+    {
+      "metric": "breaks_older_than_30_days",
+      "value": 0.1,
+      "unit": "share of open breaks older than 30 days",
+      "population": "This workflow",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; mostly external manager and income items awaiting custodian correction."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Files from about 120 external managers and several counterparties arrive in different formats and at different times, so most days begin with chasing a missing or wrong file.",
+      "steps": [
+        "s03",
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "smartstream"
+        ],
+        "note": "Fragmented data arriving in inconsistent formats and at different times is described."
+      }
+    },
+    {
+      "description": "Analysts must triage and release pricing-critical accounts within a couple of hours, under pressure to class breaks as timing items so prices and risk runs are not delayed.",
+      "steps": [
+        "s07",
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "fundcount"
+        ],
+        "note": "Stop-the-line versus document-and-release decisions are described."
+      }
+    },
+    {
+      "description": "Investigating breaks means flipping between the tool, the custodian portal and the book of record, and derivative and some manager reconciliations still run in spreadsheets.",
+      "steps": [
+        "s10",
+        "s11",
+        "s12",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ftf"
+        ],
+        "note": "57% of firms use spreadsheets or legacy systems for reconciliation; this team's tool mix is an author judgment."
+      }
+    },
+    {
+      "description": "Breaks owned by the custodian or external managers age while queries wait for replies, and the ageing report grows with items the model manager cannot fix itself.",
+      "steps": [
+        "s14",
+        "s17",
+        "s19",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author judgment."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "autorek",
+      "title": "How to Meet CASS Requirements: Custody Assets and Client Money",
+      "publisher": "AutoRek",
+      "url": "https://www.fstech.co.uk/fst/autorek/How%20to%20Meet%20CASS%20Requirements%20-%20AutoRek.pdf",
+      "year": 2016,
+      "accessed": "2026-11-17",
+      "supports": "Reconciliation tool practice: daily feeds from custody systems, automatic matching of transactions and balances, labelling and analysis of breaks, routing break cases to resolvers inside or outside the firm, carrying unresolved breaks forward, and sign-off evidence for auditors; UK client asset rules require external reconciliations at least monthly and client money reconciliations each business day."
+    },
+    {
+      "id": "smartstream",
+      "title": "Smart Reconciliations: Custody and Securities use case",
+      "publisher": "SmartStream",
+      "url": "https://smart.stream/wp-content/uploads/smartstream-resources/Smart-Reconciliations-Custody-Securities-Use-Case.pdf",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Asset manager reconciliation of positions, cash, transactions, valuations and corporate actions across custodians, prime brokers, fund accountants and internal books of record; breaks cause misstated NAV, settlement failures and pricing discrepancies; spreadsheet-based processes slow exception resolution; dashboards on break ageing and NAV impact."
+    },
+    {
+      "id": "ftf",
+      "title": "The Tipping Point for Asset Management Operations (AutoRek survey)",
+      "publisher": "FTF News",
+      "url": "https://www.ftfnews.com/FTF-Research-Institute/the-tipping-point-for-asset-management-operations-the-rising-costs-of-operational-complacency/",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Survey of asset management firms: 57% still rely on spreadsheets or a mix of in-house and legacy systems for reconciliation, 79% call reconciliation a major operational challenge and 36% name manual processes as a top daily challenge."
+    },
+    {
+      "id": "fundcount",
+      "title": "NAV Oversight: Controls, Review Workflow, and Common Breakpoints",
+      "publisher": "FundCount",
+      "url": "https://fundcount.com/nav-oversight-controls-review-workflow-breakpoints/",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Eight-step NAV review workflow (readiness, reconciliation review, pricing and stale price oversight, accrual review, investor allocations, analytical review, approval and release, remediation); stop-the-line criteria such as unreconciled positions, missing pricing approvals and unexplained NAV movement; common breakpoints including stale prices, FX inconsistency and NAV reruns."
+    },
+    {
+      "id": "rg94",
+      "title": "RG 94 Unit pricing: Guide to good practice",
+      "publisher": "Australian Securities and Investments Commission and Australian Prudential Regulation Authority",
+      "url": "https://download.asic.gov.au/media/zn0cv11h/rg94-published-august-2008-20260409.pdf",
+      "year": 2008,
+      "accessed": "2026-11-17",
+      "supports": "Monitoring controls in unit pricing such as movements outside agreed tolerances and tracking prices against benchmarks; data feeds with stale prices, zero amounts and out-of-tolerance moves; reconciliations in each pricing cycle; incident and error logs; compensation when an error is 0.3% (30 basis points) or more; price as often as units can be bought or sold; batching of applications on the day a price is struck."
+    },
+    {
+      "id": "csae",
+      "title": "Reports on Controls at Service Organizations FAQs",
+      "publisher": "Chartered Professional Accountants of British Columbia",
+      "url": "https://www.bccpa.ca/kbase/kbase-search/assurance-standards/audit/guidance/reports-on-controls-at-service-organizations-faqs/",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "CSAE 3416 (SOC 1 equivalent) reports on controls at a service organization relevant to user entities' financial reporting; Type 1 covers design at a date and Type 2 covers operating effectiveness over a period; used by user entities and their auditors."
+    },
+    {
+      "id": "bci_fs21",
+      "title": "Public Equity Pooled Fund Financial Statements, December 2021",
+      "publisher": "British Columbia Investment Management Corporation",
+      "url": "https://www.bci.ca/wp-content/uploads/2023/05/PublicEquities-PooledFundFinancialStmts-Dec2021.pdf",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Units issued and redeemed at a unit value equal to net assets divided by units outstanding on each valuation date, recorded on a trade date basis; open-ended pools where each client's units issued or redeemed depend on changes to its asset allocation; purchase and redemption limits set by the CIO; pool cash and liquidity monitored daily."
+    },
+    {
+      "id": "jb11101",
+      "title": "Wages: Financial analyst (NOC 11101) in the Toronto region",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/12417/22437",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Toronto hourly wages low 27.97, median 41.60, high 73.57 dollars (reference period 2023-2024); the organisation file uses it as the proxy for operations analysts."
+    },
+    {
+      "id": "jb10010",
+      "title": "Wages: Finance director (NOC 10010) in the Toronto region",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/1225/22437",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Toronto hourly wages low 41.21, median 62.37, high 96.15 dollars (reference period 2023-2024); the organisation file uses it for operations managers."
+    }
+  ],
+  "assumptions": [
+    "One case is one business day's reconciliation across all accounts (about 250 custody, mandate, pool and client accounts in 2021); step times are for the whole day's work, so a single analysis step can take several hours.",
+    "Steps s10 to s13 are worked by different analysts at the same time; the validator adds their hands-on time in sequence, so its simulated cycle time overstates real elapsed time by roughly four to six hours.",
+    "Positions on pricing-critical accounts are triaged and released before the full break list is worked, so pricing is not held for the whole reconciliation.",
+    "interfaces.triggered_by shares: the custodian's statements trigger the day almost always; manager files, settlement status, corporate action notices and reference data fixes are the inputs that most often add work.",
+    "Auto-match rates, break counts and ageing are author estimates; vendor material describes the practice but no published benchmark for pension managers was opened.",
+    "Loaded costs come from the organisation file (Job Bank Toronto wages deflated to 2021, plus variable pay, times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

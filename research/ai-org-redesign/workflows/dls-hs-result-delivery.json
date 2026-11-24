@@ -1,0 +1,1491 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-hs-result-delivery",
+  "name": "Deliver reference results to hospitals",
+  "org": "diagnostic-lab-services-co",
+  "process": "hs-result-delivery",
+  "sector": "health care: medical laboratory testing and health services",
+  "function": "hospital reference testing",
+  "summary": "Once the reference laboratory releases a specialised test result, the report has to reach the hospital that referred it, usually straight into the hospital's own LIS over an HL7 interface, otherwise through the eResults web service or by fax. Most reports flow without anyone touching them; the work is in the exceptions: messages the hospital LIS rejects because of unmapped test codes or missing orders, interfaces that go down, failed faxes, hospital calls about results they cannot find, corrected reports that must be phoned, and tests with no price on the client's contract. Results on specimens from the company's own community laboratories go back to community reporting, and every delivered hospital report posts its billable tests for the monthly client invoice.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "The hospital reference services line of a large Canadian community laboratory company, delivering about 60,000 reference reports a month to more than 500 hospitals.",
+    "org_size_employees": 3300,
+    "notes": "HL7 interface engine with per-hospital code mapping tables; eResults web portal; fax server; client billing system with contract price lists."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one reference report",
+  "trigger": "The reference laboratory releases the results on a requisition (or a send-out result is entered), creating a report to deliver.",
+  "end_state": "The report is in the hospital's LIS, on eResults or faxed, or handed to community reporting, and its billable tests are posted to client billing.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 45000,
+      "mode": 60000,
+      "high": 80000
+    },
+    "seasonality": "Follows reference testing: weekday peaks and lower weekends.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "dyn_hospital"
+      ],
+      "note": "Matches the organisation file's volume for reference testing; more than 500 hospitals served (dyn_hospital)."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "hs-reference-testing",
+        "object": "test_result",
+        "share": 0.9
+      },
+      {
+        "from": "hs-sendout-management",
+        "object": "test_result",
+        "share": 0.1
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "delivered",
+        "to": "hospital_client",
+        "object": "lab_report"
+      },
+      {
+        "outcome": "corrected",
+        "to": "hospital_client",
+        "object": "lab_report"
+      },
+      {
+        "outcome": "delivered",
+        "to": "fin-client-invoicing",
+        "object": "billable_order"
+      },
+      {
+        "outcome": "to_community_reporting",
+        "to": "cl-result-reporting",
+        "object": "test_result"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "referral_coordinator",
+      "title": "Hospital referral coordinator",
+      "department": "Hospital client services",
+      "layer": "individual_contributor",
+      "fte_on_process": 4.0,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 32,
+        "high": 40
+      },
+      "occupation_code": "NOC 13112",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Hospital client services coordinators answer hospital result queries, fax reports when interfaces fail, phone corrected reports and fix billing exceptions; 4 of the 14 coordinators (5 are on referral intake). Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    },
+    {
+      "id": "interface_analyst",
+      "title": "Interface analyst (EMR and hospital LIS)",
+      "department": "LIS and integration",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 52,
+        "mode": 62,
+        "high": 78
+      },
+      "occupation_code": "NOC 21222",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_hospital",
+          "dyn_eresults"
+        ],
+        "note": "Bi-directional hospital LIS and HL7 interfaces are described (dyn_hospital, dyn_eresults); 1.5 of the 10 interface analyst FTE left after community reporting. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    },
+    {
+      "id": "hospital_client_manager",
+      "title": "Manager, hospital client services",
+      "department": "Hospital client services",
+      "layer": "manager",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 72,
+        "high": 88
+      },
+      "occupation_code": "NOC 10019",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The hospital client services manager handles repeated delivery problems and pricing exceptions with hospital clients; small share of 2 managers. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lis",
+      "name": "Laboratory information system (orders, accessioning, results, autoverification rules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "hl7_engine",
+      "name": "Interface engine for HL7 orders and results with EMRs and hospital LIS",
+      "kind": "workflow"
+    },
+    {
+      "id": "eresults",
+      "name": "eResults provider portal and EMR results delivery",
+      "kind": "external_portal"
+    },
+    {
+      "id": "fax",
+      "name": "Fax server",
+      "kind": "communication"
+    },
+    {
+      "id": "billing_system",
+      "name": "Laboratory billing and accounts receivable system (provincial claims, patient, client invoices)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "crm",
+      "name": "CRM for client accounts, sales pipeline and service cases",
+      "kind": "workflow"
+    },
+    {
+      "id": "telephony",
+      "name": "Contact centre telephony with IVR, queues and call recording",
+      "kind": "communication"
+    },
+    {
+      "id": "itsm",
+      "name": "IT service management ticketing",
+      "kind": "workflow"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Compose the report when results are released",
+      "description": "When the reference technologist releases the last result on a requisition, or an interim report is due for a long-running test, the LIS builds the report with the hospital's accession number, reference ranges, interpretive comments and the performing laboratory's details.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "released results"
+      ],
+      "outputs": [
+        "report"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "report built"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard LIS behaviour; timing is an estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Apply the client's routing rules",
+      "description": "The LIS reads the client code: reports for hospitals with a results interface go to the interface engine, reports for hospitals that use the web service or fax go to eResults and the fax server, and results on specimens that came from the company's own community laboratories go back to community reporting.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "report",
+        "client routing table"
+      ],
+      "outputs": [
+        "routed report"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Wrong routing in the client table sends the report to the wrong destination.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.5,
+          "condition": "hospital with results interface"
+        },
+        {
+          "to": "s08",
+          "prob": 0.14,
+          "condition": "hospital using eResults"
+        },
+        {
+          "to": "s09",
+          "prob": 0.06,
+          "condition": "hospital needing fax or printed copy"
+        },
+        {
+          "to": "s10",
+          "prob": 0.3,
+          "condition": "community-origin specimen"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_hospital",
+          "dyn_eresults"
+        ],
+        "note": "Results through hospital LIS interfaces or eResults (dyn_hospital, dyn_eresults). Shares are estimates; the 30 percent community share matches the reference testing workflow's 30 percent of work from other company laboratories."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Map and send the result message through the interface engine",
+      "description": "The interface engine translates the laboratory's test codes and units into the hospital's codes using the client's mapping table, builds the HL7 result message and sends it to the hospital LIS.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "routed report",
+        "code mapping table"
+      ],
+      "outputs": [
+        "HL7 result message"
+      ],
+      "systems": [
+        "hl7_engine"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Mapping table maps a result to the wrong hospital test or unit.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "wiki_hl7",
+          "dyn_eresults"
+        ],
+        "note": "HL7 version 2 result messages link laboratory systems with hospital systems (wiki_hl7); HL7 interfaces offered (dyn_eresults)."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Receive the hospital LIS acknowledgement",
+      "description": "The hospital LIS files the result against its own order and returns an acknowledgement; a rejection (unknown test code, no matching order or patient, format error) or a missing acknowledgement puts the message in the engine's error queue.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "HL7 result message"
+      ],
+      "outputs": [
+        "acknowledged message or error"
+      ],
+      "systems": [
+        "hl7_engine"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.965,
+          "condition": "accepted"
+        },
+        {
+          "to": "s05",
+          "prob": 0.03,
+          "condition": "rejected; in the error queue"
+        },
+        {
+          "to": "s19",
+          "prob": 0.005,
+          "condition": "no acknowledgement; connection stalled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "wiki_hl7"
+        ],
+        "note": "Message exchange per HL7 v2 (wiki_hl7). The 3.5 percent error rate is an estimate; new tests and hospital LIS changes cause most rejections."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Triage the interface error queue",
+      "description": "An interface analyst works the error queue several times a day, opens each failed message, reads the hospital's rejection reason and decides whether the fix is on the laboratory side (code mapping, message format), on the hospital side (order or patient not found) or a connection outage.",
+      "role": "interface_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "error queue"
+      ],
+      "outputs": [
+        "diagnosed error"
+      ],
+      "systems": [
+        "hl7_engine",
+        "itsm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 180,
+        "high": 960
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong cause chosen; message resent unchanged.",
+        "typically_caught_at": "s04"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.5,
+          "condition": "laboratory-side mapping or format fix"
+        },
+        {
+          "to": "s07",
+          "prob": 0.35,
+          "condition": "hospital must fix its order or patient record"
+        },
+        {
+          "to": "s11",
+          "prob": 0.15,
+          "condition": "interface down"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common interface support practice; shares and times are estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Fix the mapping or message and resend",
+      "description": "The analyst adds or corrects the hospital test code mapping or message rule under change control, tests it, and resends the held messages for that hospital.",
+      "role": "interface_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "diagnosed error"
+      ],
+      "outputs": [
+        "corrected mapping",
+        "resent message"
+      ],
+      "systems": [
+        "hl7_engine",
+        "itsm"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "New mapping wrong.",
+        "typically_caught_at": "s04"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Laboratory change control and computerized system validation for interface mapping changes",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "resent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_licences"
+        ],
+        "note": "Change control and computerized systems validation are part of the quality system (dyn_licences). Times are estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Ask the hospital to fix its side and resend",
+      "description": "A referral coordinator calls or emails the hospital laboratory or its LIS team with the accession number and the rejection reason, waits for the hospital to create or merge the order or patient record, and then resends the message.",
+      "role": "referral_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "diagnosed error"
+      ],
+      "outputs": [
+        "hospital fix and resent message"
+      ],
+      "systems": [
+        "telephony",
+        "crm",
+        "hl7_engine"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.85,
+          "condition": "fixed and resent"
+        },
+        {
+          "to": "s11",
+          "prob": 0.15,
+          "condition": "cannot fix soon; send a paper copy"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "capt_clarify"
+        ],
+        "note": "Lab-to-client clarification calls take about 10 minutes (capt_clarify); waits are estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Publish the report to eResults",
+      "description": "The report is published to the hospital's eResults account, where laboratory staff view and print it or batch-load it into their system.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "routed report"
+      ],
+      "outputs": [
+        "report on eResults"
+      ],
+      "systems": [
+        "eresults"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "published"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_eresults"
+        ],
+        "note": "Web viewing and batch delivery through eResults (dyn_eresults)."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Fax or print the report for the hospital",
+      "description": "For hospitals that still want paper, the fax server sends the report to the hospital laboratory's registered fax number, or reports are printed for the courier bag on the next run.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "routed report"
+      ],
+      "outputs": [
+        "faxed or printed report"
+      ],
+      "systems": [
+        "fax",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.97,
+          "condition": "fax delivered or printed"
+        },
+        {
+          "to": "s12",
+          "prob": 0.03,
+          "condition": "fax failed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "alpha_report"
+        ],
+        "note": "Fax and hard copy remain routine delivery methods for Ontario laboratories (alpha_report). Failure share is an estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Return community-origin results to community reporting",
+      "description": "For specimens referred in from the company's community laboratories, the LIS hands the released result to the community reporting stream, which delivers it to the clinician's EMR, eResults and OLIS with the community report.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "routed report"
+      ],
+      "outputs": [
+        "result for community reporting"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "handed to community reporting",
+          "outcome": "to_community_reporting"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "olis"
+        ],
+        "note": "OLIS receives results from community and hospital laboratories (olis); community delivery is the cl-result-reporting workflow."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Fax reports while the interface cannot deliver",
+      "description": "When a hospital's interface is down or a message cannot be fixed soon, the coordinator prints or faxes the affected reports to the hospital laboratory, calls to confirm receipt of urgent ones and marks them so the later electronic resend is not filed as a duplicate.",
+      "role": "referral_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "undelivered reports"
+      ],
+      "outputs": [
+        "faxed reports"
+      ],
+      "systems": [
+        "fax",
+        "telephony",
+        "lis",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Duplicate or missed report when the interface comes back.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "delivered on paper"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "alpha_report"
+        ],
+        "note": "Fax as a fallback delivery method (alpha_report). Times are estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Resolve a failed fax or misrouted report",
+      "description": "The coordinator checks the fax log or routing error, confirms the hospital's correct fax number or client code with the hospital, corrects the client table and resends; a report sent to the wrong recipient is logged as a privacy incident.",
+      "role": "referral_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "failed or misrouted report"
+      ],
+      "outputs": [
+        "resent report"
+      ],
+      "systems": [
+        "fax",
+        "crm",
+        "lis",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Personal Health Information Protection Act (Ontario): reports may only be disclosed to the intended custodian and misdirected reports are privacy breaches",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "resent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; the privacy obligation is named from the organisation file's privacy regulators; times are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Answer a hospital query about a result",
+      "description": "A hospital technologist or physician calls because a result is not showing in their LIS, a turnaround seems long or a comment needs explaining; the coordinator looks up the accession, explains the status, resends the report or passes the clinical question to the clinical scientist.",
+      "role": "referral_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "hospital call"
+      ],
+      "outputs": [
+        "answer or resent report"
+      ],
+      "systems": [
+        "telephony",
+        "lis",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.85,
+          "condition": "answered",
+          "outcome": "delivered"
+        },
+        {
+          "to": "s04",
+          "prob": 0.15,
+          "condition": "report resent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_hospital"
+        ],
+        "note": "Pathologists and scientists available to answer hospital questions (dyn_hospital). The query rate and times are estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Issue a corrected report to the hospital",
+      "description": "When a released result is amended by the testing laboratory, the coordinator phones the hospital laboratory to report the correction, records who was told and when, and the LIS sends a corrected report marked as amended through the same channel.",
+      "role": "referral_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "amended result"
+      ],
+      "outputs": [
+        "corrected report",
+        "notification record"
+      ],
+      "systems": [
+        "telephony",
+        "lis",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189 requirements for amended reports: corrections are identified as such, the original is retained and the requester is informed",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.7,
+          "condition": "corrected report through the interface"
+        },
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "corrected report on eResults or fax",
+          "outcome": "corrected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "dyn_licences",
+          "acd"
+        ],
+        "note": "Accredited laboratories (dyn_licences, acd) must manage amended reports; the 0.4 percent correction rate and times are estimates."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Post the billable tests to client billing",
+      "description": "The LIS posts each billable test on the delivered report to the billing system under the hospital's client account and contract price for the month-end invoice; tests with no price or billing code on the client's price list stop on an exception list. The nightly export does not hold up delivery.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "delivered report",
+        "client price list"
+      ],
+      "outputs": [
+        "billable order"
+      ],
+      "systems": [
+        "lis",
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.937,
+          "condition": "priced and delivered",
+          "outcome": "delivered"
+        },
+        {
+          "to": "s16",
+          "prob": 0.015,
+          "condition": "missing price or billing code"
+        },
+        {
+          "to": "s13",
+          "prob": 0.04,
+          "condition": "hospital calls about the result"
+        },
+        {
+          "to": "s14",
+          "prob": 0.004,
+          "condition": "result later amended"
+        },
+        {
+          "to": "s17",
+          "prob": 0.004,
+          "condition": "repeated delivery problem for this client"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ag2017"
+        ],
+        "note": "Hospitals pay for referred tests at agreed prices (ag2017). Exception and query shares are estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Fix a missing client price or billing code",
+      "description": "The coordinator checks the hospital's contract and price list for the test, adds the agreed price or billing code in the billing system, or asks the client services manager to approve a price for a test not on the contract.",
+      "role": "referral_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "billing exception"
+      ],
+      "outputs": [
+        "priced billable order"
+      ],
+      "systems": [
+        "billing_system",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong price applied.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.8,
+          "condition": "priced",
+          "outcome": "delivered"
+        },
+        {
+          "to": "s18",
+          "prob": 0.2,
+          "condition": "price not on contract"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ag2017"
+        ],
+        "note": "Prices for referred tests vary widely between providers (ag2017). Times are estimates; exceptions are worked from a daily list."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Review a repeated delivery problem with the hospital",
+      "description": "The hospital client services manager reviews a pattern of failed messages, late reports or complaints for one hospital, agrees fixes with the hospital's laboratory manager and the interface team, and records actions in the client record.",
+      "role": "hospital_client_manager",
+      "kind": "review",
+      "inputs": [
+        "error and complaint history"
+      ],
+      "outputs": [
+        "agreed actions"
+      ],
+      "systems": [
+        "crm",
+        "itsm"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189 handling of complaints and corrective action",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "actions agreed",
+          "outcome": "delivered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "dyn_licences"
+        ],
+        "note": "Corrective and preventive action in the quality system (dyn_licences); share and times are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Approve a price for a test outside the contract",
+      "description": "The hospital client services manager approves a price for a test the hospital ordered that is not on its contract, or decides to bill at list price, and tells the coordinator.",
+      "role": "hospital_client_manager",
+      "kind": "approval",
+      "inputs": [
+        "price question"
+      ],
+      "outputs": [
+        "approved price"
+      ],
+      "systems": [
+        "crm",
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Client contract pricing authority",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "priced",
+          "outcome": "delivered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Monitor the interface for stalled queues",
+      "description": "Alongside the error queue, the analyst watches the engine's dashboards for hospitals whose connections have stopped acknowledging and opens an IT ticket for connection outages.",
+      "role": "interface_analyst",
+      "kind": "coordination",
+      "inputs": [
+        "engine dashboards"
+      ],
+      "outputs": [
+        "outage ticket"
+      ],
+      "systems": [
+        "hl7_engine",
+        "itsm"
+      ],
+      "touch_min": {
+        "low": 0.02,
+        "mode": 0.05,
+        "high": 0.1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "error found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; per-report time is a share of routine monitoring."
+      },
+      "concurrent_with": [
+        "s05"
+      ]
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Hospital LIS rejects the result message",
+      "share_of_cases": 0.021,
+      "description": "Unknown test code, no matching order or patient, or a format problem; fixed by the analyst or by the hospital and resent.",
+      "path": [
+        "s04",
+        "s05",
+        "s06",
+        "s04"
+      ]
+    },
+    {
+      "name": "Interface outage",
+      "share_of_cases": 0.006,
+      "description": "The hospital connection stops acknowledging and reports are faxed until it is restored.",
+      "path": [
+        "s04",
+        "s19",
+        "s05",
+        "s11"
+      ]
+    },
+    {
+      "name": "Failed fax or misrouted report",
+      "share_of_cases": 0.002,
+      "description": "The fax fails or the client table routes the report wrongly; resent after the number or code is confirmed.",
+      "path": [
+        "s09",
+        "s12"
+      ]
+    },
+    {
+      "name": "Hospital query",
+      "share_of_cases": 0.028,
+      "description": "A hospital calls about a result it cannot find or a long turnaround.",
+      "path": [
+        "s15",
+        "s13"
+      ]
+    },
+    {
+      "name": "Corrected report",
+      "share_of_cases": 0.003,
+      "description": "A released result is amended; the hospital is phoned and a corrected report sent.",
+      "path": [
+        "s15",
+        "s14",
+        "s04"
+      ]
+    },
+    {
+      "name": "Missing client price",
+      "share_of_cases": 0.011,
+      "description": "A test has no price on the client's contract and waits on the exception list.",
+      "path": [
+        "s15",
+        "s16",
+        "s18"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.02,
+        "p90": 0.1
+      },
+      "unit": "calendar days from result release to delivery and billing post (0.02 days is about 30 minutes)",
+      "population": "Reference reports delivered to hospitals",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "dyn_hospital",
+          "alpha_report"
+        ],
+        "note": "No published figure found. Interface delivery is near real time (dyn_hospital); routine results are communicated within 24 hours (alpha_report); the tail comes from error queues, hospital fixes and fax batches."
+      }
+    },
+    {
+      "metric": "routine_result_communication_hours",
+      "value": 24,
+      "unit": "hours (stated maximum for routine results)",
+      "population": "An Ontario community laboratory",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "alpha_report"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "hospitals_served",
+      "value": 500,
+      "unit": "hospitals (more than)",
+      "population": "Company hospital clients",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dyn_hospital"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Every new test or hospital LIS change needs a code mapping on both sides; until it is done, results for that test bounce into the error queue and wait for an analyst.",
+      "steps": [
+        "s04",
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "wiki_hl7"
+        ],
+        "note": "HL7 v2 messages carry each system's own codes (wiki_hl7); the error pattern is common interface experience, estimate."
+      }
+    },
+    {
+      "description": "Rejections caused by missing orders or patients in the hospital LIS depend on the hospital to fix, so reports can wait a day or more.",
+      "steps": [
+        "s07"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "description": "Paper fallbacks during outages create duplicate or missing reports when the electronic feed resumes.",
+      "steps": [
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "description": "Tests ordered outside a hospital's contract stop billing until a price is found or approved, delaying invoices.",
+      "steps": [
+        "s15",
+        "s16",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ag2017"
+        ],
+        "note": "Inconsistent inter-hospital test pricing (ag2017)."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "dyn_hospital",
+      "title": "Hospital solutions",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Bi-directional interfaces with hospital LIS for orders and results; hospitals access results through their own LIS; more than 500 hospitals served; clinical pathologists and scientists available for questions."
+    },
+    {
+      "id": "dyn_eresults",
+      "title": "eResults",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Free online results service for healthcare providers and corporate clients to view and print results in a browser; batch delivery into EMRs that meet the company's conformance standards; connectivity by web service, HL7 and ACORD interfaces; IT service desk for conformance questions."
+    },
+    {
+      "id": "wiki_hl7",
+      "title": "Health Level 7",
+      "publisher": "Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Health_Level_7",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "HL7 version 2 messages support hospital workflow including orders (ORM) and observation results (ORU) and link laboratory systems with other hospital systems; supported by every major health informatics vendor in the United States."
+    },
+    {
+      "id": "olis",
+      "title": "Ontario Laboratories Information System (OLIS)",
+      "publisher": "Ontario Health",
+      "url": "https://ontariohealth.ca/digital/innovations/olis",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "OLIS holds patients' laboratory orders and results from hospitals, public health and community laboratories in one place for authorised providers."
+    },
+    {
+      "id": "alpha_report",
+      "title": "Test reporting",
+      "publisher": "Alpha Laboratories (Ontario community laboratory)",
+      "url": "https://testdirectory.alphalabs.ca/Labs/TestReporting",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Routine results are communicated within 24 hours; ASAP results are faxed or phoned; critical values are called 24 hours a day; once results are delivered by phone, fax or hard copy no further direct attempts are made."
+    },
+    {
+      "id": "ag2017",
+      "title": "2017 Annual Report, Section 3.07: Laboratory Services in the Health Sector",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en17/v1_307en17.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Hospitals that perform tests on behalf of other hospitals charge them, with inconsistent billing practices and prices that differ widely for the same test."
+    },
+    {
+      "id": "dyn_licences",
+      "title": "Licences and quality commitment",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "ISO 15189 and CAP accredited laboratories; quality system covers document control, change control and computerized systems validation, corrective and preventive action and internal audits."
+    },
+    {
+      "id": "acd",
+      "title": "Accreditation Canada Diagnostics",
+      "publisher": "Accreditation Canada",
+      "url": "https://diagnostics.accreditation.ca/",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Accredits medical laboratories to ISO 15189 Plus requirements."
+    },
+    {
+      "id": "capt_clarify",
+      "title": "Labs' problem child: the difficult test order (Q-Probes)",
+      "publisher": "CAP Today",
+      "url": "https://www.captodayonline.com/Archives/1109/1109b_labs_problem_child.html",
+      "year": 2009,
+      "accessed": "2026-11-17",
+      "supports": "Median clarification time for an unclear order was 10 minutes; used here only as a reference for the length of a lab-to-client clarification call."
+    }
+  ],
+  "assumptions": [
+    "Unit of work is one reference report (one requisition's results, or an interim report); its count follows reference testing.",
+    "Delivery shares are estimates: 50 percent hospital interface, 14 percent eResults, 6 percent fax or print, 30 percent community-origin results returned to community reporting.",
+    "Critical values are phoned by the call desk in a separate workflow (cs-critical-result-notification) and are not part of this delivery process.",
+    "Corrected results are amended by the testing laboratory; this workflow covers notifying the hospital and sending the corrected report.",
+    "Billing posts in a nightly export that runs alongside delivery; the cycle time ends at delivery plus the post, not at invoicing.",
+    "OLIS submission for hospital patients is left to the hospital and community reporting streams; the share the reference laboratory submits directly was not established.",
+    "Error, query and correction rates are the author's estimates; no published rates for reference-to-hospital interfaces were found within the search budget."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

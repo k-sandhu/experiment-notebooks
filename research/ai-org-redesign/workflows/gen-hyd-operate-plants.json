@@ -1,0 +1,1446 @@
+{
+  "schema_version": "0.3",
+  "id": "gen-hyd-operate-plants",
+  "name": "Operate hydro plants (one control centre shift)",
+  "org": "power-generation-co",
+  "process": "hyd-operate-plants",
+  "sector": "electric power generation",
+  "function": "hydro generation",
+  "summary": "The company's seventeen hydro plants and their dams are run remotely from a control centre in Calgary staffed around the clock by two operators on 12-hour shifts. In each shift the operators follow the AESO's dispatches and reserve directives, move gates to keep river flows and reservoir levels inside licence limits, handle alarms from unstaffed plants, call out operator-maintainers when something needs hands at site, and isolate equipment for the day's maintenance. The work is error-prone because it is continuous, spread over many remote sites, and mixes market, water and safety rules, and because availability changes must be passed to the trading desk by phone.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "An Alberta merchant generator with seventeen hydro plants on the Bow, North Saskatchewan and Oldman rivers run from one Calgary control centre, alongside converted gas units and wind farms.",
+    "org_size_employees": 1300,
+    "notes": "One shift is one case. Passive watching of screens is not counted as hands-on time; only active work is."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one control centre shift",
+  "trigger": "A 12-hour shift starts at the hydro control centre (day or night).",
+  "end_state": "The shift is handed over with the log, equipment status, isolations and flow records up to date.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 60,
+      "mode": 61,
+      "high": 62
+    },
+    "seasonality": "Two shifts a day all year. Workload per shift is highest during May to July runoff and in winter ice conditions.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "s5"
+      ],
+      "note": "Rotating 12-hour day and night shifts (s5) give two shifts a day."
+    },
+    "surge": {
+      "cause": "spring runoff and June rain events (extra operator shifts staffed)",
+      "events_per_year": {
+        "low": 0,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 5,
+        "mode": 14,
+        "high": 30
+      },
+      "volume_multiplier": {
+        "low": 1.0,
+        "mode": 1.3,
+        "high": 1.6
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shift count is fixed; the multiplier stands for extra operator shifts and workload during high-flow events, matching the organisation file's flood surge."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "mkt-respond-dispatch",
+        "object": "dispatch_instruction",
+        "share": 0.6
+      },
+      {
+        "from": "hyd-plan-water-schedule",
+        "object": "water_schedule",
+        "share": 0.35
+      },
+      {
+        "from": "hyd-flood-operations",
+        "object": "water_schedule",
+        "share": 0.05
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "shift_completed",
+        "to": "mkt-restate-offers",
+        "object": "availability_change"
+      },
+      {
+        "outcome": "shift_completed",
+        "to": "aeso",
+        "object": "delivered_energy"
+      },
+      {
+        "outcome": "shift_completed",
+        "to": "hyd-maintain-plants",
+        "object": "work_request"
+      },
+      {
+        "outcome": "shift_completed",
+        "to": "hyd-water-licence-reporting",
+        "object": "flow_data"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "hydro_control_operator",
+      "title": "Hydro control centre operator",
+      "department": "Hydro control centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 10.0,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 68,
+        "high": 86
+      },
+      "occupation_code": "NOC 92100",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5"
+        ],
+        "note": "Two operators per 12-hour shift around the clock (about 11 FTE of coverage) matches the organisation file's 12 operators; operator role and shifts from s5."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "hydro_supervisor",
+      "title": "Hydro operations supervisor",
+      "department": "Hydro generation",
+      "layer": "supervisor",
+      "fte_on_process": 0.8,
+      "loaded_cost_per_hour": {
+        "low": 78,
+        "mode": 92,
+        "high": 112
+      },
+      "occupation_code": "NOC 92100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily review by the supervisor covering the control centre; estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "hydro_tech",
+      "title": "Hydro operator-maintainer",
+      "department": "Bow River plants",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 52,
+        "mode": 64,
+        "high": 82
+      },
+      "occupation_code": "NOC 72400",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "After-hours callouts across the on-call roster; estimate."
+      },
+      "shift_pattern": "on_call"
+    }
+  ],
+  "systems": [
+    {
+      "id": "scada",
+      "name": "Hydro, wind and battery SCADA and remote control",
+      "kind": "instrument"
+    },
+    {
+      "id": "historian",
+      "name": "Plant data historian",
+      "kind": "analytics"
+    },
+    {
+      "id": "ets",
+      "name": "AESO Energy Trading System (offers, declarations and dispatch)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "permit_system",
+      "name": "Permit-to-work and lockout system",
+      "kind": "workflow"
+    },
+    {
+      "id": "erp",
+      "name": "ERP (finance, purchasing and plant maintenance modules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email",
+      "name": "Email, chat and video calls",
+      "kind": "communication"
+    },
+    {
+      "id": "forecast_tools",
+      "name": "Load, price, wind and inflow forecasting models",
+      "kind": "analytics"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "resources": [
+    {
+      "id": "hydro_plant",
+      "name": "Hydro plant with dam and reservoir",
+      "kind": "plant",
+      "count": 17
+    },
+    {
+      "id": "service_truck",
+      "name": "Field service pickup truck",
+      "kind": "vehicle",
+      "count": 110,
+      "cost_per_hour": {
+        "low": 20,
+        "mode": 28,
+        "high": 40
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Take shift handover",
+      "description": "The incoming pair of control centre operators read the electronic operating log, the equipment status list and the active isolations and permits, then go through open issues with the outgoing operators face to face before taking the desk.",
+      "role": "hydro_control_operator",
+      "kind": "intake",
+      "inputs": [
+        "operating log",
+        "equipment status list",
+        "active permits"
+      ],
+      "outputs": [
+        "accepted shift"
+      ],
+      "systems": [
+        "scada",
+        "permit_system"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "An open isolation or restriction is not passed on.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Control centre shift turnover procedure",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5"
+        ],
+        "note": "Electronic logs and clear shift handovers are part of the operator role (s5); time estimated."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review daily guidelines and market position",
+      "description": "The operators read the day's operating guidelines from Hydro Scheduling, the current AESO dispatch levels and ancillary services commitments for each hydro asset, and the inflow outlook, and note the hours when large changes are expected.",
+      "role": "hydro_control_operator",
+      "kind": "lookup",
+      "inputs": [
+        "daily operating guidelines",
+        "dispatch status"
+      ],
+      "outputs": [
+        "shift plan notes"
+      ],
+      "systems": [
+        "scada",
+        "ets",
+        "email"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5"
+        ],
+        "note": "Coordination point between operations, Hydro Scheduling and AESO (s5); time estimated."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Check reservoir levels and river flows",
+      "description": "Several times a shift an operator steps through the SCADA screens for every reservoir, forebay, canal and downstream gauge and compares levels and flows with licence limits, minimum flows and any provincial target elevation, flagging anything trending towards a limit.",
+      "role": "hydro_control_operator",
+      "kind": "validation",
+      "inputs": [
+        "SCADA levels and flows",
+        "constraint list"
+      ],
+      "outputs": [
+        "flow checks"
+      ],
+      "systems": [
+        "scada",
+        "historian"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A level trending out of range is not noticed in time.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Water Act licence conditions (minimum flows and elevation limits) and Bow River agreement target elevations",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5",
+          "s3"
+        ],
+        "note": "Managing reservoirs, forebays, canals and river flows within constraints (s5); Ghost targets (s3)."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Carry out energy dispatches",
+      "description": "When the AESO issues a dispatch for a hydro asset, relayed through the energy trading system and the real-time desk, the operator starts, stops or loads units through SCADA, confirms output settles within the allowed tolerance and logs the time. A shift sees roughly five to twenty-five dispatches.",
+      "role": "hydro_control_operator",
+      "kind": "coordination",
+      "inputs": [
+        "dispatch_instruction"
+      ],
+      "outputs": [
+        "units at dispatched output",
+        "dispatch log entries"
+      ],
+      "systems": [
+        "scada",
+        "ets"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 240
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Output not reached within the allowed time or the log entry is missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "AESO ISO rules: dispatched assets must follow dispatches within the allowed time and tolerance",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5"
+        ],
+        "note": "Executing AESO dispatches is a core operator duty (s5); dispatch counts per shift are estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Follow ancillary service and voltage directives",
+      "description": "The operator watches automatic generation control on the units providing regulating reserve, responds to contingency reserve directives by loading spinning units, and adjusts voltage set points when the system operator asks.",
+      "role": "hydro_control_operator",
+      "kind": "coordination",
+      "inputs": [
+        "ancillary services directives",
+        "voltage instructions"
+      ],
+      "outputs": [
+        "directive responses"
+      ],
+      "systems": [
+        "scada",
+        "ets"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "AESO ISO rules for operating reserve and voltage control",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5",
+          "s6"
+        ],
+        "note": "AGC, ancillary services and voltage duties (s5); ancillary services value from hydro (s6)."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Adjust gates and spill to meet water targets",
+      "description": "The operator changes gate openings and plant flows remotely to hold minimum flows below dams, follow the reservoir trajectory in the plan and avoid spill, and logs each change with the reason.",
+      "role": "hydro_control_operator",
+      "kind": "judgment",
+      "inputs": [
+        "shift plan notes",
+        "flow checks"
+      ],
+      "outputs": [
+        "gate and flow changes"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Ramp too fast below a dam or minimum flow briefly missed.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s4"
+        ],
+        "note": "Levels below Bearspaw can change up to 2 m quickly (s4); times estimated."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Monitor and acknowledge alarms",
+      "description": "The operators acknowledge the alarms that arrive from seventeen plants and their dams through the shift, sort the nuisance alarms from real ones, and pick out the ones that need diagnosis.",
+      "role": "hydro_control_operator",
+      "kind": "validation",
+      "inputs": [
+        "SCADA alarms"
+      ],
+      "outputs": [
+        "alarms needing action"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A real alarm is dismissed as nuisance.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.55,
+          "condition": "an alarm needs diagnosis"
+        },
+        {
+          "to": "s15",
+          "prob": 0.45,
+          "condition": "no actionable alarm this shift"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5"
+        ],
+        "note": "Alarm handling including nuisance alarms (s5); share of shifts with an actionable alarm estimated."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Diagnose alarm remotely",
+      "description": "The operator pulls trends from SCADA and the historian for the affected unit or gate, checks recent work on the equipment, and decides whether a remote reset is safe, whether the unit must be declared unavailable, or whether someone has to go to site.",
+      "role": "hydro_control_operator",
+      "kind": "analysis",
+      "inputs": [
+        "alarms needing action",
+        "historian trends"
+      ],
+      "outputs": [
+        "diagnosis"
+      ],
+      "systems": [
+        "scada",
+        "historian",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Wrong call: a reset is tried on a real fault.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.55,
+          "condition": "remote reset is safe"
+        },
+        {
+          "to": "s10",
+          "prob": 0.15,
+          "condition": "capability lost: desk must restate"
+        },
+        {
+          "to": "s11",
+          "prob": 0.3,
+          "condition": "site visit needed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Branch shares estimated."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Reset remotely and log",
+      "description": "The operator resets the trip or alarm through SCADA following the plant's remote operating procedure, watches the unit return to normal and records the event in the log.",
+      "role": "hydro_control_operator",
+      "kind": "coordination",
+      "inputs": [
+        "diagnosis"
+      ],
+      "outputs": [
+        "log entry"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Report availability change to the desk",
+      "description": "The operator phones or messages the real-time trader with the asset, the megawatts now available and the expected return time, so the desk can restate the offer with the AESO, and logs the call.",
+      "role": "hydro_control_operator",
+      "kind": "communication",
+      "inputs": [
+        "diagnosis"
+      ],
+      "outputs": [
+        "availability_change"
+      ],
+      "systems": [
+        "email",
+        "ets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Return time given is too optimistic.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "AESO ISO rules: available capability must be restated promptly and outages reported (Section 306.5)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.7,
+          "condition": "site visit needed"
+        },
+        {
+          "to": "s15",
+          "prob": 0.3,
+          "condition": "no site visit until day shift"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Rule obligations described from general knowledge; the AESO rule text was not readable."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Call out on-call operator-maintainer",
+      "description": "The operator phones the on-call operator-maintainer for that plant area from the callout list, describes the alarm and the plant state, and agrees what will be isolated before they arrive.",
+      "role": "hydro_control_operator",
+      "kind": "communication",
+      "inputs": [
+        "diagnosis"
+      ],
+      "outputs": [
+        "callout"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5"
+        ],
+        "note": "After-hours response is coordinated with site staff (s5); time estimated."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Drive to plant",
+      "description": "The on-call operator-maintainer gets ready and drives a company truck from home or the area shop to the plant, which can mean an hour or more on mountain or forestry roads to sites such as Brazeau or the Kananaskis plants, slower in winter.",
+      "role": "hydro_tech",
+      "kind": "travel",
+      "inputs": [
+        "callout"
+      ],
+      "outputs": [
+        "technician on site"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 30,
+        "mode": 75,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s6"
+        ],
+        "note": "Plant locations from s6; drive and turnout times estimated."
+      },
+      "resources": [
+        {
+          "id": "service_truck",
+          "occupied_min": {
+            "low": 60,
+            "mode": 150,
+            "high": 360
+          }
+        }
+      ]
+    },
+    {
+      "id": "s13",
+      "name": "Fix or make safe at site",
+      "description": "The operator-maintainer inspects the equipment, isolates it with the control centre if needed, resets or repairs what can be done alone, and either returns the unit or leaves it safely out of service for the day crew.",
+      "role": "hydro_tech",
+      "kind": "physical",
+      "inputs": [
+        "callout",
+        "diagnosis"
+      ],
+      "outputs": [
+        "equipment returned or made safe"
+      ],
+      "systems": [
+        "permit_system",
+        "scada"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Temporary fix that fails again within days.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Alberta OHS Code Part 15 hazardous energy control and the company working-alone procedure",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.5,
+          "condition": "follow-up maintenance needed"
+        },
+        {
+          "to": "s15",
+          "prob": 0.5,
+          "condition": "fixed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s10"
+        ],
+        "note": "Lockout duties from s10; times and shares estimated."
+      },
+      "resources": [
+        {
+          "id": "service_truck",
+          "occupied_min": {
+            "low": 30,
+            "mode": 90,
+            "high": 240
+          }
+        },
+        {
+          "id": "hydro_plant",
+          "occupied_min": {
+            "low": 30,
+            "mode": 120,
+            "high": 480
+          }
+        }
+      ]
+    },
+    {
+      "id": "s14",
+      "name": "Raise work request",
+      "description": "The operator-maintainer enters a work request in the ERP plant maintenance module with the equipment number, the symptom, what was done and a suggested priority, so the area supervisor can plan the repair.",
+      "role": "hydro_tech",
+      "kind": "data_entry",
+      "inputs": [
+        "equipment returned or made safe"
+      ],
+      "outputs": [
+        "work_request"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Vague symptom or wrong equipment number.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Switch and isolate for planned work",
+      "description": "For maintenance on the day's schedule the operator opens breakers and closes gates remotely, places SCADA tags, records the isolation in the permit system and hands it to the site permit holder, who verifies it and applies personal locks. Some shifts have none.",
+      "role": "hydro_control_operator",
+      "kind": "coordination",
+      "inputs": [
+        "permit requests",
+        "maintenance schedule"
+      ],
+      "outputs": [
+        "isolations issued"
+      ],
+      "systems": [
+        "scada",
+        "permit_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Wrong device switched or tag missed.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Alberta OHS Code Part 15 (isolation, verification, personal locks, group control) and the company permit-to-work procedure",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5",
+          "s10"
+        ],
+        "note": "Switching and isolation coordination (s5); Part 15 requirements (s10); time estimated."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Return equipment to service",
+      "description": "When a permit holder reports work complete and locks removed, the operator checks the permit is cleared, removes tags, restores the unit or gate, tells the desk the asset is available again and logs it.",
+      "role": "hydro_control_operator",
+      "kind": "coordination",
+      "inputs": [
+        "cleared permits"
+      ],
+      "outputs": [
+        "equipment in service",
+        "availability_change"
+      ],
+      "systems": [
+        "scada",
+        "permit_system",
+        "ets"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Unit returned without telling the desk.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Alberta OHS Code Part 15 (isolation, verification, personal locks, group control) and the company permit-to-work procedure",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5",
+          "s10"
+        ],
+        "note": "Time estimated."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Watch weather, ice and inflow",
+      "description": "The operator checks weather warnings and inflow trends, and in winter watches for frazil ice at intakes, calling the hydro scheduler or area manager when inflows or ice threaten the plan.",
+      "role": "hydro_control_operator",
+      "kind": "analysis",
+      "inputs": [
+        "weather forecasts",
+        "inflow trends"
+      ],
+      "outputs": [
+        "weather notes",
+        "calls to scheduling"
+      ],
+      "systems": [
+        "scada",
+        "forecast_tools",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Supervisor reviews shift events",
+      "description": "The hydro operations supervisor reads the significant events in the log, approves any departure from the water plan, decides on overtime or callouts for the next shift and follows up on unresolved alarms with the area teams.",
+      "role": "hydro_supervisor",
+      "kind": "review",
+      "inputs": [
+        "operating log"
+      ],
+      "outputs": [
+        "supervisor decisions"
+      ],
+      "systems": [
+        "scada",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Record levels and flows and complete log",
+      "description": "The operator checks the hourly levels and flows that the historian recorded, enters manual gauge readings from site staff, fills gaps and completes the daily flow summary used for licence reporting.",
+      "role": "hydro_control_operator",
+      "kind": "data_entry",
+      "inputs": [
+        "historian data",
+        "manual gauge readings"
+      ],
+      "outputs": [
+        "flow_data"
+      ],
+      "systems": [
+        "historian",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Manual reading missed or mistyped.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Prepare handover",
+      "description": "The outgoing operators update the equipment status list, list open alarms, isolations and expected dispatches, and write the shift summary for the next crew and the supervisor.",
+      "role": "hydro_control_operator",
+      "kind": "drafting",
+      "inputs": [
+        "operating log"
+      ],
+      "outputs": [
+        "shift summary"
+      ],
+      "systems": [
+        "scada",
+        "permit_system"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Handover note omits an open item.",
+        "typically_caught_at": "s01"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "shift ends",
+          "outcome": "shift_completed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5"
+        ],
+        "note": "Shift handovers (s5)."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Callout to site",
+      "share_of_cases": 0.21,
+      "description": "An alarm cannot be reset remotely and an on-call operator-maintainer drives to the plant.",
+      "path": [
+        "s08",
+        "s11",
+        "s12",
+        "s13"
+      ]
+    },
+    {
+      "name": "Capability lost",
+      "share_of_cases": 0.08,
+      "description": "A unit trips or is restricted and the desk must restate the offer to the AESO.",
+      "path": [
+        "s08",
+        "s10"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.5,
+        "p90": 0.5
+      },
+      "unit": "calendar days per shift",
+      "population": "TransAlta Hydro System Control Centre",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5"
+        ],
+        "note": "12-hour rotating shifts (s5)."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Availability changes are passed to the trading desk by phone or chat and re-entered in the AESO system, so a slow or missed call leaves an offer wrong.",
+      "steps": [
+        "s10",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "description": "Nuisance alarms from seventeen remote plants take operator attention from real ones.",
+      "steps": [
+        "s07"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s5"
+        ],
+        "note": "The posting asks operators to identify recurring or nuisance alarms (s5)."
+      }
+    },
+    {
+      "description": "Callouts to remote mountain plants take one to three hours before anyone is at the equipment.",
+      "steps": [
+        "s11",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate from plant locations."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "s3",
+      "title": "Bow River Basin: TransAlta operations",
+      "publisher": "Government of Alberta",
+      "url": "https://www.alberta.ca/bow-river-basin-transalta-operations",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Agreement since May 2016 (extended to April 1, 2031): from May 16 to July 7 the province may set target elevations for Ghost Reservoir (up to 65 million m3 for flood mitigation) and year-round volume targets for the Kananaskis-area reservoirs (up to 40 million m3 for drought mitigation); TransAlta decides how to meet the targets; the province and TransAlta assess elevations together each year; compensation 5.5 million CAD per year."
+    },
+    {
+      "id": "s4",
+      "title": "Hydro safety",
+      "publisher": "TransAlta Corporation",
+      "url": "https://transalta.com/our-operations/safety/hydro-safety",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "Water levels near Bearspaw Dam can rise or fall up to 2 metres in a short time; hydro operations support flood control, drought mitigation and irrigation and convey water to licence holders including irrigation districts and municipalities; buffer zones, signs, booms and barriers; regular patrols, inspections, safety audits and infrastructure maintenance; coordination with regulators, police and emergency responders."
+    },
+    {
+      "id": "s5",
+      "title": "Hydro Generation Operator I (Calgary) job posting",
+      "publisher": "TransAlta Corporation",
+      "url": "https://jobs.transalta.com/job/Calgary-Hydro-Generation-Operator-I-AB/1451367700/",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Operators in the Calgary Hydro System Control Centre remotely monitor and operate the hydro fleet through SCADA on rotating 12-hour day and night shifts; execute AESO dispatches, ancillary services directives and voltage instructions and monitor AGC; manage reservoirs, forebays, canals and river flows within operating constraints; acknowledge and respond to alarms; coordinate switching, isolations, equipment status and after-hours response with site operations, maintenance and Hydro Scheduling; keep electronic operating logs and shift handovers. Posted November 2026, after the reference period."
+    },
+    {
+      "id": "s6",
+      "title": "TransAlta Corporation Annual Information Form for the year ended December 31, 2021 (Exhibit 13.1 to Form 40-F)",
+      "publisher": "TransAlta Corporation via U.S. SEC EDGAR",
+      "url": "https://www.sec.gov/Archives/edgar/data/1144800/000114480022000004/a20211231tacex131aif.htm",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Alberta hydro facilities: Bow River system 11 plants (338 MW: Barrier, Bearspaw, Cascade, Ghost, Horseshoe, Interlakes, Kananaskis, Pocaterra, Rundle, Spray, Three Sisters), North Saskatchewan system 2 plants (Bighorn 120 MW, Brazeau 355 MW), Oldman system 4 small plants (21 MW); merchant sale into the Alberta spot market after PPA expiry; value from capacity, energy and ancillary services; Belly River operates April to October."
+    },
+    {
+      "id": "s10",
+      "title": "Occupational Health and Safety Code, Part 15: Managing the control of hazardous energy",
+      "publisher": "Government of Alberta",
+      "url": "https://search-ohs-laws.alberta.ca/legislation/occupational-health-and-safety-code/part-15-managing-the-control-of-hazardous-energy/",
+      "year": 2023,
+      "accessed": "2026-11-24",
+      "supports": "Part 15 sections on isolation of machinery and equipment (s. 212), verifying isolation (s. 213), assigning personal locks (s. 214), securing by individual workers (s. 214.1) and securing by group control procedures (s. 215)."
+    }
+  ],
+  "assumptions": [
+    "One case is a 12-hour shift worked by two operators; their active work is listed as one sequence of steps although much of it happens in parallel or repeatedly, so simulated cycle time can run past 12 hours on busy shifts. Passive monitoring is not counted as hands-on time, which is why stated FTE (13.3) is about three times the hands-on implied FTE.",
+    "The organisation file gives the operator-maintainers an extended-hours pattern; in this process they act on call after hours, so the role is marked on_call here.",
+    "Dispatch counts, alarm rates and callout shares are tier C estimates scaled to a 17-plant fleet; AESO rule details are from general knowledge because the rule documents could not be read.",
+    "Flood operations that override the plan are a separate process; their schedules arrive here as a 5 percent share of triggers."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

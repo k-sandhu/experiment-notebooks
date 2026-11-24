@@ -1,0 +1,1851 @@
+{
+  "schema_version": "0.2",
+  "id": "efc-remarket-equipment",
+  "name": "Remarket repossessed and returned equipment",
+  "org": "equipment-finance-co",
+  "process": "remarket-equipment",
+  "sector": "equipment leasing and finance",
+  "function": "asset management and remarketing",
+  "summary": "Equipment that customers return at the end of a lease, or that bailiffs seize after a default, sits in storage until the remarketing team sells it. A remarketing specialist reviews the condition report, an asset manager values the equipment, the specialist decides on repairs and picks a channel (an auction, the originating dealer, other dealers or a direct buyer), and the manager approves the plan and the minimum price. After the sale the specialist records the proceeds and costs, asks lease administration for the bill of sale and sends the results to recoveries when a defaulted balance remains. Waiting for inspections, repairs, auction dates and settlements makes the process slow, and storage charges and falling values mean every week of delay costs money.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A privately owned Canadian independent equipment lessor with about 55,000 active contracts and a ten-person asset management and remarketing team.",
+    "org_size_employees": 340,
+    "notes": "Trucks, trailers, construction, agricultural, industrial, technology and medical equipment. Most small items go to online or site auctions; trucks and newer machinery often go to dealers."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one asset sale",
+  "trigger": "Seized equipment arrives in storage after a repossession, or returned equipment's condition report is filed at the end of a lease.",
+  "end_state": "The asset is sold and paid for, the proceeds and costs are recorded, the bill of sale is requested and, for seized equipment, the results are with recoveries.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 80,
+      "mode": 110,
+      "high": 150
+    },
+    "seasonality": "Auction calendars are heavier in spring and fall; repossessions rose in 2020 after payment deferrals ended.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file range; about 70 off-lease returns and 45 repossessions a month feed it."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "recover-off-lease-equipment",
+        "object": "off_lease_asset",
+        "share": 0.6
+      },
+      {
+        "from": "repossess-equipment",
+        "object": "repossessed_asset",
+        "share": 0.4
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "auction_house",
+        "object": "consignment"
+      },
+      {
+        "outcome": "sold_repossessed",
+        "to": "recover-deficiencies-and-write-off",
+        "object": "remarketing_proceeds"
+      },
+      {
+        "outcome": "any",
+        "to": "transfer-title-and-discharge",
+        "object": "title_transfer_request"
+      },
+      {
+        "outcome": "any",
+        "to": "close-the-month",
+        "object": "journal_entries"
+      },
+      {
+        "outcome": "any",
+        "to": "file-sales-taxes",
+        "object": "sales_tax_data"
+      }
+    ],
+    "inputs": [
+      {
+        "from": "auction_house",
+        "object": "remarketing_proceeds"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "remarketing_spec",
+      "title": "Remarketing specialist",
+      "department": "Asset management and remarketing",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.6,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 40,
+        "high": 50
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Loaded cost from the organisation file (2019-2022 wage times 1.35). About 2.6 of 4 specialists; the rest of their time goes to repossession support and off-lease returns."
+      }
+    },
+    {
+      "id": "asset_manager",
+      "title": "Asset manager, valuation and residuals",
+      "department": "Asset management and remarketing",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 45,
+        "mode": 56,
+        "high": 70
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Loaded cost from the organisation file (2019-2022 wage times 1.35). Quick valuations for remarketing; most asset manager time is on new-deal valuations and residuals."
+      }
+    },
+    {
+      "id": "mgr_asset",
+      "title": "Manager, asset management and remarketing",
+      "department": "Asset management and remarketing",
+      "layer": "manager",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 62,
+        "mode": 75,
+        "high": 92
+      },
+      "occupation_code": "NOC 10021",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Loaded cost from the organisation file (2019-2022 wage times 1.35). Approves repair spend, disposition plans and sale records."
+      }
+    },
+    {
+      "id": "asset_coord",
+      "title": "Asset logistics coordinator",
+      "department": "Asset management and remarketing",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Loaded cost from the organisation file (2019-2022 wage times 1.35). Inspections, transport bookings and releases for sold assets."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lms",
+      "name": "Lease management system (contracts, schedules, billing, tax codes, asset records, servicing)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "auction_platforms",
+      "name": "Online auction and equipment listing platforms",
+      "kind": "external_portal"
+    },
+    {
+      "id": "equipment_value_sources",
+      "name": "Used equipment value guides, auction results and dealer listings",
+      "kind": "external_portal"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheet models (pool cuts, borrowing base, covenants, budget, tax workpapers)",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, calendars and team chat",
+      "kind": "communication"
+    },
+    {
+      "id": "doc_imaging",
+      "name": "Document imaging and contract file store",
+      "kind": "document_store"
+    },
+    {
+      "id": "gl_erp",
+      "name": "General ledger and accounts payable (mid-market ERP)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "data_warehouse",
+      "name": "Data warehouse and business intelligence reports",
+      "kind": "analytics"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Add the asset to the remarketing inventory",
+      "description": "When a bailiff confirms that seized equipment is in storage, or a returned asset's condition report is filed, the lease system changes the asset status to held for sale and puts it in the remarketing queue with the yard location and daily storage rate.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "repossessed asset",
+        "off-lease asset"
+      ],
+      "outputs": [
+        "remarketing queue item"
+      ],
+      "systems": [
+        "lms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Status-driven queue in the lease system is an author estimate of common set-up."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review the asset file",
+      "description": "The remarketing specialist reads the bailiff report or return condition report, photos, serial numbers, hours or kilometres, the contract status and pool code, and for seized equipment the date the notice of intended disposition went out, and decides whether the condition information is good enough to price the asset.",
+      "role": "remarketing_spec",
+      "kind": "intake",
+      "inputs": [
+        "remarketing queue item",
+        "condition report",
+        "bailiff report"
+      ],
+      "outputs": [
+        "asset review notes"
+      ],
+      "systems": [
+        "lms",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Notice date or a lien on another creditor's registration overlooked.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.2,
+          "condition": "condition, hours or photos missing"
+        },
+        {
+          "to": "s05",
+          "prob": 0.8,
+          "condition": "file complete"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_monitor_collector"
+        ],
+        "note": "Branch share is an author estimate; bailiff reports for seized equipment are often thinner than return inspections."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Order an inspection at the storage yard",
+      "description": "The asset logistics coordinator asks the yard or a field inspector for photos, an hour meter reading, a start-up and function check and a list of missing parts, and agrees the fee.",
+      "role": "asset_coord",
+      "kind": "coordination",
+      "inputs": [
+        "asset review notes"
+      ],
+      "outputs": [
+        "inspection order"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "ordered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Yard or inspector reports the condition",
+      "description": "The yard or inspector visits the equipment and sends the condition report and photos, which are filed in imaging and attached to the asset record.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "inspection order"
+      ],
+      "outputs": [
+        "condition report"
+      ],
+      "systems": [
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 7200,
+        "high": 17280
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "report received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of field inspection turnaround."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Value the asset and suggest a channel",
+      "description": "An asset manager checks recent auction results, value guides and dealer listings for the same make, model, year and hours, estimates the auction value and the dealer or retail value net of transport, commission and repairs, and suggests a channel and reserve. High-value or specialised items get a third-party appraisal.",
+      "role": "asset_manager",
+      "kind": "analysis",
+      "inputs": [
+        "condition report",
+        "auction results"
+      ],
+      "outputs": [
+        "valuation note"
+      ],
+      "systems": [
+        "equipment_value_sources",
+        "auction_platforms",
+        "spreadsheets",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Value set from poor comparables, so the reserve is too high or too low.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.12,
+          "condition": "high-value or specialised equipment"
+        },
+        {
+          "to": "s07",
+          "prob": 0.88,
+          "condition": "internal valuation enough"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_amc_appraisals",
+          "src_rb_10k2020"
+        ],
+        "note": "Valuation bases follow the sources; the appraisal share is an author estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Third-party appraiser values the asset",
+      "description": "For high-value or specialised equipment an outside appraiser gives orderly and forced liquidation values and the expected costs of sale, from a desktop review or a site visit.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "valuation request"
+      ],
+      "outputs": [
+        "appraisal report"
+      ],
+      "systems": [
+        "email_collab",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 12960,
+        "mode": 20160,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "appraisal received"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_amc_appraisals"
+        ],
+        "note": "Desktop appraisals 7 to 15 business days and on-site 15 to 25 business days, converted to calendar days."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Decide on repairs and get quotes",
+      "description": "The specialist decides whether repairs would add more value than they cost, for example tires, batteries, a safety certificate for a truck, missing attachments or cleaning, and gets quotes from a dealer or repair shop.",
+      "role": "remarketing_spec",
+      "kind": "judgment",
+      "inputs": [
+        "valuation note",
+        "condition report"
+      ],
+      "outputs": [
+        "repair decision",
+        "repair quote"
+      ],
+      "systems": [
+        "email_collab",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Repair approved that the market does not pay for.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.25,
+          "condition": "repair worth doing"
+        },
+        {
+          "to": "s10",
+          "prob": 0.75,
+          "condition": "sell as is"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_bc_ppsa"
+        ],
+        "note": "BC PPSA s.59(2) allows disposal as is or after repair; the repair share is an author estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Approve the repair spend",
+      "description": "The manager of asset management and remarketing checks the quote against the expected price gain and the remaining balance or residual and approves spend above the specialist's limit or tells them to sell as is.",
+      "role": "mgr_asset",
+      "kind": "approval",
+      "inputs": [
+        "repair quote"
+      ],
+      "outputs": [
+        "repair approval"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Asset management delegated spending authority",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.85,
+          "condition": "approved"
+        },
+        {
+          "to": "s10",
+          "prob": 0.15,
+          "condition": "declined; sell as is"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Repair shop reconditions the asset",
+      "description": "A dealer or repair shop does the approved work, which may include a provincial safety inspection for a truck or trailer, and invoices the company; the specialist checks the invoice against the quote.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "repair approval"
+      ],
+      "outputs": [
+        "repaired asset",
+        "repair invoice"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 7200,
+        "mode": 17280,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "work done"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of shop turnaround."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Choose the sales channel and set the reserve",
+      "description": "The specialist picks the channel: offer the asset back to the originating dealer or the dealer network, list it for a direct sale online, or consign it to a live or online auction, reserved or unreserved. The disposition plan records the reserve against the net book value or defaulted balance and the expected costs.",
+      "role": "remarketing_spec",
+      "kind": "judgment",
+      "inputs": [
+        "valuation note",
+        "repair decision"
+      ],
+      "outputs": [
+        "disposition plan"
+      ],
+      "systems": [
+        "spreadsheets",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Channel chosen that is slow for this equipment type.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "plan ready"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_rb_10k2020",
+          "src_monitor_collector"
+        ],
+        "note": "Channel options follow the sources."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Approve the disposition plan and minimum price",
+      "description": "The manager reviews the plan, checks that for seized equipment the notice of intended disposition period has run, that the sale method is commercially reasonable for the equipment and that the expected loss is within limits, and approves the channel and minimum price or asks for another plan.",
+      "role": "mgr_asset",
+      "kind": "approval",
+      "inputs": [
+        "disposition plan"
+      ],
+      "outputs": [
+        "approved disposition plan"
+      ],
+      "systems": [
+        "email_collab",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Provincial PPSA: notice before disposing of seized collateral (Ontario s.63(4), 15 days; BC s.59(6), 20 days) and a commercially reasonable sale (BC s.68(2)); company delegated authority for sale prices below book value",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.57,
+          "condition": "auction consignment"
+        },
+        {
+          "to": "s16",
+          "prob": 0.38,
+          "condition": "dealer or direct sale"
+        },
+        {
+          "to": "s10",
+          "prob": 0.05,
+          "condition": "replan"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_lawtimes_priest",
+          "src_bc_ppsa"
+        ],
+        "note": "Channel split is an author estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Consign the asset to an auction",
+      "description": "The specialist signs the auction company's consignment contract on straight commission, chooses unreserved or reserved, sends the asset details, photos and serial numbers, confirms the company can give clear title and books the asset into the next suitable sale.",
+      "role": "remarketing_spec",
+      "kind": "communication",
+      "inputs": [
+        "approved disposition plan"
+      ],
+      "outputs": [
+        "consignment"
+      ],
+      "systems": [
+        "auction_platforms",
+        "email_collab",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 50
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Serial or description error on the listing.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "consigned"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_rb_10k2020"
+        ],
+        "note": "Contract types and title checks follow the source; times are author estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Book transport to the auction yard",
+      "description": "The coordinator gets carrier quotes, issues the transport order and a release letter to the storage yard, and tracks the move; equipment sold through a weekly online auction can stay in the yard and skip this move.",
+      "role": "asset_coord",
+      "kind": "coordination",
+      "inputs": [
+        "consignment"
+      ],
+      "outputs": [
+        "transport order",
+        "release letter"
+      ],
+      "systems": [
+        "email_collab",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong pickup site or missing release.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "booked"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_rb_10k2020"
+        ],
+        "note": "Online auctions sell from the seller's yard; times are author estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Asset moves and sells at the next auction",
+      "description": "The carrier moves the equipment, the auction company inspects and lists it, and it sells at the next weekly online auction or the next scheduled site auction.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "transport order",
+        "consignment"
+      ],
+      "outputs": [
+        "auction result"
+      ],
+      "systems": [
+        "auction_platforms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 8640,
+        "mode": 23040,
+        "high": 60480
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "auction held"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_rb_10k2020"
+        ],
+        "note": "Weekly online auctions on Thursdays in North America; site auctions are less frequent; the wait range is an author estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Auction company settles the proceeds",
+      "description": "After the buyer pays, the auction company sends the settlement statement with the hammer price, commission, fees and any charges, and wires the net proceeds. A reserved lot that does not meet its reserve comes back for a new plan.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "auction result"
+      ],
+      "outputs": [
+        "settlement statement",
+        "remarketing proceeds"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 7200,
+        "mode": 14400,
+        "high": 40320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.94,
+          "condition": "sold and settled"
+        },
+        {
+          "to": "s10",
+          "prob": 0.06,
+          "condition": "no sale at the reserve or buyer default"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "src_rb_10k2020"
+        ],
+        "note": "Settlement timing is an author estimate; the source says the auction company collects and disburses proceeds."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Market the asset to dealers and buyers",
+      "description": "The specialist emails the asset to the originating dealer and a list of dealers who buy that equipment type, posts a listing with photos online, answers calls and arranges buyer inspections with the yard.",
+      "role": "remarketing_spec",
+      "kind": "communication",
+      "inputs": [
+        "approved disposition plan"
+      ],
+      "outputs": [
+        "listing",
+        "buyer enquiries"
+      ],
+      "systems": [
+        "auction_platforms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Listing details wrong.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "marketed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_monitor_collector"
+        ],
+        "note": "Dealer networks and private sales are named channels; times are author estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Buyers inspect and make offers",
+      "description": "Dealers and end buyers look at the photos or the equipment and send offers over the following weeks; some assets draw no acceptable offer and go back for a new plan, usually an auction.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "listing"
+      ],
+      "outputs": [
+        "offers"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 7200,
+        "mode": 21600,
+        "high": 60480
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.85,
+          "condition": "offers received"
+        },
+        {
+          "to": "s10",
+          "prob": 0.15,
+          "condition": "no acceptable offer"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Negotiate and accept the best offer",
+      "description": "The specialist compares the offers with the approved minimum price, negotiates with the best bidders and accepts an offer within the approval, or sends an offer below the minimum back to the manager.",
+      "role": "remarketing_spec",
+      "kind": "judgment",
+      "inputs": [
+        "offers",
+        "approved disposition plan"
+      ],
+      "outputs": [
+        "accepted offer"
+      ],
+      "systems": [
+        "email_collab",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.86,
+          "condition": "offer within the approved price"
+        },
+        {
+          "to": "s11",
+          "prob": 0.14,
+          "condition": "best offer below the minimum"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Invoice the buyer with sales tax",
+      "description": "The specialist prepares the sale invoice and as-is, where-is terms with GST/HST and any provincial sales tax for the buyer's province, or records the dealer's resale exemption, and asks for a wire or certified funds before release.",
+      "role": "remarketing_spec",
+      "kind": "drafting",
+      "inputs": [
+        "accepted offer"
+      ],
+      "outputs": [
+        "sale invoice"
+      ],
+      "systems": [
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong province or exemption, so tax is under-collected.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Excise Tax Act s.183(2) (sale of seized property is a commercial activity) and GST/HST and provincial sales tax collection rules",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "invoice sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_eta_183"
+        ],
+        "note": "Times are author estimates."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Buyer pays for the asset",
+      "description": "The buyer wires the price or delivers certified funds; the specialist confirms the funds in the bank report before anything is released.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "sale invoice"
+      ],
+      "outputs": [
+        "buyer payment"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 17280
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.96,
+          "condition": "paid"
+        },
+        {
+          "to": "s16",
+          "prob": 0.04,
+          "condition": "buyer walks away"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Release the asset to the buyer",
+      "description": "Once funds are confirmed the coordinator sends a release letter to the storage yard, agrees the pickup with the buyer's carrier and closes the storage account so daily charges stop.",
+      "role": "asset_coord",
+      "kind": "coordination",
+      "inputs": [
+        "buyer payment"
+      ],
+      "outputs": [
+        "release letter"
+      ],
+      "systems": [
+        "email_collab",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Storage not closed and charges keep running.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company policy: no release of equipment before cleared funds",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "released"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of common practice."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Record the sale and apply the proceeds",
+      "description": "The specialist keys the gross price, commission, repair, transport and storage costs and the tax collected into the lease system from the settlement statement or invoice, closes the asset record, and applies the net proceeds to the defaulted contract or books the gain or loss against the residual on an off-lease asset.",
+      "role": "remarketing_spec",
+      "kind": "data_entry",
+      "inputs": [
+        "settlement statement",
+        "sale invoice",
+        "cost invoices"
+      ],
+      "outputs": [
+        "sale record"
+      ],
+      "systems": [
+        "lms",
+        "spreadsheets",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 12,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "A cost or the tax split keyed wrongly.",
+        "typically_caught_at": "s23"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "recorded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_charter_424b"
+        ],
+        "note": "Times and error rate are author estimates."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Sign off the sale record",
+      "description": "The manager compares the sale price with the valuation and the approved minimum, checks the costs against invoices and the approvals on file, and signs the sale summary before month-end.",
+      "role": "mgr_asset",
+      "kind": "review",
+      "inputs": [
+        "sale record"
+      ],
+      "outputs": [
+        "approved sale record"
+      ],
+      "systems": [
+        "lms",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A miskeyed cost is passed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Internal control: sales negotiated by one person are reviewed by another before the results are final",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 0.95,
+          "condition": "signed"
+        },
+        {
+          "to": "s22",
+          "prob": 0.05,
+          "condition": "corrections needed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of common practice."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Post the sale journal and sales tax data",
+      "description": "The nightly interface posts the sale, costs, tax collected and gain or loss to the general ledger and loads the provincial tax amounts for the sales tax returns and the asset status for reporting.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved sale record"
+      ],
+      "outputs": [
+        "journal entries",
+        "sales tax data"
+      ],
+      "systems": [
+        "lms",
+        "gl_erp",
+        "data_warehouse"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s25",
+          "prob": 1.0,
+          "condition": "posted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of the common interface set-up."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Request the bill of sale and registration discharge",
+      "description": "The specialist sends lease administration the buyer's details, price and serial numbers so it can issue the bill of sale and discharge the company's personal property registration, which the buyer or auction company needs to show clear title.",
+      "role": "remarketing_spec",
+      "kind": "communication",
+      "inputs": [
+        "approved sale record"
+      ],
+      "outputs": [
+        "title transfer request"
+      ],
+      "systems": [
+        "email_collab",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong buyer name or serial on the request.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s26",
+          "prob": 0.4,
+          "condition": "seized equipment with a defaulted balance"
+        },
+        {
+          "to": "END",
+          "prob": 0.6,
+          "condition": "off-lease asset sold",
+          "outcome": "sold_off_lease"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_bc_ppsa"
+        ],
+        "note": "A good-faith buyer takes free of the debtor's interest (s.59(14)); the split follows the trigger mix."
+      }
+    },
+    {
+      "id": "s26",
+      "name": "Send the sale results to recoveries",
+      "description": "For seized equipment the specialist emails the recovery officer the settlement statement, net proceeds and all costs charged, so the deficiency can be calculated and the customer and guarantors told how the sale was done.",
+      "role": "remarketing_spec",
+      "kind": "communication",
+      "inputs": [
+        "approved sale record"
+      ],
+      "outputs": [
+        "remarketing proceeds"
+      ],
+      "systems": [
+        "email_collab",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A cost left off the summary.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "results sent",
+          "outcome": "sold_repossessed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; the deficiency workflow (efc-recover-deficiencies-and-write-off) starts from this summary."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Missing condition information",
+      "share_of_cases": 0.2,
+      "description": "The bailiff or return report lacks photos, hours or a function check, so an inspection is ordered before valuation.",
+      "path": [
+        "s02",
+        "s03",
+        "s04",
+        "s05"
+      ]
+    },
+    {
+      "name": "Third-party appraisal",
+      "share_of_cases": 0.12,
+      "description": "High-value or specialised equipment is appraised by an outside firm before the plan.",
+      "path": [
+        "s05",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Repairs before sale",
+      "share_of_cases": 0.21,
+      "description": "Repairs or a safety certificate are approved and done before marketing.",
+      "path": [
+        "s07",
+        "s08",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "No sale at the reserve",
+      "share_of_cases": 0.09,
+      "description": "A reserved auction lot does not sell or a direct listing draws no acceptable offer, and the asset is replanned, usually to an unreserved auction.",
+      "path": [
+        "s15",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Offer below the minimum",
+      "share_of_cases": 0.05,
+      "description": "The best direct offer is below the approved minimum and goes back to the manager.",
+      "path": [
+        "s18",
+        "s11"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 50,
+        "p90": 100
+      },
+      "unit": "calendar days from the asset entering remarketing inventory to sale recorded and results sent",
+      "population": "Canadian independent equipment lessor, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "src_rb_10k2020",
+          "src_amc_appraisals"
+        ],
+        "note": "Author estimate from weekly online and monthly site auction calendars, appraisal and repair turnaround and settlement after sale."
+      }
+    },
+    {
+      "metric": "auction_commissions_share_of_gtv_2020",
+      "value": 0.084,
+      "unit": "share of gross transaction value",
+      "population": "Ritchie Bros., all consignments, 2020",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_rb_10k2020"
+        ],
+        "note": "Commissions of $452.9 million divided by $5.4 billion GTV; buyer and listing fees are extra."
+      }
+    },
+    {
+      "metric": "underwritten_share_of_auction_volume_2020",
+      "value": 0.2,
+      "unit": "share of gross transaction value on guarantee or inventory contracts",
+      "population": "Ritchie Bros., 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_rb_10k2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "disposition_notice_ontario",
+      "value": 15,
+      "unit": "days before disposing of seized collateral",
+      "population": "Ontario PPSA s.63(4)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_lawtimes_priest"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "disposition_notice_bc",
+      "value": 20,
+      "unit": "days before disposing of seized collateral",
+      "population": "British Columbia PPSA s.59(6)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_bc_ppsa"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "appraisal_turnaround",
+      "value": {
+        "desktop": [
+          7,
+          15
+        ],
+        "on_site": [
+          15,
+          25
+        ]
+      },
+      "unit": "business days",
+      "population": "One US lender appraisal firm",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_amc_appraisals"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Seized equipment often arrives with a thin bailiff report, so inspections and photos have to be ordered before anyone can price it.",
+      "steps": [
+        "s02",
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "description": "Assets wait in paid storage for auction dates, repairs and settlements; storage charges and depreciation reduce the net recovery.",
+      "steps": [
+        "s09",
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_charter_424b"
+        ],
+        "note": "Depreciation and damage reduce amounts realised."
+      }
+    },
+    {
+      "description": "Valuations depend on a few experienced asset managers checking auction results by hand.",
+      "steps": [
+        "s05"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "description": "Sale results are re-keyed from auction settlement statements and invoices into the lease system and then emailed to recoveries.",
+      "steps": [
+        "s22",
+        "s26"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src_rb_10k2020",
+      "title": "Ritchie Bros. Auctioneers Inc. annual report on Form 10-K for 2020",
+      "publisher": "US SEC EDGAR",
+      "url": "https://www.sec.gov/Archives/edgar/data/1046102/000155837021001228/rba-20201231x10k.htm",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "A majority of its auctions are unreserved; IronPlanet online auctions run every Thursday in North America; Marketplace-E offers reserve, make-offer and buy-now formats; straight commission, guarantee and inventory contracts, with guarantee and inventory about 20% of 2020 gross transaction value; title searches so equipment is sold free of liens; 2020 gross transaction value of $5.4 billion and commissions of $452.9 million (US dollars)."
+    },
+    {
+      "id": "src_amc_appraisals",
+      "title": "Equipment appraisals",
+      "publisher": "Auction Management Corporation",
+      "url": "https://www.amcbid.com/appraisals",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Lender appraisals give orderly liquidation, forced liquidation and fair market values, estimated liquidation costs and net recoverable value; desktop appraisals take 7 to 15 business days and on-site appraisals 15 to 25 business days."
+    },
+    {
+      "id": "src_bc_ppsa",
+      "title": "Personal Property Security Act [RSBC 1996] chapter 359",
+      "publisher": "King's Printer, British Columbia",
+      "url": "https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/96359_01",
+      "year": 1996,
+      "accessed": "2026-11-17",
+      "supports": "s.59(2): seized collateral may be disposed of as is or after repair; s.59(3): by private sale, public sale including auction or closed tender, whole or in parts; s.59(6): notice at least 20 days before disposition; s.59(14): a good-faith buyer takes free of the debtor's interest; s.68(2): rights must be exercised in good faith and in a commercially reasonable manner."
+    },
+    {
+      "id": "src_lawtimes_priest",
+      "title": "Secured creditor must give reasonable notice before seizing defaulted assets: Court of Appeal",
+      "publisher": "Law Times",
+      "url": "https://www.lawtimesnews.com/news/general/secured-creditor-must-give-reasonable-notice-before-seizing-defaulted-assets-court-of-appeal/359419",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Ontario PPSA s.63(4) requires 15 days' notice before disposing of seized collateral; the exemption for goods customarily sold on a recognized market does not remove contractual and common law notice duties (1758704 Ontario Inc. v. Priest, 2021 ONCA 588)."
+    },
+    {
+      "id": "src_eta_183",
+      "title": "Excise Tax Act, section 183 (seizure and repossession)",
+      "publisher": "Justice Laws Website, Government of Canada",
+      "url": "https://laws-lois.justice.gc.ca/eng/acts/E-15/section-183.html",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "A creditor that seizes property is deemed to receive a supply at the time of seizure, and its later supply of the seized property is deemed made in the course of a commercial activity."
+    },
+    {
+      "id": "src_charter_424b",
+      "title": "Charter Equipment Lease 1998-1 LLC prospectus (Form 424B1)",
+      "publisher": "US SEC EDGAR",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001070771/000089155499001687/0000891554-99-001687.txt",
+      "year": 1999,
+      "accessed": "2026-11-17",
+      "supports": "The servicer uses commercially reasonable efforts to dispose of equipment on expiry or termination and may sell equipment of defaulted leases at public or private sale; depreciation, obsolescence and damage can leave sale proceeds below the amount due."
+    },
+    {
+      "id": "src_monitor_collector",
+      "title": "The Collector Chronicles: beyond the default, how lenders master repossession and recovery",
+      "publisher": "Monitor Daily",
+      "url": "https://www.monitordaily.com/?p=157653",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Seized equipment is liquidated through auctions, dealer networks or private sales; the sale must be commercially reasonable and a rushed or poorly marketed sale can be contested; agents document condition with photos."
+    }
+  ],
+  "assumptions": [
+    "The auction_house trigger (remarketing_proceeds) arrives inside the case at step s15, so it has a share of zero; cases start when an asset enters remarketing inventory.",
+    "About 60% of sales are consigned to auctions and 40% sold to dealers or direct buyers; channel shares, reserves and approval limits are author estimates.",
+    "Consignment is listed with outcome 'any' because the format ties outputs to END outcomes, but only auction cases (about 60%) produce it.",
+    "The share of seized versus returned equipment (40/60) follows the organisation file's volumes for repossessions (about 45 a month) and off-lease returns (about 70 a month).",
+    "Notice of intended disposition is sent in the repossession process; this workflow only checks that the period has run before the sale.",
+    "Auction commission of about 8% is a whole-company average for one auction group; the company's own negotiated rates are not public.",
+    "External steps have no touch time; inspections, repairs, auctions and buyer payments are in wait_before_min.",
+    "Loaded costs are the organisation file's (2019-2022 wage times 1.35). Remarketing roles have no occupation code in the organisation file.",
+    "Legal rules named in controls are the author's reading of the cited statutes and reports, not legal advice."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

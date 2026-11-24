@@ -1,0 +1,1863 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-cl-psc-registration",
+  "name": "Register the patient and requisition at a collection centre",
+  "org": "diagnostic-lab-services-co",
+  "process": "cl-psc-registration",
+  "sector": "medical laboratory services",
+  "function": "patient service centre operations",
+  "summary": "When a patient arrives at one of the company's roughly 200 collection centres with a requisition from their clinician, a lab assistant checks who they are, checks that the requisition is complete, finds or creates the patient in the laboratory information system, keys in the clinician and tests, checks the health card or takes payment, and prints the specimen labels. Most of the patient's time is spent waiting to reach the counter, especially on weekday mornings. Errors come from re-keying paper requisitions, unclear handwriting, invalid health cards and requisitions that cannot be found, which lead to calls to clinics, wrong or missed tests and patients sent away.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A large private community laboratory company with about 200 walk-in and appointment collection centres in Ontario, Quebec and Manitoba, a central LIS and real-time Ontario health card validation.",
+    "org_size_employees": 3300,
+    "notes": "Pre-COVID most visits were walk-ins; from 2020 many centres moved to booked appointments and online requisition upload (September 2020). The model mixes both at about half each."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one patient visit with its requisition",
+  "trigger": "A patient arrives at a collection centre with a paper, uploaded or faxed requisition, or a booked appointment.",
+  "end_state": "The visit is registered in the LIS with tests, payer and labels printed and the patient is waiting for collection, or the patient leaves unregistered.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 480000,
+      "mode": 560000,
+      "high": 640000
+    },
+    "seasonality": "Busiest Monday to Friday 7 to 10 am with fasting patients; quieter in July, August and late December. Volumes fell sharply in spring 2020 and recovered through 2021.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Taken from the org file's process map and demand driver d_psc_visits (estimate from about 10 million patients a year)."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "patient",
+        "object": "lab_requisition",
+        "share": 0.44
+      },
+      {
+        "from": "cd-appointment-booking",
+        "object": "appointment",
+        "share": 0.45
+      },
+      {
+        "from": "ordering_physician",
+        "object": "lab_requisition",
+        "share": 0.1
+      },
+      {
+        "from": "cd-self-pay-order",
+        "object": "consumer_order",
+        "share": 0.01
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "registered",
+        "to": "cl-psc-collection",
+        "object": "registered_visit"
+      },
+      {
+        "outcome": "registered",
+        "to": "fin-patient-billing",
+        "object": "patient_invoice"
+      },
+      {
+        "outcome": "any",
+        "to": "it-service-desk",
+        "object": "it_ticket"
+      }
+    ],
+    "inputs": [
+      {
+        "from": "fac-site-openings",
+        "object": "new_collection_site"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "lab_assistant_psc_on",
+      "title": "Laboratory assistant, collection centre (Ontario)",
+      "department": "Ontario collection centres",
+      "layer": "individual_contributor",
+      "fte_on_process": 160,
+      "loaded_cost_per_hour": {
+        "low": 24,
+        "mode": 31,
+        "high": 41
+      },
+      "occupation_code": "NOC 33101",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jobbank33101",
+          "ag17"
+        ],
+        "note": "Org file role; cost from the org file (Job Bank 33101 Ontario wages times 1.35). FTE estimate: about 40% of the 400 Ontario lab assistants' time goes to registration, the rest to collection, workplace drug test collections and payment reconciliation, so that all their processes fit the headcount. Assigned to all shared steps; see assumptions."
+      }
+    },
+    {
+      "id": "auxiliary_nurse_qc",
+      "title": "Auxiliary nurse, collection centre (Quebec)",
+      "department": "Quebec collection centres",
+      "layer": "individual_contributor",
+      "fte_on_process": 50,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 35,
+        "high": 44
+      },
+      "occupation_code": "NOC 32101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Org file role and cost. Quebec centres register about 17% of visits and take payment at nearly every visit; FTE is an estimate in proportion to visits."
+      }
+    },
+    {
+      "id": "lab_technician_mb",
+      "title": "Laboratory technician, collection centre (Manitoba)",
+      "department": "Manitoba collection centres",
+      "layer": "individual_contributor",
+      "fte_on_process": 30,
+      "loaded_cost_per_hour": {
+        "low": 25,
+        "mode": 31,
+        "high": 40
+      },
+      "occupation_code": "NOC 33101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Org file role and cost. Manitoba centres register about 12% of visits; FTE is an estimate in proportion to visits."
+      }
+    },
+    {
+      "id": "psc_team_lead",
+      "title": "Collection centre team lead",
+      "department": "Laboratory and Health Services Centres network",
+      "layer": "supervisor",
+      "fte_on_process": 8,
+      "loaded_cost_per_hour": {
+        "low": 34,
+        "mode": 40,
+        "high": 48
+      },
+      "occupation_code": "NOC 33101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Org file role and cost. Team leads also work the counter on busy mornings; only escalations are modelled here as their own step."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lis",
+      "name": "Laboratory information system (orders, accessioning, results, autoverification rules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "appointment_booking",
+      "name": "Online appointment booking and centre queue management",
+      "kind": "workflow"
+    },
+    {
+      "id": "requisition_imaging",
+      "name": "Requisition scanning and document imaging",
+      "kind": "document_store"
+    },
+    {
+      "id": "billing_system",
+      "name": "Laboratory billing and accounts receivable system (provincial claims, patient, client invoices)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "itsm",
+      "name": "IT service management ticketing",
+      "kind": "workflow"
+    },
+    {
+      "id": "hcv",
+      "name": "Ontario Ministry of Health Health Card Validation service (real-time, through the LIS)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "pos_terminal",
+      "name": "Debit and credit card payment terminal at the counter",
+      "kind": "other"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Patient checks in at the centre",
+      "description": "The patient walks in with a requisition, takes a numbered ticket from the queue kiosk or tells the screen or staff that they have a booked appointment, then sits in the waiting room. Patients who booked online may have checked in remotely by email link.",
+      "role": "external",
+      "kind": "intake",
+      "inputs": [
+        "paper or uploaded requisition",
+        "health card"
+      ],
+      "outputs": [
+        "queue ticket or appointment check-in"
+      ],
+      "systems": [
+        "appointment_booking"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.5,
+          "condition": "walk-in patient"
+        },
+        {
+          "to": "s03",
+          "prob": 0.5,
+          "condition": "booked appointment"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Half booked and half walk-in is an estimate from the org file's 320,000 bookings a month against 560,000 visits, less no-shows; the model laboratory says most visits need no appointment (dyn_before is not cited for the share)."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Call a walk-in patient to the counter",
+      "description": "When a counter frees up the lab assistant calls the next ticket number on the queue screen or by voice, greets the patient and asks what they are here for. Walk-ins wait longest on weekday mornings when fasting patients arrive before work.",
+      "role": "lab_assistant_psc_on",
+      "kind": "intake",
+      "inputs": [
+        "queue ticket"
+      ],
+      "outputs": [
+        "patient at counter"
+      ],
+      "systems": [
+        "appointment_booking"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.3
+      },
+      "wait_before_min": {
+        "low": 1,
+        "mode": 8,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ag17",
+          "nwm_lean"
+        ],
+        "note": "Wait range set so that about 90% of walk-ins reach the counter within about 40 minutes, near the 30 and 40 minute provider targets reported by the Auditor General; peaks of 30 to 60 minutes as in nwm_lean."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Greet a booked patient at the counter",
+      "description": "The lab assistant sees the booked patient's name on the appointment list in the queue tool, calls them near their slot time, greets them and marks the appointment as arrived. Booked patients are slotted between walk-ins, so they still wait a few minutes.",
+      "role": "lab_assistant_psc_on",
+      "kind": "intake",
+      "inputs": [
+        "appointment list"
+      ],
+      "outputs": [
+        "patient at counter"
+      ],
+      "systems": [
+        "appointment_booking"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Short wait for booked patients is an estimate; patients usually arrive a few minutes early and are fitted between walk-ins."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Confirm identity against health card and requisition",
+      "description": "The lab assistant takes the requisition and health card, asks the patient to state full name and date of birth, and compares these with the card and the requisition. A different name on the card, a missing card or someone else's requisition is caught here.",
+      "role": "lab_assistant_psc_on",
+      "kind": "validation",
+      "inputs": [
+        "requisition",
+        "health card",
+        "patient's stated name and date of birth"
+      ],
+      "outputs": [
+        "confirmed identity"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0.15,
+        "mode": 0.25,
+        "high": 0.6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Patient registered under the wrong identity (similar name, family member's card).",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189 Plus (Accreditation Canada Diagnostics) pre-examination requirements: positive patient identification with at least two identifiers before collection",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.8,
+          "condition": "paper requisition in hand"
+        },
+        {
+          "to": "s05",
+          "prob": 0.15,
+          "condition": "requisition uploaded, faxed or sent by the clinic"
+        },
+        {
+          "to": "s09",
+          "prob": 0.02,
+          "condition": "no requisition; patient asks staff to get one from the clinic"
+        },
+        {
+          "to": "s08",
+          "prob": 0.01,
+          "condition": "identity mismatch or no identification"
+        },
+        {
+          "to": "END",
+          "prob": 0.02,
+          "condition": "no requisition or requisition older than 6 months; patient told to return",
+          "outcome": "turned_away"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_before",
+          "dyn_upload"
+        ],
+        "note": "Patients bring a signed requisition and health card (dyn_before); uploaded requisitions available from September 2020 (dyn_upload). Shares are estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Retrieve an uploaded or faxed requisition",
+      "description": "The lab assistant searches the requisition queue in the imaging system by patient name and date of birth, opens the uploaded or faxed image and prints it or attaches it to the visit. Faxed requisitions can take a few hours to appear, so some are not yet there.",
+      "role": "lab_assistant_psc_on",
+      "kind": "lookup",
+      "inputs": [
+        "patient name and date of birth"
+      ],
+      "outputs": [
+        "requisition image"
+      ],
+      "systems": [
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.6,
+        "high": 2.0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Wrong patient's requisition image selected (same name).",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.9,
+          "condition": "requisition found"
+        },
+        {
+          "to": "s09",
+          "prob": 0.1,
+          "condition": "requisition not found; clinic must resend"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_upload"
+        ],
+        "note": "Upload service and same-day availability from dyn_upload; the 10% not found is an estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Review the requisition for completeness and validity",
+      "description": "The lab assistant checks that the requisition names the clinician with a practitioner number and signature, that patient identifiers match the card, that tests are clearly marked, the payer box is ticked and the date is within six months, and that timed tests carry dose or collection times.",
+      "role": "lab_assistant_psc_on",
+      "kind": "validation",
+      "inputs": [
+        "requisition"
+      ],
+      "outputs": [
+        "accepted requisition or list of problems"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.25,
+        "high": 0.6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A missing or contradictory requisition field is not noticed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Laboratory and Specimen Collection Centre Licensing Act (R.R.O. 1990, Reg. 682, replaced by O. Reg. 45/22 in 2022): tests only on a signed requisition from an authorized practitioner; Manitoba Health requisition rules",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.88,
+          "condition": "requisition complete and legible"
+        },
+        {
+          "to": "s07",
+          "prob": 0.07,
+          "condition": "unclear test name or handwriting"
+        },
+        {
+          "to": "s09",
+          "prob": 0.04,
+          "condition": "missing signature, clinician or identifier mismatch"
+        },
+        {
+          "to": "s08",
+          "prob": 0.01,
+          "condition": "unknown prescriber or test not offered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "form4422",
+          "dyn_mbreq",
+          "dyn_upload"
+        ],
+        "note": "Required fields from the Ontario and Manitoba requisition forms; six-month limit from dyn_upload. Problem shares are estimates; studies of request forms in other countries report much higher omission rates, but most omissions do not stop registration."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Look up an unclear test in the test directory",
+      "description": "For a handwritten test name, abbreviation or brand name the lab assistant searches the online test directory and LIS test catalogue, checks the tube type and whether the test is done in-house, and may ask a colleague who knows the local doctors' habits.",
+      "role": "lab_assistant_psc_on",
+      "kind": "lookup",
+      "inputs": [
+        "requisition",
+        "test directory"
+      ],
+      "outputs": [
+        "test code identified or unresolved"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 4.0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0.5,
+        "high": 3
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong test chosen for an ambiguous name.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.75,
+          "condition": "test identified"
+        },
+        {
+          "to": "s09",
+          "prob": 0.2,
+          "condition": "still unclear; call the clinic"
+        },
+        {
+          "to": "s08",
+          "prob": 0.05,
+          "condition": "needs team lead"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice in community collection centres; times and shares are estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Team lead resolves an escalated registration problem",
+      "description": "The team lead is called to the counter for an identity mismatch, a requisition from a prescriber not in the LIS, a test the company does not offer or an upset patient. The team lead decides whether to register with a note, create a provisional prescriber or send the patient back to the clinic.",
+      "role": "psc_team_lead",
+      "kind": "judgment",
+      "inputs": [
+        "requisition",
+        "patient account of the problem"
+      ],
+      "outputs": [
+        "decision and note on the visit"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 1,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Registration allowed on a doubtful identity or prescriber.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company collection centre procedure: team lead approval for identity exceptions and non-standard requisitions",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.75,
+          "condition": "resolved; registration continues"
+        },
+        {
+          "to": "s09",
+          "prob": 0.1,
+          "condition": "clinic must confirm"
+        },
+        {
+          "to": "END",
+          "prob": 0.15,
+          "condition": "patient sent back to the clinic",
+          "outcome": "turned_away"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Team lead escalation is common practice; times and shares are estimates."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Call the ordering clinic to clarify the requisition",
+      "description": "The lab assistant phones the clinic on the requisition, waits through the clinic's phone menu or reception, explains what is missing or unclear and asks for a verbal clarification or a corrected requisition by fax or upload. Calls often reach voicemail.",
+      "role": "lab_assistant_psc_on",
+      "kind": "communication",
+      "inputs": [
+        "requisition",
+        "clinic phone number"
+      ],
+      "outputs": [
+        "clarification request"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; call length is an estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Clinic confirms or sends a corrected requisition",
+      "description": "Clinic staff call back or fax or upload a corrected requisition while the patient waits. If the clinic cannot be reached in a reasonable time, the clear tests are registered and the unclear ones are held with a note, or the patient is asked to come back.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "clarification request"
+      ],
+      "outputs": [
+        "corrected requisition or verbal confirmation"
+      ],
+      "systems": [
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 2,
+        "mode": 10,
+        "high": 45
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.9,
+          "condition": "clarified, or clear tests registered and unclear test held"
+        },
+        {
+          "to": "END",
+          "prob": 0.1,
+          "condition": "patient leaves to return later",
+          "outcome": "turned_away"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait while the patient stays in the centre; partial registration is common practice. Estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Find or create the patient record in the LIS",
+      "description": "The lab assistant searches the LIS by health number or name and date of birth, picks the matching record and updates address, phone and email, or creates a new record when the patient is new to the company. Similar names make picking the wrong record possible.",
+      "role": "lab_assistant_psc_on",
+      "kind": "data_entry",
+      "inputs": [
+        "health card",
+        "requisition"
+      ],
+      "outputs": [
+        "patient record selected or created"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.004,
+        "defect_description": "Wrong patient record selected or duplicate record created.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard LIS registration practice; times are estimates for an experienced assistant."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Enter the ordering and copy-to clinicians",
+      "description": "The lab assistant looks up the ordering clinician by practitioner number or name in the LIS provider file, confirms the clinic address so the report goes to the right place, and adds any copy-to clinicians written on the requisition.",
+      "role": "lab_assistant_psc_on",
+      "kind": "data_entry",
+      "inputs": [
+        "requisition"
+      ],
+      "outputs": [
+        "clinicians on the order"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.15,
+        "high": 0.4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong clinician or clinic location chosen, so the report goes to the wrong office.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "valenstein99"
+        ],
+        "note": "Physician name discrepancies were the most common order entry error type in the Q-Probes study; the probability here is an estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Enter the ordered tests",
+      "description": "The lab assistant keys each checked test and each written test into the LIS as test codes, adds dose and collection times for drug monitoring, and records fasting status and clinical notes the laboratory needs. Paper requisitions are re-keyed in full at the counter.",
+      "role": "lab_assistant_psc_on",
+      "kind": "data_entry",
+      "inputs": [
+        "requisition"
+      ],
+      "outputs": [
+        "order with test codes"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.6,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Test missed, extra test added or wrong test code keyed.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "valenstein99",
+          "nwm_lean"
+        ],
+        "note": "Q-Probes: 4.8% of outpatient requisitions had an order entry error after the labs' own checks, so the error is set slightly higher before the label check; data entry was the bottleneck in nwm_lean. Times are estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Check patient preparation and timing",
+      "description": "The lab assistant asks whether the patient fasted when a fasting test is ordered, when the last dose was taken for drug levels, and whether a timed test needs an appointment. A patient who is not prepared is told how to prepare and asked to come back.",
+      "role": "lab_assistant_psc_on",
+      "kind": "validation",
+      "inputs": [
+        "order",
+        "test preparation rules"
+      ],
+      "outputs": [
+        "preparation confirmed"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Non-fasting patient collected for a fasting test without a note.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.69,
+          "condition": "Ontario visit"
+        },
+        {
+          "to": "s16",
+          "prob": 0.12,
+          "condition": "Manitoba visit"
+        },
+        {
+          "to": "s17",
+          "prob": 0.17,
+          "condition": "Quebec visit"
+        },
+        {
+          "to": "END",
+          "prob": 0.02,
+          "condition": "patient not prepared; asked to return",
+          "outcome": "returned_unprepared"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_before"
+        ],
+        "note": "Fasting rules and appointment-only tests from dyn_before. Province shares follow the org file's staff split (400 Ontario, 110 Quebec, 70 Manitoba); unprepared share is an estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Validate the Ontario health card online",
+      "description": "The LIS sends the health number and version code to the ministry's Health Card Validation service and shows whether the card is valid and the patient eligible. An invalid version code usually means a renewed, expired or lost card or a keying slip.",
+      "role": "lab_assistant_psc_on",
+      "kind": "validation",
+      "inputs": [
+        "health number and version code"
+      ],
+      "outputs": [
+        "eligibility response"
+      ],
+      "systems": [
+        "lis",
+        "hcv"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OHIP payment rules: the ministry pays only for insured tests on a valid health number and version code; Health Card Validation used at each visit",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.96,
+          "condition": "card valid"
+        },
+        {
+          "to": "s18",
+          "prob": 0.04,
+          "condition": "card invalid or expired"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "omd_hcv"
+        ],
+        "note": "HCV checks number and version code in real time (omd_hcv). Invalid share is an estimate; it was lower in 2020-2022 when Ontario accepted expired cards during COVID-19."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Check Manitoba coverage and payer",
+      "description": "The Manitoba technician records the PHIN and Manitoba Health registration number, checks the card, and confirms the physician marked the payment agency box (Manitoba Health, workers' compensation or other) on the requisition.",
+      "role": "lab_technician_mb",
+      "kind": "validation",
+      "inputs": [
+        "Manitoba health card",
+        "requisition"
+      ],
+      "outputs": [
+        "payer confirmed"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Wrong payer recorded.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Manitoba Health requisition rules: payment agency must be marked by the requisitioning physician",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.97,
+          "condition": "covered"
+        },
+        {
+          "to": "s18",
+          "prob": 0.03,
+          "condition": "no valid coverage or out of province"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_mbreq"
+        ],
+        "note": "Fields from the Manitoba requisition; share without coverage is an estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Quote prices and take payment for a Quebec visit",
+      "description": "In Quebec most community tests at a private centre are paid by the patient. The auxiliary nurse prints the price of each test, explains the total, takes debit or credit payment and gives a receipt for the patient's private insurer. A patient may drop tests or leave.",
+      "role": "auxiliary_nurse_qc",
+      "kind": "data_entry",
+      "inputs": [
+        "order",
+        "price list"
+      ],
+      "outputs": [
+        "payment",
+        "receipt"
+      ],
+      "systems": [
+        "lis",
+        "billing_system",
+        "pos_terminal"
+      ],
+      "touch_min": {
+        "low": 1.0,
+        "mode": 1.5,
+        "high": 3.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong price or payment amount recorded.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Company cash handling and receipting controls for point-of-sale payments, reconciled daily by billing",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.97,
+          "condition": "paid"
+        },
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "patient declines to pay and leaves",
+          "outcome": "declined"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "That patients pay for most Quebec community testing is stated in the organisation file; times and decline share are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Resolve an invalid or expired health card with the patient",
+      "description": "The lab assistant re-keys the number to rule out a typing slip, asks if the patient has a newer card, and otherwise explains that the tests can be paid now as uninsured or the patient can return after renewing the card at ServiceOntario.",
+      "role": "lab_assistant_psc_on",
+      "kind": "communication",
+      "inputs": [
+        "eligibility response",
+        "health card"
+      ],
+      "outputs": [
+        "corrected card, payment decision or deferral"
+      ],
+      "systems": [
+        "lis",
+        "hcv"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2.5,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.55,
+          "condition": "card corrected or newer card shown"
+        },
+        {
+          "to": "s20",
+          "prob": 0.25,
+          "condition": "patient pays as uninsured"
+        },
+        {
+          "to": "END",
+          "prob": 0.2,
+          "condition": "patient leaves to renew card",
+          "outcome": "turned_away"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "omd_hcv"
+        ],
+        "note": "HCV does not return corrected numbers, so the patient must supply a newer card (omd_hcv). Shares are estimates."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Screen the order for uninsured tests",
+      "description": "The LIS flags tests that the provincial plan does not pay for, or pays only under conditions, such as PSA for screening or vitamin D without an approved reason. The lab assistant checks the reason box the clinician ticked before treating a test as uninsured.",
+      "role": "lab_assistant_psc_on",
+      "kind": "validation",
+      "inputs": [
+        "order",
+        "requisition payer and reason boxes"
+      ],
+      "outputs": [
+        "insured order or uninsured tests identified"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Uninsured test billed to the province or insured test charged to the patient.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OHIP schedule of insured community laboratory services (Health Insurance Act); requisition reason boxes for PSA and vitamin D",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.93,
+          "condition": "all tests insured"
+        },
+        {
+          "to": "s20",
+          "prob": 0.07,
+          "condition": "uninsured test ordered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ag17",
+          "form4422"
+        ],
+        "note": "Ontario community labs did about 1.1 million uninsured tests in 2015/16 (ag17), about 1% of tests; at several tests per visit this is several percent of visits. PSA and vitamin D rules from form4422. Share is derived."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Explain charges and take payment for uninsured tests",
+      "description": "The lab assistant tells the patient which tests are not covered and their price, takes debit or credit payment and prints a receipt, or removes the test with a note to the clinician if the patient declines it.",
+      "role": "lab_assistant_psc_on",
+      "kind": "data_entry",
+      "inputs": [
+        "uninsured test list",
+        "price list"
+      ],
+      "outputs": [
+        "payment and receipt or declined test note"
+      ],
+      "systems": [
+        "lis",
+        "billing_system",
+        "pos_terminal"
+      ],
+      "touch_min": {
+        "low": 1.0,
+        "mode": 2.0,
+        "high": 4.0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong amount charged.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Company cash handling and receipting controls for point-of-sale payments, reconciled daily by billing",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ag17"
+        ],
+        "note": "Patients pay out of pocket or through private insurance for uninsured tests (ag17); times are estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Print specimen labels and check them against the requisition",
+      "description": "The LIS assigns an accession number and prints barcode labels and a tube list. The lab assistant compares the printed order with the requisition and the patient's name and date of birth, and fixes any missing or extra test before the patient moves on.",
+      "role": "lab_assistant_psc_on",
+      "kind": "validation",
+      "inputs": [
+        "order",
+        "requisition"
+      ],
+      "outputs": [
+        "barcode labels",
+        "tube list"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0.2,
+        "high": 1
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189 Plus pre-examination requirements: request information verified and every specimen traceable to an identified patient and request",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 0.975,
+          "condition": "labels match the requisition"
+        },
+        {
+          "to": "s13",
+          "prob": 0.015,
+          "condition": "order entry error found; correct the order"
+        },
+        {
+          "to": "s22",
+          "prob": 0.01,
+          "condition": "printer, network or LIS fault"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "valenstein99"
+        ],
+        "note": "Rechecking entered orders against the requisition lowered error rates in the Q-Probes study; the share caught here is an estimate that leaves about 4.8% of errors downstream."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Report a system fault and switch to downtime procedure",
+      "description": "When the label printer, network or LIS fails, the lab assistant restarts the printer or workstation, calls or logs a ticket with the IT service desk and, if the outage continues, switches to the downtime procedure of handwritten logs and pre-printed labels for later entry.",
+      "role": "lab_assistant_psc_on",
+      "kind": "communication",
+      "inputs": [
+        "fault"
+      ],
+      "outputs": [
+        "IT ticket",
+        "downtime log"
+      ],
+      "systems": [
+        "itsm",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Downtime entries keyed later with errors.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "printing restored or downtime labels used"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; share and times are estimates."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Scan the requisition into the imaging system",
+      "description": "The lab assistant scans the paper requisition at the counter scanner and links the image to the accession, so the laboratory, billing and client services can see the original order, then keeps or shreds the paper as procedure says.",
+      "role": "lab_assistant_psc_on",
+      "kind": "data_entry",
+      "inputs": [
+        "paper requisition",
+        "accession number"
+      ],
+      "outputs": [
+        "requisition image linked to the order"
+      ],
+      "systems": [
+        "requisition_imaging",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.15,
+        "high": 0.4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Image not linked or linked to the wrong accession.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189 Plus records requirements: the original request is retained and retrievable",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Requisition imaging is in the org file's systems; scanning at the counter and the time are estimates."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Place the visit in the collection queue",
+      "description": "The lab assistant puts the labels and tube list in the collection tray in queue order, or keeps them if they will draw the patient themselves, and asks the patient to wait to be called to a collection room.",
+      "role": "lab_assistant_psc_on",
+      "kind": "coordination",
+      "inputs": [
+        "labels",
+        "tube list"
+      ],
+      "outputs": [
+        "registered visit in the collection queue"
+      ],
+      "systems": [
+        "appointment_booking"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.15,
+        "high": 0.3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Labels placed with the wrong patient's tray.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "registered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Unclear or incomplete requisition",
+      "share_of_cases": 0.06,
+      "description": "Handwriting, an unknown test name, a missing signature or clinician, or identifiers that do not match the card. The assistant looks the test up or calls the clinic; some tests are held and a few patients are sent back.",
+      "path": [
+        "s06",
+        "s07",
+        "s09",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Uploaded or faxed requisition not yet available",
+      "share_of_cases": 0.015,
+      "description": "The patient says the clinic sent the requisition but it is not in the imaging queue yet, so the clinic has to resend it.",
+      "path": [
+        "s04",
+        "s05",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "Invalid or expired Ontario health card",
+      "share_of_cases": 0.03,
+      "description": "Health Card Validation rejects the version code; the assistant re-keys it, asks for a newer card, takes payment as uninsured or sends the patient to renew the card.",
+      "path": [
+        "s15",
+        "s18",
+        "s19"
+      ]
+    },
+    {
+      "name": "Uninsured test ordered",
+      "share_of_cases": 0.06,
+      "description": "A test not paid by the provincial plan is explained and paid at the counter or removed.",
+      "path": [
+        "s19",
+        "s20",
+        "s21"
+      ]
+    },
+    {
+      "name": "Quebec patient-pay visit",
+      "share_of_cases": 0.17,
+      "description": "The auxiliary nurse quotes the price of every test and takes payment before collection.",
+      "path": [
+        "s14",
+        "s17",
+        "s21"
+      ]
+    },
+    {
+      "name": "Patient not prepared",
+      "share_of_cases": 0.02,
+      "description": "The patient ate before a fasting test or came without an appointment for a timed test and is asked to return.",
+      "path": [
+        "s14"
+      ]
+    },
+    {
+      "name": "System or label printer outage",
+      "share_of_cases": 0.01,
+      "description": "The LIS, network or label printer fails; the assistant logs an IT ticket and uses downtime labels and logs for later entry.",
+      "path": [
+        "s21",
+        "s22",
+        "s21"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.012,
+        "p90": 0.03
+      },
+      "unit": "calendar days from arrival at the centre to registration complete (0.012 days is about 17 minutes)",
+      "population": "Community collection centres in Ontario, 2019-2022",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ag17",
+          "nwm_lean"
+        ],
+        "note": "Ontario community providers target serving 90% of patients within 30 or 40 minutes (ag17); peaks of 30 to 60 minutes in nwm_lean. The median is an estimate."
+      }
+    },
+    {
+      "metric": "wait_time_target_90th_percentile",
+      "value": {
+        "low": 30,
+        "high": 40
+      },
+      "unit": "minutes to be served",
+      "population": "Two Ontario community laboratory providers, 2017",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ag17"
+        ],
+        "note": "Provider-set targets; not monitored by the ministry."
+      }
+    },
+    {
+      "metric": "requisitions_with_order_entry_error",
+      "value": 0.048,
+      "unit": "share of outpatient requisitions",
+      "population": "660 laboratories in the CAP Q-Probes program, 1999",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "valenstein99"
+        ],
+        "note": "Median institution 6.0%; 10% of institutions at least 18%."
+      }
+    },
+    {
+      "metric": "registration_time_mean",
+      "value": 1.1,
+      "unit": "minutes per patient",
+      "population": "Hospital outpatient collection centre in India with a simpler registration and no insurance check",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cureus23"
+        ],
+        "note": "Shown as a lower bound; Canadian registration adds health card validation, re-keying of clinician and tests and payment."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Morning peaks of fasting patients make walk-in waits of 30 to 60 minutes common while the centre is quiet in the afternoon.",
+      "steps": [
+        "s02"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ag17",
+          "nwm_lean"
+        ],
+        "note": "Targets in ag17, peak waits in nwm_lean."
+      }
+    },
+    {
+      "description": "Every paper requisition is re-keyed at the counter, which is the slowest and most error-prone part of registration.",
+      "steps": [
+        "s11",
+        "s12",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "valenstein99",
+          "nwm_lean"
+        ],
+        "note": "4.8% of requisitions with an order entry error; data entry was the bottleneck."
+      }
+    },
+    {
+      "description": "Handwritten or incomplete requisitions force calls to clinics that often go to voicemail while the patient waits.",
+      "steps": [
+        "s06",
+        "s07",
+        "s09",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimate."
+      }
+    },
+    {
+      "description": "Faxed or uploaded requisitions are sometimes not yet available when the patient arrives.",
+      "steps": [
+        "s05"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_upload"
+        ],
+        "note": "Upload service introduced in 2020."
+      }
+    },
+    {
+      "description": "Explaining uninsured charges and Quebec prices at the counter slows the queue and causes complaints.",
+      "steps": [
+        "s17",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ag17"
+        ],
+        "note": "Ministry does not set or monitor prices of uninsured tests."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "ag17",
+      "title": "2017 Annual Report, Section 3.07: Laboratory Services in the Health Sector",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en17/v1_307en17.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Ontario had 356 community collection centres run by seven companies (March 2017); community laboratories did more than 121 million tests in 2015/16 and about 1.1 million uninsured tests paid by patients or private insurance; providers set their own wait targets, for example 90% of patients served within 30 minutes at one community provider and within 40 minutes at another; no provincial wait-time monitoring; collection centres differ in hours and blood-drawing chairs."
+    },
+    {
+      "id": "jobbank33101",
+      "title": "Wages: Medical Laboratory Technical Assistant in Ontario (NOC 33101)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/4210/ON",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low $17.95, median $26.25, high $36.00 (2023-2024 Labour Force Survey); Toronto median $25.00."
+    },
+    {
+      "id": "dyn_before",
+      "title": "Patients and individuals: Before my test",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Patients bring a completed and signed requisition and their provincial health card; most visits to Laboratory and Health Services Centres do not need an appointment, but glucose tolerance, breath and some other tests do; fasting rules of 4, 8 or 10 to 12 hours apply to listed tests."
+    },
+    {
+      "id": "dyn_upload",
+      "title": "Upload Ontario lab requisitions conveniently and securely (partner update)",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "From September 2020 physicians and patients can upload Ontario requisitions online; on arrival the patient tells staff the requisition was uploaded; requisitions older than 6 months are not accepted; an email explains how to check in remotely."
+    },
+    {
+      "id": "form4422",
+      "title": "Laboratory Requisition, form 4422-84 (text version)",
+      "publisher": "Ontario Ministry of Health, Central Forms Repository",
+      "url": "https://forms.mgcs.gov.on.ca/dataset/83a92b8f-f0ad-4be3-80c4-13a09e6676ce/resource/5af91189-4cfd-4db7-817d-ca85b90385e5/download/txt_4422-84e.html",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "The Ontario requisition carries clinician name, address and practitioner number, payer box (OHIP/insured, third party/uninsured, WSIB), patient name as per OHIP card, health number and version, sex, date of birth, test check boxes, therapeutic drug monitoring dose times, other tests, specimen collection date and time, and clinician signature; PSA for asymptomatic screening and vitamin D without OHIP criteria are marked as patient responsible for payment."
+    },
+    {
+      "id": "omd_hcv",
+      "title": "Health Card Validation",
+      "publisher": "OntarioMD",
+      "url": "https://ontariomd.ca/products-and-services/health-card-validation",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "The ministry's Health Card Validation service lets providers validate Ontario health card numbers and version codes in real time and returns a response code showing card status and OHIP eligibility, without returning corrected numbers."
+    },
+    {
+      "id": "dyn_mbreq",
+      "title": "The model laboratory Manitoba laboratory requisition (January 2020)",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "Manitoba requisition asks for name as per MHSC card, PHIN and MHSC numbers, a payment agency box (MB, WCB, other) that the physician must mark, cash or cheque receipt number, and states that Manitoba Health does not allow tests requisitioned in non-specific blocks."
+    },
+    {
+      "id": "valenstein99",
+      "title": "Outpatient order accuracy: a College of American Pathologists Q-Probes study of requisition order entry accuracy in 660 institutions (abstract)",
+      "publisher": "Archives of Pathology and Laboratory Medicine, via Europe PMC",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE%3A%22outpatient%20order%20accuracy%22&resultType=core&format=json",
+      "year": 1999,
+      "accessed": "2026-11-17",
+      "supports": "5,514 of 114,934 outpatient requisitions (4.8%) had at least one order entry error; median institution 6.0%; 10% of institutions at least 18%; physician name discrepancies most common; higher error rates where orders were not rechecked against requisitions and accuracy was not monitored."
+    },
+    {
+      "id": "cureus23",
+      "title": "Assessment of the number of phlebotomists in a newly established sample collection center",
+      "publisher": "Cureus (PMC10493005)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10493005",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "Time study of 1,200 outpatients at an Indian hospital collection centre: registration mean 1.1 minutes, queue wait 6.5 minutes, phlebotomy 2.2 minutes, 9.8 minutes from registration to completed draw."
+    },
+    {
+      "id": "nwm_lean",
+      "title": "Streamlining diagnostic testing at Northwestern Memorial",
+      "publisher": "iSixSigma",
+      "url": "https://www.isixsigma.com/healthcare/streamlining-diagnostic-testing-northwestern-memorial/",
+      "year": 2010,
+      "accessed": "2026-11-17",
+      "supports": "Outpatient lab flow of greeter, data entry and phlebotomy; data entry (ordering tests and queuing labels) was the bottleneck at 46 patients an hour; waits of 30 to 60 minutes at peak; share of patients seen within 20 minutes rose from 44% to 84%."
+    }
+  ],
+  "assumptions": [
+    "All shared steps are assigned to the Ontario lab assistant role because Ontario has about 70% of the centres and staff. Quebec auxiliary nurses and Manitoba technicians do the same steps at similar speed; their own role appears only on the province-specific steps (Quebec payment, Manitoba coverage check). Their FTE is stated in proportion to visits.",
+    "The registration ends when labels are printed and the patient waits for collection. The second wait, for a collection room, belongs to the collection workflow.",
+    "Half of visits are modelled as booked and half as walk-in, from the org file's 320,000 appointment bookings a month against 560,000 visits. Walk-in waits are set so that about 90% reach the counter within about 40 minutes, near provider targets reported in 2017.",
+    "Province shares (Ontario 69%, Quebec 17%, Manitoba 12%) follow the org file's staff split, not visit counts, which are not published.",
+    "Hands-on times are for an experienced assistant. Mean staff hands-on time is about 5 minutes per visit including branches. At the org file's 560,000 visits a month this implies about 360 FTE at 130 productive hours a month, more than the 248 FTE stated here; together with collection it exceeds the org file's 580 front-line centre staff. Either visits are overstated in the org file, centre headcount is understated, or productive hours per person are higher than 130. The stated FTE is kept within the org file's headcount.",
+    "Electronic orders sent from clinic EMRs straight into the LIS were rare at collection centres in 2019-2022, so nearly every visit is keyed from a paper or scanned requisition.",
+    "The new_collection_site input from site openings enables visits but does not trigger them, so its share is 0.",
+    "Loaded costs come from the org file (hourly wage times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

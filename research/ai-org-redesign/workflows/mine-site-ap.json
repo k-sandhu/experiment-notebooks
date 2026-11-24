@@ -1,0 +1,1706 @@
+{
+  "schema_version": "0.3",
+  "id": "mine-site-ap",
+  "name": "Site accounts payable: supplier invoice to payment at a remote underground gold mine",
+  "org": "mining-operator-co",
+  "process": "site-ap",
+  "sector": "gold mining",
+  "function": "finance",
+  "summary": "Site accountants receive supplier and contractor invoices by email and mail, key them into the ERP, and match them to the purchase order and the warehouse receipt, or to a contractor work certificate. Invoices without a purchase order are coded and sent to the budget holder for approval. Matched and approved invoices wait for their due date and go out in a weekly payment run that the site controller approves and head office releases from the bank portal. Missing receipts, price differences between invoice and PO, and contractor quantities that differ from the signed certificate cause most of the rework and the late payments.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A single-mine Canadian gold producer with about 280 people at a remote northern Ontario site, a mid-market ERP with purchasing, inventory and payables, and a six-person site finance team under the site controller.",
+    "org_size_employees": 300,
+    "notes": "Describes 2019-2022 practice: PDF and paper invoices keyed by hand into the ERP, three-way match in the ERP, approvals by email or ERP workflow, weekly EFT and cheque runs released by head office."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one supplier invoice",
+  "trigger": "A supplier, contractor or utility invoice arrives in the site payables email inbox or the mail.",
+  "end_state": "The invoice is posted to the payables ledger and paid in a weekly run, or rejected as a duplicate.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 1200,
+      "mode": 1600,
+      "high": 2200
+    },
+    "seasonality": "Peaks in the weeks after planned shutdowns (contractor and parts invoices) and at fiscal year-end when suppliers clear old invoices; summer surface construction adds contractor invoices.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "wdo-guidance"
+      ],
+      "note": "Organisation file process_map volume. Cross-check: about C$100 million a year of external spend (operating cost of C$900-1,000 per oz on about 100,000 oz plus C$45-53 million capital, wdo-guidance, less payroll) divided by 19,000 invoices a year gives an average invoice of about C$5,000, which is plausible for a mine with many small freight, consumable and service invoices."
+    },
+    "surge": {
+      "cause": "shutdown contractor and parts invoices",
+      "events_per_year": {
+        "low": 3,
+        "mode": 4,
+        "high": 4
+      },
+      "duration_days": {
+        "low": 14,
+        "mode": 21,
+        "high": 30
+      },
+      "volume_multiplier": {
+        "low": 1.15,
+        "mode": 1.3,
+        "high": 1.5
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Follows the organisation file's quarterly shutdown surge in purchasing, lagged by two to four weeks as invoices arrive."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "suppliers",
+        "object": "supplier_invoice",
+        "share": 0.6
+      },
+      {
+        "from": "other-contractors",
+        "object": "supplier_invoice",
+        "share": 0.18
+      },
+      {
+        "from": "drilling-contractor",
+        "object": "supplier_invoice",
+        "share": 0.06
+      },
+      {
+        "from": "fuel-supplier",
+        "object": "supplier_invoice",
+        "share": 0.04
+      },
+      {
+        "from": "reagent-supplier",
+        "object": "supplier_invoice",
+        "share": 0.04
+      },
+      {
+        "from": "explosives-supplier",
+        "object": "supplier_invoice",
+        "share": 0.03
+      },
+      {
+        "from": "travel-providers",
+        "object": "supplier_invoice",
+        "share": 0.02
+      },
+      {
+        "from": "mining-contractor",
+        "object": "supplier_invoice",
+        "share": 0.01
+      },
+      {
+        "from": "power-utility",
+        "object": "supplier_invoice",
+        "share": 0.01
+      },
+      {
+        "from": "commercial-lab",
+        "object": "supplier_invoice",
+        "share": 0.01
+      }
+    ],
+    "inputs": [
+      {
+        "from": "site-purchasing",
+        "object": "po_record"
+      },
+      {
+        "from": "site-warehouse",
+        "object": "goods_receipt"
+      },
+      {
+        "from": "site-fuel",
+        "object": "goods_receipt"
+      },
+      {
+        "from": "mine-open-pit",
+        "object": "contractor_certificate"
+      },
+      {
+        "from": "ts-definition-drilling",
+        "object": "contractor_certificate"
+      },
+      {
+        "from": "mnt-shutdown",
+        "object": "contractor_certificate"
+      },
+      {
+        "from": "site-contractors",
+        "object": "contractor_certificate"
+      },
+      {
+        "from": "expl-drilling",
+        "object": "contractor_certificate"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "paid",
+        "to": "suppliers",
+        "object": "supplier_payment"
+      },
+      {
+        "outcome": "paid",
+        "to": "corp-treasury",
+        "object": "payment_run"
+      },
+      {
+        "outcome": "any",
+        "to": "site-cost-reporting",
+        "object": "ap_ledger"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "site-accountant",
+      "title": "Site accountant (payables and cost)",
+      "department": "Site finance and payroll",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.3,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 1311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost from the organisation file. FTE on this process: about three quarters of the three site accountants' time goes to payables; the rest is cost accounting and the month-end close. The touch times imply about 3.5 FTE, see assumptions."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "site-controller",
+      "title": "Site controller",
+      "department": "Site finance and payroll",
+      "layer": "manager",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 80,
+        "mode": 95,
+        "high": 115
+      },
+      "occupation_code": "NOC 0111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost from the organisation file. FTE on this process: vendor master changes, non-PO approvals within limit and weekly payment run approval."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "gm",
+      "title": "Mine general manager",
+      "department": "Site management and administration",
+      "layer": "director",
+      "fte_on_process": 0.03,
+      "loaded_cost_per_hour": {
+        "low": 120,
+        "mode": 150,
+        "high": 185
+      },
+      "occupation_code": "NOC 0811",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost from the organisation file. FTE on this process: approval of non-PO invoices above the controller's limit."
+      }
+    },
+    {
+      "id": "buyer",
+      "title": "Buyer",
+      "department": "Supply chain and warehouse",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.25,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 45,
+        "high": 54
+      },
+      "occupation_code": "NOC 1225",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost from the organisation file. FTE on this process: resolving price and quantity differences between invoices and POs."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "warehouse-attendant",
+      "title": "Warehouse attendant",
+      "department": "Supply chain and warehouse",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 37,
+        "high": 44
+      },
+      "occupation_code": "NOC 1522",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost from the organisation file. FTE on this process: confirming and posting late goods receipts when AP asks."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "treasury-tax-manager",
+      "title": "Treasury and tax manager",
+      "department": "Corporate finance and reporting",
+      "layer": "manager",
+      "fte_on_process": 0.03,
+      "loaded_cost_per_hour": {
+        "low": 85,
+        "mode": 105,
+        "high": 130
+      },
+      "occupation_code": "NOC 1111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost from the organisation file. FTE on this process: releasing the weekly payment batch in the bank portal."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "erp",
+      "name": "Mid-market ERP for finance, purchasing, inventory and fixed assets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email",
+      "name": "Email and calendar (Microsoft Outlook/Exchange)",
+      "kind": "communication"
+    },
+    {
+      "id": "docs",
+      "name": "Shared drives and document library (procedures, permits, drawings)",
+      "kind": "document_store"
+    },
+    {
+      "id": "bank-portal",
+      "name": "Bank and bullion account portals",
+      "kind": "external_portal"
+    },
+    {
+      "id": "consolidation",
+      "name": "Consolidation, budget and reporting workbooks",
+      "kind": "spreadsheet"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive and log invoice",
+      "description": "A site accountant opens the payables inbox or the mail, saves each invoice as a PDF to the invoice folder, stamps the received date and sorts it into PO, contractor or non-PO piles.",
+      "role": "site-accountant",
+      "kind": "intake",
+      "inputs": [
+        "supplier invoice (PDF or paper)"
+      ],
+      "outputs": [
+        "logged invoice"
+      ],
+      "systems": [
+        "email",
+        "docs"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Paper invoices take several days by mail to a remote site; email invoices wait in the inbox until the daily batch. Estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check for duplicates and supplier record",
+      "description": "The accountant searches the ERP for the same supplier invoice number and amount, and checks that the supplier exists with current remit-to and banking details.",
+      "role": "site-accountant",
+      "kind": "lookup",
+      "inputs": [
+        "logged invoice"
+      ],
+      "outputs": [
+        "checked invoice"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Duplicate with a changed invoice number not spotted.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.95,
+          "condition": "new invoice from a set-up supplier"
+        },
+        {
+          "to": "s03",
+          "prob": 0.03,
+          "condition": "new supplier or changed bank details"
+        },
+        {
+          "to": "END",
+          "prob": 0.02,
+          "condition": "duplicate or statement copy",
+          "outcome": "rejected_duplicate"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Duplicate and new-supplier shares are estimates."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Verify and set up supplier or bank change",
+      "description": "The site controller checks the supplier's forms, phones a known contact at the supplier to confirm any new or changed bank details, and enters or approves the vendor master change, which the accountant who keys invoices cannot do.",
+      "role": "site-controller",
+      "kind": "validation",
+      "inputs": [
+        "supplier forms",
+        "bank change request"
+      ],
+      "outputs": [
+        "approved vendor record"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Internal control over financial reporting: vendor master changes verified and made by someone other than the invoice processor",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "supplier active"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Callback verification and separation of vendor master maintenance from invoice entry are standard payables fraud controls; not checked against a source."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Route by invoice type",
+      "description": "The accountant decides which path the invoice takes: against a purchase order, against a contractor work certificate, or a non-PO invoice such as freight, power, travel or a service without an order.",
+      "role": "site-accountant",
+      "kind": "judgment",
+      "inputs": [
+        "checked invoice"
+      ],
+      "outputs": [
+        "routed invoice"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.5,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.68,
+          "condition": "PO invoice"
+        },
+        {
+          "to": "s13",
+          "prob": 0.14,
+          "condition": "contractor invoice"
+        },
+        {
+          "to": "s16",
+          "prob": 0.18,
+          "condition": "non-PO invoice"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Mix is an estimate: the organisation file links most invoices to POs and goods receipts and a sizeable minority to contractor certificates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Key PO invoice against the purchase order",
+      "description": "The accountant opens the PO in the ERP payables screen, keys the invoice number, date, amounts, freight and taxes, and selects the receipt lines being billed.",
+      "role": "site-accountant",
+      "kind": "data_entry",
+      "inputs": [
+        "PO invoice",
+        "PO record"
+      ],
+      "outputs": [
+        "entered invoice"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Amount, tax or quantity keyed wrongly.",
+        "typically_caught_at": "s06"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "entered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Manual keying of invoices was common at mid-sized mining companies before 2022; time per invoice is an estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "ERP three-way match",
+      "description": "The ERP compares invoice price and quantity with the PO and the posted goods receipt within the set tolerance, and either clears the invoice for payment or puts it on hold with a reason code.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "entered invoice",
+        "PO record",
+        "goods receipt"
+      ],
+      "outputs": [
+        "matched invoice or match hold"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: three-way match of invoice, purchase order and receipt before payment",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.7,
+          "condition": "matched within tolerance"
+        },
+        {
+          "to": "s07",
+          "prob": 0.12,
+          "condition": "no goods receipt posted"
+        },
+        {
+          "to": "s09",
+          "prob": 0.18,
+          "condition": "price or quantity difference"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "A first-pass match rate of about 70 percent is an estimate for manual keying with frequent freight and price changes."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Chase missing goods receipt",
+      "description": "The accountant emails the warehouse or the requisitioner asking whether the goods or service arrived and to post the receipt in the ERP.",
+      "role": "site-accountant",
+      "kind": "communication",
+      "inputs": [
+        "match hold report"
+      ],
+      "outputs": [
+        "receipt request"
+      ],
+      "systems": [
+        "email",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Warehouse confirms and posts receipt",
+      "description": "A warehouse attendant finds the packing slip or checks the bin, posts the receipt in the ERP, or reports that the goods never arrived or arrived short.",
+      "role": "warehouse-attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "receipt request",
+        "packing slip"
+      ],
+      "outputs": [
+        "posted goods receipt"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Receipt posted against the wrong PO line.",
+        "typically_caught_at": "s06"
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.88,
+          "condition": "receipt posted; rematch"
+        },
+        {
+          "to": "s09",
+          "prob": 0.12,
+          "condition": "short or not received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate; warehouse attendants work field rotation and receipts for goods delivered directly to departments are often missed."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Investigate price or quantity difference",
+      "description": "The accountant compares the invoice with the PO, the receipt and the packing slip, works out whether the difference is freight, a price increase, a partial shipment or a keying error, and decides who has to act.",
+      "role": "site-accountant",
+      "kind": "analysis",
+      "inputs": [
+        "match hold",
+        "PO",
+        "packing slip"
+      ],
+      "outputs": [
+        "variance finding"
+      ],
+      "systems": [
+        "erp",
+        "docs",
+        "email"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.55,
+          "condition": "PO price or terms need a buyer decision"
+        },
+        {
+          "to": "s11",
+          "prob": 0.25,
+          "condition": "supplier billed wrongly"
+        },
+        {
+          "to": "s19",
+          "prob": 0.2,
+          "condition": "small difference accepted within policy"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Buyer resolves PO difference",
+      "description": "The buyer checks the quote and the supplier's acknowledgement, then either amends the PO price or freight line or tells the accountant the supplier must credit the difference.",
+      "role": "buyer",
+      "kind": "judgment",
+      "inputs": [
+        "variance finding"
+      ],
+      "outputs": [
+        "amended PO or credit decision"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.7,
+          "condition": "PO amended; rematch"
+        },
+        {
+          "to": "s11",
+          "prob": 0.3,
+          "condition": "supplier must credit"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "discovery-buyer"
+        ],
+        "note": "Resolving invoice issues with vendors is a listed buyer duty; time and shares are estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Request credit note or corrected invoice",
+      "description": "The accountant emails the supplier with the PO price or quantity, asks for a credit note or corrected invoice, and puts the invoice on hold with a note.",
+      "role": "site-accountant",
+      "kind": "communication",
+      "inputs": [
+        "variance finding"
+      ],
+      "outputs": [
+        "credit request"
+      ],
+      "systems": [
+        "email",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Supplier issues credit or corrected invoice",
+      "description": "The supplier's receivables team reviews the request and sends a credit note or a replacement invoice, often after a reminder.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "credit request"
+      ],
+      "outputs": [
+        "credit note or corrected invoice"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 14400,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "document received; re-key"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Match contractor invoice to approved certificate",
+      "description": "The accountant compares the contractor's invoice with the work certificate signed by the contract owner: metres drilled, equipment and labour hours, rates from the contract schedule, holdback and taxes.",
+      "role": "site-accountant",
+      "kind": "validation",
+      "inputs": [
+        "contractor invoice",
+        "approved contractor certificate",
+        "contract rate schedule"
+      ],
+      "outputs": [
+        "checked contractor invoice"
+      ],
+      "systems": [
+        "erp",
+        "docs"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Rate or quantity difference missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: contractor invoices paid only against certified quantities",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.8,
+          "condition": "matches the certificate"
+        },
+        {
+          "to": "s14",
+          "prob": 0.2,
+          "condition": "quantity or rate differs"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate. The organisation file sends certificates from the open pit, drilling, shutdown and contractor-management processes into payables."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Query contract owner on difference",
+      "description": "The accountant emails the superintendent or geologist who signed the certificate with the difference and waits for them to confirm the extra work or ask the contractor to reissue; owners on rotation or underground answer slowly.",
+      "role": "site-accountant",
+      "kind": "communication",
+      "inputs": [
+        "checked contractor invoice"
+      ],
+      "outputs": [
+        "owner's answer"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.7,
+          "condition": "owner confirms the invoice"
+        },
+        {
+          "to": "s11",
+          "prob": 0.3,
+          "condition": "contractor must reissue"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate; most contract owners work 14-on, 14-off rotation in the organisation file."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Code contractor invoice",
+      "description": "The accountant codes the invoice to the operating cost centre or capital project, records any construction holdback and posts it to the payables ledger.",
+      "role": "site-accountant",
+      "kind": "data_entry",
+      "inputs": [
+        "checked contractor invoice"
+      ],
+      "outputs": [
+        "posted contractor invoice"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Capital and operating codes swapped.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "posted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Code non-PO invoice and route for approval",
+      "description": "The accountant keys the invoice, codes it to the general ledger account and cost centre, attaches the PDF and sends it to the budget holder through the ERP workflow or by email.",
+      "role": "site-accountant",
+      "kind": "data_entry",
+      "inputs": [
+        "non-PO invoice"
+      ],
+      "outputs": [
+        "coded invoice awaiting approval"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong cost centre or GL account.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "routed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Site controller approves non-PO invoice",
+      "description": "The site controller, who holds the budgets for freight, power, camp services and travel, checks that the charge is real and coded correctly and approves it, or recodes it or sends it to the general manager when it is above their limit.",
+      "role": "site-controller",
+      "kind": "approval",
+      "inputs": [
+        "coded invoice"
+      ],
+      "outputs": [
+        "approved invoice"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Delegation of financial authority: budget holder approval of non-PO invoices",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.82,
+          "condition": "approved"
+        },
+        {
+          "to": "s18",
+          "prob": 0.13,
+          "condition": "above controller limit"
+        },
+        {
+          "to": "s16",
+          "prob": 0.05,
+          "condition": "recode"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate. Most non-PO spend at a mine is freight, utilities, travel and camp services held in site administration budgets."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "General manager approves large non-PO invoice",
+      "description": "The general manager reviews larger non-PO invoices such as power bills or one-off services with the controller's note and approves them in the workflow.",
+      "role": "gm",
+      "kind": "approval",
+      "inputs": [
+        "approved invoice"
+      ],
+      "outputs": [
+        "GM-approved invoice"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Delegation of financial authority approved by the board",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Hold until due date",
+      "description": "The ERP holds the approved invoice until the payment run that falls before its due date, usually net 30 days from the invoice date, which is often a week or more before the site received it.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved invoice"
+      ],
+      "outputs": [
+        "invoice selected for payment"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 17280,
+        "high": 37440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "due in the next run"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Net 30 terms from invoice date, with invoices reaching site some days after their date, leave about one to four weeks between approval and payment; estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Prepare weekly payment proposal",
+      "description": "Each week the accountant runs the payment proposal in the ERP, removes invoices on hold or in dispute, checks large payments and new bank details against the vendor change log, and exports the EFT file and cheque list.",
+      "role": "site-accountant",
+      "kind": "analysis",
+      "inputs": [
+        "invoices due"
+      ],
+      "outputs": [
+        "payment proposal",
+        "EFT file"
+      ],
+      "systems": [
+        "erp",
+        "docs"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.6,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 8640
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "proposal ready"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly payment runs are common at single-site miners; per-invoice share of the run time is an estimate (a run of 300-500 invoices takes two to four hours)."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Site controller approves payment run",
+      "description": "The site controller reviews the payment register, totals by supplier and any unusual payees, compares with the cash forecast, and signs the approval.",
+      "role": "site-controller",
+      "kind": "approval",
+      "inputs": [
+        "payment proposal"
+      ],
+      "outputs": [
+        "approved payment run"
+      ],
+      "systems": [
+        "erp",
+        "consolidation"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Payment run approved by someone other than the person who prepared it",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Head office releases payment",
+      "description": "The treasury and tax manager in Toronto uploads the approved EFT file to the bank portal, checks the batch total against the site approval, and releases it with a second authoriser; cheques are signed and mailed.",
+      "role": "treasury-tax-manager",
+      "kind": "approval",
+      "inputs": [
+        "approved payment run",
+        "EFT file"
+      ],
+      "outputs": [
+        "released payment batch"
+      ],
+      "systems": [
+        "bank-portal",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.3
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Bank mandate: two authorised signatories release payments",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "released"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Head office release with dual authorisation is an estimate from the organisation file, which sends the payment run to corp-treasury."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Bank settles payment and remittance sent",
+      "description": "The bank settles EFT payments the next business day and the ERP emails remittance advices; cheques take several days in the mail.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "released payment batch"
+      ],
+      "outputs": [
+        "supplier payment",
+        "remittance advice",
+        "payables ledger entries"
+      ],
+      "systems": [
+        "bank-portal",
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "paid",
+          "outcome": "paid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Missing goods receipt",
+      "share_of_cases": 0.12,
+      "description": "Goods arrived but nobody posted the receipt; AP chases the warehouse and rematches.",
+      "path": [
+        "s06",
+        "s07",
+        "s08",
+        "s06"
+      ]
+    },
+    {
+      "name": "Price or quantity difference",
+      "share_of_cases": 0.18,
+      "description": "Invoice differs from the PO; the buyer amends the PO or the supplier credits the difference.",
+      "path": [
+        "s06",
+        "s09",
+        "s10",
+        "s06"
+      ]
+    },
+    {
+      "name": "Credit note needed",
+      "share_of_cases": 0.07,
+      "description": "The supplier has to credit or reissue, which can take weeks.",
+      "path": [
+        "s11",
+        "s12",
+        "s05"
+      ]
+    },
+    {
+      "name": "Contractor quantity dispute",
+      "share_of_cases": 0.03,
+      "description": "Contractor bills more than the signed certificate and the contract owner must confirm.",
+      "path": [
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Bank detail change",
+      "share_of_cases": 0.03,
+      "description": "New supplier or changed bank account verified by callback before any payment.",
+      "path": [
+        "s02",
+        "s03",
+        "s04"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 15,
+        "p90": 30
+      },
+      "unit": "calendar days from receipt of invoice until payment is transmitted",
+      "population": "APQC Open Standards Benchmarking, cross-industry",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfo-ap"
+        ],
+        "note": "The p50 of 15 days is the APQC median as reported. The source gives 24 days at the 75th percentile; the p90 of 30 days is the author's extrapolation, not a published figure."
+      }
+    },
+    {
+      "metric": "invoice_to_payment_days_quartiles",
+      "value": {
+        "p25": 12,
+        "p50": 15,
+        "p75": 24
+      },
+      "unit": "calendar days",
+      "population": "APQC Open Standards Benchmarking, cross-industry",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfo-ap"
+        ],
+        "note": "As published."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "About three in ten PO invoices fail the first match, mostly because receipts are not posted or freight and price changes were never put on the PO.",
+      "steps": [
+        "s06",
+        "s07",
+        "s08",
+        "s09",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "description": "Credit notes and corrected invoices from suppliers take weeks, so disputed invoices age past their terms and suppliers call to chase payment.",
+      "steps": [
+        "s11",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "description": "Approvers and contract owners work rotations or are underground, so non-PO approvals and contractor queries wait days.",
+      "steps": [
+        "s14",
+        "s17",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file gives most superintendents field_rotation shift patterns."
+      }
+    },
+    {
+      "description": "Paper and PDF invoices are keyed by hand; three accountants also carry cost accounting and the close.",
+      "steps": [
+        "s05",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file headcount and process roles."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "cfo-ap",
+      "title": "Hidden delays that slow payments and strain cash flow (Metric of the Month)",
+      "publisher": "CFO.com (Perry D. Wiggins, APQC)",
+      "url": "https://www.cfo.com/news/hidden-delays-that-slow-payments-and-strain-cash-flow-metric-of-the-month/806681/",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "APQC Open Standards Benchmarking: cycle time from receipt of invoice until payment is transmitted is 12 days at the 25th percentile, 15 days at the median and 24 days at the 75th percentile."
+    },
+    {
+      "id": "discovery-buyer",
+      "title": "Buyer, Porcupine operations (Timmins, Ontario) job posting",
+      "publisher": "Discovery Silver Corp. (ApplicantStack)",
+      "url": "https://discovery.applicantstack.com/x/detail/a2vy5j81wf6t",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Buyer at an Ontario underground and open pit gold operation follows the procure-to-pay process, obtains three quotes for items over $500, issues purchase orders and change orders, expedites past-due and rush orders, follows up with end users, updates the ERP and resolves invoice issues with vendors; reports to the procurement and warehouse manager."
+    },
+    {
+      "id": "wdo-guidance",
+      "title": "Wesdome Announces 2020 Fourth Quarter and Full Year Production Results; Provides 2021 Guidance",
+      "publisher": "Wesdome Gold Mines (via Yahoo Finance)",
+      "url": "https://finance.yahoo.com/news/wesdome-announces-2020-fourth-quarter-213000875.html",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Eagle River complex 2021 guidance: 92,000-105,000 oz, operating cost C$900-1,000 per oz, AISC C$1,300-1,450 per oz, sustaining capital C$23-27 million and growth capital C$22-26 million; 2020 ore milled 236,297 t and production 90,278 oz."
+    }
+  ],
+  "assumptions": [
+    "Invoices are keyed manually; OCR capture was not yet common at single-mine producers of this size in 2019-2022.",
+    "The cycle time includes the deliberate wait until the due date (s19). Most invoices are paid near net 30 from the invoice date, so the simulated median is above the cross-industry APQC median of 15 days, whose population includes companies paying faster than terms.",
+    "The organisation file triggers this process only from suppliers, other contractors and the drilling contractor. This file adds invoices from the fuel, reagent and explosives suppliers (which purchasing sends POs to), the open pit mining contractor, travel providers, the power utility and commercial labs, all of which are outside parties in the organisation file.",
+    "Approvers: the organisation file lists only the site accountant and site controller on this process. This file adds the general manager (large non-PO invoices), the buyer (price differences), a warehouse attendant (late receipts) and the treasury and tax manager (payment release), all existing roles.",
+    "Contractor certificates are approved upstream by their owners; AP only queries an owner when the invoice differs from the certificate.",
+    "Weekly payment runs prepared at site and released by head office from the bank portal; the organisation file links the payment run to corp-treasury.",
+    "Staffing gap: at 1,600 invoices a month the touch times (about 17 minutes of accountant time per invoice once exceptions are averaged in) imply about 3.5 FTE of accountant work, more than the three site accountants can give while also doing cost accounting and the close. Either the organisation file volume is high (its note assumes about three invoices per PO; one to one and a half per PO plus contractor and non-PO invoices gives about 1,000-1,200 a month) or site finance needs a dedicated payables clerk.",
+    "Loaded costs are taken from the organisation file."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

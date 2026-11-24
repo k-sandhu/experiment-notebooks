@@ -1,0 +1,1478 @@
+{
+  "schema_version": "0.3",
+  "id": "mine-mill-crushing",
+  "name": "Crushing (one crushing day)",
+  "org": "mining-operator-co",
+  "process": "mill-crushing",
+  "sector": "metal mining (gold)",
+  "function": "processing",
+  "summary": "Run-of-mine ore from the stockpile is broken in a jaw crusher and a cone crusher and screened so that the ball mills get rock of which 80% passes 14 mm (9/16 inch). One crusher operator per shift runs the plant, mostly on day shift, keeping the fine ore bin full enough to feed the mill around the clock. The work is interrupted by drill steel and rock bolts tripping the metal detector, by wet or oversize ore choking chutes, and by breakdowns; a major cone crusher failure can starve the mill for days, as happened at the reference mine in December 2020.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A single-mine Canadian underground gold producer with a two-stage jaw and cone crushing plant, permitted for 1,200 tpd, feeding a mill running at 650 to 780 tpd.",
+    "org_size_employees": 300,
+    "notes": "One case is one calendar day of crushing, mostly on day shift with a night top-up when needed."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one crushing day",
+  "trigger": "The day crusher operator takes over at 07:00 with ore on the stockpile and the mill drawing from the fine ore bin.",
+  "end_state": "The fine ore bin holds enough crushed ore for the mill, the circuit is stopped empty or running, and the crushing tally is in the shift report.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 29,
+      "mode": 30,
+      "high": 31
+    },
+    "seasonality": "Constant number of days; spring thaw brings wet, sticky ore and more chokes, and winter brings frozen stockpile lumps.",
+    "evidence": {
+      "tier": "A",
+      "sources": [
+        "wes2020"
+      ],
+      "note": "One case per calendar day; 236,297 t milled in 2020, about 645 t a day, all of it crushed."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "mine-ore-stockpile",
+        "object": "mill_feed",
+        "share": 1.0
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "crushing_day_completed",
+        "to": "mill-grind-leach",
+        "object": "crushed_ore"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-breakdown-repair",
+        "object": "work_request"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "crusher-operator",
+      "title": "Crusher operator",
+      "department": "Mill operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.0,
+      "loaded_cost_per_hour": {
+        "low": 37,
+        "mode": 43,
+        "high": 51
+      },
+      "occupation_code": "NOC 9411",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Four operators, one per crew on 12-hour shifts (organisation file); about three quarters of their time on crushing, the rest on stockpile reclaim with the loader."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "mill-shift-supervisor",
+      "title": "Mill shift supervisor",
+      "department": "Mill operations",
+      "layer": "supervisor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 62,
+        "mode": 72,
+        "high": 86
+      },
+      "occupation_code": "NOC 9211",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Lockout checks, work requests and the daily tally."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "electrician",
+      "title": "Industrial electrician",
+      "department": "Fixed plant and electrical",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.05,
+      "loaded_cost_per_hour": {
+        "low": 47,
+        "mode": 55,
+        "high": 65
+      },
+      "occupation_code": "NOC 7242",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly belt scale calibration check."
+      },
+      "shift_pattern": "field_rotation"
+    }
+  ],
+  "systems": [
+    {
+      "id": "dcs",
+      "name": "Mill distributed control system and process historian",
+      "kind": "instrument"
+    },
+    {
+      "id": "shift-sheets",
+      "name": "Shift reports, line-up boards and production tallies (paper and spreadsheets)",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "cmms",
+      "name": "Maintenance management system (ERP maintenance module or standalone)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "radio",
+      "name": "Leaky feeder radio and surface radio network",
+      "kind": "communication"
+    },
+    {
+      "id": "hse-system",
+      "name": "Incident, inspection and training records system",
+      "kind": "workflow"
+    },
+    {
+      "id": "erp",
+      "name": "Mid-market ERP for finance, purchasing, inventory and fixed assets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email",
+      "name": "Email and calendar (Microsoft Outlook/Exchange)",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "crusher",
+      "name": "Two-stage crushing circuit (jaw and cone)",
+      "kind": "equipment",
+      "count": 1,
+      "cost_per_hour": {
+        "low": 150,
+        "mode": 220,
+        "high": 300
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Take over the crusher from the night operator",
+      "description": "At shift change the day crusher operator meets the night operator at the crusher control panel, hears what was crushed, which chutes plugged, the fine ore bin level and any equipment locked out, and reads the crusher log.",
+      "role": "crusher-operator",
+      "kind": "communication",
+      "inputs": [
+        "crusher log"
+      ],
+      "outputs": [
+        "handover"
+      ],
+      "systems": [
+        "shift-sheets",
+        "radio"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A known defect such as a worn belt splice is not passed on.",
+        "typically_caught_at": "s02"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "One crusher operator per crew on 12-hour shifts (organisation file: four operators, shift_24x7); handover time is the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Do the pre-start inspection",
+      "description": "Before starting, the operator walks the apron feeder, jaw, cone, screen and conveyors, checks guards, pull cords and belt tracking, the cone lube oil level and temperature, the tramp magnet and metal detector, and signs the pre-start checklist.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "pre-start checklist"
+      ],
+      "outputs": [
+        "signed checklist",
+        "defects found"
+      ],
+      "systems": [
+        "shift-sheets",
+        "hse-system"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A missing guard or damaged pull cord is not noticed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Pre-operational inspection of guards, pull cords and interlocks before starting conveyors and crushers (company procedure under the OHSA)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "crush911"
+        ],
+        "note": "Pull cords, plugged chute switches, cone lube interlocks, tramp magnet and metal detector are standard in a small jaw and cone plant (crush911)."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Check bin levels and the ore to crush",
+      "description": "The operator reads the coarse ore bin and fine ore bin levels, radios the control room for the mill feed rate, and checks with the metallurgist's blend sheet which stockpile the loader should feed next.",
+      "role": "crusher-operator",
+      "kind": "lookup",
+      "inputs": [
+        "bin level indicators",
+        "blend sheet"
+      ],
+      "outputs": [
+        "crushing plan for the shift"
+      ],
+      "systems": [
+        "dcs",
+        "radio"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong stockpile fed, mixing open pit and underground ore.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Blending by source and grade follows mine-ore-stockpile in the organisation file."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Start the crushing circuit in sequence",
+      "description": "Once the loader has tipped ore from the Eagle or Mishi stockpile pad into the jaw crusher feed bin, the operator starts the dust scrubber, the conveyors from the fine ore bin end backwards, the screen, the cone and the jaw, sounds the start-up horn, and finally starts the apron feeder at a low rate.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "ore in coarse bin"
+      ],
+      "outputs": [
+        "circuit running"
+      ],
+      "systems": [
+        "dcs"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 120
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "crush911",
+          "er2022"
+        ],
+        "note": "Start-up horn with a 30-second delay and interlocked start sequence (crush911); a front-end loader feeds the jaw crusher from three stockpile pads (er2022). The wait is for the loader."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Run the crushing circuit",
+      "description": "The operator watches jaw and cone motor power, feeder speed, cone cavity level and screen overflow on the panel and cameras, raises or lowers the feeder rate to keep the cone choke-fed without overloading, and keeps an eye on the fine ore bin level.",
+      "role": "crusher-operator",
+      "kind": "judgment",
+      "inputs": [
+        "panel readings",
+        "camera views"
+      ],
+      "outputs": [
+        "crushed ore to the fine ore bin"
+      ],
+      "systems": [
+        "dcs"
+      ],
+      "touch_min": {
+        "low": 240,
+        "mode": 360,
+        "high": 480
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Feed too fast, overloading the cone and stopping the circuit.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s06",
+        "s14",
+        "s15"
+      ],
+      "resources": [
+        {
+          "id": "crusher",
+          "occupied_min": {
+            "low": 420,
+            "mode": 600,
+            "high": 840
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.55,
+          "condition": "metal detector or magnet trip"
+        },
+        {
+          "to": "s07",
+          "prob": 0.25,
+          "condition": "chute plugged or crusher choked"
+        },
+        {
+          "to": "s09",
+          "prob": 0.08,
+          "condition": "equipment breakdown"
+        },
+        {
+          "to": "s12",
+          "prob": 0.12,
+          "condition": "no stoppage"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "er2022",
+          "crush911"
+        ],
+        "note": "Jaw crusher, double-deck screen and cone crusher in closed circuit with the screen, product 80% passing 9/16 inch, fine ore bin (er2022); a comparable 500 tpd plant crushes about 12 hours a day at 70% availability (crush911). Event frequencies are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Remove tramp steel",
+      "description": "When the metal detector stops the belt or the magnet collects steel, the operator locks out the conveyor, finds and removes the drill steel, rock bolt or scoop tooth from the belt or magnet, notes it in the log and restarts the belt.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "metal detector trip"
+      ],
+      "outputs": [
+        "tramp steel removed",
+        "log note"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Lockout and tagging before entering or clearing a crusher, chute or conveyor (Ontario Regulation 854 under the OHSA; site lockout procedure)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.85,
+          "condition": "belt restarted"
+        },
+        {
+          "to": "s07",
+          "prob": 0.15,
+          "condition": "steel jammed in a chute or the crusher"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "crush911"
+        ],
+        "note": "Magnet over conveyor 1 picks up drill steel and tramp iron to protect the cone; metal detector on conveyor 2 stops the belt (crush911). Underground ore carries rock bolts, mesh and drill steel."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Lock out and confirm isolation for a choke",
+      "description": "The shift supervisor comes to the crusher, checks that the operator has locked out the feeder, crusher and conveyor at the motor control centre, tries the start buttons to confirm zero energy, and approves entry to the chute or crusher cavity.",
+      "role": "mill-shift-supervisor",
+      "kind": "review",
+      "inputs": [
+        "lockout request"
+      ],
+      "outputs": [
+        "confirmed isolation"
+      ],
+      "systems": [
+        "hse-system",
+        "radio"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Lockout and tagging before entering or clearing a crusher, chute or conveyor (Ontario Regulation 854 under the OHSA; site lockout procedure)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Supervisor verification of lockout before entering a crusher is common practice; Regulation 854 text could not be opened."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Clear the choke or plugged chute",
+      "description": "The operator, tied off where needed, bars out the wet or oversize rock or jammed steel from the jaw, cone feed or plugged chute, cleans up the spill, removes locks and restarts the circuit with the supervisor's agreement.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "confirmed isolation"
+      ],
+      "outputs": [
+        "chute cleared"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Liner or chute damaged while barring, found later as a breakdown.",
+        "typically_caught_at": "s09"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Lockout and tagging before entering or clearing a crusher, chute or conveyor (Ontario Regulation 854 under the OHSA; site lockout procedure)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.9,
+          "condition": "cleared and restarted"
+        },
+        {
+          "to": "s09",
+          "prob": 0.1,
+          "condition": "damage found that needs maintenance"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "crush911"
+        ],
+        "note": "Plugged chute tilt switches stop conveyors (crush911); wet spring ore and slabs from underground cause chokes. Times are the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Raise a work request for the breakdown",
+      "description": "The shift supervisor radios the maintenance supervisor, enters a work request for the failed conveyor, screen, feeder or cone with its priority, and tells the control room how long the fine ore bin will last at the current mill feed rate.",
+      "role": "mill-shift-supervisor",
+      "kind": "data_entry",
+      "inputs": [
+        "breakdown report"
+      ],
+      "outputs": [
+        "work request",
+        "bin run-out estimate"
+      ],
+      "systems": [
+        "cmms",
+        "radio",
+        "dcs"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Fault described vaguely, so the first trade sent cannot fix it.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.88,
+          "condition": "repair with parts on site"
+        },
+        {
+          "to": "s10",
+          "prob": 0.12,
+          "condition": "major part must be ordered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "wes2020"
+        ],
+        "note": "Crusher breakdowns are a main cause of lost milling time; six days lost to the cone crusher in December 2020 at the reference mine."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Wait for replacement parts",
+      "description": "For a major failure such as a cone crusher head, bowl or bearing, the replacement is ordered from the OEM or a rebuild shop and trucked to site, and the mill runs on the fine ore bin and stockpile until it arrives.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "purchase order"
+      ],
+      "outputs": [
+        "parts delivered"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "parts on site"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "wes2020",
+          "er2022"
+        ],
+        "note": "Six milling days were lost in December 2020 to cone crusher downtime, and the cone crusher was replaced in an August 2021 shutdown (wes2020, er2022); the share of breakdowns needing outside parts is the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Restart the crusher after the repair",
+      "description": "When the millwright or electrician finishes and removes their locks, the crusher operator removes the personal lock, runs the circuit empty to check the repair, then brings feed back up and refills the fine ore bin.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "completed repair"
+      ],
+      "outputs": [
+        "circuit back in service"
+      ],
+      "systems": [
+        "dcs",
+        "cmms"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "crusher",
+          "occupied_min": {
+            "low": 60,
+            "mode": 240,
+            "high": 720
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait is for a millwright or electrician to come and finish the repair; repair labour is counted in mnt-breakdown-repair."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Check product size and the belt scale",
+      "description": "The operator looks at screen undersize for oversize pieces and torn screen panels, reads the weightometer totaliser on the second mill feed conveyor, and compares tonnes crushed with the drop in stockpile loads.",
+      "role": "crusher-operator",
+      "kind": "validation",
+      "inputs": [
+        "screen product",
+        "belt scale totaliser"
+      ],
+      "outputs": [
+        "product check",
+        "tonnes crushed"
+      ],
+      "systems": [
+        "dcs",
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A torn screen panel is missed and oversize reaches the ball mill.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.14,
+          "condition": "weekly belt scale check due"
+        },
+        {
+          "to": "s14",
+          "prob": 0.86,
+          "condition": "no check due"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022"
+        ],
+        "note": "Weightometer on the second fine ore conveyor to the primary ball mill (er2022); check time is the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Check the belt scale calibration",
+      "description": "Once a week an electrician runs the belt empty for a zero check, hangs test weights or runs a calibration chain, compares the totaliser with the reference and adjusts the span if it is out by more than the tolerance, logging the result.",
+      "role": "electrician",
+      "kind": "validation",
+      "inputs": [
+        "test weights",
+        "calibration log"
+      ],
+      "outputs": [
+        "calibration record"
+      ],
+      "systems": [
+        "dcs",
+        "cmms"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 60,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Metallurgical accounting procedure: mill feed tonnes from a calibrated belt scale",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Mill feed tonnes are the basis of reported milled tonnes and reconciliation; weekly checks are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Clean spillage and wash down",
+      "description": "With the affected conveyor locked out, the operator shovels or hoses spillage from under tail pulleys, transfer points and the screen deck back to the sump, keeping walkways clear.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "spillage"
+      ],
+      "outputs": [
+        "clean walkways"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "No cleaning near moving conveyors without lockout (company guarding and lockout procedure)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s05"
+      ],
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "crush911"
+        ],
+        "note": "Sump pump and wash-down in the crushing building (crush911); time is the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Check the dust scrubber",
+      "description": "The operator checks the wet dust scrubber fan and bottoms pump are running, the water flow and pump box level are normal, and the pickup hoods at the feeder and transfer points are drawing.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "scrubber panel"
+      ],
+      "outputs": [
+        "scrubber check"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Site air Environmental Compliance Approval covering particulate sources (Environmental Protection Act, Ontario)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.15,
+          "condition": "weekly liner and setting check due"
+        },
+        {
+          "to": "s17",
+          "prob": 0.85,
+          "condition": "no check due"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "crush911",
+          "ero1400"
+        ],
+        "note": "Wet dust scrubber at feeder and transfer points (crush911); the mill's air approval lists particulate matter (ero1400)."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Measure liner wear and adjust the cone setting",
+      "description": "With the cone locked out, the operator measures the closed side setting with a lead slug, notes jaw and cone liner wear, and adjusts the cone bowl to restore the setting, telling the planner when liners near their change-out limit.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "lead slug",
+        "liner wear log"
+      ],
+      "outputs": [
+        "setting restored",
+        "liner wear reading"
+      ],
+      "systems": [
+        "shift-sheets",
+        "cmms"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Setting measured wrongly, coarsening mill feed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Lockout and tagging before entering or clearing a crusher, chute or conveyor (Ontario Regulation 854 under the OHSA; site lockout procedure)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "crusher",
+          "occupied_min": {
+            "low": 30,
+            "mode": 60,
+            "high": 120
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly setting checks are the author's estimate; liner changes are planned in mnt-fixed-plant."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Stop crushing at full fine ore bin",
+      "description": "When the fine ore bin reaches its high level the feeder stops on its interlock; the operator then lets conveyors run empty and stops the circuit in sequence, swinging the magnet clear before conveyor 1 stops.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "high bin level"
+      ],
+      "outputs": [
+        "circuit stopped empty"
+      ],
+      "systems": [
+        "dcs"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.35,
+          "condition": "night crushing needed to keep the bin full"
+        },
+        {
+          "to": "s19",
+          "prob": 0.65,
+          "condition": "bin holds the night's feed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "crush911"
+        ],
+        "note": "High fine ore bin level stops the feeder, then the conveyors after a delay; the magnet is swung away before conveyor 1 stops (crush911)."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Crush a night top-up",
+      "description": "When the fine ore bin will not last until morning, for example after a breakdown or at high mill throughput, the night crusher operator restarts the circuit and crushes for a few hours to refill it.",
+      "role": "crusher-operator",
+      "kind": "physical",
+      "inputs": [
+        "bin run-out estimate"
+      ],
+      "outputs": [
+        "crushed ore to the fine ore bin"
+      ],
+      "systems": [
+        "dcs",
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 90,
+        "mode": 180,
+        "high": 300
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 360
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "crusher",
+          "occupied_min": {
+            "low": 120,
+            "mode": 240,
+            "high": 360
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Mill runs about 645 tpd while the crusher works mainly on day shift; share of nights with top-up crushing is the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Record the crushing tally",
+      "description": "The operator writes tonnes crushed from the belt scale, run hours, tramp steel removed, chokes and breakdowns with times, and liner readings on the crusher log sheet.",
+      "role": "crusher-operator",
+      "kind": "data_entry",
+      "inputs": [
+        "belt scale totaliser",
+        "downtime notes"
+      ],
+      "outputs": [
+        "crusher log"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Downtime minutes or causes recorded inaccurately.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Review the crushing tally in the shift report",
+      "description": "The shift supervisor checks the crusher log against the mill feed tonnes and downtime in the control room log, follows up any open work request, and copies the crushing figures into the mill shift report.",
+      "role": "mill-shift-supervisor",
+      "kind": "review",
+      "inputs": [
+        "crusher log",
+        "mill shift log"
+      ],
+      "outputs": [
+        "crushing section of the shift report"
+      ],
+      "systems": [
+        "shift-sheets",
+        "cmms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "crushing day recorded",
+          "outcome": "crushing_day_completed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Tramp steel trip",
+      "share_of_cases": 0.55,
+      "description": "The metal detector or magnet catches drill steel or a rock bolt and the operator removes it under lockout.",
+      "path": [
+        "s05",
+        "s06",
+        "s12"
+      ]
+    },
+    {
+      "name": "Choke or plugged chute",
+      "share_of_cases": 0.33,
+      "description": "Wet or oversize ore or jammed steel blocks a chute or crusher; the supervisor confirms lockout and the operator clears it.",
+      "path": [
+        "s05",
+        "s07",
+        "s08",
+        "s12"
+      ]
+    },
+    {
+      "name": "Breakdown with parts on site",
+      "share_of_cases": 0.1,
+      "description": "A conveyor, screen or crusher fails and maintenance repairs it within hours.",
+      "path": [
+        "s09",
+        "s11"
+      ]
+    },
+    {
+      "name": "Major crusher failure awaiting parts",
+      "share_of_cases": 0.013,
+      "description": "A cone crusher head, bowl or bearing fails and the replacement must be shipped in, starving the mill for days.",
+      "path": [
+        "s09",
+        "s10",
+        "s11"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.0,
+        "p90": 1.0
+      },
+      "unit": "calendar days per crushing day",
+      "population": "One crushing day",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "A crushing day lasts one calendar day by definition. The simulator sums only the steps, most of them on day shift, so its median is shorter; the rare wait for parts lengthens the tail."
+      }
+    },
+    {
+      "metric": "crushing_hours_per_day",
+      "value": {
+        "low": 8,
+        "mode": 12,
+        "high": 16
+      },
+      "unit": "hours of crusher running per day",
+      "population": "Small jaw and cone plants feeding a mill of about 500 to 700 tpd",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "crush911"
+        ],
+        "note": "A 500 tpd plant is designed to crush in 12 hours at 70% availability (crush911)."
+      }
+    },
+    {
+      "metric": "crushing_product_size",
+      "value": 0.5625,
+      "unit": "inches, 80% passing",
+      "population": "Reference mine crushing circuit",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "er2022"
+        ],
+        "note": "9/16 inch."
+      }
+    },
+    {
+      "metric": "milling_days_lost_to_crusher",
+      "value": 6,
+      "unit": "days in December 2020",
+      "population": "Reference mine (Eagle River)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "wes2020"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Drill steel, bolts and mesh from underground trip the metal detector many times a week, and each trip needs a lockout and a search of the belt.",
+      "steps": [
+        "s06"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "crush911"
+        ],
+        "note": "Magnet and metal detector protect the cone from drill steel and tramp iron (crush911); trip frequency is the author's estimate."
+      }
+    },
+    {
+      "description": "A major cone crusher failure needs parts from outside and can stop the mill for days once the fine ore bin is empty.",
+      "steps": [
+        "s09",
+        "s10",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "wes2020"
+        ],
+        "note": "Six milling days lost in December 2020 to cone crusher downtime."
+      }
+    },
+    {
+      "description": "Clearing a choke needs a supervisor to confirm lockout, so the operator waits while the mill draws down the bin.",
+      "steps": [
+        "s07",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "er2022",
+      "title": "Technical Report for the Eagle River Gold Mining Complex, Ontario, Canada (NI 43-101, SRK Consulting, 22 April 2022)",
+      "publisher": "Wesdome Gold Mines Ltd.",
+      "url": "https://s203.q4cdn.com/643390454/files/doc_downloads/2022/11/ERtechnicalReport.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Section 17: mill permitted to 1,200 t/d on a crushing basis; three stockpile pads; loader feeds the jaw crusher, cone in closed circuit with a double-deck screen, fine ore bin, weightometer on the second mill feed conveyor; crushing product 80% passing 9/16 inch; primary and secondary ball mills with cyclones, 75% passing 74 um; semi-batch centrifugal gravity concentrator on cyclone feed, shaking table daily and magnetic separation; trash screen, pre-leach thickener (permanganate, flocculant, cyanide); six leach tanks (one standby), air sparged, 36-38 h retention, pH 10.5-11.2; drum filters; three clarifiers precoated with Dicalite and Solka Floc; vacuum towers, zinc dust and lead nitrate, sock presses with socks removed bi-weekly; tailings filtered on drum filters and conveyed for dry stacking; refinery with CCTV, vault, sock burner oven and propane Wabi furnace smelting table concentrate and burned sock ash to doré of 80-94% gold; hydrogen peroxide cyanide destruction in the Reclaim Pond; 2021-22 mill availability basis 93.3% (86% in 2021), average 779 t/d; recovery gravity 43%, Merrill-Crowe 88%, overall 97%; reagent use (NaCN 0.52 kg/t, lime 0.79 kg/t, zinc 0.086 kg/t). Sections 18.7 and 20.3: filtered tailings conveyed to stockpiles and redistributed by trucks and a dozer; Reclaim Pond feeds the mill; excess water treated to the Polishing Pond or stored in the Mishi pit; dam raises 2019 (Stage 3), 2020 (Stage 4) and 2022-24 (Stage 5); annual Dam Safety Inspections by consultants (SNC-Lavalin 2020, EXP 2021) under CDA guidelines, the Lakes and Rivers Improvement Act and MAC guidance; dams classed High; mill 17 km by road from the mine"
+    },
+    {
+      "id": "wes2020",
+      "title": "Wesdome Announces 2020 Fourth Quarter and Full Year Production Results; Provides 2021 Guidance",
+      "publisher": "Wesdome Gold Mines Ltd. (news release, via Yahoo Finance)",
+      "url": "https://finance.yahoo.com/news/wesdome-announces-2020-fourth-quarter-213000875.html",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Ore milled 2019 (168,809 t) and 2020 (236,297 t) including Mishi open pit ore; Eagle River recovery 97.7% and Mishi recovery 77.8% in 2020; gold produced 91,688 oz (2019) and 90,278 oz (2020); six days of milling lost in December 2020 to mechanical downtime on the cone crusher; Mishi stockpile of over 40,000 t to be milled in 2021"
+    },
+    {
+      "id": "crush911",
+      "title": "Small Crushing Plant Operating Guide",
+      "publisher": "911Metallurgist",
+      "url": "https://www.911metallurgist.com/small-crushing-plant-operating-guide",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Jaw and standard cone crusher plant of 500 tpd crushing 12 hours a day at 70% availability (60 t/h); 350 t coarse ore bin, 500 t live fine ore bin, double-deck screen; tramp iron magnet over conveyor 1 and metal detector on conveyor 2 that stops the belt; plugged chute tilt switches and pull cords; cone lube interlocks; shutdown on high fine ore bin level; wet dust scrubber"
+    },
+    {
+      "id": "ero1400",
+      "title": "Wesdome Gold Mines Ltd. - Environmental Compliance Approval (air), Eagle River Mill (ERO 012-8749)",
+      "publisher": "Ontario Environmental Registry",
+      "url": "https://ero.ontario.ca/node/1400",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "Amended air approval of 21 December 2020 for the Eagle River Mill, 50 km west of Wawa: replacement of the laboratory fume hood and bullion furnace, a dicalite vent bin collection system, hydrogen cyanide emissions from the tailings pond and leach tanks, cyanide building and cyanide mixing ventilation; contaminants include hydrogen cyanide and zinc"
+    }
+  ],
+  "assumptions": [
+    "Crushing runs mainly on day shift for 7 to 14 hours, with a night top-up on about a third of days; the mill draws from the fine ore bin around the clock.",
+    "touch_min on the run step counts active control and attention; the operator is on the plant for the whole shift. The simulator adds steps in sequence and leaves out the hours the operator spends on stockpile reclaim and cleanup outside this process, so its median cycle time (about 0.7 days) is shorter than the calendar day it represents.",
+    "Repair labour is counted in mnt-breakdown-repair; here a repair appears as the wait before s11, and a major failure as the external wait s10.",
+    "Event probabilities (tramp steel on about half of days, chokes on about a third, breakdowns on about one day in ten) are the author's estimates for an underground ore with rock bolts and mesh.",
+    "Ore reaches the mill stockpile pads by truck over 17 km of road from the mine at the reference operation (er2022), not from a shaft bin beside the mill as the organisation file describes; this does not change the crushing steps.",
+    "Loaded costs come from the organisation file."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

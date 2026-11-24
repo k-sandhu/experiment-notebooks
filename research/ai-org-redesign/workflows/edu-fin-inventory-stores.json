@@ -1,0 +1,1594 @@
+{
+  "schema_version": "0.3",
+  "id": "edu-fin-inventory-stores",
+  "name": "Run stores and issue materials",
+  "org": "electric-distribution-utility",
+  "process": "fin-inventory-stores",
+  "sector": "electricity distribution",
+  "function": "supply chain",
+  "summary": "Stores attendants pick, stage and issue poles, cable, transformers, meters and hardware to line, cable and station crews and charge each line to a work order in the ERP. Most lines are picked from pick lists for scheduled jobs and staged for the crew's early start, some are served at the counter, and after hours an on-call attendant drives in to issue material for trouble and outages on paper slips that are keyed the next morning. Shortages, which grew in 2021 and 2022, send lines to transfers between warehouses or expediting, and mis-posted issues surface later as cycle count variances; during major storms stores run around the clock.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A municipally owned Ontario electricity distributor with about 350,000 customers, two warehouses with a pole yard, and ten unionised stores attendants on extended hours with an on-call rota.",
+    "org_size_employees": 571,
+    "notes": "ERP inventory with MRP reorder points; mobile workforce tablets show work orders but stores issues are posted at the warehouse."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one material issue line",
+  "trigger": "A scheduled work order's pick list, a counter request or an after-hours call-out asks for a stock item.",
+  "end_state": "The material is in the crew's hands and the issue is posted to the work order (with any return or count adjustment), or the job is rescheduled for lack of material.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 3000,
+      "mode": 4500,
+      "high": 6500
+    },
+    "seasonality": "Higher from April to November in the construction season; lower in January and February.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file estimate kept: about 170 capital jobs and 2,000 scheduled work orders a month in the organisation file with a few lines each."
+    },
+    "surge": {
+      "cause": "major storm (wind, ice storm, tornado or derecho)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "duration_days": {
+        "low": 2,
+        "mode": 3,
+        "high": 10
+      },
+      "volume_multiplier": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Taken from the organisation file's surge for this process, which rests on the May 2022 derecho; emergency pole and transformer spending above budget in 2021 (s2) is consistent with it."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ops-work-scheduling",
+        "object": "crew_schedule",
+        "share": 0.78
+      },
+      {
+        "from": "ops-outage-restoration",
+        "object": "restoration_work_order",
+        "share": 0.07
+      },
+      {
+        "from": "ops-field-service-orders",
+        "object": "service_request",
+        "share": 0.15
+      }
+    ],
+    "inputs": [
+      {
+        "from": "supplier",
+        "object": "materials"
+      },
+      {
+        "from": "fin-procurement",
+        "object": "purchase_order"
+      },
+      {
+        "from": "ops-major-event-response",
+        "object": "major_event_declaration"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "ops-overhead-construction",
+        "object": "material_issue"
+      },
+      {
+        "outcome": "any",
+        "to": "ops-underground-construction",
+        "object": "material_issue"
+      },
+      {
+        "outcome": "any",
+        "to": "ops-outage-restoration",
+        "object": "material_issue"
+      },
+      {
+        "outcome": "any",
+        "to": "ops-pole-replacement",
+        "object": "material_issue"
+      },
+      {
+        "outcome": "any",
+        "to": "ops-cable-fault-repair",
+        "object": "material_issue"
+      },
+      {
+        "outcome": "any",
+        "to": "cs-meter-exchange",
+        "object": "material_issue"
+      },
+      {
+        "outcome": "issued_reorder",
+        "to": "fin-procurement",
+        "object": "purchase_requisition"
+      },
+      {
+        "outcome": "any",
+        "to": "fin-month-end-close",
+        "object": "journal_entries"
+      },
+      {
+        "outcome": "deferred",
+        "to": "ops-work-scheduling",
+        "object": "material_issue"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "stores-attendant",
+      "title": "Stores attendant",
+      "department": "Supply Chain and Stores",
+      "layer": "individual_contributor",
+      "fte_on_process": 7.0,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 45,
+        "high": 54
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s1"
+        ],
+        "note": "Duties from an Ontario distributor storeskeeper posting (s1). Seven of the ten attendants in the organisation file are counted on issuing; the rest of their time goes to receiving routine deliveries, yard work, cycle counts and PCB and glove programs. After-hours issues use an on-call rota."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "supply-supervisor",
+      "title": "Supply chain supervisor",
+      "department": "Supply Chain and Stores",
+      "layer": "supervisor",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 64,
+        "high": 75
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Decides on shortages and approves inventory adjustments; share estimated."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "apprentice-plt",
+      "title": "Apprentice power line technician",
+      "department": "Overhead Lines",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 46,
+        "high": 56
+      },
+      "occupation_code": "NOC 72203",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "A crew member, usually an apprentice, collects staged material at the start of the shift and signs for it. Not listed in the organisation file's process entry."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "buyer",
+      "title": "Buyer / procurement specialist",
+      "department": "Supply Chain and Stores",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 45,
+        "mode": 53,
+        "high": 63
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Expedites short items with suppliers. Not listed in the organisation file's process entry."
+      },
+      "shift_pattern": "office_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "erp",
+      "name": "ERP: general ledger, work orders, purchasing, inventory, fixed assets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mwm",
+      "name": "Mobile workforce management and field tablets",
+      "kind": "workflow"
+    },
+    {
+      "id": "email",
+      "name": "Email, calendar and Teams",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "paper-slips",
+      "name": "Paper material issue slips (after hours)",
+      "kind": "other"
+    }
+  ],
+  "resources": [
+    {
+      "id": "warehouse",
+      "name": "Stores warehouse and pole yard",
+      "kind": "facility",
+      "count": 2
+    },
+    {
+      "id": "light-vehicle",
+      "name": "Light vehicle (pickup or van) for locators, meter technicians, inspectors and field service",
+      "kind": "vehicle",
+      "count": 130,
+      "cost_per_hour": {
+        "low": 12,
+        "mode": 18,
+        "high": 25
+      }
+    },
+    {
+      "id": "forklift",
+      "name": "Warehouse forklift and yard loader for poles, reels and transformers",
+      "kind": "equipment",
+      "count": 4,
+      "cost_per_hour": {
+        "low": 15,
+        "mode": 25,
+        "high": 40
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive the material request",
+      "description": "The stores attendant opens the request queue: pick lists from work orders scheduled in the next few days, crews at the counter, and call-outs for trouble and outages. The attendant decides which path the request takes.",
+      "role": "stores-attendant",
+      "kind": "intake",
+      "inputs": [
+        "pick list",
+        "counter request",
+        "call-out"
+      ],
+      "outputs": [
+        "accepted request"
+      ],
+      "systems": [
+        "erp",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.5,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.78,
+          "condition": "pick list for a scheduled job"
+        },
+        {
+          "to": "s12",
+          "prob": 0.15,
+          "condition": "counter request during opening hours"
+        },
+        {
+          "to": "s13",
+          "prob": 0.07,
+          "condition": "after-hours trouble or outage call-out"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Split of issue lines is the author's estimate: most lines are planned construction and maintenance; trouble and outage lines come from about 900 trouble calls and 100 outages a month in the organisation file."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check stock and reserve the line",
+      "description": "The attendant looks up the item in the ERP, checks on-hand quantity and bin location, and reserves the quantity for the work order, or flags the line as short.",
+      "role": "stores-attendant",
+      "kind": "lookup",
+      "inputs": [
+        "pick list"
+      ],
+      "outputs": [
+        "reserved line",
+        "shortage flag"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.7,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 360,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "ERP shows stock that is not on the shelf.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.93,
+          "condition": "in stock"
+        },
+        {
+          "to": "s03",
+          "prob": 0.07,
+          "condition": "short"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s2",
+          "s3"
+        ],
+        "note": "Material shortages in 2021-2022 (s2, s3); shortage rate averaged over 2019-2022 is estimated."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Supervisor decides how to cover a shortage",
+      "description": "The supply chain supervisor checks stock at the other warehouse, open purchase orders and substitutes, and decides to transfer, expedite, or tell the work planner to reschedule the job.",
+      "role": "supply-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "shortage flag",
+        "open purchase orders"
+      ],
+      "outputs": [
+        "shortage decision"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.45,
+          "condition": "transfer from the other warehouse"
+        },
+        {
+          "to": "s05",
+          "prob": 0.35,
+          "condition": "expedite from the supplier"
+        },
+        {
+          "to": "END",
+          "prob": 0.2,
+          "condition": "job rescheduled for material",
+          "outcome": "deferred"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s2"
+        ],
+        "note": "Planned work deferred for material availability in 2021 (s2); shares estimated."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Transfer the item from the other warehouse",
+      "description": "An attendant drives to the second warehouse or pole yard, loads the item and brings it back, posting a stock transfer in the ERP.",
+      "role": "stores-attendant",
+      "kind": "travel",
+      "inputs": [
+        "shortage decision"
+      ],
+      "outputs": [
+        "transferred stock"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Transfer not posted, leaving stock wrong at both sites.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "arrived"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimated."
+      },
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 40,
+            "mode": 75,
+            "high": 150
+          }
+        }
+      ]
+    },
+    {
+      "id": "s05",
+      "name": "Buyer expedites the supplier",
+      "description": "The buyer calls the supplier on the open order or places an urgent order, asks for the earliest ship date and tells stores and the work planner when to expect it.",
+      "role": "buyer",
+      "kind": "coordination",
+      "inputs": [
+        "shortage decision",
+        "open purchase order"
+      ],
+      "outputs": [
+        "expedite promise"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimated."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Supplier ships the item",
+      "description": "The supplier ships the expedited item to the warehouse; the wait depends on whether the supplier has stock, from a day for hardware to weeks for transformers.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "expedite promise"
+      ],
+      "outputs": [
+        "delivery"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "delivered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s3"
+        ],
+        "note": "Transformer lead times lengthened sharply in 2022 (s3); range estimated."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Receive the delivery and post the goods receipt",
+      "description": "The attendant unloads the delivery, counts it against the packing slip and the purchase order, reports damage or short shipment to the supplier and supervisor, and posts the goods receipt in the ERP.",
+      "role": "stores-attendant",
+      "kind": "physical",
+      "inputs": [
+        "delivery",
+        "purchase order"
+      ],
+      "outputs": [
+        "goods receipt"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Quantity received keyed wrong.",
+        "typically_caught_at": "s20"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Lift truck operation by certified operators only (company forklift certification; Ontario Regulation 851, Industrial Establishments)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "received"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s1"
+        ],
+        "note": "Receiving and PO comparison duties in s1; time estimated."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 5,
+            "mode": 10,
+            "high": 30
+          }
+        },
+        {
+          "id": "warehouse",
+          "occupied_min": {
+            "low": 10,
+            "mode": 20,
+            "high": 60
+          }
+        }
+      ]
+    },
+    {
+      "id": "s08",
+      "name": "Pick the material",
+      "description": "The attendant walks the pick list, takes hardware from bins and uses the forklift or yard loader for poles, cable reels and transformers, checking item and quantity against the work order.",
+      "role": "stores-attendant",
+      "kind": "physical",
+      "inputs": [
+        "reserved line"
+      ],
+      "outputs": [
+        "picked material"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong item or quantity picked.",
+        "typically_caught_at": "s10"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Lift truck operation by certified operators only (company forklift certification; Ontario Regulation 851, Industrial Establishments)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s1"
+        ],
+        "note": "Issuing and forklift certification in s1; time per line estimated."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 0,
+            "mode": 2,
+            "high": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "s09",
+      "name": "Stage the kit for the crew",
+      "description": "The attendant places the picked lines in the staging bay or on the crew's trailer, labelled with the work order and crew, so the crew can load quickly at the start of the shift.",
+      "role": "stores-attendant",
+      "kind": "physical",
+      "inputs": [
+        "picked material"
+      ],
+      "outputs": [
+        "staged kit"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 120
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Typical early-morning crew staging; estimated."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Crew member collects and signs for the material",
+      "description": "On the job day a crew member, usually the apprentice, checks the staged kit against the work order, loads it on the truck and signs the pick list.",
+      "role": "apprentice-plt",
+      "kind": "physical",
+      "inputs": [
+        "staged kit"
+      ],
+      "outputs": [
+        "signed pick list"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 720.0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.97,
+          "condition": "complete"
+        },
+        {
+          "to": "s08",
+          "prob": 0.03,
+          "condition": "wrong or missing item found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimated."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Post the issue to the work order",
+      "description": "The attendant posts the issue transaction in the ERP, charging the quantity and cost to the work order and closing the reservation.",
+      "role": "stores-attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "signed pick list",
+        "counter slip"
+      ],
+      "outputs": [
+        "material issue"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.7,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Charged to the wrong work order or quantity keyed wrong.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "posted"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s1"
+        ],
+        "note": "Computerised entry of issues in s1."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Serve a counter request",
+      "description": "A crew member at the stores counter asks for an item for a job in progress; the attendant confirms the work order number, finds the item and hands it over with a counter slip.",
+      "role": "stores-attendant",
+      "kind": "physical",
+      "inputs": [
+        "counter request"
+      ],
+      "outputs": [
+        "counter slip"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Work order number missing or wrong on the slip.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "handed over"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimated."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "On-call attendant is called out",
+      "description": "The control room or a crew supervisor phones the on-call stores attendant for material needed for a trouble call, outage or cable fault outside opening hours; the call covers all lines the crew needs.",
+      "role": "stores-attendant",
+      "kind": "coordination",
+      "inputs": [
+        "call-out"
+      ],
+      "outputs": [
+        "call-out accepted"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "accepted"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s1"
+        ],
+        "note": "After-hours call-outs are a condition of the job (s1)."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Drive to the warehouse",
+      "description": "The on-call attendant drives from home to the warehouse and opens it, which sets how fast after-hours material reaches the crew. A call-out averages about four lines, so the time shown is one line's share of the trip.",
+      "role": "stores-attendant",
+      "kind": "travel",
+      "inputs": [
+        "call-out accepted"
+      ],
+      "outputs": [
+        "attendant on site"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 5,
+        "mode": 9,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "arrived"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimated."
+      },
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 5,
+            "mode": 9,
+            "high": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "s15",
+      "name": "Issue material after hours on a paper slip",
+      "description": "The attendant picks the requested items, loads them for the trouble crew and writes a paper issue slip with the item, quantity and outage or work order number for later entry.",
+      "role": "stores-attendant",
+      "kind": "physical",
+      "inputs": [
+        "attendant on site"
+      ],
+      "outputs": [
+        "paper issue slip",
+        "issued material"
+      ],
+      "systems": [
+        "paper-slips"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Slip missing a work order number or quantity.",
+        "typically_caught_at": "s17"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Lift truck operation by certified operators only (company forklift certification; Ontario Regulation 851, Industrial Establishments)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.3,
+          "condition": "deliver to a field site or storm staging area"
+        },
+        {
+          "to": "s17",
+          "prob": 0.7,
+          "condition": "crew collects at the warehouse"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimated."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 0,
+            "mode": 5,
+            "high": 20
+          }
+        },
+        {
+          "id": "warehouse",
+          "occupied_min": {
+            "low": 8,
+            "mode": 12,
+            "high": 25
+          }
+        }
+      ]
+    },
+    {
+      "id": "s16",
+      "name": "Deliver material to the field",
+      "description": "During outages and storms the attendant drives poles, transformers or conductor to the crew's site or a staging area, after a vehicle circle check, sometimes waiting out high winds or ice before travelling. The time shown is one line's share of a delivery run of about four lines.",
+      "role": "stores-attendant",
+      "kind": "travel",
+      "inputs": [
+        "issued material"
+      ],
+      "outputs": [
+        "material at site"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 12,
+        "mode": 22,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 360
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Pre-trip vehicle circle check and storm work hazard assessment",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "delivered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimated; storm deliveries rise sharply during the surge."
+      },
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 15,
+            "mode": 30,
+            "high": 60
+          }
+        }
+      ]
+    },
+    {
+      "id": "s17",
+      "name": "Key paper slips into the ERP next morning",
+      "description": "The next business morning an attendant keys each after-hours paper slip into the ERP, chasing crews for missing work order numbers.",
+      "role": "stores-attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "paper issue slip"
+      ],
+      "outputs": [
+        "material issue"
+      ],
+      "systems": [
+        "erp",
+        "paper-slips",
+        "email"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 600,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Slip keyed to the wrong work order.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "keyed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Typical re-keying of manual slips in the period; estimated."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "ERP updates stock, charges the work order and checks the reorder point",
+      "description": "The ERP decrements on-hand stock, posts the cost to the work order for capital or maintenance accounting, and adds the item to the next MRP run if it has fallen below its reorder point.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "material issue"
+      ],
+      "outputs": [
+        "work order charge",
+        "reorder suggestion"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.73,
+          "condition": "issued",
+          "outcome": "issued"
+        },
+        {
+          "to": "END",
+          "prob": 0.12,
+          "condition": "issued; stock below reorder point",
+          "outcome": "issued_reorder"
+        },
+        {
+          "to": "s19",
+          "prob": 0.12,
+          "condition": "unused material returned later"
+        },
+        {
+          "to": "s20",
+          "prob": 0.03,
+          "condition": "line later falls in a cycle count with a variance"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shares estimated."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Take back returned material and credit the work order",
+      "description": "When the crew brings back unused material, the attendant inspects it, returns good stock to its bin or tags damaged items, and posts a return credit to the work order.",
+      "role": "stores-attendant",
+      "kind": "physical",
+      "inputs": [
+        "returned material"
+      ],
+      "outputs": [
+        "return credit"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 28800
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Return credited to the wrong work order.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "credited",
+          "outcome": "issued_with_return"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s1"
+        ],
+        "note": "Credits and returns are posted in the MRP system (s1)."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Cycle count finds a variance and recounts",
+      "description": "During a scheduled cycle count the attendant finds the bin quantity differs from the ERP, recounts, traces recent issues, returns and slips, and records the likely cause.",
+      "role": "stores-attendant",
+      "kind": "validation",
+      "inputs": [
+        "cycle count list"
+      ],
+      "outputs": [
+        "variance record"
+      ],
+      "systems": [
+        "erp",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 10080,
+        "mode": 43200,
+        "high": 129600
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Inventory cycle counting and year-end count under internal control over financial reporting",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "variance confirmed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s1"
+        ],
+        "note": "Cycle counts and year-end count are part of the storeskeeper's duties (s1)."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Supervisor approves the inventory adjustment",
+      "description": "The supply chain supervisor reviews the variance record and approves the ERP adjustment, escalating large or repeated variances to finance.",
+      "role": "supply-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "variance record"
+      ],
+      "outputs": [
+        "inventory adjustment"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Inventory adjustments approved by someone other than the counter",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "adjusted",
+          "outcome": "issued_adjusted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimated."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Stock shortage",
+      "share_of_cases": 0.055,
+      "description": "The line is short; the supervisor transfers it from the other warehouse, has the buyer expedite it, or reschedules the job.",
+      "path": [
+        "s02",
+        "s03",
+        "s04",
+        "s08"
+      ]
+    },
+    {
+      "name": "After-hours issue on paper",
+      "share_of_cases": 0.07,
+      "description": "An on-call attendant drives in, issues on a paper slip, sometimes delivers to the field, and the slip is keyed the next morning.",
+      "path": [
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17",
+        "s18"
+      ]
+    },
+    {
+      "name": "Cycle count variance",
+      "share_of_cases": 0.03,
+      "description": "A mis-posted issue, transfer or return shows up weeks later as a count variance that must be traced and adjusted.",
+      "path": [
+        "s18",
+        "s20",
+        "s21"
+      ]
+    },
+    {
+      "name": "Crew finds a wrong item at pickup",
+      "share_of_cases": 0.02,
+      "description": "The crew checks the staged kit and sends a line back to be re-picked.",
+      "path": [
+        "s10",
+        "s08",
+        "s09",
+        "s10"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 2.5,
+        "p90": 8
+      },
+      "unit": "calendar days from request in the stores queue to issue posted",
+      "population": "Issue lines at a mid-size Ontario distributor",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: pick lists arrive one to three days before the job day and are posted the same day; counter and after-hours lines are issued within the hour, after-hours postings the next morning. The p90 includes lines whose unused quantity is returned and credited days later."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Shortages of transformers, poles and some cable in 2021-2022 meant transfers, expediting and rescheduled jobs, with emergency stock near zero at many utilities.",
+      "steps": [
+        "s02",
+        "s03",
+        "s04",
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "s2",
+          "s3"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "After-hours issues on paper slips are keyed later and often lack a work order number, causing mis-charges that surface at cycle count or month end.",
+      "steps": [
+        "s15",
+        "s17",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimated."
+      }
+    },
+    {
+      "description": "During storms a small stores team must run around the clock, load poles and transformers and drive them to staging areas, which limits how fast crews can be resupplied.",
+      "steps": [
+        "s13",
+        "s14",
+        "s15",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file surge description; estimated."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "s1",
+      "title": "Job Bulletin: Storeskeeper (Purchasing and Stores Department)",
+      "publisher": "Synergy North Corporation",
+      "url": "https://synergynorth.ca/wp-content/uploads/2024/06/2024-Job-Bulletin-Storeskeeper.pdf",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "Ontario distributor storeskeeper duties: physically receives, issues and stores tools, material and equipment; computerised entry of all receipts, issues, credits and returns through the MRP system; compares goods received to purchase orders and reports deficiencies to the vendor and supervisor; keeps transformer and protective rubber glove rotation files; physical cycle counts and year-end count; handles PCB-contaminated transformers and oil; must hold forklift certification, work after-hours call-outs and overtime; unionised outside-staff wage band $21.04 to $26.30 an hour (2024)."
+    },
+    {
+      "id": "s2",
+      "title": "Scorecard - Hydro Ottawa Limited (2017-2021) and 2021 Scorecard Management Discussion and Analysis",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/documents/scorecard/2021/Scorecard%20-%20Hydro%20Ottawa%20Limited.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Planned work deferred in 2021 partly because of material availability; emergency spending $8.57M against a $6.73M budget, mainly poles and underground transformers."
+    },
+    {
+      "id": "s3",
+      "title": "APPA survey of members shows distribution transformer production not meeting demand",
+      "publisher": "American Public Power Association",
+      "url": "https://www.publicpower.org/periodical/article/appa-survey-members-shows-distribution-transformer-production-not-meeting-demand",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Most of 95 responding utilities reported low or near-zero emergency transformer stock in August 2022, some within weeks of running out; transformer lead times rose from two to three months before 2021 to about 12 months in 2022."
+    }
+  ],
+  "assumptions": [
+    "The unit of work is one issue line; receiving of routine replenishment deliveries is not a separate case here and appears only on the shortage path (s07), so attendant time on receiving, yard work and PCB and glove programs is outside the FTE counted.",
+    "Branch shares, touch times and waits are the author's estimates for a utility of this size; no published stores benchmark for Ontario distributors was found.",
+    "The forklift fleet (four units) is not in the organisation file and is added here.",
+    "The cycle time counts the wait until the job day for scheduled pick lists, which is set by the work schedule rather than by stores.",
+    "The on-call rota for after-hours issues is described in the steps; the role keeps the organisation file's extended_hours shift pattern."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

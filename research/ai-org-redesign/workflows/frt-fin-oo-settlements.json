@@ -1,0 +1,1490 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-fin-oo-settlements",
+  "name": "Settle owner-operators weekly",
+  "org": "freight-carrier-co",
+  "process": "fin-oo-settlements",
+  "sector": "trucking (truckload)",
+  "function": "finance",
+  "summary": "Every week the carrier pays each of its leased owner-operators for the trips they completed, net of what they owe the carrier. Settlements clerks check that each trip has its delivery paperwork, verify miles or revenue against the lease, add accessorials and the fuel surcharge pass-through, deduct fuel card purchases, advances, insurance, plates, escrow and one-off chargebacks, and the finance operations manager approves the payment batch. Missing paperwork, accessorial claims that need approval and disputed deductions cause most of the manual work, and lease rules require chargebacks to be listed and itemised.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees paying about 380 leased owner-operators by weekly settlement.",
+    "org_size_employees": 3000,
+    "notes": "One case is one owner-operator's weekly settlement statement, from the week's close to the owner-operator accepting the statement or a dispute being answered."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one weekly settlement statement",
+  "trigger": "The settlement week closes on Sunday night with the owner-operator's completed trips in the TMS.",
+  "end_state": "The owner-operator is paid by direct deposit and accepts the statement, or a disputed line is corrected on the next settlement or explained.",
+  "cadence": "weekly",
+  "volume": {
+    "cases_per_month": {
+      "low": 1500,
+      "mode": 1650,
+      "high": 1800
+    },
+    "seasonality": "Flat in count; statements carry more trips and accessorials in the autumn peak and more weather delays in winter.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "About 380 owner-operators in the organisation file times 4.33 weeks a month is about 1,650 statements."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "tl-trip-execution",
+        "object": "trip_record",
+        "share": 0.9
+      },
+      {
+        "from": "ltl-linehaul-dispatch",
+        "object": "trip_record",
+        "share": 0.1
+      }
+    ],
+    "inputs": [
+      {
+        "from": "tl-oo-contracting",
+        "object": "owner_operator_agreement"
+      },
+      {
+        "from": "mnt-fuel-management",
+        "object": "fuel_transaction"
+      },
+      {
+        "from": "fin-fuel-surcharge",
+        "object": "fuel_surcharge_table"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "owner-operator-business",
+        "object": "settlement_statement"
+      },
+      {
+        "outcome": "any",
+        "to": "owner-operator-business",
+        "object": "settlement_payment"
+      },
+      {
+        "outcome": "any",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "settlements-clerk",
+      "title": "Driver pay and owner-operator settlements clerk",
+      "department": "Finance",
+      "layer": "individual_contributor",
+      "fte_on_process": 5.5,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 33,
+        "high": 39
+      },
+      "occupation_code": "NOC 13102",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 26 minutes of clerk time per statement on 1,650 statements is about 5.5 FTE; the organisation file's 10 clerks also run company driver pay."
+      }
+    },
+    {
+      "id": "finance-manager",
+      "title": "Finance operations manager",
+      "department": "Finance",
+      "layer": "manager",
+      "fte_on_process": 0.15,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 82,
+        "high": 98
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Batch approval and exceptions; author's estimate."
+      }
+    },
+    {
+      "id": "driver-manager",
+      "title": "Driver manager (fleet manager)",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Accessorial approvals and dispute checks; author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "owner-operator",
+      "title": "Owner-operator, truckload (contracted, not an employee)",
+      "department": "Truckload fleet operations",
+      "layer": "external_party",
+      "fte_on_process": 0.0,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 65,
+        "high": 78
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "External party; time not counted in company FTE."
+      },
+      "shift_pattern": "field_rotation"
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "rating-engine",
+      "name": "Rating engine and tariff tables",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "fuel-card",
+      "name": "Fuel card portal",
+      "kind": "external_portal"
+    },
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "erp",
+      "name": "ERP general ledger, payables and receivables",
+      "kind": "system_of_record"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Close the settlement week and pull completed trips",
+      "description": "At midnight on Sunday the TMS closes the settlement week and lists, for each owner-operator, the trips delivered in the week with loaded and empty miles, revenue and the accessorials already entered by dispatch.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "trip_record"
+      ],
+      "outputs": [
+        "pre-settlement trip list"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Index scanned trip documents to trips",
+      "description": "The imaging system matches the bills of lading, proofs of delivery and receipts that owner-operators scanned at truck-stop kiosks or with a phone app to trip numbers, and leaves unmatched images in an exception queue.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "scanned trip documents"
+      ],
+      "outputs": [
+        "indexed trip documents"
+      ],
+      "systems": [
+        "imaging",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Truck-stop and mobile scanning of trip paperwork was common in the period; author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Open the owner-operator's pre-settlement",
+      "description": "On Monday the settlements clerk opens the owner-operator's pre-settlement in the TMS settlement module, with the trips, miles, revenue and the deductions schedule from the lease.",
+      "role": "settlements-clerk",
+      "kind": "lookup",
+      "inputs": [
+        "pre-settlement trip list",
+        "owner_operator_agreement"
+      ],
+      "outputs": [
+        "settlement worksheet"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 480,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check that every trip has delivery paperwork",
+      "description": "The clerk checks that each trip has a signed bill of lading and proof of delivery in the imaging system. Company policy pays a trip only when its paperwork is in, because the customer cannot be billed without it.",
+      "role": "settlements-clerk",
+      "kind": "validation",
+      "inputs": [
+        "settlement worksheet",
+        "indexed trip documents"
+      ],
+      "outputs": [
+        "paperwork status"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company pay-on-paperwork policy: trips are settled only when delivery documents are received",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.82,
+          "condition": "all paperwork present"
+        },
+        {
+          "to": "s05",
+          "prob": 0.18,
+          "condition": "paperwork missing for a trip"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr376"
+        ],
+        "note": "49 CFR 376.12(f) ties the payment clock to submission of the delivery documents; the missing-paperwork share is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Chase missing paperwork",
+      "description": "The clerk messages the owner-operator and the driver manager listing the trips with missing or unreadable documents and the cut-off time for this week's settlement.",
+      "role": "settlements-clerk",
+      "kind": "communication",
+      "inputs": [
+        "paperwork status"
+      ],
+      "outputs": [
+        "paperwork request"
+      ],
+      "systems": [
+        "email-phone",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.6,
+          "condition": "owner-operator can send the documents before cut-off"
+        },
+        {
+          "to": "s07",
+          "prob": 0.4,
+          "condition": "trip held to next week's settlement"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Owner-operator scans the missing documents",
+      "description": "The owner-operator finds the paperwork in the truck, or gets a copy from the consignee, and scans it in at the next stop.",
+      "role": "owner-operator",
+      "kind": "data_entry",
+      "inputs": [
+        "paperwork request"
+      ],
+      "outputs": [
+        "scanned trip documents"
+      ],
+      "systems": [
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Verify the pay on each trip",
+      "description": "For owner-operators paid by the mile, the clerk compares paid miles with the practical route miles and the rate in the lease; for those paid a percentage of revenue, the clerk checks the rated freight bill and attaches a copy to the statement.",
+      "role": "settlements-clerk",
+      "kind": "validation",
+      "inputs": [
+        "settlement worksheet",
+        "owner_operator_agreement",
+        "freight_bill"
+      ],
+      "outputs": [
+        "verified trip pay"
+      ],
+      "systems": [
+        "tms",
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong miles or rate paid on a trip.",
+        "typically_caught_at": "s19"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "49 CFR 376.12(d) and (g): pay as stated in the lease, with the rated freight bill shown for percentage pay",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.6,
+          "condition": "accessorial claims to add"
+        },
+        {
+          "to": "s10",
+          "prob": 0.4,
+          "condition": "no accessorials"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr376"
+        ],
+        "note": "A copy of the rated freight bill is required for percentage-of-revenue pay under 49 CFR 376.12(g); times are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Key accessorial pay claims",
+      "description": "The clerk enters detention, layover, extra stops, tarping and border-crossing pay claimed by the owner-operator on the trip envelope or in a message, checking each against the times in the ELD and the customer's detention record.",
+      "role": "settlements-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "accessorial claims",
+        "detention_record"
+      ],
+      "outputs": [
+        "accessorial pay lines"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "An accessorial is paid twice or missed.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.4,
+          "condition": "claim needs driver-manager approval"
+        },
+        {
+          "to": "s10",
+          "prob": 0.6,
+          "condition": "claim matches the record"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Driver manager approves accessorial pay",
+      "description": "The driver manager checks the claimed detention or layover against what happened on the trip and approves or cuts the amount in the TMS.",
+      "role": "driver-manager",
+      "kind": "approval",
+      "inputs": [
+        "accessorial pay lines"
+      ],
+      "outputs": [
+        "approved accessorials"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company accessorial pay policy: operations approval for claims not matched to a customer charge",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Calculate the fuel surcharge pass-through",
+      "description": "The TMS multiplies the week's miles, or the fuel surcharge billed to the customer, by the rate in the weekly fuel surcharge table and adds the pass-through to the statement.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "verified trip pay",
+        "fuel_surcharge_table"
+      ],
+      "outputs": [
+        "fuel surcharge pay line"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Fuel surcharge pass-through to owner-operators is common in Canadian leases; formula varies by carrier. Author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Import fuel card purchases and cash advances",
+      "description": "The clerk imports the week's fuel card file from the fuel card portal, checks that each purchase is matched to the right unit, and adds cash advances and money codes issued during the week as deductions.",
+      "role": "settlements-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "fuel_transaction",
+        "advance log"
+      ],
+      "outputs": [
+        "fuel and advance deductions"
+      ],
+      "systems": [
+        "fuel-card",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A fuel purchase charged to the wrong unit.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Apply recurring deductions",
+      "description": "The settlement module applies the deductions scheduled in the lease: cargo and liability insurance share, plates, escrow or maintenance reserve, ELD and communications fee, trailer rental and any lease-purchase payment.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "deduction schedule"
+      ],
+      "outputs": [
+        "recurring deduction lines"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.35,
+          "condition": "one-off chargebacks this week"
+        },
+        {
+          "to": "s14",
+          "prob": 0.65,
+          "condition": "no one-off chargebacks"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr376"
+        ],
+        "note": "Chargeback items and escrow must be set out in the lease (49 CFR 376.12(h), (k)); the list is the author's summary of common items."
+      },
+      "concurrent_with": [
+        "s11"
+      ]
+    },
+    {
+      "id": "s13",
+      "name": "Key one-off chargebacks with itemisation",
+      "description": "The clerk enters one-off charges such as tolls, roadside fines, company shop repairs, a cargo claim deductible or a lost fuel card fee, attaching the invoice or a written itemisation so the owner-operator can see how each was computed.",
+      "role": "settlements-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "chargeback invoices",
+        "claim notices"
+      ],
+      "outputs": [
+        "chargeback lines"
+      ],
+      "systems": [
+        "tms",
+        "imaging",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "A chargeback without support or charged twice.",
+        "typically_caught_at": "s19"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "49 CFR 376.12(h) and (j): only chargebacks listed in the lease, with itemised support",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr376"
+        ],
+        "note": "Written itemisation before cargo or damage deductions is required by 49 CFR 376.12(j); share and times are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Review the statement for reasonableness",
+      "description": "The clerk compares the statement's gross, deductions and net with the owner-operator's recent weeks and looks for a negative net or an unusual deduction before marking it complete.",
+      "role": "settlements-clerk",
+      "kind": "review",
+      "inputs": [
+        "draft settlement_statement"
+      ],
+      "outputs": [
+        "completed statement"
+      ],
+      "systems": [
+        "tms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.96,
+          "condition": "normal"
+        },
+        {
+          "to": "s15",
+          "prob": 0.04,
+          "condition": "net pay negative or deduction unusually large"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Decide on a negative or unusual settlement",
+      "description": "The finance operations manager decides whether to carry a deficit to next week, spread a large chargeback over several weeks, or release a cash advance, following the lease and the owner-operator's history.",
+      "role": "finance-manager",
+      "kind": "approval",
+      "inputs": [
+        "completed statement"
+      ],
+      "outputs": [
+        "approved treatment"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Finance delegation of authority for deficits and spread chargebacks",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Approve the weekly settlement batch",
+      "description": "On Tuesday or Wednesday the finance operations manager reviews the batch totals, exception list and the largest statements and approves the payment file; the time shown is each statement's share of that review.",
+      "role": "finance-manager",
+      "kind": "approval",
+      "inputs": [
+        "completed statements"
+      ],
+      "outputs": [
+        "approved settlement batch"
+      ],
+      "systems": [
+        "tms",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 480,
+        "mode": 1440,
+        "high": 2160
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Internal control over financial reporting: payment batch approved by a manager who did not prepare the statements",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Generate payments, post to the ledger and publish statements",
+      "description": "The system creates the direct deposit file for the bank, posts the settlement expense, deductions and escrow balances to the ERP, and emails or posts each statement to the owner-operator portal.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved settlement batch"
+      ],
+      "outputs": [
+        "settlement_payment file",
+        "ledger_postings",
+        "settlement_statement"
+      ],
+      "systems": [
+        "tms",
+        "erp",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Funds reach the owner-operator's bank",
+      "description": "The bank processes the direct deposit file and the money lands in the owner-operator's account, usually on Thursday or Friday.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "settlement_payment file"
+      ],
+      "outputs": [
+        "settlement_payment"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr376"
+        ],
+        "note": "Payment must be within 15 days after delivery documents are submitted (49 CFR 376.12(f)); the weekly Thursday or Friday deposit is the author's estimate of common practice."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Owner-operator reviews the statement",
+      "description": "The owner-operator reads the statement line by line, comparing paid miles, accessorials, fuel and deductions with his or her own records.",
+      "role": "owner-operator",
+      "kind": "review",
+      "inputs": [
+        "settlement_statement"
+      ],
+      "outputs": [
+        "accepted or disputed statement"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.9,
+          "condition": "statement accepted",
+          "outcome": "settled"
+        },
+        {
+          "to": "s20",
+          "prob": 0.1,
+          "condition": "owner-operator disputes a line"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Investigate the disputed line",
+      "description": "The settlements clerk pulls the trip, the ELD times, the fuel transaction or the chargeback invoice behind the disputed line and decides whether it was paid correctly.",
+      "role": "settlements-clerk",
+      "kind": "analysis",
+      "inputs": [
+        "dispute",
+        "settlement_statement"
+      ],
+      "outputs": [
+        "dispute findings"
+      ],
+      "systems": [
+        "tms",
+        "imaging",
+        "fuel-card",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.5,
+          "condition": "trip facts need the driver manager"
+        },
+        {
+          "to": "s22",
+          "prob": 0.5,
+          "condition": "records settle it"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Driver manager confirms the trip facts",
+      "description": "The driver manager confirms what happened on the trip, such as an extra stop, a reroute or a wait at a customer, and tells the clerk whether the claim stands.",
+      "role": "driver-manager",
+      "kind": "lookup",
+      "inputs": [
+        "dispute findings"
+      ],
+      "outputs": [
+        "confirmed trip facts"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Key the adjustment and reply to the owner-operator",
+      "description": "The clerk enters a correction on next week's settlement or explains why the original amount stands, and replies to the owner-operator in writing.",
+      "role": "settlements-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "dispute findings"
+      ],
+      "outputs": [
+        "adjustment line",
+        "dispute reply"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.75,
+          "condition": "adjustment on next settlement",
+          "outcome": "adjusted_next_week"
+        },
+        {
+          "to": "END",
+          "prob": 0.25,
+          "condition": "original amount stands",
+          "outcome": "dispute_rejected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly owner-operator settlement practice at Canadian carriers 2019-2022 from general knowledge; times are the author's estimate per statement."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Missing trip paperwork",
+      "share_of_cases": 0.18,
+      "description": "A trip lacks its proof of delivery; the clerk chases it and the trip is paid this week or held to the next.",
+      "path": [
+        "s04",
+        "s05",
+        "s06"
+      ]
+    },
+    {
+      "name": "Accessorial needs approval",
+      "share_of_cases": 0.24,
+      "description": "Detention or layover claimed by the owner-operator does not match a customer charge and goes to the driver manager.",
+      "path": [
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Negative settlement",
+      "share_of_cases": 0.04,
+      "description": "Deductions exceed earnings and the finance manager decides how to treat the deficit.",
+      "path": [
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Disputed deduction or pay line",
+      "share_of_cases": 0.1,
+      "description": "The owner-operator disputes a line; the clerk investigates and adjusts the next settlement or explains.",
+      "path": [
+        "s19",
+        "s20",
+        "s21",
+        "s22"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 5,
+        "p90": 8
+      },
+      "unit": "calendar days from week close to statement accepted",
+      "population": "Weekly owner-operator settlements at a Canadian truckload carrier",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice: statements built Monday to Wednesday and paid Thursday or Friday; disputes take several more days."
+      }
+    },
+    {
+      "metric": "max_days_to_pay_after_documents",
+      "value": 15,
+      "unit": "days",
+      "population": "Owner-operator leases under US Truth-in-Leasing rules",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-cfr376"
+        ],
+        "note": "49 CFR 376.12(f)."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Trips without scanned delivery paperwork are held, so owner-operators are paid late and call to chase.",
+      "steps": [
+        "s04",
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr376"
+        ],
+        "note": "Payment clock tied to document submission; frequency is the author's estimate."
+      }
+    },
+    {
+      "description": "Accessorial claims arrive as notes and messages and need driver-manager approval, delaying statements.",
+      "steps": [
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Chargebacks and fuel deductions are the main source of disputes; each needs records pulled from several systems.",
+      "steps": [
+        "s11",
+        "s13",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr376"
+        ],
+        "note": "Chargebacks must be listed and itemised; dispute frequency is the author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-cfr376",
+      "title": "49 CFR 376.12 - Written lease requirements",
+      "publisher": "Legal Information Institute, Cornell Law School (US Code of Federal Regulations)",
+      "url": "https://www.law.cornell.edu/cfr/text/49/376.12",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "Lease of owner-operator equipment to an authorized carrier: written lease signed by both parties stating start and end, exclusive possession and control by the carrier, compensation stated before any trip, chargeback items listed with how each is computed, payment within 15 days after submission of the delivery documents, a copy of the rated freight bill when pay is a percentage of revenue, written itemisation before cargo or damage deductions, escrow terms with interest and return within 45 days of termination."
+    }
+  ],
+  "assumptions": [
+    "Volume is one statement per owner-operator per week (about 380 owner-operators), as in the organisation file.",
+    "US Truth-in-Leasing rules (49 CFR 376.12) are assumed to shape the lease and settlement for all owner-operators because many run cross-border under the carrier's authority; no Canadian federal equivalent applies.",
+    "The cycle starts at the Sunday week close; days between a trip's delivery and the week close are outside the case.",
+    "About 10% of statements are assumed to belong to owner-operators pulling LTL linehaul, as the organisation file's trigger from linehaul dispatch implies.",
+    "Owner-operator time adds to the simulated hands-on hours but is not company labour; its fte_on_process is 0.",
+    "Settlements are built Monday and Tuesday by about five or six clerks working through 380 statements, so a statement waits up to two days after the Sunday close before a clerk opens it.",
+    "Loaded costs come from the organisation file."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

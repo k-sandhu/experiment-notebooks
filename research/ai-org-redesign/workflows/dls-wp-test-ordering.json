@@ -1,0 +1,1630 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-wp-test-ordering",
+  "name": "Order workplace drug and alcohol tests and run random selections",
+  "org": "diagnostic-lab-services-co",
+  "process": "wp-test-ordering",
+  "sector": "health care: workplace drug and alcohol testing",
+  "function": "workplace services: program management",
+  "summary": "Employers that test applicants and workers for drugs and alcohol ask the company for each test, and the company turns the request into a donor authorization that tells the donor where to go and by when. Most requests are placed by the employer's designated representative in the online ordering screens and pass automatic checks against the employer's program; program coordinators key phone and email orders, resolve flagged orders, choose collection sites, book third-party clinics, dispatch on-call collectors for urgent post-incident tests and run random selections for safety-sensitive and DOT-regulated workers. Delays come from orders that do not fit the program, third-party clinics without supplies, out-of-date random pools and after-hours callouts that must beat regulatory time limits.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "The workplace testing line of a large Canadian laboratory company serving more than 500 employers through company centres, on-site collectors and about 2,000 third-party clinics.",
+    "org_size_employees": 3300,
+    "notes": "Most Canadian testing is pre-employment or pre-access, post-incident and reasonable cause; random testing is mainly for US DOT-regulated cross-border drivers and some safety-sensitive programs."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one drug or alcohol test request",
+  "trigger": "An employer's DER places a test request (online, by email, fax or phone, or by an urgent call), or a random selection falls due under the employer's program calendar.",
+  "end_state": "A donor authorization is issued for a company site, on-site collector or third-party clinic, or the request is cancelled.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 22000,
+      "mode": 25000,
+      "high": 28000
+    },
+    "seasonality": "Pre-employment and site access requests rise in spring and early summer with construction and energy hiring and before plant turnarounds; random draws cluster at the start of each period; urgent calls arrive at any hour.",
+    "evidence": {
+      "tier": "A",
+      "sources": [
+        "dyn_dts"
+      ],
+      "note": "More than 300,000 drug tests a year is about 25,000 a month."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "employer_client",
+        "object": "dt_request",
+        "share": 0.87
+      },
+      {
+        "from": "wp-program-setup",
+        "object": "program_profile",
+        "share": 0.13
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "authorized_company_site",
+        "to": "wp-collection",
+        "object": "donor_authorization"
+      },
+      {
+        "outcome": "authorized_third_party",
+        "to": "third_party_collection_site",
+        "object": "donor_authorization"
+      },
+      {
+        "outcome": "any",
+        "to": "employer_client",
+        "object": "random_selection_list"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "workplace_program_coordinator",
+      "title": "Workplace testing program coordinator",
+      "department": "Workplace program management",
+      "layer": "individual_contributor",
+      "fte_on_process": 11.5,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 36,
+        "high": 45
+      },
+      "occupation_code": "NOC 13110",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_dtsol",
+          "doi_sched",
+          "cfr4014"
+        ],
+        "note": "Coordinators set up and schedule tests in a web system, choose collection sites and give collectors the required information (doi_sched, cfr4014); program management and support described by the company (dyn_dtsol). FTE: about 11.5 of the 18 coordinators, close to what hands-on time times 25,000 requests implies; most web orders need no coordinator touch. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "dt_system",
+      "name": "Drug testing case management (chain of custody, MRO review, employer web reports)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "telephony",
+      "name": "Contact centre telephony with IVR, queues and call recording",
+      "kind": "communication"
+    },
+    {
+      "id": "email_office",
+      "name": "Email and office suite",
+      "kind": "communication"
+    },
+    {
+      "id": "fax",
+      "name": "Fax server",
+      "kind": "communication"
+    },
+    {
+      "id": "logistics_tracking",
+      "name": "Courier routing, dispatch and web-based order and tracking system",
+      "kind": "workflow"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive the test request or random selection due date",
+      "description": "A request reaches the drug testing case system in one of four ways: the employer's designated representative (DER) places it in the online ordering screens, sends it by email or fax or phones the workplace line, phones the 24-hour line for an urgent post-incident or reasonable cause test, or a random selection falls due under the employer's program calendar.",
+      "role": "system",
+      "kind": "intake",
+      "inputs": [
+        "employer request",
+        "program calendar"
+      ],
+      "outputs": [
+        "request record"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.7,
+          "condition": "web order by the DER"
+        },
+        {
+          "to": "s03",
+          "prob": 0.12,
+          "condition": "email, fax or phone order"
+        },
+        {
+          "to": "s11",
+          "prob": 0.05,
+          "condition": "urgent post-incident or reasonable cause call"
+        },
+        {
+          "to": "s13",
+          "prob": 0.13,
+          "condition": "random selection due for the period"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Channel shares are estimates: most employers order online (doi_sched shows the web scheduling pattern), random testing is limited in Canada to safety-sensitive and DOT-regulated workers, and urgent callouts match the 5 percent share in the collection workflow."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check the web order against the program profile",
+      "description": "The case system checks the DER's login against the account's authorized contacts and the order against the program profile: testing reason allowed by the employer's policy, panel and specimen type, DOT or non-regulated form, observed collection where required, and account status. Clean orders go straight to authorization; anything outside the profile is flagged to a coordinator.",
+      "role": "system",
+      "kind": "validation",
+      "inputs": [
+        "web order",
+        "program profile"
+      ],
+      "outputs": [
+        "validated order or exception flag"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.52,
+          "condition": "valid, DER chose a company centre or on-site collection"
+        },
+        {
+          "to": "s19",
+          "prob": 0.36,
+          "condition": "valid, DER chose a third-party collection site"
+        },
+        {
+          "to": "s04",
+          "prob": 0.12,
+          "condition": "flagged: reason, panel, site capability or account status outside the profile"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "doi_sched",
+          "cfr4014"
+        ],
+        "note": "Web scheduling with reason, test type, donor and site search (doi_sched); information the collector must receive (cfr4014). Flag share estimated."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Take the phone, email or fax order and key it",
+      "description": "The coordinator confirms the caller or sender is an authorized DER for the account, then keys the donor's name and employee or applicant ID, contact details, testing reason, panel, specimen type, alcohol test, location and the deadline into the case system.",
+      "role": "workplace_program_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "phone call, email or fax"
+      ],
+      "outputs": [
+        "keyed request"
+      ],
+      "systems": [
+        "dt_system",
+        "telephony",
+        "email_office",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Donor name, ID or reason keyed wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "keyed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4014",
+          "dyn_dtsol"
+        ],
+        "note": "Required collection information (cfr4014); orders by email to the drug testing team (dyn_dtsol). Times estimated."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check the request against the employer's program",
+      "description": "The coordinator opens the program profile and confirms the testing reason is one the employer's policy allows for this worker, that the panel, cut-offs and specimen type match, whether a federal DOT or non-regulated custody form applies, whether the collection must be observed (return-to-duty, follow-up) and that the account is not on a billing hold.",
+      "role": "workplace_program_coordinator",
+      "kind": "validation",
+      "inputs": [
+        "request",
+        "program profile"
+      ],
+      "outputs": [
+        "approved request or query"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong panel or custody form type passed to the site.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Employer drug and alcohol policy and program profile, limited by human rights law (testing only in justified circumstances such as safety-sensitive, post-incident or for-cause); DOT reasons and forms under 49 CFR Part 40 for regulated donors",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.88,
+          "condition": "request fits the program"
+        },
+        {
+          "to": "s05",
+          "prob": 0.1,
+          "condition": "information missing or outside the program"
+        },
+        {
+          "to": "s21",
+          "prob": 0.02,
+          "condition": "duplicate of an open request"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hri_policy",
+          "ohrc_policy",
+          "cfr4014",
+          "coaa_2011"
+        ],
+        "note": "Testing reasons in Canadian policies (hri_policy) and their human rights limits (ohrc_policy); DOT standards adopted by the Canadian Model (coaa_2011). Shares estimated."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Ask the employer to clarify the request",
+      "description": "The coordinator emails or phones the DER to fill the gap: a missing donor ID or phone number, a reason the policy does not cover, a panel not in the program or a billing hold that the account manager must clear.",
+      "role": "workplace_program_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "query"
+      ],
+      "outputs": [
+        "question to the DER"
+      ],
+      "systems": [
+        "email_office",
+        "telephony",
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "question sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; time estimated."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Wait for the employer's answer",
+      "description": "The DER answers by email or phone, often after checking with the hiring manager or supervisor, or withdraws the request because the job offer or the reason has changed.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "question to the DER"
+      ],
+      "outputs": [
+        "answer or withdrawal"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.85,
+          "condition": "answer received"
+        },
+        {
+          "to": "s21",
+          "prob": 0.15,
+          "condition": "request withdrawn"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Choose the collection site",
+      "description": "The coordinator searches the site directory by the donor's postal code and the deadline, and checks hours and capability: oral fluid, breath alcohol, a same-gender observer for observed collections, after-hours service. A company centre or on-site collector is preferred; a third-party clinic is used where no company site is near.",
+      "role": "workplace_program_coordinator",
+      "kind": "lookup",
+      "inputs": [
+        "approved request",
+        "site directory"
+      ],
+      "outputs": [
+        "chosen site"
+      ],
+      "systems": [
+        "dt_system",
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Site chosen cannot perform the required collection (observed, oral fluid, alcohol).",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.55,
+          "condition": "company centre or on-site collection"
+        },
+        {
+          "to": "s08",
+          "prob": 0.15,
+          "condition": "third-party clinic that needs a booking"
+        },
+        {
+          "to": "s19",
+          "prob": 0.3,
+          "condition": "third-party walk-in clinic"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "doi_sched",
+          "dyn_dts"
+        ],
+        "note": "Site search by postal code and radius (doi_sched); more than 70 company centres and 2,000 third-party sites (dyn_dts). Split follows the organisation file's 60/40 collection share."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Book the donor with the third-party clinic",
+      "description": "The coordinator phones the third-party clinic to book a time, confirms it can collect the specimen type and observed collection required and has the company's custody forms and shipping supplies in stock, and notes the booking.",
+      "role": "workplace_program_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "chosen third-party site"
+      ],
+      "outputs": [
+        "booking"
+      ],
+      "systems": [
+        "telephony",
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.85,
+          "condition": "booked"
+        },
+        {
+          "to": "s09",
+          "prob": 0.1,
+          "condition": "clinic has no company forms or supplies"
+        },
+        {
+          "to": "s07",
+          "prob": 0.05,
+          "condition": "clinic cannot do it, choose another"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate from common practice with independent clinics."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Send custody forms and supplies to the clinic",
+      "description": "The coordinator orders a collection kit with pre-printed custody forms, bottles, seals and shipping bags for the clinic and books it on the courier system.",
+      "role": "workplace_program_coordinator",
+      "kind": "physical",
+      "inputs": [
+        "supply request"
+      ],
+      "outputs": [
+        "kit shipment"
+      ],
+      "systems": [
+        "logistics_tracking",
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "kit shipped"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "doi_sched"
+        ],
+        "note": "Paper custody forms are used where no electronic-form site is near (doi_sched); kit handling estimated."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Wait for the kit to reach the clinic",
+      "description": "The courier delivers the kit to the clinic, usually the next business day and two or three days for remote northern or rural sites, before the clinic can collect.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "kit shipment"
+      ],
+      "outputs": [
+        "kit delivered"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 4320
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "delivered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Courier transit estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Take the urgent post-incident or reasonable cause call",
+      "description": "The coordinator on the 24-hour line confirms the caller is an authorized supervisor or DER, records the incident time, site address, number of workers to test, whether a breath alcohol test is needed and whether the donor is DOT-regulated, and reminds the caller of the time limits.",
+      "role": "workplace_program_coordinator",
+      "kind": "intake",
+      "inputs": [
+        "urgent call"
+      ],
+      "outputs": [
+        "urgent request"
+      ],
+      "systems": [
+        "telephony",
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Site address or incident time recorded wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "49 CFR 382.303 post-accident timing for DOT-regulated drivers (alcohol within 2 hours, stop at 8; drugs stop at 32 hours) and the employer's post-incident procedure for others. For DOT-regulated donors (cross-border drivers) the rule is fixed by law; for most Canadian donors it is adopted through the Canadian Model and the employer's policy, so it is marked needs_policy_change.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr382303",
+          "hri_postinc"
+        ],
+        "note": "Post-accident timing (cfr382303); supervisor referral after an incident with a second manager's agreement (hri_postinc)."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Dispatch an on-call collector or find an open clinic",
+      "description": "The coordinator phones the on-call collector for the region and agrees an arrival time, or where none is in reach phones a 24-hour third-party clinic, then calls the DER back with the arrival time or the clinic address so the worker can be driven there.",
+      "role": "workplace_program_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "urgent request",
+        "on-call roster"
+      ],
+      "outputs": [
+        "dispatched collector or clinic"
+      ],
+      "systems": [
+        "telephony",
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.75,
+          "condition": "company collector dispatched"
+        },
+        {
+          "to": "s19",
+          "prob": 0.25,
+          "condition": "third-party clinic used"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "On-call dispatch practice estimated; the collection workflow has an on-call collector respond."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Update the employer's random pool",
+      "description": "Before the scheduled draw, the coordinator loads the employer's current roster of covered safety-sensitive workers (new hires added, leavers removed) into the random pool, checking the count against the last period. The work is done once per draw and shared by all the workers selected.",
+      "role": "workplace_program_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "employer roster file"
+      ],
+      "outputs": [
+        "updated random pool"
+      ],
+      "systems": [
+        "dt_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A leaver kept or a new hire missing from the pool.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "49 CFR 382.305(j): only covered employees in the pool and all of them included. For DOT-regulated donors (cross-border drivers) the rule is fixed by law; for most Canadian donors it is adopted through the Canadian Model and the employer's policy, so it is marked needs_policy_change.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "pool updated"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr382305"
+        ],
+        "note": "Pool rules (cfr382305). Waiting for the employer's roster and the amortised time are estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Run the random selection",
+      "description": "The case system draws the period's selections and alternates from the pool with a random number generator at the program's annual rate divided by the number of periods, giving every covered worker an equal chance, and stores the draw for audit.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "random pool",
+        "program rate"
+      ],
+      "outputs": [
+        "selection list"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "49 CFR 382.305: scientifically valid method, equal chance at each selection, minimum annual rates of 50 percent for drugs and 10 percent for alcohol. For DOT-regulated donors (cross-border drivers) the rule is fixed by law; for most Canadian donors it is adopted through the Canadian Model and the employer's policy, so it is marked needs_policy_change.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "draw complete"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr382305"
+        ],
+        "note": "Selection method and minimum rates stated in the rule."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Check the draw and send the list to the DER",
+      "description": "The coordinator checks the number selected against the required rate and pool size, looks for duplicates or names outside the covered group, then releases the list to the DER through the secure web report or encrypted email with the date by which each worker must be tested.",
+      "role": "workplace_program_coordinator",
+      "kind": "review",
+      "inputs": [
+        "selection list"
+      ],
+      "outputs": [
+        "random selection list sent to the employer"
+      ],
+      "systems": [
+        "dt_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.5,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Random program audit trail: selection counts and lists kept to show the required rate was met",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "list sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr382305",
+          "dyn_dts"
+        ],
+        "note": "C/TPAs may make selections for employers (cfr382305); statistical reports (dyn_dts). Amortised time estimated."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Wait for the DER to notify the selected worker",
+      "description": "The DER confirms which selected workers are available and reports those on leave or no longer employed as excused; the DER later tells each worker at an unannounced time to go for testing immediately, which belongs to the collection process.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "random selection list"
+      ],
+      "outputs": [
+        "notified worker or excused report"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.75,
+          "condition": "worker tested by a company centre or on-site collector"
+        },
+        {
+          "to": "s19",
+          "prob": 0.17,
+          "condition": "worker sent to a third-party clinic"
+        },
+        {
+          "to": "s17",
+          "prob": 0.08,
+          "condition": "worker excused (leave, layoff, left the company)"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr382305",
+          "doi_sched"
+        ],
+        "note": "Unannounced tests spread through the year and immediate reporting (cfr382305, doi_sched); DER confirmation time and excused share estimated."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Record the excused worker and apply the alternate rule",
+      "description": "The coordinator records why the worker could not be tested, and either schedules the test for the worker's return within the period or releases an alternate from the stored draw, as the program rules allow.",
+      "role": "workplace_program_coordinator",
+      "kind": "judgment",
+      "inputs": [
+        "excused report",
+        "stored draw"
+      ],
+      "outputs": [
+        "alternate or rescheduled test"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.8,
+          "condition": "alternate or rescheduled worker to a company site"
+        },
+        {
+          "to": "s19",
+          "prob": 0.2,
+          "condition": "alternate to a third-party site"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Program practice estimated."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Issue the donor authorization for a company site",
+      "description": "The case system creates the donor authorization with the donor, reason, panel, specimen type, alcohol test and expiry time, emails or texts it to the donor or DER, and posts it to the company centre worklist or the on-site collector's booking queue.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved request"
+      ],
+      "outputs": [
+        "donor authorization"
+      ],
+      "systems": [
+        "dt_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.95,
+          "condition": "authorization issued",
+          "outcome": "authorized_company_site"
+        },
+        {
+          "to": "s20",
+          "prob": 0.05,
+          "condition": "DER or donor asks to change site, extend or cancel"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "doi_sched",
+          "dyn_dts"
+        ],
+        "note": "Electronic donor pass with expiry sent by email or text (doi_sched)."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Issue the donor authorization for a third-party site",
+      "description": "The case system creates the authorization, sends it to the donor or DER and faxes or emails the clinic the account's instructions: custody form type, laboratory address, panel and shipping method.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved request",
+        "chosen clinic"
+      ],
+      "outputs": [
+        "donor authorization",
+        "clinic instructions"
+      ],
+      "systems": [
+        "dt_system",
+        "fax",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.95,
+          "condition": "authorization issued",
+          "outcome": "authorized_third_party"
+        },
+        {
+          "to": "s20",
+          "prob": 0.05,
+          "condition": "DER or donor asks to change site, extend or cancel"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "doi_sched",
+          "cfr4014"
+        ],
+        "note": "Authorization and collector information (doi_sched, cfr4014)."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Handle a change to an issued authorization",
+      "description": "The DER or donor phones because the donor cannot reach the site in time, the site was closed, the deadline needs extending or the employer wants to cancel. The coordinator voids or extends the authorization and, for a new site, goes back to site selection.",
+      "role": "workplace_program_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "change request"
+      ],
+      "outputs": [
+        "voided or changed authorization"
+      ],
+      "systems": [
+        "dt_system",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.65,
+          "condition": "new site or new expiry"
+        },
+        {
+          "to": "s21",
+          "prob": 0.35,
+          "condition": "employer cancels the test"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr40191"
+        ],
+        "note": "Failing to appear within a reasonable time is a refusal for tests other than pre-employment and the employer decides (cfr40191), so expired authorizations go back to the DER. Shares estimated."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Cancel the request",
+      "description": "The coordinator cancels the request in the case system with the reason, voids any authorization so a site cannot collect on it, and tells the DER, so no charge or only the agreed cancellation fee is billed.",
+      "role": "workplace_program_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "cancellation reason"
+      ],
+      "outputs": [
+        "cancelled request"
+      ],
+      "systems": [
+        "dt_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "cancelled",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Order outside the program",
+      "share_of_cases": 0.02,
+      "description": "A web order is flagged or a keyed order does not fit the program; the coordinator asks the DER and waits for an answer.",
+      "path": [
+        "s02",
+        "s04",
+        "s05",
+        "s06",
+        "s04"
+      ]
+    },
+    {
+      "name": "Third-party clinic without supplies",
+      "share_of_cases": 0.004,
+      "description": "The booked clinic lacks the company's custody forms and a kit is couriered before the authorization goes out.",
+      "path": [
+        "s08",
+        "s09",
+        "s10",
+        "s19"
+      ]
+    },
+    {
+      "name": "Urgent post-incident callout",
+      "share_of_cases": 0.05,
+      "description": "An after-hours call needs a collector at the site within the post-accident time limits.",
+      "path": [
+        "s01",
+        "s11",
+        "s12",
+        "s18"
+      ]
+    },
+    {
+      "name": "Random selection with excused worker",
+      "share_of_cases": 0.01,
+      "description": "A selected worker is on leave or gone and an alternate is released or the test deferred within the period.",
+      "path": [
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17"
+      ]
+    },
+    {
+      "name": "Authorization changed or cancelled after issue",
+      "share_of_cases": 0.05,
+      "description": "The donor cannot reach the site, the deadline needs extending or the employer withdraws the test.",
+      "path": [
+        "s18",
+        "s20",
+        "s07"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.01,
+        "p90": 2
+      },
+      "unit": "calendar days from request received to donor authorization issued",
+      "population": "Workplace drug and alcohol test requests at a Canadian testing provider",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "No opened source gives an ordering turnaround. Web orders that pass the automatic checks are issued within minutes and keyed orders within the business day; random requests wait for the employer roster and the DER's confirmation, which sets the p90."
+      }
+    },
+    {
+      "metric": "pre_employment_reporting_window",
+      "value": 48,
+      "unit": "hours from notification",
+      "population": "Applicants in a US federal agency program run through a third-party administrator",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "doi_sched"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "random_minimum_annual_rate",
+      "value": {
+        "drugs": 0.5,
+        "alcohol": 0.1
+      },
+      "unit": "share of average covered driver positions per year",
+      "population": "US DOT FMCSA-regulated drivers, including Canadian cross-border drivers",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr382305"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "post_accident_time_limits",
+      "value": {
+        "alcohol_record_reason_after": 2,
+        "alcohol_stop": 8,
+        "drugs_stop": 32
+      },
+      "unit": "hours after the accident",
+      "population": "US DOT FMCSA-regulated drivers",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr382303"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "collection_sites",
+      "value": {
+        "company_centres": 70,
+        "third_party_sites": 2000
+      },
+      "unit": "sites (more than)",
+      "population": "The company's workplace collection network",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dyn_dts"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "workplace_testing_clients",
+      "value": 500,
+      "unit": "employers (more than)",
+      "population": "The company's workplace testing clients",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dyn_wp"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Phone, email and fax orders are keyed by hand and checked against the program, which takes most of the coordinators' ordering time.",
+      "steps": [
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from the touch times."
+      }
+    },
+    {
+      "description": "Urgent post-incident calls arrive at any hour and must reach a collector within the post-accident time limits, which is hard for remote sites.",
+      "steps": [
+        "s11",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr382303",
+          "hri_postinc"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Random pools depend on employers sending current rosters; stale rosters select people who have left and miss new hires.",
+      "steps": [
+        "s13",
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr382305"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Third-party clinics vary in hours, capability and stock of the company's forms, so some need calls or a courier kit before a donor can be sent.",
+      "steps": [
+        "s08",
+        "s09",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "doi_sched",
+          "dyn_dts"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Testing is limited by human rights law to justified circumstances, so orders outside the employer's policy have to be queried rather than processed.",
+      "steps": [
+        "s04",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ohrc_policy",
+          "hri_policy"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "dyn_dts",
+      "title": "Drug testing services",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "More than 300,000 drug tests a year; more than 70 company centres and more than 2,000 preferred third-party collection sites; negatives usually released within 24 hours and non-negatives need another 48 to 72 hours; web-based and secure fax result reporting; DOT-compliant and non-regulated statistical reports; performance scorecards; post-accident, random and other testing reasons."
+    },
+    {
+      "id": "dyn_dtsol",
+      "title": "Drug testing solutions",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Negatives generally released within 6 to 24 hours, non-negatives another 48 to 72 hours; web-based and secure fax reporting; activity reports of specimens received in the previous 24 hours with status and result; DOT-compliant and non-regulated statistical reports; performance scorecards; single laboratory and billing platform; scientific consultants; inquiries to a drug testing mailbox."
+    },
+    {
+      "id": "dyn_wp",
+      "title": "The model laboratory Workplace",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "More than 500 workplace testing clients across Canada; on-site testing or collection at company facilities nationwide; programs created and managed with employers."
+    },
+    {
+      "id": "cfr4014",
+      "title": "49 CFR 40.14 What collection information must employers provide to collectors?",
+      "publisher": "Legal Information Institute (Cornell)",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.14",
+      "year": "current",
+      "accessed": "2026-11-17",
+      "supports": "Employer or C/TPA must give the collector the employee's name and ID, laboratory, employer and DER details, MRO details, DOT agency, reason for test, whether observed, C/TPA details and specimen type."
+    },
+    {
+      "id": "cfr382305",
+      "title": "49 CFR 382.305 Random testing",
+      "publisher": "Legal Information Institute (Cornell)",
+      "url": "https://www.law.cornell.edu/cfr/text/49/382.305",
+      "year": "current",
+      "accessed": "2026-11-17",
+      "supports": "Minimum annual random rates of 50 percent of driver positions for drugs and 10 percent for alcohol, adjusted by FMCSA from industry positive rates; selection by a scientifically valid method such as a computer random number generator matched to employee IDs, equal chance at every selection, unannounced tests spread through the year; a notified driver goes to the test site immediately; C/TPAs may make the selections."
+    },
+    {
+      "id": "cfr382303",
+      "title": "49 CFR 382.303 Post-accident testing",
+      "publisher": "Legal Information Institute (Cornell)",
+      "url": "https://www.law.cornell.edu/cfr/text/49/382.303",
+      "year": "current",
+      "accessed": "2026-11-17",
+      "supports": "Alcohol test as soon as practicable; reasons recorded if not done within 2 hours and attempts stop at 8 hours; drug test attempts stop at 32 hours; fatal accidents, and injury or tow-away accidents with a citation, require testing."
+    },
+    {
+      "id": "cfr40191",
+      "title": "49 CFR 40.191 What is a refusal to take a DOT drug test, and what are the consequences?",
+      "publisher": "Legal Information Institute (Cornell)",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.191",
+      "year": "current",
+      "accessed": "2026-11-17",
+      "supports": "Failing to appear for any test except pre-employment within a reasonable time set by the employer, leaving the site, and verified adulteration or substitution are refusals; the employer alone decides whether a refusal occurred."
+    },
+    {
+      "id": "doi_sched",
+      "title": "Scheduling drug test",
+      "publisher": "U.S. Department of the Interior, Interior Business Center",
+      "url": "https://ibc.doi.gov/node/15",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "A scheduler enters the test reason, test type and donor in the third-party administrator's web system, lists notification emails or a phone number for the electronic donor pass, sets an expiration date and searches collection sites by postal code and radius; random selectees report immediately and applicants within 48 hours of notification; paper forms are used where no electronic-form site is near."
+    },
+    {
+      "id": "hri_policy",
+      "title": "Drug and alcohol testing policy (model policy)",
+      "publisher": "HR Insider",
+      "url": "https://hrinsider.ca/model-drug-alcohol-testing-policy/",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Canadian model policy: pre-employment, post-incident, reasonable cause, random for safety-sensitive positions and post-rehabilitation testing; confirmed results go to HR or another designated role; confidential handling; consent form; refusal is a violation."
+    },
+    {
+      "id": "hri_postinc",
+      "title": "Model post-incident drug or alcohol testing procedures",
+      "publisher": "HR Insider",
+      "url": "https://hrinsider.ca/model-post-incident-drug-or-alcohol-testing-procedures/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "The supervisor decides on referral after investigating a significant incident, with agreement of a second level of management; only workers directly involved are referred."
+    },
+    {
+      "id": "ohrc_policy",
+      "title": "Policy on drug and alcohol testing",
+      "publisher": "Ontario Human Rights Commission",
+      "url": "https://www.ohrc.on.ca/en/policy-drug-and-alcohol-testing",
+      "year": 2016,
+      "accessed": "2026-11-17",
+      "supports": "Testing is used only in limited circumstances such as for-cause, post-incident or post-reinstatement, for safety-sensitive positions, and must meet the bona fide requirement test set by the Supreme Court of Canada."
+    },
+    {
+      "id": "coaa_2011",
+      "title": "COAA Best Practices Conference XIX: Canadian Model best practice (presentation transcript)",
+      "publisher": "Construction Owners Association of Alberta via sambuz.com",
+      "url": "https://sambuz.com/doc/coaa-best-practices-conference-xix-canadian-model-best-ppt-presentation-50475",
+      "year": 2011,
+      "accessed": "2026-11-17",
+      "supports": "US DOT standards are mandated for the COAA Canadian Model best practice, including collector, collection facility and MRO standards; oral fluid preference for reasonable cause, post-incident and random; medical marijuana raised as an MRO question; longer waits for drug test results."
+    }
+  ],
+  "assumptions": [
+    "One case is one test request for one donor. Breath alcohol and drug tests ordered together are one request.",
+    "Channel shares (70 percent web, 12 percent email, fax or phone, 5 percent urgent, 13 percent random) are the author's estimates. The 13 percent random share is also the share of cases triggered by the program profile; all other requests come from the employer.",
+    "Random pool updates and draws are done once per employer per period; their touch time is shared across the workers selected.",
+    "Company sites take about 60 percent of authorizations and third-party clinics about 40 percent, matching the organisation file's collection volumes. The collection workflow handles donors who never attend.",
+    "Rules from US DOT 49 CFR Parts 40 and 382 apply by law only to DOT-regulated donors; for the rest they are adopted through the Canadian Model and employer policies, so controls are marked needs_policy_change.",
+    "Coordinator FTE (11.5 of 18) is close to what hands-on time times volume implies. With the collection, result reporting and medical review workflows, coordinators are left with about 3 FTE for program set-up, occupational health and account service.",
+    "The process ends when the authorization is issued; the donor's attendance belongs to the collection process.",
+    "Loaded costs come from the organisation file (wage times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

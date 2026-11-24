@@ -1,0 +1,1564 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-cs-bed-management",
+  "name": "Assign inpatient beds and run patient flow",
+  "org": "community-hospital-corp",
+  "process": "cs-bed-management",
+  "sector": "healthcare (acute care hospital)",
+  "function": "clinical support (patient flow)",
+  "summary": "Patient flow coordinators, usually experienced nurses, take bed requests from the emergency department, the recovery room, the ICU, other units and other hospitals, and match each one to a clean bed of the right type on the electronic bed board. Because the hospital runs at or above full occupancy, most requests wait for a discharge to leave and the room to be cleaned; the coordinator chases expected discharges, ranks requests at twice-daily bed meetings and, when no bed is in sight, the manager or after-hours clinical administrator opens surge beds in unconventional spaces and asks for extra staff. Once a bed is assigned the receiving unit must accept the patient and a porter must move them. Work is slowed by late-day discharges, delays in cleaning, isolation needs that require single rooms and units that push back on assignments.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A not-for-profit Ontario community hospital corporation with three hospitals, about 640 inpatient beds and an emergency department at each site, on a single hospital information system with an electronic bed board.",
+    "org_size_employees": 5790,
+    "notes": "Patient flow is staffed around the clock at the large site and on days and evenings at the smaller sites; after hours a clinical administrator holds bed authority. The provincial daily bed census counts hallway and unconventional-space patients."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one bed assignment (from bed request to the patient occupying the assigned inpatient bed)",
+  "trigger": "A bed request arrives on the bed board from the ED, recovery room, ICU, an inpatient unit needing a transfer, or another hospital asking to repatriate a patient.",
+  "end_state": "The patient is in the assigned bed, ADT and the bed board show the bed occupied, and any surge or unconventional placement is recorded for the daily bed census.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2600,
+      "mode": 3000,
+      "high": 3500
+    },
+    "seasonality": "Highest in January to March with respiratory admissions; lower in summer when elective surgery slows; 2020 elective ramp-downs reduced surgical requests but COVID-19 isolation needs made matching harder.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Author's estimate, same as the organisation file: about 1,400 ED admissions (see hosp-ed-admission-boarding), 400 to 500 elective and day-of-surgery admissions, about 150 ICU step-downs, 40 to 80 repatriations and 400 to 600 internal transfers a month."
+    },
+    "surge": {
+      "cause": "Winter respiratory virus season (influenza and RSV; COVID-19 waves from 2020)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 60,
+        "mode": 90,
+        "high": 120
+      },
+      "volume_multiplier": {
+        "low": 1.03,
+        "mode": 1.08,
+        "high": 1.15
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Same winter surge as the organisation file; requests rise while discharges to long-term care and home care slow."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ed-admission-boarding",
+        "object": "bed_request",
+        "share": 0.47
+      },
+      {
+        "from": "med-icu-critical-care",
+        "object": "bed_request",
+        "share": 0.06
+      },
+      {
+        "from": "tertiary_hospital",
+        "object": "repatriation_request",
+        "share": 0.02
+      },
+      {
+        "from": "cs-discharge-planning",
+        "object": "bed_status_update",
+        "share": 0.3
+      },
+      {
+        "from": "qp-ipac-surveillance",
+        "object": "isolation_order",
+        "share": 0.05
+      },
+      {
+        "from": "med-end-of-life-care",
+        "object": "bed_status_update",
+        "share": 0.02
+      },
+      {
+        "from": "sx-perioperative-case",
+        "object": "bed_request",
+        "share": 0.08
+      }
+    ],
+    "inputs": [
+      {
+        "from": "fs-emergency-preparedness",
+        "object": "emergency_plan"
+      },
+      {
+        "from": "fs-environmental-cleaning",
+        "object": "clean_bed"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "bed_occupied",
+        "to": "ed-admission-boarding",
+        "object": "bed_assignment"
+      },
+      {
+        "outcome": "bed_occupied",
+        "to": "med-inpatient-medical-care",
+        "object": "bed_assignment"
+      },
+      {
+        "outcome": "bed_occupied",
+        "to": "sx-surgical-inpatient-care",
+        "object": "bed_assignment"
+      },
+      {
+        "outcome": "bed_occupied",
+        "to": "fs-patient-portering",
+        "object": "transport_request"
+      },
+      {
+        "outcome": "any",
+        "to": "hr-staff-scheduling",
+        "object": "staffing_request"
+      },
+      {
+        "outcome": "bed_occupied",
+        "to": "tertiary_hospital",
+        "object": "transfer_acceptance"
+      },
+      {
+        "outcome": "request_cancelled",
+        "to": "ed-admission-boarding",
+        "object": "bed_status_update"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "bed_flow_coordinator",
+      "title": "Patient flow coordinator (bed allocation)",
+      "department": "Patient flow and bed management",
+      "layer": "senior_specialist",
+      "fte_on_process": 10.0,
+      "loaded_cost_per_hour": {
+        "low": 51,
+        "mode": 63,
+        "high": 70
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Bed search, assignments, unit calls and census for every request; 12 people cover 24/7 at the large site and extended hours at the smaller sites. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "patient_flow_manager",
+      "title": "Manager, patient flow",
+      "department": "Patient flow and bed management",
+      "layer": "manager",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 74,
+        "mode": 84,
+        "high": 94
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Chairs the daytime bed meetings and handles weekday escalations. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      }
+    },
+    {
+      "id": "admin_on_call",
+      "title": "Clinical administrator (evenings, nights and weekends)",
+      "department": "Patient flow and bed management",
+      "layer": "supervisor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 59,
+        "mode": 68,
+        "high": 76
+      },
+      "occupation_code": "NOC 2016 3011",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Holds bed authority evenings, nights and weekends: escalations, surge beds and unit disputes. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "med_manager",
+      "title": "Patient care manager, inpatient unit",
+      "department": "Medicine and critical care program",
+      "layer": "manager",
+      "fte_on_process": 1.2,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 78,
+        "high": 89
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Unit managers report expected discharges at bed meetings and resolve refused assignments. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      }
+    },
+    {
+      "id": "cs_director",
+      "title": "Director, clinical support services",
+      "department": "Clinical support services",
+      "layer": "director",
+      "fte_on_process": 0.05,
+      "loaded_cost_per_hour": {
+        "low": 88,
+        "mode": 101,
+        "high": 119
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves opening unfunded surge beds or activating the over-capacity plan. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      }
+    },
+    {
+      "id": "med_rn",
+      "title": "Inpatient registered nurse",
+      "department": "Inpatient medicine units",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 61,
+        "high": 68
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Receiving unit charge nurse accepts or questions assignments. Not listed among the process roles in the organisation file. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "unit_clerk",
+      "title": "Inpatient unit clerk",
+      "department": "Inpatient medicine units",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 35,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Confirms arrival and occupies the bed in ADT. Not listed among the process roles in the organisation file. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "staffing_clerk",
+      "title": "Staffing and scheduling clerk",
+      "department": "Staffing office",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 35,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1411",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Finds a nurse for a surge bed from call-in lists. Not listed among the process roles in the organisation file. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "bed_board",
+      "name": "Electronic bed board and patient flow dashboard",
+      "kind": "workflow"
+    },
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    },
+    {
+      "id": "criticall_portal",
+      "name": "CritiCall Ontario referral line and portal",
+      "kind": "external_portal"
+    },
+    {
+      "id": "scheduling_system",
+      "name": "Staff scheduling and time-and-attendance system",
+      "kind": "workflow"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets and shared drives",
+      "kind": "spreadsheet"
+    }
+  ],
+  "resources": [
+    {
+      "id": "bed_medicine",
+      "name": "Inpatient medicine beds",
+      "kind": "bed",
+      "count": 300
+    },
+    {
+      "id": "bed_surgical",
+      "name": "Surgical inpatient beds",
+      "kind": "bed",
+      "count": 115
+    },
+    {
+      "id": "bed_icu",
+      "name": "Intensive care beds",
+      "kind": "bed",
+      "count": 30
+    },
+    {
+      "id": "field_hospital_beds",
+      "name": "COVID-19 field hospital beds (opened 2020-2022)",
+      "kind": "bed",
+      "count": 52
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive the bed request on the bed board",
+      "description": "A bed request arrives on the electronic bed board from ADT when the ED opens an admission, the recovery room books a post-operative bed, the ICU asks to step a patient down or a unit asks for a transfer. The board shows the service, bed type, isolation flag and the time of request.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "bed request"
+      ],
+      "outputs": [
+        "request on bed board"
+      ],
+      "systems": [
+        "bed_board",
+        "his"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.98,
+          "condition": "internal request"
+        },
+        {
+          "to": "s03",
+          "prob": 0.02,
+          "condition": "repatriation from another hospital"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of an electronic bed board linked to ADT, common in Ontario hospitals of this size."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review the request and its requirements",
+      "description": "The patient flow coordinator opens the request and checks service, bed type (telemetry, step-down, surgical, medicine), any isolation needs and special needs such as bariatric equipment or a negative-pressure room, phoning the requesting nurse when the entry is unclear.",
+      "role": "bed_flow_coordinator",
+      "kind": "validation",
+      "inputs": [
+        "request on bed board"
+      ],
+      "outputs": [
+        "validated request"
+      ],
+      "systems": [
+        "bed_board",
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Requirement missed (isolation, telemetry), causing a refused bed later.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 0.85,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "requirements clear"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Accept a repatriation request",
+      "description": "A tertiary hospital asks, by phone or through the CritiCall referral line, to send back a patient who came from this community. The coordinator takes the clinical summary, confirms the receiving service and physician accept, and records the request on the bed board.",
+      "role": "bed_flow_coordinator",
+      "kind": "intake",
+      "inputs": [
+        "repatriation request"
+      ],
+      "outputs": [
+        "accepted repatriation",
+        "request on bed board"
+      ],
+      "systems": [
+        "criticall_portal",
+        "email_phone",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Clinical summary incomplete, so the receiving unit cannot plan care.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Provincial expectation that community hospitals repatriate their patients from tertiary centres promptly (regional repatriation agreements).",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "accepted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check isolation and infection status",
+      "description": "The coordinator checks the infection flags in the hospital information system and any new isolation order from infection control (MRSA, VRE, CPE, C. difficile, from 2020 COVID-19 status), because isolated patients need a single room or a cohort with the same organism.",
+      "role": "bed_flow_coordinator",
+      "kind": "lookup",
+      "inputs": [
+        "validated request",
+        "infection flags"
+      ],
+      "outputs": [
+        "room type needed"
+      ],
+      "systems": [
+        "his",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Flag overlooked; patient placed in a shared room and must be moved.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "room type known"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate. Isolation narrows the beds available because most beds in older community hospitals are in semi-private or ward rooms."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Search for a clean or soon-available bed",
+      "description": "The coordinator scans the bed board for clean empty beds of the right type and for beds where a discharge is entered or expected today, considering off-service placement (a medical patient on a surgical unit) when the right unit is full. The coordinator decides whether a bed is available now, expected soon, or not in sight.",
+      "role": "bed_flow_coordinator",
+      "kind": "analysis",
+      "inputs": [
+        "bed board",
+        "expected discharges"
+      ],
+      "outputs": [
+        "candidate bed or wait decision"
+      ],
+      "systems": [
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Off-service placement chosen that the unit cannot staff, leading to a refusal.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.25,
+          "condition": "matching clean bed free now"
+        },
+        {
+          "to": "s06",
+          "prob": 0.6,
+          "condition": "discharge expected later today"
+        },
+        {
+          "to": "s08",
+          "prob": 0.15,
+          "condition": "no bed in sight: over capacity"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023",
+          "moh_dbcs"
+        ],
+        "note": "Ontario hospitals ran near or above full occupancy, with at least 1,000 hallway patients a day in 2019 and ALC patients filling about 15% of patient days (oag2023). Branch shares tier C."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Chase expected discharges with the units",
+      "description": "The coordinator phones the charge nurses on units with expected discharges to ask when the patient will leave, whether the discharge order is written and whether family or transport is arranged, and pushes for discharges before 11:00.",
+      "role": "bed_flow_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "expected discharges"
+      ],
+      "outputs": [
+        "updated discharge times"
+      ],
+      "systems": [
+        "email_phone",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "discharge times updated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Rank the request at the bed meeting",
+      "description": "At the morning and afternoon bed meetings (or huddle calls) the patient flow manager and the unit managers go through every waiting request, the confirmed and possible discharges and the staffing on each unit, and agree the order in which beds go to ED, recovery room, ICU and transfer patients. The touch time is this request's share of the meeting.",
+      "role": "patient_flow_manager",
+      "kind": "coordination",
+      "inputs": [
+        "request list",
+        "discharge list"
+      ],
+      "outputs": [
+        "ranked requests"
+      ],
+      "systems": [
+        "bed_board",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 360
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Priority set on incomplete discharge information; bed promised then delayed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "ranked"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate. Twice-daily bed meetings are common practice in Ontario community hospitals; the wait is the time to the next meeting."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Escalate to the over-capacity plan",
+      "description": "When no bed will come free in time and the ED is full of admitted patients, the patient flow manager on weekdays or the clinical administrator after hours reviews the census with the units, decides where an unconventional surge space (a lounge, a hallway alcove or an unfunded bed) can be opened and which unit will take an extra patient.",
+      "role": "admin_on_call",
+      "kind": "judgment",
+      "inputs": [
+        "census",
+        "ED board"
+      ],
+      "outputs": [
+        "surge decision"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital surge and over-capacity protocol under the emergency response plan.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.25,
+          "condition": "new surge beds or field hospital beds needed"
+        },
+        {
+          "to": "s10",
+          "prob": 0.75,
+          "condition": "existing surge space used"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "moh_dbcs"
+        ],
+        "note": "The Ministry's February 2020 definitions distinguish conventional from unconventional spaces and count inpatients in unconventional spaces as hallway patients. Decision times tier C."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Approve surge beds and request staff",
+      "description": "The director approves opening additional unfunded or field hospital beds, and the staffing office is asked to call in nurses and PSWs from the call-in lists, often at overtime rates. A surge bed cannot be used until it has a nurse.",
+      "role": "cs_director",
+      "kind": "approval",
+      "inputs": [
+        "surge decision"
+      ],
+      "outputs": [
+        "approved surge beds",
+        "staffing request"
+      ],
+      "systems": [
+        "email_phone",
+        "scheduling_system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Opening beds beyond the funded complement needs senior approval because the hospital bears the unfunded cost (hospital budget authority policy).",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "surge capacity approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; field hospital beds operated in 2020-2022 (organisation file)."
+      },
+      "resources": [
+        {
+          "id": "field_hospital_beds",
+          "occupied_min": {
+            "low": 0,
+            "mode": 120,
+            "high": 720
+          }
+        }
+      ]
+    },
+    {
+      "id": "s10",
+      "name": "Assign the bed when discharge and cleaning are done",
+      "description": "When a matching bed is marked clean on the bed board, or a surge space is ready, the coordinator assigns it to the highest-ranked request and records the assignment, which shows on the requesting area's board. The wait here is for patients to leave and environmental services to clean the room.",
+      "role": "bed_flow_coordinator",
+      "kind": "judgment",
+      "inputs": [
+        "clean bed",
+        "ranked requests"
+      ],
+      "outputs": [
+        "bed assignment"
+      ],
+      "systems": [
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 45,
+        "high": 600
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Assignment does not match the patient's needs.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.97,
+          "condition": "bed assigned"
+        },
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "request cancelled: patient discharged or transferred elsewhere",
+          "outcome": "request_cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023",
+          "khsc_beds"
+        ],
+        "note": "Bed allocators assign beds as they are cleaned and keep the ED informed (khsc_beds); ED patients waited on average 8 to 10 hours for a bed before COVID-19 and 10.8 hours in the Mississauga Halton sub-region in 2021/22 (oag2023). The triangular wait across all requesters is tier C."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Assign a free bed at once",
+      "description": "When a matching clean bed is already empty, the coordinator assigns it straight away on the bed board and phones the sending area.",
+      "role": "bed_flow_coordinator",
+      "kind": "judgment",
+      "inputs": [
+        "clean bed"
+      ],
+      "outputs": [
+        "bed assignment"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Assignment does not match the patient's needs.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "bed assigned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      },
+      "concurrent_with": [
+        "s05"
+      ]
+    },
+    {
+      "id": "s12",
+      "name": "Receiving charge nurse accepts the assignment",
+      "description": "The receiving unit's charge nurse checks the assignment against the unit's staffing and patient mix and accepts it, or pushes back (no nurse for a new admission at shift change, gender mix in a ward room, isolation not possible). Disputes go back to the coordinator or the administrator.",
+      "role": "med_rn",
+      "kind": "review",
+      "inputs": [
+        "bed assignment"
+      ],
+      "outputs": [
+        "accepted assignment"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.88,
+          "condition": "accepted"
+        },
+        {
+          "to": "s13",
+          "prob": 0.12,
+          "condition": "pushed back"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Resolve a refused assignment",
+      "description": "The unit manager (or the clinical administrator after hours) talks with the coordinator and the charge nurse, either confirming the assignment with extra help for the unit or releasing the bed so the coordinator can reassign.",
+      "role": "med_manager",
+      "kind": "coordination",
+      "inputs": [
+        "refused assignment"
+      ],
+      "outputs": [
+        "resolution"
+      ],
+      "systems": [
+        "email_phone",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.7,
+          "condition": "assignment stands"
+        },
+        {
+          "to": "s10",
+          "prob": 0.3,
+          "condition": "bed released, reassign"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Notify the sending area and request transport",
+      "description": "The coordinator confirms the bed number with the sending area and enters a porter request, or for repatriations tells the sending hospital the bed is ready so it can book an ambulance. The bed stays reserved and empty until the patient arrives.",
+      "role": "bed_flow_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "accepted assignment"
+      ],
+      "outputs": [
+        "transport request",
+        "transfer acceptance"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Sending area not told; assigned bed sits empty.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.98,
+          "condition": "internal transfer"
+        },
+        {
+          "to": "s15",
+          "prob": 0.02,
+          "condition": "repatriation"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Wait for the sending hospital to transfer the patient",
+      "description": "The tertiary hospital books non-urgent patient transport or an ambulance and sends the patient with a transfer package; arrival often takes hours and may slip to the next day.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "transfer acceptance"
+      ],
+      "outputs": [
+        "patient arrives"
+      ],
+      "systems": [
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 360,
+        "high": 1440
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "patient arrives"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Confirm arrival and occupy the bed in ADT",
+      "description": "When the patient arrives on the unit, the unit clerk moves the patient to the bed in ADT, which updates the bed board to occupied and closes the request; the coordinator watches for beds that stay reserved too long.",
+      "role": "unit_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "patient on unit"
+      ],
+      "outputs": [
+        "bed occupied in ADT"
+      ],
+      "systems": [
+        "his",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 40,
+        "high": 120
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Transfer not entered, so the board shows the bed empty and it is offered again.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.12,
+          "condition": "placed in a surge or unconventional space"
+        },
+        {
+          "to": "END",
+          "prob": 0.88,
+          "condition": "patient in bed",
+          "outcome": "bed_occupied"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the wait covers report, porter and travel."
+      },
+      "resources": [
+        {
+          "id": "bed_medicine",
+          "occupied_min": {
+            "low": 19,
+            "mode": 37,
+            "high": 112
+          }
+        },
+        {
+          "id": "bed_surgical",
+          "occupied_min": {
+            "low": 9,
+            "mode": 18,
+            "high": 54
+          }
+        },
+        {
+          "id": "bed_icu",
+          "occupied_min": {
+            "low": 2,
+            "mode": 5,
+            "high": 14
+          }
+        }
+      ]
+    },
+    {
+      "id": "s17",
+      "name": "Record the surge placement for the daily census",
+      "description": "For patients placed in an unconventional space or an unfunded bed, the coordinator records the placement on the census sheet so it appears in the hospital's daily bed census summary and hallway count reported to the Ministry, and flags the patient to move to a conventional bed first.",
+      "role": "bed_flow_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "placement"
+      ],
+      "outputs": [
+        "census entry"
+      ],
+      "systems": [
+        "spreadsheets",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Placement not recorded; hallway count understated.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ministry of Health daily bed census summary reporting of conventional and unconventional spaces and hallway patients.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "census updated",
+          "outcome": "bed_occupied"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "moh_dbcs"
+        ],
+        "note": "Daily bed census summary with conventional and unconventional spaces, segmented from October 2021. Times tier C."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Call in staff for the surge bed",
+      "description": "The staffing clerk works through the call-in and part-time availability lists in the scheduling system, phoning nurses and PSWs in seniority order under the collective agreement until the extra shift is filled, then tells the coordinator the surge bed can open.",
+      "role": "staffing_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "staffing request"
+      ],
+      "outputs": [
+        "filled shift"
+      ],
+      "systems": [
+        "scheduling_system",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Shift offered out of seniority order, leading to a grievance.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Call-in order and premium pay rules in the nursing and service collective agreements (ONA, CUPE, SEIU, OPSEU).",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "staff found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Bed free at request",
+      "share_of_cases": 0.25,
+      "description": "A matching clean bed is empty and is assigned at once.",
+      "path": [
+        "s05",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Over capacity",
+      "share_of_cases": 0.15,
+      "description": "No bed is in sight; the over-capacity plan opens surge space, sometimes with director approval and called-in staff.",
+      "path": [
+        "s05",
+        "s08",
+        "s09",
+        "s18",
+        "s10"
+      ]
+    },
+    {
+      "name": "Refused assignment",
+      "share_of_cases": 0.12,
+      "description": "The receiving unit pushes back and the manager resolves or the bed is reassigned.",
+      "path": [
+        "s12",
+        "s13",
+        "s10"
+      ]
+    },
+    {
+      "name": "Repatriation",
+      "share_of_cases": 0.02,
+      "description": "A tertiary hospital sends a patient back; the patient arrives hours after the bed is assigned.",
+      "path": [
+        "s03",
+        "s15"
+      ]
+    },
+    {
+      "name": "Surge placement",
+      "share_of_cases": 0.12,
+      "description": "The patient goes to an unconventional space and is counted as a hallway patient in the daily census.",
+      "path": [
+        "s16",
+        "s17"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.25,
+        "p90": 0.75
+      },
+      "unit": "days from bed request to patient in bed",
+      "population": "All inpatient bed requests (ED, recovery room, ICU, transfers, repatriations), Ontario community hospital, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: ED requests make up about half and wait longest (see the ED averages below); post-operative and internal transfer requests are often planned and wait 2 to 4 hours."
+      }
+    },
+    {
+      "metric": "average_wait_for_inpatient_bed_mississauga_halton_2021_22",
+      "value": 10.8,
+      "unit": "hours (ED patients, decision to admit to leaving the ED)",
+      "population": "Admitted ED patients in the Mississauga Halton LHIN sub-region",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "Figure 16; 21.3 hours in 2022/23."
+      }
+    },
+    {
+      "metric": "average_wait_for_inpatient_bed_ontario_pre_covid",
+      "value": {
+        "low": 8,
+        "high": 10
+      },
+      "unit": "hours",
+      "population": "Admitted ED patients, Ontario, before 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "Section 4.2.4."
+      }
+    },
+    {
+      "metric": "alc_share_of_patient_days_ontario_2022_23",
+      "value": 0.15,
+      "unit": "share of inpatient days",
+      "population": "Ontario hospitals",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "ALC patients occupy beds that could take ED admissions."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Most requests wait for a discharge and a clean room; discharges cluster in the afternoon while ED admissions build from late morning.",
+      "steps": [
+        "s06",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023",
+          "khsc_beds"
+        ],
+        "note": "Long waits for inpatient beds (oag2023); bed allocators depend on cleaning notifications (khsc_beds). The timing pattern is tier C."
+      }
+    },
+    {
+      "description": "ALC patients waiting for long-term care or home care hold about 15% of patient days, so fewer beds turn over.",
+      "steps": [
+        "s05",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "ALC about 15% of patient days in 2022/23."
+      }
+    },
+    {
+      "description": "Bed meetings run twice a day, so a request that misses one meeting waits hours to be ranked.",
+      "steps": [
+        "s07"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Units push back on assignments at shift change or when short-staffed; settling disputes adds time and management effort.",
+      "steps": [
+        "s12",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Surge beds need staff who must be called in, often at overtime, and their patients count as hallway patients.",
+      "steps": [
+        "s08",
+        "s09",
+        "s18",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "moh_dbcs"
+        ],
+        "note": "Hallway definitions include inpatients in unconventional spaces."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oag2023",
+      "title": "Value-for-Money Audit: Emergency Departments (2023 Annual Report)",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en23/AR_emergencydepts_en23.pdf",
+      "year": 2023,
+      "accessed": "2026-11-24",
+      "supports": "Average wait for an inpatient bed after the decision to admit: about 8 to 10 hours before COVID-19, 13 hours (90th percentile 35 hours) in 2022/23, about 21 hours at the 90th percentile in 2013/14; Mississauga Halton sub-region average 10.8 hours in 2021/22 and 21.3 hours in 2022/23; 12% of ED visits admitted in 2022/23; ALC about 15% of patient days; at least 1,000 hallway patients a day in January 2019; ED Return Visit Quality Program (72-hour and 7-day returns)."
+    },
+    {
+      "id": "moh_dbcs",
+      "title": "Conventional and Unconventional Spaces and Hallway Definitions",
+      "publisher": "Ontario Ministry of Health, Capacity Planning and Analytics Division",
+      "url": "https://hsihelp.ontariohealth.ca/hsi/BCM/MOH_Documents/dBCS%20(Bed%20Segmentation)%20Conventional_Unonventional%20Revised%20Info%20Sheet.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Definitions from February 18, 2020 of conventional and unconventional patient spaces; hallway patients counted as admitted patients held in the ED because no bed is available plus inpatients in unconventional spaces; reported through the daily bed census summary (segmented from October 2021)."
+    },
+    {
+      "id": "khsc_beds",
+      "title": "Preventing gridlock: New bed notification system helping smooth patient flow",
+      "publisher": "Kingston Health Sciences Centre",
+      "url": "https://kingstonhsc.ca/node/2927",
+      "year": 2014,
+      "accessed": "2026-11-24",
+      "supports": "Ontario hospital discharge cleaning team: unit clerks update the patient care system at discharge, which pages a discharge-team cleaner; just under 40 minutes on average to reach the bed and about 25 minutes to clean, about 65 minutes in total; bed allocators assign the next patient while the bed is being cleaned and keep the ED informed."
+    }
+  ],
+  "assumptions": [
+    "The unit of work is one bed assignment from any requester. The organisation file's volume and driver are kept; the shares in triggered_by are the author's split of that volume.",
+    "The wait before s10 covers all requesters; ED requests wait longer than post-operative and planned transfer requests. hosp-ed-admission-boarding gives the ED view of the same wait.",
+    "Bed meetings are a daily event; s07 charges each request a small share of the meeting time, and the wait is the time to the next meeting.",
+    "Bed reservation in s16 (from assignment to arrival) is split across medicine (62%), surgical (30%) and ICU (8%) beds by expected share, so each figure is the expected minutes per case.",
+    "Field hospital beds (s09) were open only during 2020-2022 COVID-19 waves; the occupied minutes are the time the surge capacity is held open for the request.",
+    "Sending a repatriation acceptance to the tertiary hospital, the receiving charge nurse, inpatient unit clerk and staffing clerk are included though the process map entry does not list them; sx-perioperative-case is added as a requester because recovery-room bed requests are a large share of requests and are missing from the process map.",
+    "The simulated median (about 0.34 days, 8 hours) is above the tier C benchmark of 6 hours because the bed meeting wait and the wait for a clean bed are modelled in sequence, while in practice a request is often ranked while the discharge is already under way; the simulated 90th percentile (about 14 hours) is shorter than the longest real waits on gridlock days. No published source gives the request-to-bed time for all requesters, so the benchmark stays a tier C estimate."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

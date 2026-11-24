@@ -1,0 +1,1840 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-fin-client-invoicing",
+  "name": "Invoice clients and collect receivables",
+  "org": "diagnostic-lab-services-co",
+  "process": "fin-client-invoicing",
+  "sector": "medical laboratory services",
+  "function": "finance (billing and revenue cycle)",
+  "summary": "The company bills its business clients (life insurers, employers, hospitals, clinical trial and companion diagnostics sponsors and courier customers) for work priced by contract, mostly on monthly invoices and for some insurers and small employers per case or per week. Billing clerks price and check each invoice against the contract and the client's format, supervisors approve large and changed ones, and accounts receivable clerks apply payments, chase overdue invoices and resolve disputes. Most of the elapsed time is the client's own approval and payment cycle, and the work that causes delay is missing purchase orders, unpriced services, supplier portal rejections and short payments.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A large Canadian medical laboratory and health services company with a central billing and receivables team serving insurance, workplace, hospital, trial and sponsor clients.",
+    "org_size_employees": 3300,
+    "notes": "The case starts at the client's billing point (cycle close or per-case billing) and ends when the invoice is paid and closed, credited or written off. Accumulating billable orders before the cycle closes is not counted."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one client invoice",
+  "trigger": "A client's billing cycle closes, or a per-case billable order arrives, with billable orders ready in the billing system.",
+  "end_state": "The invoice is paid and closed in the ledger, fully credited, or written off.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 8000,
+      "mode": 10000,
+      "high": 12000
+    },
+    "seasonality": "Peaks after month end when most cycles close; collections are strongest in December when clients spend remaining budgets (hh2012).",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "hh2012"
+      ],
+      "note": "Volume from the organisation file's process map. The client mix (about 35 per cent insurers, 41 per cent employers including occupational health, 12 per cent hospitals, 7 per cent courier clients, 3 per cent trial sponsors, 2 per cent companion diagnostics sponsors) is the author's estimate."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "in-case-review-release",
+        "object": "billable_order",
+        "share": 0.35
+      },
+      {
+        "from": "wp-result-reporting",
+        "object": "billable_order",
+        "share": 0.33
+      },
+      {
+        "from": "wp-occupational-health",
+        "object": "billable_order",
+        "share": 0.08
+      },
+      {
+        "from": "hs-result-delivery",
+        "object": "billable_order",
+        "share": 0.12
+      },
+      {
+        "from": "lg-commercial-logistics",
+        "object": "billable_order",
+        "share": 0.07
+      },
+      {
+        "from": "ct-study-setup",
+        "object": "billable_order",
+        "share": 0.01
+      },
+      {
+        "from": "ct-data-transfer",
+        "object": "billable_order",
+        "share": 0.02
+      },
+      {
+        "from": "gs-cdx-program",
+        "object": "billable_order",
+        "share": 0.02
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "life_insurer",
+        "object": "client_invoice"
+      },
+      {
+        "outcome": "any",
+        "to": "employer_client",
+        "object": "client_invoice"
+      },
+      {
+        "outcome": "any",
+        "to": "hospital_client",
+        "object": "client_invoice"
+      },
+      {
+        "outcome": "any",
+        "to": "trial_sponsor",
+        "object": "client_invoice"
+      },
+      {
+        "outcome": "any",
+        "to": "cdx_sponsor",
+        "object": "client_invoice"
+      },
+      {
+        "outcome": "paid",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      },
+      {
+        "outcome": "credited",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      },
+      {
+        "outcome": "written_off",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      }
+    ],
+    "inputs": [
+      {
+        "from": "hospital_client",
+        "object": "payment_remittance"
+      },
+      {
+        "from": "life_insurer",
+        "object": "payment_remittance"
+      },
+      {
+        "from": "employer_client",
+        "object": "payment_remittance"
+      },
+      {
+        "from": "trial_sponsor",
+        "object": "payment_remittance"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "billing_clerk",
+      "title": "Billing clerk",
+      "department": "Billing and revenue cycle",
+      "layer": "individual_contributor",
+      "fte_on_process": 12.0,
+      "loaded_cost_per_hour": {
+        "low": 29,
+        "mode": 33,
+        "high": 42
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ci_job"
+        ],
+        "note": "Invoice analysis, corrections and client formats from the company's posting; FTE share is an estimate within the billing clerks not used by provincial and patient billing."
+      }
+    },
+    {
+      "id": "ar_collections_clerk",
+      "title": "Accounts receivable and collections clerk",
+      "department": "Billing and revenue cycle",
+      "layer": "individual_contributor",
+      "fte_on_process": 13.0,
+      "loaded_cost_per_hour": {
+        "low": 29,
+        "mode": 33,
+        "high": 42
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ci_job"
+        ],
+        "note": "Payment posting, aging and delinquent account follow-up from the posting; FTE share is an estimate."
+      }
+    },
+    {
+      "id": "billing_supervisor",
+      "title": "Senior billing clerk and billing supervisor",
+      "department": "Billing and revenue cycle",
+      "layer": "supervisor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 33,
+        "mode": 38,
+        "high": 46
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approval of large and changed invoices and credit notes; estimate."
+      }
+    },
+    {
+      "id": "billing_manager",
+      "title": "Billing manager",
+      "department": "Billing and revenue cycle",
+      "layer": "manager",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 66,
+        "high": 80
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ci_job"
+        ],
+        "note": "Clerks report to the Manager of Billing (ci_job); escalation share is an estimate."
+      }
+    },
+    {
+      "id": "revenue_cycle_director",
+      "title": "Director, revenue cycle and billing",
+      "department": "Billing and revenue cycle",
+      "layer": "director",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 85,
+        "mode": 105,
+        "high": 130
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Write-off approval above the manager's authority and the monthly aged receivables review; estimate."
+      }
+    },
+    {
+      "id": "account_manager_corporate",
+      "title": "Corporate account manager (employers, sponsors, insurers)",
+      "department": "Hospital, corporate and specialty sales",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 60,
+        "high": 75
+      },
+      "occupation_code": "NOC 62100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Answers pricing and purchase order questions and calls client executives on escalated accounts; estimate."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "billing_system",
+      "name": "Laboratory billing and accounts receivable system (provincial claims, patient, client invoices)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "lis",
+      "name": "Laboratory information system (orders, accessioning, results, autoverification rules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "oms",
+      "name": "Insurance Order Management System with Paraweb ordering and iCARE status hub",
+      "kind": "workflow"
+    },
+    {
+      "id": "dt_system",
+      "name": "Drug testing case management (chain of custody, MRO review, employer web reports)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "trials_system",
+      "name": "Clinical trial central lab system (study build, kit inventory, sample tracking, data transfer)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "logistics_tracking",
+      "name": "Courier routing, dispatch and web-based order and tracking system",
+      "kind": "workflow"
+    },
+    {
+      "id": "erp",
+      "name": "ERP for general ledger, payables, procurement and inventory",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "crm",
+      "name": "CRM for client accounts, sales pipeline and service cases",
+      "kind": "workflow"
+    },
+    {
+      "id": "email_office",
+      "name": "Email and office suite",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "bi",
+      "name": "Data warehouse and management dashboards",
+      "kind": "analytics"
+    },
+    {
+      "id": "client_ap_portal",
+      "name": "Client supplier and accounts payable portals (hospital shared services, insurers)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "bank_portal",
+      "name": "Bank online reporting with EFT and lockbox remittance files",
+      "kind": "external_portal"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Close the billing cycle and build the draft invoice",
+      "description": "At the client's billing point (month end for most contracts, weekly or per case for some insurers and small employers) the billing system pulls the client's billable orders from the LIS, the insurance order system, the drug testing system, the trial system or courier tracking, prices them from the contract rate table and builds a draft invoice with line detail.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "billable orders",
+        "contract rate table"
+      ],
+      "outputs": [
+        "draft invoice",
+        "exception list"
+      ],
+      "systems": [
+        "billing_system",
+        "lis",
+        "oms",
+        "dt_system",
+        "trials_system",
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Order mapped to the wrong client account or priced from an old rate table.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.78,
+          "condition": "all lines priced"
+        },
+        {
+          "to": "s02",
+          "prob": 0.22,
+          "condition": "unpriced or incomplete lines"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "ci_job"
+        ],
+        "note": "Billing against contracts is described (ci_job); the cycle mix and exception share are the author's estimates."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Work the unpriced and incomplete line exceptions",
+      "description": "A billing clerk opens the exception list: tests or services with no contract price, missing purchase order or cost centre, trial visits not in the study budget, orders on the wrong account and possible duplicates. She checks the contract file and the source order and fixes what she can.",
+      "role": "billing_clerk",
+      "kind": "validation",
+      "inputs": [
+        "exception list",
+        "contract file",
+        "source orders"
+      ],
+      "outputs": [
+        "corrected draft"
+      ],
+      "systems": [
+        "billing_system",
+        "lis",
+        "oms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Line moved to the wrong account or priced at list instead of contract.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.75,
+          "condition": "fixed"
+        },
+        {
+          "to": "s03",
+          "prob": 0.25,
+          "condition": "needs the account manager or client"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ci_job",
+          "dyn_ct"
+        ],
+        "note": "Checking price variations and billing requirements against contracts is a listed duty (ci_job); each trial is run by a dedicated project team that holds the study details (dyn_ct). Times and shares are estimates."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Ask the account manager for the missing price, purchase order or study code",
+      "description": "The clerk emails the corporate account manager or the trial project team with the order list and the question, and puts the invoice on hold in the billing system until the answer arrives.",
+      "role": "billing_clerk",
+      "kind": "communication",
+      "inputs": [
+        "exception details"
+      ],
+      "outputs": [
+        "query to the business line",
+        "invoice on hold"
+      ],
+      "systems": [
+        "email_office",
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are estimates."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Account manager confirms the price, purchase order or study code",
+      "description": "The account manager checks the signed contract, quote or study budget, or asks the client contact for a purchase order number, and replies with the price or code to use or confirms the service is not billable.",
+      "role": "account_manager_corporate",
+      "kind": "coordination",
+      "inputs": [
+        "query"
+      ],
+      "outputs": [
+        "confirmed price, PO or code"
+      ],
+      "systems": [
+        "email_office",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Price confirmed from memory that differs from the contract.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.92,
+          "condition": "answer received"
+        },
+        {
+          "to": "s02",
+          "prob": 0.08,
+          "condition": "answer incomplete, back to the exception queue"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Account managers travel and answer billing questions between client meetings; wait and share are estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Review the draft invoice against the contract and the client's requirements",
+      "description": "The clerk compares the total with the prior period, checks contract rates, volume tiers, minimum fees and pass-through charges (attending physician fees, shipping, kits), applies GST/HST to taxable services such as insurance exams and employer drug tests, and prepares the backup file in the format the client requires.",
+      "role": "billing_clerk",
+      "kind": "review",
+      "inputs": [
+        "draft invoice",
+        "contract",
+        "client billing instructions"
+      ],
+      "outputs": [
+        "final invoice and backup"
+      ],
+      "systems": [
+        "billing_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong rate, missed volume tier or wrong tax code.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Excise Tax Act (GST/HST): tax charged on taxable supplies and required invoice information; client contract pricing terms",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.8,
+          "condition": "routine invoice"
+        },
+        {
+          "to": "s06",
+          "prob": 0.2,
+          "condition": "large, first or changed invoice"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ci_job",
+          "hh2012"
+        ],
+        "note": "Invoices are checked against contracts and sent in each client's format (ci_job); insurers deduct billed items not meeting their specifications (hh2012). Tax treatment named from general knowledge; times are estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Supervisor approves a large, first or changed invoice",
+      "description": "The billing supervisor reviews invoices above the approval threshold, the first invoice under a new contract and invoices after a price change, comparing them with the contract and prior invoices before release.",
+      "role": "billing_supervisor",
+      "kind": "approval",
+      "inputs": [
+        "final invoice",
+        "contract"
+      ],
+      "outputs": [
+        "approved invoice"
+      ],
+      "systems": [
+        "billing_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Billing review policy: supervisor review of invoices above a value threshold and of new or changed contracts",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.92,
+          "condition": "approved"
+        },
+        {
+          "to": "s05",
+          "prob": 0.08,
+          "condition": "sent back for correction"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; threshold share and times are estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Issue the invoice and send it with backup",
+      "description": "The billing system posts the invoice to receivables and, in the nightly run, emails the PDF with the line-detail file to the client's accounts payable address or sends it electronically to the large insurers that accept electronic invoices.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved invoice"
+      ],
+      "outputs": [
+        "client invoice",
+        "receivable"
+      ],
+      "systems": [
+        "billing_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.25,
+          "condition": "client requires its supplier portal"
+        },
+        {
+          "to": "s09",
+          "prob": 0.75,
+          "condition": "sent by email or electronically"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh2012",
+          "apqc_dso"
+        ],
+        "note": "Electronic customer billing helped a paramedical company hold DSO (hh2012); invoices prepared but sent late lengthen DSO (apqc_dso)."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Upload the invoice to the client's supplier portal",
+      "description": "For hospitals and other clients that accept invoices only through their supplier or accounts payable portal, the clerk logs in, re-keys the invoice header, purchase order and amounts, attaches the PDF and backup and records the portal reference.",
+      "role": "billing_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "client invoice"
+      ],
+      "outputs": [
+        "portal submission"
+      ],
+      "systems": [
+        "client_ap_portal",
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Purchase order or amount keyed wrongly, so the portal rejects the invoice.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Supplier portals were common for hospitals and large payers by 2019; share and times are estimates."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Wait for the client to approve and pay",
+      "description": "The client's accounts payable team matches the invoice to its purchase order or contract, routes it to the laboratory, program or study budget owner for approval and pays in its next payment run, usually by EFT with a separate remittance advice.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "client invoice"
+      ],
+      "outputs": [
+        "payment and remittance, rejection or silence"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 14400,
+        "mode": 37440,
+        "high": 86400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.64,
+          "condition": "paid"
+        },
+        {
+          "to": "s13",
+          "prob": 0.06,
+          "condition": "rejected or disputed"
+        },
+        {
+          "to": "s11",
+          "prob": 0.3,
+          "condition": "past due"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "hh2012",
+          "apqc_dso"
+        ],
+        "note": "Insurers paid a paramedical exam company with an average DSO of about 45 days (hh2012); APQC median DSO 38 days, bottom quartile 46 days or longer (apqc_dso). The 30 per cent past-due share is an estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Apply the payment and remittance to the invoice",
+      "description": "An accounts receivable clerk matches each EFT or cheque to the remittance advice the client emailed or mailed, applies it across the listed invoices in the billing system and flags short payments, deductions and payments without a remittance.",
+      "role": "ar_collections_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "bank deposit",
+        "remittance advice"
+      ],
+      "outputs": [
+        "applied payment",
+        "deduction list"
+      ],
+      "systems": [
+        "billing_system",
+        "bank_portal",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Payment applied to the wrong invoice or client.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.88,
+          "condition": "fully applied"
+        },
+        {
+          "to": "s13",
+          "prob": 0.07,
+          "condition": "short paid or deduction taken"
+        },
+        {
+          "to": "s12",
+          "prob": 0.05,
+          "condition": "no remittance or cannot match"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ci_job",
+          "nacha_cash"
+        ],
+        "note": "Allocating cheques and posting payments are listed duties (ci_job); remittances by email and mail make application manual (nacha_cash). Shares are estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Send a statement and call the client's accounts payable",
+      "description": "When the invoice is past due the clerk runs the aging report, emails a statement, checks the invoice status in the client's portal where there is one and phones accounts payable to learn whether the invoice is approved, lost or waiting for a purchase order, recording any promise to pay.",
+      "role": "ar_collections_clerk",
+      "kind": "communication",
+      "inputs": [
+        "aging report",
+        "statement"
+      ],
+      "outputs": [
+        "call note",
+        "promise to pay"
+      ],
+      "systems": [
+        "billing_system",
+        "client_ap_portal",
+        "email_office",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 10080,
+        "high": 20160
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Promise recorded against the wrong invoice.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company credit and collection policy: dunning schedule for past-due client accounts",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.85,
+          "condition": "promise or status obtained"
+        },
+        {
+          "to": "s13",
+          "prob": 0.1,
+          "condition": "client says the invoice is wrong"
+        },
+        {
+          "to": "s14",
+          "prob": 0.05,
+          "condition": "invoice lost, resend a copy"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ci_job"
+        ],
+        "note": "Generating aging reports and following up delinquent accounts are listed duties; timing and shares are estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Research an unapplied payment",
+      "description": "The clerk asks the client's accounts payable for the remittance, searches open invoices by amount and date, and applies the payment or records it as unapplied cash pending the client's answer.",
+      "role": "ar_collections_clerk",
+      "kind": "analysis",
+      "inputs": [
+        "unapplied cash list"
+      ],
+      "outputs": [
+        "applied payment"
+      ],
+      "systems": [
+        "billing_system",
+        "bank_portal",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Applied to the wrong invoice.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.85,
+          "condition": "applied"
+        },
+        {
+          "to": "s13",
+          "prob": 0.15,
+          "condition": "short payment found"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "nacha_cash"
+        ],
+        "note": "Payments arriving without matching remittance need manual research (nacha_cash); times are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Investigate the dispute, rejection or short payment",
+      "description": "The clerk reads the client's reason (missing purchase order, price disagreement, exam cancelled but billed, duplicate, missing backup), pulls the order evidence from the insurance order system, LIS or drug testing system and the contract, and decides whether the client or the invoice is right.",
+      "role": "ar_collections_clerk",
+      "kind": "analysis",
+      "inputs": [
+        "client dispute or deduction",
+        "order records",
+        "contract"
+      ],
+      "outputs": [
+        "dispute finding"
+      ],
+      "systems": [
+        "billing_system",
+        "oms",
+        "lis",
+        "dt_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Valid deduction rebilled or valid invoice credited.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.5,
+          "condition": "client is right, credit and rebill"
+        },
+        {
+          "to": "s09",
+          "prob": 0.35,
+          "condition": "invoice is right, resend with evidence"
+        },
+        {
+          "to": "s17",
+          "prob": 0.15,
+          "condition": "commercial disagreement, escalate"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh2012",
+          "ci_job"
+        ],
+        "note": "Customer deductions for billed items not meeting specifications (hh2012); reconciling non-payments is a listed duty (ci_job). Shares and times are estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Prepare the credit note and corrected invoice",
+      "description": "A billing clerk prepares a credit note for the disputed lines or the whole invoice and, where the service is still billable, a corrected invoice with the right purchase order, price or backup, and attaches the evidence.",
+      "role": "billing_clerk",
+      "kind": "drafting",
+      "inputs": [
+        "dispute finding"
+      ],
+      "outputs": [
+        "credit note",
+        "corrected invoice"
+      ],
+      "systems": [
+        "billing_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Credit for the wrong amount.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ci_job"
+        ],
+        "note": "Preparing corrected invoices and adjusting accounts are listed duties; times are estimates."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Approve the credit note",
+      "description": "The billing supervisor checks the credit note against the dispute evidence and the original invoice and approves it within her authority, sending larger credits to the billing manager, then releases the credit and any corrected invoice.",
+      "role": "billing_supervisor",
+      "kind": "approval",
+      "inputs": [
+        "credit note",
+        "evidence"
+      ],
+      "outputs": [
+        "approved credit"
+      ],
+      "systems": [
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Billing adjustment authority matrix: the clerk who prepares a credit note does not approve it; larger credits need the billing manager",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.6,
+          "condition": "corrected invoice issued"
+        },
+        {
+          "to": "END",
+          "prob": 0.4,
+          "condition": "invoice fully credited",
+          "outcome": "credited"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common internal control; shares and times are estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Wait for the promised payment",
+      "description": "After the call the clerk waits for the client to clear its approval or purchase order problem and pay on its next payment run.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "promise to pay"
+      ],
+      "outputs": [
+        "payment or silence"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 14400,
+        "high": 30240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.75,
+          "condition": "paid"
+        },
+        {
+          "to": "s13",
+          "prob": 0.07,
+          "condition": "dispute raised"
+        },
+        {
+          "to": "s17",
+          "prob": 0.18,
+          "condition": "still unpaid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Response shares and timing are estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Escalate the overdue account to the billing manager and account manager",
+      "description": "At the monthly aged receivables review the billing manager goes through accounts over 60 to 90 days with the account manager, who calls the client's controller or executive sponsor; small clients may be put on prepayment or credit hold.",
+      "role": "billing_manager",
+      "kind": "coordination",
+      "inputs": [
+        "aged receivables report",
+        "dispute notes"
+      ],
+      "outputs": [
+        "escalation plan"
+      ],
+      "systems": [
+        "billing_system",
+        "bi",
+        "crm",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 10080,
+        "high": 20160
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company credit and collection policy: escalation and credit hold for accounts over 60 to 90 days",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; timing and touch time are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Post cash and close the invoice in the ledger",
+      "description": "Each night the billing system posts applied cash, credits and write-offs to the ERP general ledger by business line and client type, closing the invoice for the monthly close.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "applied payment"
+      ],
+      "outputs": [
+        "ledger postings"
+      ],
+      "systems": [
+        "billing_system",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "paid and closed",
+          "outcome": "paid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Nightly subledger posting is the author's estimate of common practice."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Wait for payment after escalation",
+      "description": "The client pays after the executive call, agrees a settlement or stays unpaid while its own approval or budget problem continues.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "escalation"
+      ],
+      "outputs": [
+        "payment or no payment"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 7200,
+        "mode": 20160,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.78,
+          "condition": "paid or settled"
+        },
+        {
+          "to": "s14",
+          "prob": 0.1,
+          "condition": "settled by partial credit"
+        },
+        {
+          "to": "s20",
+          "prob": 0.12,
+          "condition": "not paid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shares and timing are estimates."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Prepare the write-off or collection referral",
+      "description": "An accounts receivable clerk assembles the account history, invoices, call notes and dispute file and recommends either referral to a commercial collection agency or lawyer, or write-off, including the GST/HST portion that can be recovered on taxable supplies.",
+      "role": "ar_collections_clerk",
+      "kind": "drafting",
+      "inputs": [
+        "account history"
+      ],
+      "outputs": [
+        "write-off or referral recommendation"
+      ],
+      "systems": [
+        "billing_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 20160
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Tax portion of the bad debt not identified.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.4,
+          "condition": "refer to agency or lawyer"
+        },
+        {
+          "to": "s22",
+          "prob": 0.6,
+          "condition": "write off"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ci_job",
+          "eta231"
+        ],
+        "note": "Recommending write-offs is a listed duty (ci_job); the tax on a written-off bad debt can be deducted (eta231). Shares are estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Collection agency or lawyer pursues the debt",
+      "description": "A commercial collection agency or the company's lawyer sends demand letters and negotiates with the client, remitting what is recovered net of fees or returning the account as uncollectible.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "referral file"
+      ],
+      "outputs": [
+        "recovery or returned account"
+      ],
+      "systems": [
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 20160,
+        "mode": 60480,
+        "high": 129600
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.3,
+          "condition": "recovered"
+        },
+        {
+          "to": "s22",
+          "prob": 0.7,
+          "condition": "uncollectible"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Recovery share and duration are estimates."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Approve the write-off",
+      "description": "The director of revenue cycle reviews the recommendation and the collection history, approves the write-off within delegated authority (larger amounts go to the CFO), and finance posts it against the allowance and claims the tax adjustment for taxable supplies.",
+      "role": "revenue_cycle_director",
+      "kind": "approval",
+      "inputs": [
+        "write-off recommendation"
+      ],
+      "outputs": [
+        "approved write-off",
+        "ledger postings"
+      ],
+      "systems": [
+        "billing_system",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Delegated write-off authority and allowance review under internal control over financial reporting; Excise Tax Act section 231 for the tax on bad debts",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "written off",
+          "outcome": "written_off"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "eta231",
+          "hh2012"
+        ],
+        "note": "Write-offs are charged to the allowance after collection is exhausted (hh2012); tax deduction rule (eta231). Authority levels are estimates."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Unpriced or incomplete lines",
+      "share_of_cases": 0.22,
+      "description": "Services without a contract price, missing purchase orders or trial visits outside the budget hold the invoice until a clerk or account manager fixes them.",
+      "path": [
+        "s01",
+        "s02",
+        "s03",
+        "s04",
+        "s05"
+      ]
+    },
+    {
+      "name": "Supplier portal submission",
+      "share_of_cases": 0.25,
+      "description": "Hospitals and some large payers accept invoices only through their portals, so the invoice is re-keyed and can be rejected for a purchase order mismatch.",
+      "path": [
+        "s07",
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Past-due invoice",
+      "share_of_cases": 0.3,
+      "description": "The invoice passes its due date and needs a statement, a call to accounts payable and a promise to pay.",
+      "path": [
+        "s09",
+        "s11",
+        "s16",
+        "s10"
+      ]
+    },
+    {
+      "name": "Dispute or short payment",
+      "share_of_cases": 0.15,
+      "description": "The client rejects the invoice or deducts lines it says do not meet its specifications, and the clerk investigates, credits and rebills or resends with evidence.",
+      "path": [
+        "s13",
+        "s14",
+        "s15",
+        "s07"
+      ]
+    },
+    {
+      "name": "Escalation and write-off",
+      "share_of_cases": 0.08,
+      "description": "An account over 60 to 90 days goes to the billing manager and account manager; a few end with an agency or write-off.",
+      "path": [
+        "s17",
+        "s19",
+        "s20",
+        "s21",
+        "s22"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 45,
+        "p90": 90
+      },
+      "unit": "calendar days from billing point to invoice paid or otherwise closed",
+      "population": "Derived from DSO of a paramedical exam company billing insurers and cross-industry DSO",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh2012",
+          "apqc_dso",
+          "hackett21"
+        ],
+        "note": "Average DSO 45.5 days for a company billing life insurers (hh2012), APQC median 38 and bottom quartile 46 days (apqc_dso), large-company median 48.7 days in 2021 (hackett21); DSO measures balances, not per-invoice time, so the p50 adds a few days of invoice preparation and the p90 is the author's estimate."
+      }
+    },
+    {
+      "metric": "dso_paramedical_insurer_billing",
+      "value": 45.5,
+      "unit": "days, 2012 average",
+      "population": "Hooper Holmes, US paramedical exam provider to life insurers",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "hh2012"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "dso_cross_industry",
+      "value": {
+        "p25": 30,
+        "p50": 38,
+        "p75": 46
+      },
+      "unit": "days",
+      "population": "APQC cross-industry benchmark",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "apqc_dso"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "auto_cash_application_rate",
+      "value": {
+        "low_performers": "0 to 20 per cent",
+        "high_performers": "80 per cent and above"
+      },
+      "unit": "share of payments applied automatically",
+      "population": "Nacha and Credit Research Foundation survey",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "nacha_cash"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Invoices wait for missing purchase orders, contract prices and trial budget codes that only the account manager or client can supply.",
+      "steps": [
+        "s02",
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice."
+      }
+    },
+    {
+      "description": "Client supplier portals require re-keying and reject invoices for purchase order mismatches, restarting the client's approval clock.",
+      "steps": [
+        "s08",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice."
+      }
+    },
+    {
+      "description": "Remittances arrive by email and mail separately from EFTs and cover many invoices, so cash application is manual and leaves unapplied cash.",
+      "steps": [
+        "s10",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "nacha_cash"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Insurers and other clients deduct lines they say do not meet their specifications, and each deduction needs evidence from the operating system and a credit or rebill.",
+      "steps": [
+        "s13",
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh2012"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "ci_job",
+      "title": "Senior Billing Clerk, Winnipeg (job posting)",
+      "publisher": "The model laboratory via Jobvite",
+      "url": "",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Reports to the Manager of Billing; analyses client and patient invoices to confirm price variations and billing requirements match contracts; edits invoices, adjusts accounts, prepares corrected invoices and sends them in the format each client requires; posts payments, adjustments and transfers; generates aging reports; follows up delinquent accounts with physicians and clients; recommends write-offs; reconciles non-payments; maintains files of client contracts and original invoices; allocates cheques and posts payments; CAD 40,000 to 46,000 a year."
+    },
+    {
+      "id": "hh2012",
+      "title": "Hooper Holmes, Inc. annual report on Form 10-K for 2012",
+      "publisher": "US Securities and Exchange Commission",
+      "url": "https://www.sec.gov/Archives/edgar/data/741815/000074181513000006/hh12311210-k.htm",
+      "year": 2013,
+      "accessed": "2026-11-17",
+      "supports": "A paramedical exam company billing life insurers: average DSO 45.5 days in 2012 and 45.6 in 2011 (39.9 and 40.5 days at year end, the low point because customers spend remaining budgets in December); allowance covers customer deductions for billed items not in compliance with customer specifications; electronic customer billing; billing centralised; contracts or billing approvals with over 90 per cent of carriers. Read from a text copy saved under scratch by earlier work."
+    },
+    {
+      "id": "apqc_dso",
+      "title": "Days sales outstanding: a critical lever for managing cash flow (Metric of the Month)",
+      "publisher": "CFO.com with APQC",
+      "url": "https://www.cfo.com/news/dso-cash-flow-management-metric-of-the-month-perry-wiggins-apqc/717822/",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "APQC cross-industry DSO: top performers 30 days or less, median 38 days or less, bottom performers 46 days or longer; causes include invoices prepared early but sent much later and customers paying well past terms; paper cheques and phone payments slow collection."
+    },
+    {
+      "id": "hackett21",
+      "title": "The industries that got paid faster: working capital scorecard",
+      "publisher": "CFO.com (Hackett Group data)",
+      "url": "https://www.cfo.com/news/the-industries-that-got-paid-faster-working-capital-scorecard/655003/",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "For the 1,000 largest non-financial US companies, average DSO 40.6 days and median DSO 48.7 days in 2021."
+    },
+    {
+      "id": "nacha_cash",
+      "title": "Goofus and Gallant: cash application",
+      "publisher": "Nacha",
+      "url": "https://www.nacha.org/news/goofus-and-gallant-cash-application",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Nacha and Credit Research Foundation survey: more than half of low performers apply 0 to 20 per cent of payments automatically, high performers 80 per cent and above; high performers get remittance feeds from banks, low performers get remittances by email and mail."
+    },
+    {
+      "id": "eta231",
+      "title": "Excise Tax Act, section 231: bad debts",
+      "publisher": "Justice Laws Website, Government of Canada",
+      "url": "https://laws-lois.justice.gc.ca/eng/acts/E-15/section-231-20070622.html",
+      "year": 2007,
+      "accessed": "2026-11-17",
+      "supports": "A supplier that writes off a bad debt on a taxable supply to an arm's-length recipient may deduct the tax portion of the unpaid amount from its net tax; tax on a later recovery must be added back."
+    },
+    {
+      "id": "dyn_ct",
+      "title": "Clinical trial services",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "A dedicated project team per study; transport, storage and transfer of samples; data in multiple electronic formats."
+    }
+  ],
+  "assumptions": [
+    "One case is one client invoice from its billing point to closure. Monthly statement invoices for large clients and per-case invoices for some insurers and small employers are modelled with one set of steps; hands-on times are ranges that cover both.",
+    "The client mix and the shares of trigger sources are the author's estimates; the organisation file gives only the total of about 10,000 invoices a month.",
+    "Payment remittances from hospitals, insurers, employers and sponsors are listed in triggered_by with a share of 0 to match the organisation file; they arrive during a case (step s08) and do not start one.",
+    "Companion diagnostics sponsors and courier clients pay like the others; courier clients are mostly hospitals and health organisations, so their invoices go to hospital_client.",
+    "The GST/HST treatment (insurance exams and employer drug tests taxable, hospital laboratory testing exempt) is the author's understanding and was not confirmed by an opened source.",
+    "The DSO benchmarks are US figures (a paramedical exam company billing insurers and cross-industry surveys); Ontario hospitals and some sponsors are believed to pay more slowly, which the p90 allows for.",
+    "The corporate account manager, billing manager and director roles are added for pricing questions, escalations and write-off approval; they are in the organisation file but not in this process's role list there.",
+    "Web search capacity ran out during this workflow, so sources were limited to pages fetched by address and text copies saved earlier; many step details are tier C.",
+    "Loaded costs are from the organisation file (hourly wage times 1.35).",
+    "Hands-on times are averages per invoice; a remittance, statement or collection call often covers several invoices of one client, and its time is divided among them. Stated FTE are about 80 per cent of the hands-on time implied by volume, which assumes clerks handle related invoices of the same client together."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

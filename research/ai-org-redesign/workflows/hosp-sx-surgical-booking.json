@@ -1,0 +1,1608 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-sx-surgical-booking",
+  "name": "Book elective surgery and manage the wait list",
+  "org": "community-hospital-corp",
+  "process": "sx-surgical-booking",
+  "sector": "healthcare (acute care hospital)",
+  "function": "surgical and perioperative services",
+  "summary": "After a surgeon and patient decide on an operation, the surgeon's office faxes a booking package to the hospital's surgical booking office. A booking coordinator checks the package is complete, enters the case in the OR scheduling module and again in the provincial Wait Time Information System, agrees a date in the surgeon's block and keeps the case on the wait list until its surgical week. Incomplete faxed packages, double entry into two systems, patients who defer and missing pre-operative results cause rework, and in 2020-2022 COVID-19 pauses stretched the wait list.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital corporation doing about 40,000 to 45,000 surgeries a year, with a central perioperative booking office at each site, an OR scheduling module in the hospital information system and paper or electronic fax.",
+    "org_size_employees": 5790,
+    "notes": "Surgeons' offices are independent practices paid by OHIP; only hospital labour is counted. Elective surgery was paused in spring 2020 and again in 2021 under provincial directives, which this baseline treats through seasonality and the wait distribution rather than as a separate path."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one surgical booking",
+  "trigger": "A surgeon's office faxes a booking package after the surgeon and patient decide to proceed with elective surgery.",
+  "end_state": "The case has been operated on and its wait list record is closed in the provincial system, or the case has been removed from the wait list.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 1900,
+      "mode": 2150,
+      "high": 2300
+    },
+    "seasonality": "Lower in July-August and late December when planned OR closures shorten booking; very low in April-June 2020 and parts of 2021 when non-urgent surgery was paused; higher in February-March.",
+    "surge": {
+      "cause": "Fiscal year-end push to complete funded procedure volumes (February-March)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 30,
+        "mode": 45,
+        "high": 60
+      },
+      "volume_multiplier": {
+        "low": 1.05,
+        "mode": 1.1,
+        "high": 1.15
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; hospitals fund volumes per quality-based procedure (src10) and add cases before March 31."
+      }
+    },
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "oag2016"
+      ],
+      "note": "About 87% of Ontario surgical cases are elective (oag2016). Applied to the organisation file's 3,230-3,770 surgeries a month this gives about 2,800-3,300 elective cases performed, and bookings also include the 3-7% later removed from the list; the organisation file's 2,600-3,300 range is kept with the upper end raised to 3,400."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "referring_office",
+        "object": "surgical_booking_request",
+        "share": 0.75
+      },
+      {
+        "from": "amb-clinic-visit",
+        "object": "surgical_booking_request",
+        "share": 0.15
+      },
+      {
+        "from": "sx-fracture-clinic",
+        "object": "surgical_booking_request",
+        "share": 0.1
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "ontario_health",
+        "object": "wait_time_record"
+      },
+      {
+        "outcome": "completed",
+        "to": "sx-preadmission-clinic",
+        "object": "surgical_case"
+      },
+      {
+        "outcome": "completed",
+        "to": "sx-or-scheduling",
+        "object": "surgical_case"
+      },
+      {
+        "outcome": "completed",
+        "to": "dh-patient-registration",
+        "object": "surgical_case"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "surg_booking_clerk",
+      "title": "Surgical booking and wait-list coordinator",
+      "department": "Perioperative services",
+      "layer": "individual_contributor",
+      "fte_on_process": 7.17,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 36,
+        "high": 40
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. All ten coordinators in the organisation file work on booking and wait-list work; hands-on time x volume implies about 15 FTE, so the organisation file's headcount looks low or surgeons' secretaries do more of the work than modelled."
+      }
+    },
+    {
+      "id": "surgeon",
+      "title": "Surgeon",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.57,
+      "loaded_cost_per_hour": {
+        "low": 180,
+        "mode": 240,
+        "high": 320
+      },
+      "occupation_code": "NOC 2016 3111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Only the surgeon's decisions inside this process (target breaches and re-prioritization) are counted; the consultation and decision to treat happen before the trigger."
+      },
+      "shift_pattern": "on_call"
+    },
+    {
+      "id": "surg_manager",
+      "title": "Patient care manager, perioperative or surgical unit",
+      "department": "Surgical and perioperative program",
+      "layer": "manager",
+      "fte_on_process": 0.21,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 78,
+        "high": 89
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Monthly wait list review and escalations across three sites."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "fax",
+      "name": "Fax (referrals, requisitions and reports to community physicians)",
+      "kind": "communication"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    },
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "hcv",
+      "name": "Ministry health card validation service",
+      "kind": "external_portal"
+    },
+    {
+      "id": "or_scheduling",
+      "name": "Operating room scheduling and perioperative documentation module",
+      "kind": "workflow"
+    },
+    {
+      "id": "wtis",
+      "name": "Provincial Wait Time Information System",
+      "kind": "external_portal"
+    },
+    {
+      "id": "olis",
+      "name": "Ontario Laboratories Information System and ConnectingOntario viewer",
+      "kind": "external_portal"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets and shared drives",
+      "kind": "spreadsheet"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive and log the faxed booking package",
+      "description": "The booking coordinator collects the booking packages that came in on the booking office fax overnight and during the day, date-stamps each one and sorts it by site, surgeon and surgery date requested. Each package is put in the to-be-checked tray or the shared electronic fax folder.",
+      "role": "surg_booking_clerk",
+      "kind": "intake",
+      "inputs": [
+        "faxed booking package"
+      ],
+      "outputs": [
+        "logged booking package"
+      ],
+      "systems": [
+        "fax"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 180,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh_pac"
+        ],
+        "note": "The hospital's booking lines and fax numbers at each of three sites are listed with weekday hours of about 7:30 or 8:00 to 15:00 or 15:30 (hh_pac); touch time and the overnight queue are the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check the booking package is complete",
+      "description": "The coordinator compares the package with the booking checklist: signed booking form with procedure, side, priority level and decision-to-treat date, estimated case length, equipment and implant needs, signed surgical consent, pre-operative orders, the family physician's Cumulative Patient Profile and the anaesthesia questionnaire. Packages with anything missing or illegible are set aside for a chase.",
+      "role": "surg_booking_clerk",
+      "kind": "validation",
+      "inputs": [
+        "logged booking package",
+        "booking checklist"
+      ],
+      "outputs": [
+        "checked package"
+      ],
+      "systems": [
+        "fax"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A missing or unsigned consent or a wrong priority level is not noticed.",
+        "typically_caught_at": "s14"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital surgical booking policy: a booking is accepted only with a complete package (booking form, consent, Cumulative Patient Profile, pre-op orders)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.75,
+          "condition": "package complete"
+        },
+        {
+          "to": "s03",
+          "prob": 0.25,
+          "condition": "an item is missing, unsigned or illegible"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh_cpp",
+          "hh_pac"
+        ],
+        "note": "From October 1, 2019 the hospital required a Cumulative Patient Profile in place of the pre-op history and physical, placed in the package by the surgeon (hh_cpp); the package is given to the patient by the surgeon (hh_pac). The 25% incomplete rate is the author's estimate for fax packages assembled by many separate offices."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Ask the surgeon's office for missing items",
+      "description": "The coordinator faxes back a deficiency sheet or phones the surgeon's secretary, naming each missing or unclear item. The package is held in a pending folder with a follow-up date.",
+      "role": "surg_booking_clerk",
+      "kind": "communication",
+      "inputs": [
+        "checked package"
+      ],
+      "outputs": [
+        "deficiency request"
+      ],
+      "systems": [
+        "fax",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of a phone call or fax back to the office; booking offices of this period worked largely by fax."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Surgeon's office sends the missing documents",
+      "description": "The surgeon's secretary finds the missing item, gets the surgeon's signature or asks the family physician for the Cumulative Patient Profile, and faxes it to the booking office. Office time is outside the hospital's labour; only a few minutes of handling are counted.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "deficiency request"
+      ],
+      "outputs": [
+        "missing documents"
+      ],
+      "systems": [
+        "fax"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "documents arrive; recheck"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh_cpp"
+        ],
+        "note": "The hospital told patients to obtain the profile from their family physician when it was missing (hh_cpp); the wait of half a day to a week is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Look up the patient and validate the health card",
+      "description": "The coordinator searches the hospital information system for the patient's medical record number, creates a pre-registration if the patient is new and checks the health card number and version code through the Ministry's validation service.",
+      "role": "surg_booking_clerk",
+      "kind": "lookup",
+      "inputs": [
+        "checked package"
+      ],
+      "outputs": [
+        "medical record number",
+        "health card validation"
+      ],
+      "systems": [
+        "his",
+        "hcv"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A duplicate chart is created for an existing patient.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; health card validation is a standard Ontario registration check."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Enter the case in the OR booking module",
+      "description": "The coordinator types the case into the operating room scheduling module: surgeon, procedure and side, priority, decision-to-treat date, estimated duration, anaesthesia type, special equipment, implants, and whether the patient needs an inpatient or ICU bed. The case goes onto the surgeon's wait list in the module.",
+      "role": "surg_booking_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "checked package",
+        "medical record number"
+      ],
+      "outputs": [
+        "booked case in OR module"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Wrong procedure code, side, duration or equipment keyed from a handwritten form.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; field list from common Ontario OR booking forms."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Enter the decision to treat in the provincial wait time system",
+      "description": "The coordinator re-keys the case into the Wait Time Information System: procedure, priority level 2, 3 or 4 and the decision-to-treat date that starts the provincial Wait 2 clock. Entries are often done in a batch at the end of the day.",
+      "role": "surg_booking_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "booked case in OR module"
+      ],
+      "outputs": [
+        "wait time record"
+      ],
+      "systems": [
+        "wtis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong decision-to-treat date or priority keyed, distorting the reported wait.",
+        "typically_caught_at": "s20"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ministry of Health wait-time reporting: hospitals funded for wait-time volumes submit Wait 2 data to the Wait Time Information System (accountability agreement condition)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oh_surg_ind",
+          "oag2016"
+        ],
+        "note": "Wait 2 runs from the decision to treat to surgery and is reported from the WTIS; priority 1 cases are excluded (oh_surg_ind). Hospitals must submit wait-time data monthly (oag2016). Batch entry and times are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Decide whether the patient needs a pre-admission clinic visit",
+      "description": "The coordinator applies the pre-admission screening criteria (procedure type, inpatient stay, age, conditions flagged on the questionnaire) to decide between an in-person clinic visit, a phone screen or no visit, and flags the case for the pre-admission clinic.",
+      "role": "surg_booking_clerk",
+      "kind": "judgment",
+      "inputs": [
+        "booked case in OR module",
+        "anaesthesia questionnaire"
+      ],
+      "outputs": [
+        "pre-admission flag"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A patient who needed an anaesthesia review is sent for a phone screen only.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh_pac"
+        ],
+        "note": "Patients attend the pre-admission clinic 7 to 14 days before day or inpatient surgery (hh_pac); the screening criteria and minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Offer a date in the surgeon's block",
+      "description": "The coordinator and the surgeon's secretary agree a date in one of the surgeon's allocated operating room blocks that fits the priority target and the case length. If no slot falls inside the provincial target for the priority, the coordinator refers the case to the surgeon.",
+      "role": "surg_booking_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "booked case in OR module",
+        "block schedule"
+      ],
+      "outputs": [
+        "tentative surgery date"
+      ],
+      "systems": [
+        "or_scheduling",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.85,
+          "condition": "slot found within target"
+        },
+        {
+          "to": "s10",
+          "prob": 0.15,
+          "condition": "no slot within the priority target"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016",
+          "oh_surg_ind"
+        ],
+        "note": "OR time is allocated to departments and then by the department head to each surgeon; surgeons schedule electives by urgency, patient preference and their available time (oag2016). Targets for priorities 2-4 range from 7 to 182 days by specialty (oh_surg_ind). Share without a slot is the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Surgeon decides how to handle a case that cannot meet its target",
+      "description": "The surgeon reviews the case and either moves a less urgent patient, asks the department chief for released or extra block time, or offers the patient another surgeon with a shorter list. The decision is relayed to the coordinator.",
+      "role": "surgeon",
+      "kind": "judgment",
+      "inputs": [
+        "tentative surgery date",
+        "surgeon wait list"
+      ],
+      "outputs": [
+        "revised date"
+      ],
+      "systems": [
+        "email_phone",
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "decision made"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "In 2015/16 only 33% to 90% of high-priority (priority 2) elective surgeries at large community hospitals met their target, against a 90% requirement (oag2016). The surgeon's minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Send the confirmation to the surgeon's office and the pre-admission clinic",
+      "description": "The coordinator faxes the booking confirmation with the date to the surgeon's office and sends the pre-admission referral and package copy to the clinic, which then books its visit.",
+      "role": "surg_booking_clerk",
+      "kind": "communication",
+      "inputs": [
+        "tentative surgery date"
+      ],
+      "outputs": [
+        "booking confirmation",
+        "pre-admission referral"
+      ],
+      "systems": [
+        "fax",
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Surgeon's office tells the patient the date",
+      "description": "The surgeon's secretary phones the patient with the surgery date, reminds them to attend the pre-admission clinic and to bring the clinic envelope. Office time is outside the hospital's labour.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "booking confirmation"
+      ],
+      "outputs": [
+        "patient informed"
+      ],
+      "systems": [
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh_cpp",
+          "hh_pac"
+        ],
+        "note": "Patients receive a pre-admission clinic envelope and package from the surgeon (hh_cpp, hh_pac); timing is the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Keep the case on the wait list and review it monthly",
+      "description": "The case waits on the surgeon's list until its surgical week. Each month the coordinator runs the wait list report, phones patients approaching or past target to confirm they still want surgery and enters patient-unavailable periods so they are deducted from Wait 2.",
+      "role": "surg_booking_clerk",
+      "kind": "analysis",
+      "inputs": [
+        "surgeon wait list",
+        "WTIS wait list report"
+      ],
+      "outputs": [
+        "validated wait list entry"
+      ],
+      "systems": [
+        "or_scheduling",
+        "wtis",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 129600
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "An unavailable period is not recorded, overstating the patient's wait.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.82,
+          "condition": "surgical week approaches"
+        },
+        {
+          "to": "s16",
+          "prob": 0.07,
+          "condition": "patient asks to defer or is unavailable"
+        },
+        {
+          "to": "s21",
+          "prob": 0.11,
+          "condition": "case is past or near its target"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016",
+          "oh_surg_ind",
+          "cihi2022"
+        ],
+        "note": "Medians of Wait 2 at large Ontario community hospitals in 2015/16 ranged from 6 to 21 days at high, 17 to 53 at medium and 29 to 65 days at low priority, with 90th percentiles of 23 to 187 days (oag2016). Patient-unavailable dates are deducted from wait days (oh_surg_ind). The share of hip and knee replacements done within the 182-day benchmark fell from 75% and 70% (April-September 2019) to 65% and 59% (April-September 2021) in Canada (cihi2022). The waiting distribution here is fitted by the author to those medians."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Confirm the patient is ready about a week before surgery",
+      "description": "The coordinator checks the case in the OR module and the chart: pre-admission visit done, anaesthesia clearance, blood work and ECG resulted, consent and Cumulative Patient Profile on file, inpatient bed requested. Missing results or a deferral by the anaesthesiologist are followed up.",
+      "role": "surg_booking_clerk",
+      "kind": "validation",
+      "inputs": [
+        "validated wait list entry",
+        "pre-admission assessment"
+      ],
+      "outputs": [
+        "ready case"
+      ],
+      "systems": [
+        "or_scheduling",
+        "his"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A missing result or unsigned consent is not caught before the day of surgery.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.83,
+          "condition": "ready"
+        },
+        {
+          "to": "s15",
+          "prob": 0.08,
+          "condition": "results or documents missing"
+        },
+        {
+          "to": "s16",
+          "prob": 0.06,
+          "condition": "patient cancels or is deferred as not fit"
+        },
+        {
+          "to": "s18",
+          "prob": 0.03,
+          "condition": "patient no longer needs or wants surgery"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "leslie2013"
+        ],
+        "note": "In a Kingston, Ontario hospital 8.07% of 19,141 elective cases were cancelled on the day of surgery, and process factors made up 58.5% of cancellations (leslie2013); this pre-surgery check exists to catch those problems earlier. Branch shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Chase missing pre-operative results or documents",
+      "description": "The coordinator calls the pre-admission clinic, the laboratory, the family physician or the surgeon's office for the missing item and checks back the next day.",
+      "role": "surg_booking_clerk",
+      "kind": "communication",
+      "inputs": [
+        "ready case"
+      ],
+      "outputs": [
+        "missing results"
+      ],
+      "systems": [
+        "email_phone",
+        "fax",
+        "olis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "item received; recheck"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Record the unavailable period and rebook",
+      "description": "The coordinator cancels the date in the OR module, records the patient-unavailable dates or the medical deferral in the Wait Time Information System, tells the surgeon's office and returns the case for a new date.",
+      "role": "surg_booking_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "deferral notice"
+      ],
+      "outputs": [
+        "rebooking request",
+        "updated wait time record"
+      ],
+      "systems": [
+        "or_scheduling",
+        "wtis",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Unavailable dates keyed outside the decision-to-treat window.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "rebook"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oh_surg_ind"
+        ],
+        "note": "Patient-unavailable dates must fall between the decision to treat and the procedure date or they are treated as data entry errors (oh_surg_ind); the minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Release the case to the OR scheduler",
+      "description": "The coordinator marks the case as ready in the OR module so it appears on the scheduler's list for that week's slate, and flags implants or special equipment the scheduler must confirm.",
+      "role": "surg_booking_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "ready case"
+      ],
+      "outputs": [
+        "surgical case"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Remove the case from the wait list",
+      "description": "After the surgeon's office confirms that the patient declined surgery, had it elsewhere or died, the coordinator removes the case from the OR module and closes the Wait Time Information System entry with the removal reason.",
+      "role": "surg_booking_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "removal notice"
+      ],
+      "outputs": [
+        "closed wait time record"
+      ],
+      "systems": [
+        "or_scheduling",
+        "wtis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "removed",
+          "outcome": "removed_from_list"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oh_surg_ind"
+        ],
+        "note": "Entries identified as excluded or as data entry errors are removed from reporting (oh_surg_ind); the wait for the office's confirmation is the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Close the wait list record after surgery",
+      "description": "After the operation the coordinator checks that the procedure date flowed from the OR module to the Wait Time Information System, enters it where the interface did not, and closes the wait list entry.",
+      "role": "surg_booking_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "completed surgery in OR module"
+      ],
+      "outputs": [
+        "closed wait time record"
+      ],
+      "systems": [
+        "or_scheduling",
+        "wtis"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 5760,
+        "mode": 11520,
+        "high": 21600
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.9,
+          "condition": "record clean",
+          "outcome": "completed"
+        },
+        {
+          "to": "s20",
+          "prob": 0.1,
+          "condition": "record flagged by the data quality report"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oh_surg_ind"
+        ],
+        "note": "Hospitals take the treatment date from their OR scheduling systems and the WTIS refreshes daily (oh_surg_ind). The wait covers release, the surgical week and the record update; times and the 10% flag rate are the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Correct records flagged by the wait time data quality report",
+      "description": "The coordinator works through the monthly data quality report: wrong dates, missing procedure dates, unavailable periods outside the window, duplicates. Each record is checked against the OR module and corrected in the provincial system.",
+      "role": "surg_booking_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "WTIS data quality report"
+      ],
+      "outputs": [
+        "corrected wait time record"
+      ],
+      "systems": [
+        "wtis",
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "corrected",
+          "outcome": "completed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oh_surg_ind"
+        ],
+        "note": "The indicator rules exclude entries the hospital identifies as data entry errors and treat out-of-window unavailable dates as errors (oh_surg_ind); monthly batching is the author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Manager reviews cases past their target",
+      "description": "The perioperative manager reviews the monthly list of cases past or near target by surgeon and priority, and asks surgeons about cases that can be moved, transferred or added to released block time.",
+      "role": "surg_manager",
+      "kind": "review",
+      "inputs": [
+        "wait list report"
+      ],
+      "outputs": [
+        "escalation list"
+      ],
+      "systems": [
+        "or_scheduling",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 10080,
+        "high": 20160
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "escalated to the surgeon"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Individual surgeons manage their own wait lists and waits differ widely between surgeons and hospitals (oag2016); the manager's review cadence and minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Surgeon re-prioritizes or offers an earlier slot",
+      "description": "The surgeon reconsiders the case's priority, offers it a released slot or refers the patient to a colleague, and tells the booking coordinator.",
+      "role": "surgeon",
+      "kind": "judgment",
+      "inputs": [
+        "escalation list"
+      ],
+      "outputs": [
+        "revised priority or date"
+      ],
+      "systems": [
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "case continues"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the referral option follows the central referral services for hips and knees described in oag2016, which most other specialties lacked."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Incomplete booking package",
+      "share_of_cases": 0.25,
+      "description": "A form is unsigned, the consent or Cumulative Patient Profile is missing or the priority is blank, so the coordinator chases the surgeon's office before the case can be entered.",
+      "path": [
+        "s02",
+        "s03",
+        "s04",
+        "s02"
+      ]
+    },
+    {
+      "name": "Case cannot be booked within its priority target",
+      "share_of_cases": 0.15,
+      "description": "No slot in the surgeon's blocks falls inside the provincial target, so the surgeon must move cases, find extra time or refer on.",
+      "path": [
+        "s09",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Patient defers or is not fit",
+      "share_of_cases": 0.12,
+      "description": "The patient asks to postpone, or the pre-admission anaesthesiologist defers surgery; unavailable dates are recorded and the case is rebooked.",
+      "path": [
+        "s13",
+        "s16",
+        "s09"
+      ]
+    },
+    {
+      "name": "Case past target escalated",
+      "share_of_cases": 0.11,
+      "description": "The monthly wait list review shows the case at or past target; the manager and the surgeon look for an earlier slot.",
+      "path": [
+        "s13",
+        "s21",
+        "s22",
+        "s14"
+      ]
+    },
+    {
+      "name": "Removed from the wait list",
+      "share_of_cases": 0.03,
+      "description": "The patient declines, has surgery elsewhere or dies before surgery.",
+      "path": [
+        "s14",
+        "s18"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 40,
+        "p90": 120
+      },
+      "unit": "calendar days from booking (decision to treat) to surgery, all priorities 2-4 mixed",
+      "population": "Large Ontario community hospitals, elective adult surgery",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016",
+          "cihi2022"
+        ],
+        "note": "Derived by the author from 2015/16 Wait 2 medians of 6-65 days and 90th percentiles of 23-187 days by specialty and priority at large community hospitals (oag2016), weighted towards low and medium priority, and lengthened slightly for 2020-2022 when the share of cases within benchmark fell (cihi2022)."
+      }
+    },
+    {
+      "metric": "share_of_priority_2_cases_within_target",
+      "value": {
+        "low": 0.33,
+        "high": 0.9
+      },
+      "unit": "share of cases completed within the provincial target (requirement 0.90)",
+      "population": "Large Ontario community hospitals, 2015/16, by specialty",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Figure 9 of oag2016: high-urgency cases met target 33% (neurosurgery) to 90% (plastic surgery) of the time."
+      }
+    },
+    {
+      "metric": "share_of_hip_replacements_within_182_days",
+      "value": {
+        "2019_apr_sep": 0.75,
+        "2021_apr_sep": 0.65
+      },
+      "unit": "share of cases",
+      "population": "Canada",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cihi2022"
+        ],
+        "note": "CIHI 2022; knee replacement 0.70 to 0.59 and cataract 0.70 to 0.66 over the same periods."
+      }
+    },
+    {
+      "metric": "ontario_surgical_backlog_sept_2021",
+      "value": 419200,
+      "unit": "elective procedures projected in backlog by end of September 2021",
+      "population": "Ontario",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "fao2021"
+        ],
+        "note": "FAO projected the backlog growing by 11,152 procedures a week while surgery was postponed and 3.5 years to clear."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Booking packages arrive by fax from dozens of independent offices and about a quarter are incomplete, so coordinators spend time chasing signatures, consents and Cumulative Patient Profiles.",
+      "steps": [
+        "s02",
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hh_cpp"
+        ],
+        "note": "The October 2019 switch to the Cumulative Patient Profile left patients and offices to fix missing documents (hh_cpp); the incomplete share is the author's estimate."
+      }
+    },
+    {
+      "description": "Every case is keyed twice, into the OR module and into the provincial Wait Time Information System, and the two drift apart; monthly data quality reports find wrong dates and out-of-window unavailable periods.",
+      "steps": [
+        "s06",
+        "s07",
+        "s19",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oh_surg_ind"
+        ],
+        "note": "Data entry error rules in oh_surg_ind; double entry is the author's description of 2019-2022 practice."
+      }
+    },
+    {
+      "description": "Each surgeon keeps a separate list, so a patient's wait depends on the surgeon referred to rather than on urgency, and urgent priority 2 cases often miss target.",
+      "steps": [
+        "s09",
+        "s10",
+        "s21"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Wait-list variation by surgeon and the 33-90% on-target rates for high-urgency cases are reported in oag2016."
+      }
+    },
+    {
+      "description": "COVID-19 pauses in 2020 and 2021 created a provincial backlog and pushed many cases past target, adding re-validation calls and rebookings.",
+      "steps": [
+        "s13",
+        "s16",
+        "s21"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "fao2021",
+          "cihi2022"
+        ],
+        "note": "fao2021 backlog figures and the fall in on-benchmark shares in cihi2022."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oag2016",
+      "title": "2016 Annual Report, Chapter 3, Section 3.08: Large Community Hospital Operations",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en16/v1_308en16.pdf",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Elective share of cases (87%), block allocation from department to surgeon, surgeon-managed wait lists, priority 2-4 targets and 2015/16 Wait 2 medians and 90th percentiles by specialty at large community hospitals, monthly wait-time submissions."
+    },
+    {
+      "id": "oh_surg_ind",
+      "title": "Regional Surgery Indicator Descriptions (Wait 1 and Wait 2 definitions and provincial priority access targets)",
+      "publisher": "Ontario Health",
+      "url": "https://hsihelp.ontariohealth.ca/hsi/assets/misc_doc/Regional_Surgery_Indicator_Descriptions.pdf",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Definition of Wait 2 (decision to treat to surgery), priority access targets by specialty, handling of patient-unavailable dates and data entry errors, OR system as the source of treatment dates."
+    },
+    {
+      "id": "cihi2022",
+      "title": "Wait times for priority procedures in Canada, 2022",
+      "publisher": "Canadian Institute for Health Information",
+      "url": "https://www.cihi.ca/en/wait-times-for-priority-procedures-in-canada-2022",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Share of hip, knee and cataract procedures within benchmark in 2019 and 2021."
+    },
+    {
+      "id": "hh_pac",
+      "title": "Pre-Admission Clinic (service page)",
+      "publisher": "Halton Healthcare",
+      "url": "https://www.haltonhealthcare.on.ca/services_/28763/s29987-pre-admission-clinic",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Pre-admission clinic timing (7-14 days before surgery), package from the surgeon, booking phone, fax and hours at three sites."
+    },
+    {
+      "id": "hh_cpp",
+      "title": "Important information for all surgical patients (letter dated October 1, 2019, on the Cumulative Patient Profile replacing the pre-op history and physical)",
+      "publisher": "Halton Healthcare",
+      "url": "https://www.haltonhealthcare.on.ca/site_files/content/pdfs/01_services/02_surgical-program/important-info-for-surgical-patients.pdf",
+      "year": 2019,
+      "accessed": "2026-11-24",
+      "supports": "Cumulative Patient Profile required in the booking package from October 1, 2019."
+    },
+    {
+      "id": "leslie2013",
+      "title": "Day of surgery cancellation rates in urology: identification of modifiable factors (Leslie RJ, Beiko D, van Vlymen J, Siemens DR), CUAJ 7(5-6):167-73",
+      "publisher": "Canadian Urological Association Journal",
+      "url": "https://cuaj.ca/index.php/journal/article/view/1345",
+      "year": 2013,
+      "accessed": "2026-11-24",
+      "supports": "Day-of-surgery cancellation rate (8.07%) and the share due to process factors (58.5%) in an Ontario hospital."
+    },
+    {
+      "id": "fao2021",
+      "title": "Media release: FAO projects health sector spending shortfall of $61.9 billion over nine years (May 10, 2021)",
+      "publisher": "Financial Accountability Office of Ontario",
+      "url": "https://fao-on.org/en/communication/mr-2021-health-estimates/",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Ontario elective surgery backlog projection for September 2021."
+    }
+  ],
+  "assumptions": [
+    "The simulated median (about 49 days) is about 1.2 times the 40-day benchmark and the 90th percentile (about 89 days) is below the 120-day benchmark, because a triangular wait cannot reproduce the long right tail of low-priority orthopaedic and ophthalmic waits. The cycle runs from receipt of the booking package to closure of the wait list record after surgery, so it contains the whole Wait 2 interval; the simulated median and 90th percentile are compared with a benchmark derived from 2015/16 provincial medians rather than measured at this hospital.",
+    "The long calendar wait on the list sits on step s13; its triangular distribution (1 to 90 days, mode 2) is fitted to give a median near 30 days before the final week of preparation, because the provincial figures are reported only as medians and 90th percentiles by specialty and priority.",
+    "Work done in surgeons' offices (assembling packages, telling patients their date) is shown as external steps with a few minutes of handling; that labour is paid by the surgeons, not the hospital.",
+    "The booking coordinator role covers both the booking office and wait-list management; at some hospitals the OR scheduler or the surgeon's secretary enters the WTIS record instead.",
+    "Hands-on time x volume implies about 17 FTE (15 of them booking coordinators, plus about 1.4 FTE of surgeons' office handling that the hospital does not pay) against 11.1 stated; the organisation file lists 10 booking coordinators, which looks low for about 3,000 bookings a month unless surgeons' offices do more of the entry, as they do at some hospitals. The step times are the author's estimates and were not cut to fit the headcount.",
+    "The organisation file's process description (fax package, completeness check, entry in hospital and provincial systems, date within the surgeon's block) matches what the sources describe.",
+    "Urgent and emergency cases booked on the add-on list are handled in sx-emergency-surgery and are not counted here.",
+    "Organisation file corrected on 2026-11-24: elective bookings are about 87% of operating room cases (the Auditor General gives 13% emergencies), about 2,150 a month, now that endoscopies are counted only in sx-endoscopy. Stated FTE on this process were scaled to the new volume."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

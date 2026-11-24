@@ -1,0 +1,1576 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-ltl-dest-dock",
+  "name": "Strip and stage freight at the destination terminal",
+  "org": "freight-carrier-co",
+  "process": "ltl-dest-dock",
+  "sector": "trucking (less-than-truckload freight)",
+  "function": "LTL terminal operations",
+  "summary": "In the early morning, dock workers at the destination terminal unload the linehaul trailers that arrived overnight, scan each shipment, flag shortages and damage, and stage the freight by city route in stop order before loading the city trucks. The dock supervisor sets the strip order and the city dispatcher confirms routes from what has been staged. Late trailers, missed scans, appointment requirements found at the last minute and freight staged in the wrong lane delay the day's deliveries.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL carrier of about 3,000 employees with 38 terminals, 33 of them satellite terminals running two weekday shifts.",
+    "org_size_employees": 3000,
+    "notes": "Destination strip on the early shift, from about 03:00 to 08:00, Monday to Friday."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one shipment",
+  "trigger": "A linehaul trailer carrying the shipment arrives at the destination terminal overnight.",
+  "end_state": "The shipment is loaded in stop order on its city truck and set out for delivery, or held for an appointment, an OS&D exception or forwarding.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 130000,
+      "mode": 150000,
+      "high": 175000
+    },
+    "seasonality": "Highest from September to mid-December; lowest in January, February and July. Monday mornings are heavy with weekend linehaul.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Matches the organisation file: every LTL shipment is stripped and staged at its destination terminal once."
+    },
+    "surge": {
+      "cause": "Autumn shipping peak (September to mid-December retail and industrial restocking)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 50,
+        "mode": 70,
+        "high": 90
+      },
+      "volume_multiplier": {
+        "low": 1.12,
+        "mode": 1.2,
+        "high": 1.35
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Same as the organisation file; author's estimate of the autumn LTL peak in Canada."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-linehaul-dispatch",
+        "object": "loaded_trailer",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ltl-dock-labour-scheduling",
+        "object": "labour_schedule"
+      },
+      {
+        "from": "fin-freight-bill-entry",
+        "object": "freight_bill"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "staged_and_loaded",
+        "to": "ltl-pd-dispatch",
+        "object": "staged_freight"
+      },
+      {
+        "outcome": "staged_and_loaded",
+        "to": "ltl-delivery-execution",
+        "object": "staged_freight"
+      },
+      {
+        "outcome": "held_for_appointment",
+        "to": "ltl-appointment-scheduling",
+        "object": "appointment_request"
+      },
+      {
+        "outcome": "any",
+        "to": "ltl-osd-exceptions",
+        "object": "osd_report"
+      },
+      {
+        "outcome": "misdirect_forwarded",
+        "to": "ltl-linehaul-planning",
+        "object": "shipment_scan_data"
+      },
+      {
+        "outcome": "any",
+        "to": "ltl-terminal-performance",
+        "object": "terminal_kpi_data"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "terminal-dock-worker",
+      "title": "Terminal dock worker",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 130.0,
+      "loaded_cost_per_hour": {
+        "low": 25,
+        "mode": 29,
+        "high": 34
+      },
+      "occupation_code": "NOC 75101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Satellite-terminal dock workers split their shifts between the morning strip and the evening outbound load (ltl-origin-dock). Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "hub-dock-worker",
+      "title": "Hub dock worker and forklift operator",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 55.0,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 30,
+        "high": 36
+      },
+      "occupation_code": "NOC 75101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "At the five hub cities the same steps are done by hub dock workers; the steps name terminal-dock-worker for both. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff). This role is in the organisation file but not in this process's role list in the process map."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "dock-supervisor",
+      "title": "Dock supervisor",
+      "department": "LTL terminal network",
+      "layer": "supervisor",
+      "fte_on_process": 18.0,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 47,
+        "high": 56
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Early-shift supervisors at the 38 terminals, part of their shift. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff)."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "city-dispatcher",
+      "title": "City pickup and delivery dispatcher",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 8.0,
+      "loaded_cost_per_hour": {
+        "low": 33,
+        "mode": 39,
+        "high": 47
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Route confirmation from the staged freight, part of the morning dispatch. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff). This role is in the organisation file but not in this process's role list in the process map."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "osd-clerk",
+      "title": "OS&D clerk",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 8.0,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 33,
+        "high": 39
+      },
+      "occupation_code": "NOC 14400",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "OS&D records for exceptions found on the inbound strip. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff). This role is in the organisation file but not in this process's role list in the process map."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "terminal-service-clerk",
+      "title": "Terminal service clerk",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 10.0,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Appointment requests for freight found on the strip without a booked appointment. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff). This role is in the organisation file but not in this process's role list in the process map."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "dock-handheld",
+      "name": "Dock and driver handheld scanning",
+      "kind": "instrument"
+    },
+    {
+      "id": "route-planner",
+      "name": "City route planning and dispatch board",
+      "kind": "workflow"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "edi-gateway",
+      "name": "EDI gateway (204 tenders, 211 bills of lading, 214 status, 210 invoices)",
+      "kind": "workflow"
+    }
+  ],
+  "resources": [
+    {
+      "id": "terminal-dock-door",
+      "name": "Satellite terminal dock door",
+      "kind": "facility",
+      "count": 1000
+    },
+    {
+      "id": "forklift",
+      "name": "Dock forklift",
+      "kind": "equipment",
+      "count": 420,
+      "cost_per_hour": {
+        "low": 6,
+        "mode": 9,
+        "high": 13
+      }
+    },
+    {
+      "id": "pd-truck",
+      "name": "Pickup and delivery truck (day-cab tractor or straight truck)",
+      "kind": "vehicle",
+      "count": 560,
+      "cost_per_hour": {
+        "low": 28,
+        "mode": 36,
+        "high": 46
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive the advance manifest",
+      "description": "When the inbound trailer was closed at the hub or origin terminal, the TMS sent its manifest ahead. The destination terminal's inbound list and the city dispatcher's preliminary route plan now show the shipment, its consignee and any delivery requirements.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "advance manifest",
+        "loaded trailer"
+      ],
+      "outputs": [
+        "shipment on the inbound list",
+        "preliminary route plan"
+      ],
+      "systems": [
+        "tms",
+        "route-planner"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-heilig"
+        ],
+        "note": "Inbound staging supports sequenced loading and routing of P&D units (Heilig). Timing is the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Plan the morning strip",
+      "description": "At the start of the early shift the dock supervisor checks which linehaul trailers have arrived and which are still on the road, and sets the strip order: trailers with appointment and guaranteed freight and those feeding the first routes go first. Each trailer is assigned a strip door near the route lanes.",
+      "role": "dock-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "shipment on the inbound list",
+        "linehaul arrival estimates"
+      ],
+      "outputs": [
+        "strip order",
+        "door assignment"
+      ],
+      "systems": [
+        "tms",
+        "route-planner"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 40
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.9,
+          "condition": "trailer arrived on time"
+        },
+        {
+          "to": "s03",
+          "prob": 0.1,
+          "condition": "trailer running late"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dock"
+        ],
+        "note": "Planning sequences shipments for cross-docking and route loading (Transport Topics, Averitt). Share of late trailers and minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Re-sequence for a late trailer",
+      "description": "When a trailer delayed by weather, a breakdown or a late hub departure finally arrives, the supervisor puts it on the first free door as a hot strip and warns the city dispatcher which routes will leave late or need freight added after departure.",
+      "role": "dock-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "late arrival notice"
+      ],
+      "outputs": [
+        "revised strip order"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 600
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; delay length is the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Secure and open the trailer",
+      "description": "A dock worker checks the trailer is chocked or restrained, positions the dock plate, breaks the seal and compares its number with the manifest, and checks for shifted freight and floor damage before driving in. Trailers dropped overnight at a satellite terminal wait until the dock shift starts.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "trailer at door",
+        "trailer manifest"
+      ],
+      "outputs": [
+        "trailer open and safe to enter"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Provincial OHS regulations and carrier dock safety procedure: wheels chocked or trailer restrained and dock plate secured before forklift entry (CCOHS guidance)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "terminal-dock-door",
+          "occupied_min": {
+            "low": 0.5,
+            "mode": 1,
+            "high": 2
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.92,
+          "condition": "palletised freight"
+        },
+        {
+          "to": "s06",
+          "prob": 0.08,
+          "condition": "floor-loaded loose cartons"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ccohs-forklift"
+        ],
+        "note": "Chock or restrain the trailer, inspect the floor and secure the dock plate before forklift entry (CCOHS). The overnight wait for the dock to open is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Unload the shipment by forklift and scan it",
+      "description": "The dock worker lifts the shipment's pallets out of the trailer and scans the PRO label; the handheld shows the shipment's route lane or a hold location.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "trailer open and safe to enter"
+      ],
+      "outputs": [
+        "shipment on the dock with a scan"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Shipment not scanned off the trailer, so it appears short.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1.5,
+            "mode": 3,
+            "high": 6
+          }
+        },
+        {
+          "id": "terminal-dock-door",
+          "occupied_min": {
+            "low": 1.5,
+            "mode": 3,
+            "high": 6
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-heilig"
+        ],
+        "note": "Bar-code scans record each shipment's dock movement (Heilig). Minutes are the author's estimate, about 40 minutes for a trailer of 12 to 15 shipments."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Hand-unload loose cartons",
+      "description": "Two dock workers hand-stack floor-loaded cartons onto pallets, scanning each piece, and wrap them so they can be staged as one unit.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "trailer open and safe to enter"
+      ],
+      "outputs": [
+        "shipment on the dock with a scan"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 14
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "people": 2,
+      "resources": [
+        {
+          "id": "terminal-dock-door",
+          "occupied_min": {
+            "low": 3,
+            "mode": 6,
+            "high": 14
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-heilig"
+        ],
+        "note": "Handling units drive dock cost (Heilig). Share and minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Check count and condition",
+      "description": "The dock worker compares the pieces scanned with the manifest count and looks for damage. A shortage, overage or damage is flagged for OS&D; freight that belongs to another terminal is set aside as a misdirect.",
+      "role": "terminal-dock-worker",
+      "kind": "validation",
+      "inputs": [
+        "shipment on the dock with a scan",
+        "trailer manifest"
+      ],
+      "outputs": [
+        "checked shipment"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Concealed damage missed, found by the consignee at delivery.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.93,
+          "condition": "count and condition match"
+        },
+        {
+          "to": "s08",
+          "prob": 0.05,
+          "condition": "short, over or damaged"
+        },
+        {
+          "to": "s10",
+          "prob": 0.02,
+          "condition": "misdirected freight"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dock"
+        ],
+        "note": "Scanning reduces misdirects but does not remove them (Transport Topics). Shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Flag the exception on the dock",
+      "description": "The dock worker photographs the damage or notes missing pieces, scans an exception code and moves badly damaged freight to the OS&D area.",
+      "role": "terminal-dock-worker",
+      "kind": "data_entry",
+      "inputs": [
+        "checked shipment"
+      ],
+      "outputs": [
+        "exception scan",
+        "photos"
+      ],
+      "systems": [
+        "dock-handheld",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Record the OS&D report",
+      "description": "The OS&D clerk opens the exception in the TMS, checks the origin and hub manifests for where pieces went missing, sends a trace request to other terminals and decides with the supervisor whether the shipment goes out for delivery with an exception note or is held.",
+      "role": "osd-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "exception scan",
+        "photos",
+        "trailer manifests"
+      ],
+      "outputs": [
+        "OS&D report",
+        "trace request"
+      ],
+      "systems": [
+        "tms",
+        "imaging",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.7,
+          "condition": "deliver with the exception noted"
+        },
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "held for OS&D",
+          "outcome": "held_for_osd"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes and shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Forward misdirected freight",
+      "description": "The dock supervisor re-labels the misdirected shipment, books it on the next linehaul to the correct terminal and notes the misload against the terminal that loaded it.",
+      "role": "dock-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "checked shipment"
+      ],
+      "outputs": [
+        "re-routed shipment",
+        "misload record"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "misdirect_forwarded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dock"
+        ],
+        "note": "Misdirected freight is a measured dock failure (Transport Topics). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Check delivery requirements",
+      "description": "The dock worker reads the delivery notes the handheld shows from the freight bill: appointment required, liftgate, inside delivery, collect on delivery or a residential address. Freight needing an appointment that has not been booked is moved to a hold lane.",
+      "role": "terminal-dock-worker",
+      "kind": "lookup",
+      "inputs": [
+        "checked shipment",
+        "freight bill"
+      ],
+      "outputs": [
+        "delivery requirement check"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Appointment or liftgate note missed, causing a failed delivery attempt.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.9,
+          "condition": "ready to route"
+        },
+        {
+          "to": "s12",
+          "prob": 0.1,
+          "condition": "appointment needed and not booked"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share needing an unbooked appointment is the author's estimate; retail distribution centres and many construction sites require appointments."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Request a delivery appointment",
+      "description": "The terminal service clerk creates an appointment request in the TMS and calls or emails the consignee for a slot; the request passes to appointment scheduling and the shipment stays in hold until a slot is confirmed.",
+      "role": "terminal-service-clerk",
+      "kind": "communication",
+      "inputs": [
+        "delivery requirement check"
+      ],
+      "outputs": [
+        "appointment request"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes and wait are the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Move the shipment to the appointment hold lane",
+      "description": "The dock worker moves the shipment to the hold lane for appointment freight and scans it to that location so it can be found when the appointment is set.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "appointment request"
+      ],
+      "outputs": [
+        "shipment in hold lane"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 0.5,
+            "mode": 1,
+            "high": 2.5
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "held_for_appointment"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Stage the shipment in its route lane",
+      "description": "The dock worker moves the shipment to the floor lane for its city route and sets it in stop order, so the loader can put the last stop in the nose of the truck. The staging scan updates the route plan.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "delivery requirement check",
+        "preliminary route plan"
+      ],
+      "outputs": [
+        "staged freight"
+      ],
+      "systems": [
+        "dock-handheld",
+        "route-planner"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1,
+            "mode": 2,
+            "high": 4
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-heilig",
+          "src-ttnews-dock"
+        ],
+        "note": "Inbound staging supports sequenced loading of P&D units (Heilig); carriers direct which shipment to pick so routes are sequenced (Transport Topics). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Confirm the route plan",
+      "description": "The city dispatcher finalises the morning routes from the staged freight, balancing stops, weight and appointment windows across drivers, and moves shipments between routes where a truck is overloaded. Freight from trailers that arrive after the cut-off is left for the next day.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "staged freight",
+        "preliminary route plan"
+      ],
+      "outputs": [
+        "final route plan"
+      ],
+      "systems": [
+        "route-planner",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s14"
+      ],
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.86,
+          "condition": "route confirmed"
+        },
+        {
+          "to": "s16",
+          "prob": 0.08,
+          "condition": "moved to another route"
+        },
+        {
+          "to": "s18",
+          "prob": 0.06,
+          "condition": "missed the route cut-off"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dock"
+        ],
+        "note": "Route projections and sequencing support dock loading (Transport Topics). Shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Re-stage to another route lane",
+      "description": "The dock worker moves the shipment to the lane of the route it was moved to, or to the right place in the stop order, and rescans it.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "final route plan"
+      ],
+      "outputs": [
+        "staged freight"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 0.5,
+            "mode": 1,
+            "high": 2.5
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Load the city truck in stop order",
+      "description": "The dock worker loads the shipment onto the P&D truck or city trailer at the route's door, last stop first, scans it to the unit so the handheld can warn of a wrong route, and secures the load.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "staged freight",
+        "final route plan"
+      ],
+      "outputs": [
+        "shipment loaded on P&D unit"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 40
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Shipment loaded out of stop order, costing the driver time at delivery.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1.5,
+            "mode": 3,
+            "high": 6
+          }
+        },
+        {
+          "id": "terminal-dock-door",
+          "occupied_min": {
+            "low": 3,
+            "mode": 5,
+            "high": 10
+          }
+        },
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 3,
+            "mode": 5,
+            "high": 10
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.97,
+          "condition": "loaded on the right unit"
+        },
+        {
+          "to": "s16",
+          "prob": 0.03,
+          "condition": "wrong route warning: re-stage"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dock"
+        ],
+        "note": "Handheld systems guide loading and prevent misdirects (Transport Topics). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Carry the shipment over to the next day",
+      "description": "Freight that missed the route cut-off stays staged on the floor; the next morning a dock worker moves it into the new day's route lane and it is routed again.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "final route plan"
+      ],
+      "outputs": [
+        "staged freight"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2.5
+      },
+      "wait_before_min": {
+        "low": 900,
+        "mode": 1300,
+        "high": 1440
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait to the next delivery day is the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Check the dock and release the routes",
+      "description": "Before drivers leave, the dock supervisor runs the report of freight on the dock not loaded or not scanned, sends workers to find stray shipments and releases the loaded units to the drivers.",
+      "role": "dock-supervisor",
+      "kind": "review",
+      "inputs": [
+        "dock scan status",
+        "final route plan"
+      ],
+      "outputs": [
+        "released routes"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.3,
+        "high": 0.8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Set the shipment out for delivery",
+      "description": "The TMS marks the shipment as out for delivery, sends the status to the customer by EDI and the portal, and hands the loaded route to delivery execution.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "released routes"
+      ],
+      "outputs": [
+        "out-for-delivery status",
+        "staged freight on route"
+      ],
+      "systems": [
+        "tms",
+        "edi-gateway"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "staged_and_loaded"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard TMS and EDI 214 status of the period; author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Late linehaul trailer",
+      "share_of_cases": 0.1,
+      "description": "The trailer arrives after the strip has started; it is stripped hot and some freight misses its route.",
+      "path": [
+        "s02",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Over, short or damaged",
+      "share_of_cases": 0.05,
+      "description": "The exception is flagged and recorded; about three in ten are held instead of going out.",
+      "path": [
+        "s07",
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Appointment not booked",
+      "share_of_cases": 0.09,
+      "description": "Freight that needs an appointment goes to a hold lane and an appointment request.",
+      "path": [
+        "s11",
+        "s12",
+        "s13"
+      ]
+    },
+    {
+      "name": "Missed route cut-off",
+      "share_of_cases": 0.06,
+      "description": "Freight is carried over a day on the dock floor.",
+      "path": [
+        "s15",
+        "s18",
+        "s14"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.17,
+        "p90": 0.35
+      },
+      "unit": "calendar days from the inbound trailer's arrival to the shipment loaded on its city truck",
+      "population": "Early-morning destination docks at a regional Canadian LTL carrier",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: trailers arrive between about 01:00 and 05:00, docks open about 03:00 to 04:00 and city trucks leave about 07:30 to 08:30; carry-over adds a day."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Late linehaul trailers compress the strip into the last hour before routes leave, so freight misses its route or the truck leaves late.",
+      "steps": [
+        "s03",
+        "s15",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common practice; linehaul delays come mainly from storms and late hub departures."
+      }
+    },
+    {
+      "description": "Freight staged in the wrong lane or out of stop order is re-handled and slows drivers at delivery.",
+      "steps": [
+        "s14",
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dock"
+        ],
+        "note": "Carriers built systems to tell dock workers which shipment to select so routes are sequenced, reducing handling (Transport Topics)."
+      }
+    },
+    {
+      "description": "Appointment requirements found only at the strip hold freight a day or more.",
+      "steps": [
+        "s11",
+        "s12",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-heilig",
+      "title": "A look at LTL carrier dock operations",
+      "publisher": "PARCEL Industry (Joe Heilig)",
+      "url": "https://parcelindustry.com/print-article-3642-permanent.html",
+      "year": null,
+      "accessed": "2026-11-24",
+      "supports": "Most shipments cross-docked from pickup unit to linehaul trailer; headloading of large shipments; planning systems project linehaul trailer loads; breakbulks often over 100 doors; unload doors assigned from each shipment's next scheduled door; inbound floor staging to sequence P&D loads; dock metrics such as shipments per hour; bar-code scans record each dock move. The page gives no publication date"
+    },
+    {
+      "id": "src-ttnews-dock",
+      "title": "Better planning, equipment maintenance are key to improved loading dock efficiency",
+      "publisher": "Transport Topics (Mindy Long)",
+      "url": "https://ttnews.com/articles/better-planning-equipment-maintenance-are-key-improved-loading-dock-efficiency",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "LTL carriers measure dock productivity in pounds per hour and feet travelled per shipment; dock work only as good as the load plan; staging congestion and understaffing cause delays; handheld scanning reduces misdirects; trailer creep, pop-up, landing-gear collapse and early departure are forklift hazards"
+    },
+    {
+      "id": "src-ccohs-forklift",
+      "title": "Forklift trucks: loading and unloading",
+      "publisher": "Canadian Centre for Occupational Health and Safety",
+      "url": "https://www.ccohs.ca/oshanswers/safety_haz/forklift/loading.html",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Before a forklift enters a trailer: brakes set, wheels chocked, trailer restraint engaged where available, trailer floor inspected, dock plate positioned and secured, landing gear supporting an uncoupled trailer; stop if the trailer tilts or a gap opens"
+    }
+  ],
+  "assumptions": [
+    "The unit of work is one shipment. Trailer-level work (opening, planning the strip) is spread across about 12 to 15 shipments per trailer, and route-level work across about 15 to 20 stops per route.",
+    "At the five hub cities the destination strip is done by hub dock workers; the steps name terminal-dock-worker and the hub-dock-worker role carries its share of the FTE.",
+    "City dispatchers, OS&D clerks and terminal service clerks take part although the organisation file's process map lists only dock workers and dock supervisors.",
+    "Loading the city truck in stop order is included here because staging and loading are done by the same early-shift dock crew before drivers arrive; driver pre-trip and departure belong to ltl-delivery-execution.",
+    "The case ends at load or at a hold; appointment freight continues in ltl-appointment-scheduling and held OS&D freight in ltl-osd-exceptions.",
+    "Dock headcount looks tight across the dock processes: this workflow implies about 230 dock-worker FTE at the validator's 130 productive hours a month (about 185 at 160 hours), and with the hub cross-dock (about 220) and the origin dock (about 150 to 190) the five dock processes need about 550 to 640 dock workers against 560 (330 hub plus 230 terminal) in the organisation file, leaving no allowance for absence, training or the autumn peak.",
+    "Loaded costs come from the organisation file: wage x 1.30 for hourly staff and x 1.35 for salaried staff."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

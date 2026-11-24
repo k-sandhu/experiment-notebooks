@@ -1,0 +1,1669 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-lg-route-pickup",
+  "name": "Pick up and deliver specimens on scheduled courier routes",
+  "org": "diagnostic-lab-services-co",
+  "process": "lg-route-pickup",
+  "sector": "medical laboratory services",
+  "function": "specimen logistics",
+  "summary": "About 220 company couriers drive or walk fixed routes several times a day, stopping at collection centres, physician offices, long-term care homes, workplaces and hospital laboratories to collect bagged specimens and drop off reports and supplies. At each stop the courier checks and scans the bags, keeps them in the right temperature zone and carries them to the laboratory or to a hub for a line haul, while dispatch watches the runs by GPS. Traffic, late runs, sites that are closed or not ready, leaking containers and coolers that warm up cause missed pickups, delays and specimens that have to be recollected.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A large private community laboratory company with its own courier fleet, TDG-certified drivers, 24/7 dispatch and web-based specimen tracking serving centres, clinics, homes and hospitals in Ontario, Quebec and Manitoba.",
+    "org_size_employees": 3300,
+    "notes": "Handheld scanning and GPS tracking were in common use in 2019-2022; the dispatcher posting describes the current tools."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one stop pickup",
+  "trigger": "A scheduled stop on a courier route comes due.",
+  "end_state": "The stop's specimens are delivered and scanned at the laboratory (or hospital referrals at reference intake), or the stop is recorded as no pickup.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 120000,
+      "mode": 150000,
+      "high": 180000
+    },
+    "seasonality": "Steady on weekdays, lighter on weekends; winter weather slows routes.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Org file process map and demand driver d_route_stops (about 220 couriers times 26 days times 20 to 30 stops)."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ordering_physician",
+        "object": "specimen_shipment",
+        "share": 0.65
+      },
+      {
+        "from": "cl-psc-collection",
+        "object": "specimen_shipment",
+        "share": 0.14
+      },
+      {
+        "from": "hospital_client",
+        "object": "reference_referral",
+        "share": 0.1
+      },
+      {
+        "from": "mb-ltc-collection",
+        "object": "specimen_shipment",
+        "share": 0.08
+      },
+      {
+        "from": "mb-house-call",
+        "object": "specimen_shipment",
+        "share": 0.01
+      },
+      {
+        "from": "wp-occupational-health",
+        "object": "specimen_shipment",
+        "share": 0.02
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "delivered",
+        "to": "cl-specimen-accessioning",
+        "object": "specimen_shipment"
+      },
+      {
+        "outcome": "delivered_reference",
+        "to": "hs-referral-intake",
+        "object": "reference_referral"
+      },
+      {
+        "outcome": "any",
+        "to": "hrm-health-safety",
+        "object": "safety_incident"
+      }
+    ],
+    "inputs": [
+      {
+        "from": "sl-client-onboarding",
+        "object": "client_account"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "courier",
+      "title": "Courier (driving and walking routes)",
+      "department": "Courier operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 185,
+      "loaded_cost_per_hour": {
+        "low": 24,
+        "mode": 27,
+        "high": 40
+      },
+      "occupation_code": "NOC 75201",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_courier",
+          "dyn_job_walking",
+          "jobbank75201"
+        ],
+        "note": "Org file role and cost (Job Bank 75201 Ontario times 1.35); postings pay $18.50 to $21 an hour in 2026. FTE estimate: most of the 220 couriers' time; the rest goes to STAT pickups, line hauls, supply delivery and commercial work."
+      }
+    },
+    {
+      "id": "courier_supervisor",
+      "title": "Courier route supervisor",
+      "department": "Courier operations",
+      "layer": "supervisor",
+      "fte_on_process": 8,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 38,
+        "high": 46
+      },
+      "occupation_code": "NOC 12013",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Org file role and cost; handles incidents, missed pickups and courier coverage; estimate."
+      }
+    },
+    {
+      "id": "logistics_dispatcher",
+      "title": "Logistics dispatcher",
+      "department": "Logistics dispatch centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 7,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 34,
+        "high": 42
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_dispatcher",
+          "dyn_logistics"
+        ],
+        "note": "Org file role and cost; route monitoring and exceptions for scheduled routes; the rest of the 24 dispatchers' time is on STAT and other dispatch. Estimate."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "logistics_tracking",
+      "name": "Courier routing, dispatch and web-based order and tracking system",
+      "kind": "workflow"
+    },
+    {
+      "id": "handheld",
+      "name": "Courier handheld scanner or phone app with route sequence and GPS",
+      "kind": "other"
+    },
+    {
+      "id": "telephony",
+      "name": "Contact centre telephony with IVR, queues and call recording",
+      "kind": "communication"
+    },
+    {
+      "id": "vehicle_cooler",
+      "name": "Vehicle with ambient, refrigerated and frozen transport containers and temperature indicators",
+      "kind": "instrument"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Stop comes due on the courier's route",
+      "description": "The routing system holds each scheduled stop with its time window and sequence. When the run starts, the stop appears on the courier's handheld in order, with the client's address, access notes and what to collect or drop off.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "route schedule"
+      ],
+      "outputs": [
+        "stop on handheld"
+      ],
+      "systems": [
+        "logistics_tracking",
+        "handheld"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.001,
+        "defect_description": "Stop missing from the route after a client change.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.07,
+          "condition": "first stop of a run"
+        },
+        {
+          "to": "s03",
+          "prob": 0.93,
+          "condition": "later stop on the run"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_logistics",
+          "dyn_job_walking"
+        ],
+        "note": "Route sequences and web tracking from the sources; about 14 stops per run is an estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Prepare the vehicle and coolers for the run",
+      "description": "At the hub the courier checks the vehicle, loads conditioned ice or gel packs into refrigerated coolers and dry ice for frozen boxes where needed, collects reports and supplies to drop off and logs into the handheld.",
+      "role": "courier",
+      "kind": "physical",
+      "inputs": [
+        "vehicle",
+        "coolers",
+        "route sheet"
+      ],
+      "outputs": [
+        "vehicle ready"
+      ],
+      "systems": [
+        "handheld",
+        "vehicle_cooler"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Cooler not conditioned, risking temperature excursion.",
+        "typically_caught_at": "s18"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Transportation of Dangerous Goods Regulations Part 6: driver holds a valid TDG training certificate; Part 5 and section 1.39 containment for UN3373",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_courier",
+          "dyn_logistics",
+          "tdg_regs"
+        ],
+        "note": "Hub start and TDG certification from the posting; time is an estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Drive to the stop",
+      "description": "The courier drives to the next stop in sequence, often a few minutes away in a city and much longer on rural routes; walking couriers push a cart between medical buildings downtown. Traffic and weather stretch the time.",
+      "role": "courier",
+      "kind": "physical",
+      "inputs": [
+        "stop on handheld"
+      ],
+      "outputs": [
+        "courier at stop"
+      ],
+      "systems": [
+        "handheld"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 18
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.9908,
+          "condition": "arrives within the window"
+        },
+        {
+          "to": "s16",
+          "prob": 0.009,
+          "condition": "run running late"
+        },
+        {
+          "to": "s19",
+          "prob": 0.0002,
+          "condition": "vehicle breakdown or collision"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_walking"
+        ],
+        "note": "Driving and walking routes described in the postings; driving minutes and late share are estimates (urban and suburban stops dominate)."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Arrive and scan the stop",
+      "description": "The courier parks, walks into the clinic, collection centre, home or hospital lab, and scans the stop barcode or taps arrival on the handheld, which records the time and GPS position as proof of the visit.",
+      "role": "courier",
+      "kind": "data_entry",
+      "inputs": [
+        "courier at stop"
+      ],
+      "outputs": [
+        "arrival scan"
+      ],
+      "systems": [
+        "handheld",
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Arrival not scanned.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Ontario Laboratory Accreditation (ISO 15189 Plus) specimen transport requirements: traceable pickup times",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.82,
+          "condition": "specimens ready"
+        },
+        {
+          "to": "s05",
+          "prob": 0.12,
+          "condition": "nothing to pick up"
+        },
+        {
+          "to": "s07",
+          "prob": 0.04,
+          "condition": "specimens not ready yet"
+        },
+        {
+          "to": "s08",
+          "prob": 0.02,
+          "condition": "site locked or closed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shares are estimates; physician offices often have nothing on a given run."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Record a no-pickup visit and drop off items",
+      "description": "The courier marks the stop as no pickup on the handheld and leaves any reports, supplies or empty transport boxes for the site before moving on.",
+      "role": "courier",
+      "kind": "data_entry",
+      "inputs": [
+        "arrival scan"
+      ],
+      "outputs": [
+        "no-pickup record"
+      ],
+      "systems": [
+        "handheld"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.8,
+        "high": 2.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Specimens left behind at a site marked no pickup.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "no_pickup"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Collect the bags and check them against the site's log",
+      "description": "The courier takes the bags or boxes from the pickup fridge, counter or lockbox, checks they are sealed, that requisitions are in the outer pockets and boxes are separated by temperature, and confirms the count on the site's pickup log.",
+      "role": "courier",
+      "kind": "validation",
+      "inputs": [
+        "specimen bags",
+        "pickup log"
+      ],
+      "outputs": [
+        "collected bags"
+      ],
+      "systems": [
+        "handheld"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Bag left in the fridge or count not checked.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189 Plus and company chain of custody procedure: specimen count confirmed at each handoff",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.997,
+          "condition": "bags intact"
+        },
+        {
+          "to": "s10",
+          "prob": 0.003,
+          "condition": "leaking or broken container"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Wait for the site to finish packing",
+      "description": "Staff at the collection centre or clinic are still drawing, labelling or bagging, so the courier waits a few minutes or helps carry boxes rather than leave specimens for the next run.",
+      "role": "courier",
+      "kind": "physical",
+      "inputs": [
+        "arrival scan"
+      ],
+      "outputs": [
+        "specimens ready"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; the courier's paid waiting time is counted as hands-on time."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Report a locked or closed site to dispatch",
+      "description": "The courier calls or messages dispatch that the office is closed, the lockbox code fails or nobody answers, and waits briefly for instructions.",
+      "role": "courier",
+      "kind": "communication",
+      "inputs": [
+        "arrival scan"
+      ],
+      "outputs": [
+        "access problem report"
+      ],
+      "systems": [
+        "handheld",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimates."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Dispatcher contacts the site and decides",
+      "description": "The dispatcher calls the client, finds an alternate contact or lockbox code, and decides whether the courier waits, comes back later in the run, or the specimens wait for the next scheduled pickup.",
+      "role": "logistics_dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "access problem report"
+      ],
+      "outputs": [
+        "instruction to courier"
+      ],
+      "systems": [
+        "logistics_tracking",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.5,
+          "condition": "access arranged"
+        },
+        {
+          "to": "s22",
+          "prob": 0.5,
+          "condition": "pickup moved to later or next run"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_dispatcher"
+        ],
+        "note": "Dispatcher duties from the posting; shares and times are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Contain a leaking or broken specimen",
+      "description": "The courier puts on gloves, places the leaking bag in an overpack or secondary bag with absorbent from the spill kit, wipes the surface, tells the site and dispatch, and notes the event so receiving can assess the specimen.",
+      "role": "courier",
+      "kind": "physical",
+      "inputs": [
+        "leaking container"
+      ],
+      "outputs": [
+        "overpacked specimen",
+        "spill note"
+      ],
+      "systems": [
+        "handheld"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Transportation of Dangerous Goods Regulations Part 5: means of containment must prevent release; company biological spill procedure",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "tdg_regs"
+        ],
+        "note": "Containment rules from tdg_regs; spill steps and times are estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Scan each bag or box into tracking",
+      "description": "The courier scans the barcode on each bag or box, or the stop's manifest, so the tracking system shows the specimens as picked up, by whom and when.",
+      "role": "courier",
+      "kind": "data_entry",
+      "inputs": [
+        "collected bags"
+      ],
+      "outputs": [
+        "pickup scans"
+      ],
+      "systems": [
+        "handheld",
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1.0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Bag not scanned, so it later looks missing.",
+        "typically_caught_at": "s18"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Ontario Laboratory Accreditation (ISO 15189 Plus) specimen transport traceability",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_logistics"
+        ],
+        "note": "Web-based tracking described; time estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Load boxes into the right temperature zone",
+      "description": "The courier places room temperature boxes in the ambient bin, refrigerated bags in the cooler with ice packs and frozen specimens on dry ice, keeping the Category B marked containers closed and secured.",
+      "role": "courier",
+      "kind": "physical",
+      "inputs": [
+        "collected bags"
+      ],
+      "outputs": [
+        "specimens in transport"
+      ],
+      "systems": [
+        "vehicle_cooler"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1.0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Specimen put in the wrong temperature zone.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Transportation of Dangerous Goods Regulations section 1.39: UN3373 Category B in Type P650 containment, marked, with 24-hour number; laboratory temperature requirements",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.3,
+          "condition": "items to drop off"
+        },
+        {
+          "to": "s14",
+          "prob": 0.7,
+          "condition": "nothing to drop off"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "tdg_regs",
+          "dyn_logistics"
+        ],
+        "note": "Category B rules from tdg_regs; climate-controlled transport from dyn_logistics."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Drop off reports, supplies or empty boxes",
+      "description": "The courier leaves printed reports, supply orders and empty transport boxes for the site, and takes signatures where the client asks for proof of delivery.",
+      "role": "courier",
+      "kind": "physical",
+      "inputs": [
+        "reports",
+        "supplies"
+      ],
+      "outputs": [
+        "delivered items"
+      ],
+      "systems": [
+        "handheld"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 1.0,
+        "high": 3.0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Report or supply left at the wrong site.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_courier"
+        ],
+        "note": "Couriers deliver reports and mail on their route (posting); share and time are estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Dispatcher monitors the run's progress",
+      "description": "The dispatcher watches GPS positions and scan times on the dispatch board for all active runs and checks this stop against its window, ready to resequence or reassign if the run falls behind.",
+      "role": "logistics_dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "GPS and scan data"
+      ],
+      "outputs": [
+        "run on track or flagged"
+      ],
+      "systems": [
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_dispatcher"
+        ],
+        "note": "Continuous route monitoring by GPS from the posting; per-stop share of attention is an estimate."
+      },
+      "concurrent_with": [
+        "s03",
+        "s15"
+      ]
+    },
+    {
+      "id": "s15",
+      "name": "Carry the specimens through the rest of the run",
+      "description": "The specimens ride in the vehicle while the courier serves the remaining stops and drives back to the laboratory or hub. The courier's time is counted on those other stops, so this step only adds elapsed time.",
+      "role": "courier",
+      "kind": "physical",
+      "inputs": [
+        "specimens in transport"
+      ],
+      "outputs": [
+        "specimens arriving"
+      ],
+      "systems": [
+        "vehicle_cooler"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 200
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Cooler warms or freezes over a long run.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.7497,
+          "condition": "courier delivers to the laboratory"
+        },
+        {
+          "to": "s17",
+          "prob": 0.25,
+          "condition": "transfer to a line haul at a hub"
+        },
+        {
+          "to": "s19",
+          "prob": 0.0003,
+          "condition": "vehicle breakdown or collision"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "tian22",
+          "epmc_rejection",
+          "ag17"
+        ],
+        "note": "Longer transport delays testing (ag17), raises haemolysis (tian22) and cold storage raises potassium by 5% at 4 hours (epmc_rejection), so runs are kept short. Run lengths and hub share are estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Dispatcher resequences or reassigns a late run",
+      "description": "When a run falls behind because of traffic, volume or a sick courier, the dispatcher moves stops to a nearby courier, changes the order of stops and calls clients whose pickup will be late.",
+      "role": "logistics_dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "late run alert"
+      ],
+      "outputs": [
+        "revised route",
+        "client notice"
+      ],
+      "systems": [
+        "logistics_tracking",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Stop dropped when routes are changed.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.85,
+          "condition": "stop served late"
+        },
+        {
+          "to": "s22",
+          "prob": 0.15,
+          "condition": "stop missed on this run"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_dispatcher"
+        ],
+        "note": "Reassigning and resequencing routes to prevent missed pickups is in the posting; shares are estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Hand the boxes to a line-haul driver at a hub",
+      "description": "On regional routes the courier meets a line-haul driver at a hub or meeting point, both scan the boxes as transferred, and the line haul carries them to the regional laboratory.",
+      "role": "courier",
+      "kind": "physical",
+      "inputs": [
+        "specimens in transport"
+      ],
+      "outputs": [
+        "transferred boxes"
+      ],
+      "systems": [
+        "handheld",
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Box left in the courier's vehicle or not scanned at transfer.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "line haul delivers to the laboratory"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Hub transfers are common in regional networks; share and times are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Deliver to laboratory receiving",
+      "description": "At the laboratory the driver unloads the boxes at receiving, scans them as delivered, hands over the run manifest and checks the cooler temperatures with the receiving assistant. The driver's time is shared across all stops on the run.",
+      "role": "courier",
+      "kind": "physical",
+      "inputs": [
+        "boxes",
+        "run manifest"
+      ],
+      "outputs": [
+        "delivered specimen shipment",
+        "proof of delivery"
+      ],
+      "systems": [
+        "handheld",
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1.0
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 40
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Ontario Laboratory Accreditation (ISO 15189 Plus) specimen transport requirements: proof of delivery and transport temperature checked at receipt",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.897,
+          "condition": "community specimens delivered",
+          "outcome": "delivered"
+        },
+        {
+          "to": "END",
+          "prob": 0.1,
+          "condition": "hospital referral delivered to reference intake",
+          "outcome": "delivered_reference"
+        },
+        {
+          "to": "s21",
+          "prob": 0.003,
+          "condition": "cooler temperature out of range"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_logistics"
+        ],
+        "note": "Climate-controlled delivery and Ontario Laboratory Accreditation standards (dyn_logistics); hospital share follows the trigger shares; times are estimates."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Supervisor handles a vehicle breakdown or collision",
+      "description": "The courier secures the specimens and calls dispatch; the courier supervisor sends another courier or a replacement vehicle to take over the specimens, arranges a tow, and files the collision or injury report.",
+      "role": "courier_supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "incident call"
+      ],
+      "outputs": [
+        "specimens transferred",
+        "incident report"
+      ],
+      "systems": [
+        "logistics_tracking",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Highway Traffic Act collision reporting and Workplace Safety and Insurance Act injury reporting",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "specimens delivered by the relief courier"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; share and times are estimates. The laws are named from general knowledge and were not opened."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Supervisor follows up a missed pickup",
+      "description": "While the specimens wait at the site for the next scheduled run, the courier supervisor reviews why the stop was missed, calls the client to confirm the next pickup, and coaches the courier or adjusts the route if the stop is often missed.",
+      "role": "courier_supervisor",
+      "kind": "review",
+      "inputs": [
+        "missed pickup record"
+      ],
+      "outputs": [
+        "client follow-up",
+        "route change"
+      ],
+      "systems": [
+        "logistics_tracking",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 1080
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company service-level procedure for missed pickups and client complaints",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "pickup on the next run"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; the wait stands for the time until the next scheduled run, from an hour to overnight. Estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Log a transport temperature excursion",
+      "description": "The driver and receiving assistant record the out-of-range cooler, and the courier supervisor checks the cooler, packs and run timing, logs a nonconformance and tells the laboratory which specimens may be affected.",
+      "role": "courier_supervisor",
+      "kind": "review",
+      "inputs": [
+        "temperature reading",
+        "run manifest"
+      ],
+      "outputs": [
+        "excursion record"
+      ],
+      "systems": [
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189 Plus: transport conditions monitored and deviations recorded as nonconformances",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "specimens handed to receiving with the excursion noted",
+          "outcome": "delivered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimates."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Dispatcher reschedules a missed pickup",
+      "description": "The dispatcher records the missed pickup, tells the client when the next scheduled run will come or books an extra pickup, and flags the stop for the courier supervisor.",
+      "role": "logistics_dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "missed stop"
+      ],
+      "outputs": [
+        "rescheduled pickup"
+      ],
+      "systems": [
+        "logistics_tracking",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_dispatcher"
+        ],
+        "note": "Processing client pickup requests and notifying clients of delays (posting); times are estimates."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Nothing to pick up",
+      "share_of_cases": 0.12,
+      "description": "The site has no specimens on this run; the courier records a no-pickup visit and drops off any items.",
+      "path": [
+        "s04",
+        "s05"
+      ]
+    },
+    {
+      "name": "Specimens not ready",
+      "share_of_cases": 0.04,
+      "description": "Centre or clinic staff are still packing; the courier waits a few minutes.",
+      "path": [
+        "s04",
+        "s07",
+        "s06"
+      ]
+    },
+    {
+      "name": "Site locked or closed",
+      "share_of_cases": 0.02,
+      "description": "Dispatch contacts the client; half the time access is arranged, otherwise the pickup moves to a later run.",
+      "path": [
+        "s04",
+        "s08",
+        "s09",
+        "s22",
+        "s20",
+        "s03"
+      ]
+    },
+    {
+      "name": "Late run",
+      "share_of_cases": 0.009,
+      "description": "Traffic, volume or staffing puts the run behind; dispatch resequences or reassigns stops and some are missed.",
+      "path": [
+        "s03",
+        "s16",
+        "s04"
+      ]
+    },
+    {
+      "name": "Hub transfer to line haul",
+      "share_of_cases": 0.25,
+      "description": "Regional routes hand their boxes to a line-haul driver at a hub.",
+      "path": [
+        "s15",
+        "s17",
+        "s18"
+      ]
+    },
+    {
+      "name": "Leaking container",
+      "share_of_cases": 0.003,
+      "description": "The courier contains the spill and notes it for receiving.",
+      "path": [
+        "s06",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Temperature excursion",
+      "share_of_cases": 0.003,
+      "description": "A cooler is out of range at delivery; the supervisor logs a nonconformance and the laboratory assesses the specimens.",
+      "path": [
+        "s18",
+        "s21"
+      ]
+    },
+    {
+      "name": "Vehicle breakdown or collision",
+      "share_of_cases": 0.0005,
+      "description": "A relief courier takes over the specimens and the supervisor files reports.",
+      "path": [
+        "s15",
+        "s19",
+        "s18"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.08,
+        "p90": 0.17
+      },
+      "unit": "calendar days from the scheduled stop to delivery at the laboratory (0.08 days is about 2 hours)",
+      "population": "Scheduled community specimen courier runs",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "No published benchmark found; estimate from run lengths of a few hours and hub transfers on regional routes. Short transport is preferred because haemolysis and potassium drift rise with time (tian22, epmc_rejection)."
+      }
+    },
+    {
+      "metric": "courier_wage",
+      "value": {
+        "low": 18.5,
+        "high": 21.0
+      },
+      "unit": "CAD per hour (2026 postings)",
+      "population": "Company courier and walking courier postings",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dyn_job_courier",
+          "dyn_job_walking"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "potassium_rise_after_cold_storage",
+      "value": {
+        "4h": 0.05,
+        "8h": 0.2
+      },
+      "unit": "average relative increase",
+      "population": "Case-based study of blood samples stored at low temperature",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "epmc_rejection"
+        ],
+        "note": "Uminska et al. abstract."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Traffic and long rural runs make arrival times uncertain and cause late or missed pickups that clients complain about.",
+      "steps": [
+        "s03",
+        "s16",
+        "s22"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_job_dispatcher"
+        ],
+        "note": "Dispatchers resequence routes to prevent missed pickups."
+      }
+    },
+    {
+      "description": "Couriers lose time at sites that are closed, locked or not ready.",
+      "steps": [
+        "s07",
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "description": "Long runs and hub transfers add hours in transit, raising the risk of temperature excursions and degraded specimens.",
+      "steps": [
+        "s15",
+        "s17",
+        "s21"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "tian22",
+          "epmc_rejection"
+        ],
+        "note": "Effect of transport time on specimen quality."
+      }
+    },
+    {
+      "description": "Bags not scanned at pickup or transfer show as missing and trigger long searches at the laboratory.",
+      "steps": [
+        "s11",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "dyn_logistics",
+      "title": "The model laboratory Logistics",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Climate-controlled transport of specimens; highly trained, bonded drivers, all with Transportation of Dangerous Goods certification; follows Ontario Laboratory Accreditation standards; 24 hours a day, 7 days a week dispatch and emergency services; secure web-based order and tracking system."
+    },
+    {
+      "id": "dyn_job_courier",
+      "title": "Courier (casual on-call), London ON (job posting #2026-12313)",
+      "publisher": "The model laboratory via Jobvite",
+      "url": "",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Pick up medical samples as scheduled and deliver them safely; deliver reports and mail to all locations on the route; shifts 7:00 am to 4:30 pm or 5:00 pm to 5:00 am; route starts and ends at a company hub in a company vehicle; G licence with clean 3-year abstract, TDG certification, 1 year courier experience, lift 30 lb; $20 an hour."
+    },
+    {
+      "id": "dyn_job_dispatcher",
+      "title": "Bilingual Logistics Dispatcher (job posting #2026-12349)",
+      "publisher": "The model laboratory via Jobvite",
+      "url": "",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Monitor active routes continuously and act on risks to on-time performance; track drivers by GPS; reassign and resequence routes to prevent missed pickups; manage STAT and time-sensitive requests; process client pickup requests; primary contact for drivers; tell clients about delays; route planning, order management, GPS and call management software; $21 an hour."
+    },
+    {
+      "id": "dyn_job_walking",
+      "title": "Walking Courier, Toronto (job posting #2026-12177)",
+      "publisher": "The model laboratory via Jobvite",
+      "url": "",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Follow stop sequences, times and instructions per route plan and tell dispatch of deviations; ensure all specimens, coolers and boxes are picked up and delivered on time; walk long distances with a flatbed cart, lift up to 50 lb; shifts between 7:00 am and 10:00 pm; $18.50 to $21.00 an hour."
+    },
+    {
+      "id": "jobbank75201",
+      "title": "Wages: Delivery Driver in Ontario (NOC 75201)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/21667/ON",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low $17.95, median $20.00, high $30.00 (2023-2024); Toronto median $21.00."
+    },
+    {
+      "id": "tdg_regs",
+      "title": "Transportation of Dangerous Goods Regulations (SOR/2001-286), full text",
+      "publisher": "Justice Laws Website, Government of Canada",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2001-286/FullText.html",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Section 1.39: UN3373 Biological Substance, Category B is exempt from most documentation and labelling parts if carried in CGSB-43.125 Type P650 containment with the Category B mark, shipping name and a 24-hour telephone number; Part 6 requires training certificates for people who handle or transport dangerous goods."
+    },
+    {
+      "id": "tian22",
+      "title": "The incidence rate and influence factors of hemolysis, lipemia, icterus in fasting serum biochemistry specimens",
+      "publisher": "PLoS One (PMC8769349)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8769349",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Specimens with longer transfer time had higher haemolysis, lipaemia and icterus incidence; haemolysed specimens had a median transfer time of 1.48 hours against 1.34 hours."
+    },
+    {
+      "id": "epmc_rejection",
+      "title": "Europe PMC abstracts: pre-analytical error studies, including Uminska et al. 2026, Spurious hyperkalemia without hemolysis",
+      "publisher": "Europe PMC",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE%3A%28%22preanalytical+errors%22+OR+%22pre-analytical+errors%22+OR+%22preanalytical+error%22+OR+%22specimen+rejection%22+OR+%22sample+rejection%22%29+AND+%28outpatient+OR+outpatients+OR+%22primary+care%22%29&resultType=core&format=json&pageSize=8",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Uminska et al.: after storage of blood samples at low temperature potassium rose on average by 5% at 4 hours and 20% at 8 hours, a risk for laboratories serving large areas with long transport."
+    },
+    {
+      "id": "ag17",
+      "title": "2017 Annual Report, Section 3.07: Laboratory Services in the Health Sector",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en17/v1_307en17.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Community collection centres collect and transport some specimens to designated laboratories further away, and the longer transport time can delay testing; Ontario had 356 community collection centres in 2017."
+    }
+  ],
+  "assumptions": [
+    "Courier time is counted on the drive and at-stop steps of each stop; the ride through the rest of the run (s15) adds elapsed time only, so a run's driving is not double counted.",
+    "Run preparation and delivery at receiving are shared across about 14 stops per run.",
+    "Stop mix (physician offices 65%, collection centres 14%, hospitals 10%, long-term care 8%, other 3%) is an estimate; the org file gives no breakdown.",
+    "Mean courier hands-on time is about 17 minutes per stop including driving. At 150,000 stops a month this implies about 325 FTE at 130 productive hours, against 185 courier FTE stated; the org file's 220 couriers would need about 12 minutes a stop all-in, so either stops are fewer, routes denser or couriers more numerous than the org file states.",
+    "Walking couriers in downtown Toronto follow the same steps on foot; they are not modelled separately.",
+    "The new-stop input from client onboarding changes routes but does not trigger individual pickups, so its share is 0.",
+    "Loaded costs come from the org file (hourly wage times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

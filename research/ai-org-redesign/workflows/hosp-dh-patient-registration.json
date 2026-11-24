@@ -1,0 +1,1404 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-dh-patient-registration",
+  "name": "Register outpatient, inpatient and diagnostic visits",
+  "org": "community-hospital-corp",
+  "process": "dh-patient-registration",
+  "sector": "health care (public hospital)",
+  "function": "health information management (patient access)",
+  "summary": "Registration clerks record about 45,000 non-emergency visits a month at the corporation's three hospitals: clinic appointments, imaging and lab visits, surgery and planned admissions. For each visit the clerk finds or creates the patient's record, checks identity and demographics, validates the Ontario health card with the Ministry in real time, creates the visit and prints the armband and labels. Patients without valid OHIP coverage are registered to another payer and flagged for billing. Desk queues at the morning start of clinics slow the process, and the main errors are duplicate records and the wrong patient selected, which health records staff later have to merge or correct.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital corporation with central registration desks at each hospital entrance and a hospital-wide information system that validates health cards with the Ministry.",
+    "org_size_employees": 5790,
+    "notes": "Emergency department registrations are part of emergency triage and are excluded. Times and shares are the author's estimates; the validation service and the causes of duplicates come from opened sources."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one registration",
+  "trigger": "A booked or walk-in patient arrives for a clinic, imaging, laboratory, surgical or maternity visit, or a planned surgery or admission is due for pre-registration.",
+  "end_state": "The visit is registered with a validated health card or another payer, the patient has an armband or labels, and the registration has reached the departmental and billing systems.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 35000,
+      "mode": 45000,
+      "high": 55000
+    },
+    "seasonality": "Busiest on weekday mornings and lower in July, August and late December; outpatient registrations fell in spring 2020 when non-urgent clinics, imaging and surgery paused.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "hh2122"
+      ],
+      "note": "Organisation file estimate. Cross-check: about 20,000 other clinic visits, 3,000 fracture clinic, 5,200 mental health, 1,600 oncology and 3,100 dialysis visits, 12,000 outpatient imaging exams, 3,700 surgeries and outpatient lab visits a month (hh2122 annual figures divided by 12, the clinic and lab figures being estimates) give 45,000-55,000, so the organisation file's driver (outpatient_clinic_visits, 15,000-25,000) understates the workload."
+    },
+    "surge": {
+      "cause": "Deferred outpatient, imaging and surgical visits return after a COVID-19 wave",
+      "events_per_year": {
+        "low": 0,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "volume_multiplier": {
+        "low": 1.05,
+        "mode": 1.15,
+        "high": 1.3
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for 2020-2022."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "amb-clinic-referral-booking",
+        "object": "clinic_appointment",
+        "share": 0.4
+      },
+      {
+        "from": "dx-imaging-booking",
+        "object": "imaging_appointment",
+        "share": 0.2
+      },
+      {
+        "from": "primary_care",
+        "object": "imaging_order",
+        "share": 0.08
+      },
+      {
+        "from": "primary_care",
+        "object": "lab_order",
+        "share": 0.19
+      },
+      {
+        "from": "sx-surgical-booking",
+        "object": "surgical_case",
+        "share": 0.08
+      },
+      {
+        "from": "wc-obstetric-triage",
+        "object": "maternity_patient",
+        "share": 0.02
+      },
+      {
+        "from": "ed-admission-boarding",
+        "object": "admission_order",
+        "share": 0.03
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "registered",
+        "to": "amb-clinic-visit",
+        "object": "patient_account"
+      },
+      {
+        "outcome": "registered",
+        "to": "dx-imaging-exam",
+        "object": "patient_account"
+      },
+      {
+        "outcome": "registered",
+        "to": "dx-lab-specimen-collection",
+        "object": "patient_account"
+      },
+      {
+        "outcome": "registered",
+        "to": "fin-patient-billing",
+        "object": "patient_account"
+      },
+      {
+        "outcome": "registered",
+        "to": "ministry_of_health",
+        "object": "health_card_validation"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "registration_clerk",
+      "title": "Patient registration clerk",
+      "department": "Patient registration and switchboard",
+      "layer": "individual_contributor",
+      "fte_on_process": 48,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 34,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "75 registration clerks in the organisation file (people, many part-time, 24/7 across three sites, also covering emergency registration); about 48 FTE on non-emergency registration from the simulated touch time."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "him_clerk",
+      "title": "Health records clerk (release of information, scanning)",
+      "department": "Health information management",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 34,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1252",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Duplicate review and merges; not listed for this process in the organisation file."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "him_manager",
+      "title": "Manager, health information management",
+      "department": "Health information management",
+      "layer": "manager",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 68,
+        "mode": 76,
+        "high": 85
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Complex merges, overlays and oversight of registration data quality."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "hcv",
+      "name": "Ministry health card validation service",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    },
+    {
+      "id": "document_scanning",
+      "name": "Document imaging and scanning of paper chart forms",
+      "kind": "document_store"
+    },
+    {
+      "id": "ris_pacs",
+      "name": "Radiology information system, PACS and voice recognition dictation",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "lis",
+      "name": "Laboratory information system",
+      "kind": "system_of_record"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Visit appears on the registration list",
+      "description": "A booked clinic, imaging or surgical visit for the day appears on the registration desk's expected-arrivals list from the scheduling module, or a walk-in patient with a lab or X-ray requisition takes a number at the registration desk.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "booked appointment or requisition"
+      ],
+      "outputs": [
+        "expected visit"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.06,
+          "condition": "surgical, maternity or planned admission: pre-registered by phone"
+        },
+        {
+          "to": "s04",
+          "prob": 0.94,
+          "condition": "patient arrives at the desk"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share pre-registered (6%) is the author's estimate from surgical, planned admission and maternity volumes relative to all registrations."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Pre-register the patient by phone",
+      "description": "Some days before a surgery, planned admission or maternity visit, the registration clerk phones the patient, confirms demographics, health card number and version, family physician, next of kin and any private insurance, and creates the pre-registered visit.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "surgical case or booking"
+      ],
+      "outputs": [
+        "pre-registered visit"
+      ],
+      "systems": [
+        "his",
+        "email_phone",
+        "hcv"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Demographic or insurer detail keyed wrongly.",
+        "typically_caught_at": "s03"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common Ontario practice."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Confirm the pre-registered patient on arrival",
+      "description": "On the day of the visit the clerk looks up the pre-registered visit, checks the health card and photo identification against it and confirms nothing has changed.",
+      "role": "registration_clerk",
+      "kind": "validation",
+      "inputs": [
+        "pre-registered visit",
+        "health card"
+      ],
+      "outputs": [
+        "confirmed visit"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Call the patient from the queue and take the health card",
+      "description": "The clerk calls the next number, greets the patient, takes the Ontario health card and photo identification and asks what the visit is for, matching it to the booked appointment or the requisition the patient brings.",
+      "role": "registration_clerk",
+      "kind": "intake",
+      "inputs": [
+        "patient",
+        "health card",
+        "requisition"
+      ],
+      "outputs": [
+        "visit request"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 0.8,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 1,
+        "mode": 6,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of desk queue waits in a large community hospital; queues are longest at the morning start of clinics and lab."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Search the patient index for an existing record",
+      "description": "The clerk searches the master patient index by health card number, then by name and date of birth, compares the candidates' address and phone number and selects the patient's existing medical record number.",
+      "role": "registration_clerk",
+      "kind": "lookup",
+      "inputs": [
+        "health card",
+        "identification"
+      ],
+      "outputs": [
+        "selected record or no match"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.012,
+        "defect_description": "Existing record missed (duplicate created) or the wrong patient selected.",
+        "typically_caught_at": "s17"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada required organizational practice on client identification: two person-specific identifiers",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.12,
+          "condition": "no existing record"
+        },
+        {
+          "to": "s07",
+          "prob": 0.88,
+          "condition": "record found"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "just2016"
+        ],
+        "note": "just2016 shows duplicate records come mostly from name misspellings and swapped fields at registration; new-patient share and times are the author's estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Create a new patient record",
+      "description": "For a first-time patient the clerk enters legal name, date of birth, sex, address, phone, health card number and version, family physician and emergency contact, and the system issues a medical record number.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "identification",
+        "health card"
+      ],
+      "outputs": [
+        "new medical record number"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Misspelled name or wrong birth date that later causes a duplicate.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "just2016"
+        ],
+        "note": "just2016 attributes most duplicate pairs to misspelled or swapped name fields; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Verify and update demographics",
+      "description": "The clerk reads back the address, phone number, family physician and next of kin, updates anything that has changed, swipes the health card and asks about consent preferences such as a privacy lock-box.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "patient record"
+      ],
+      "outputs": [
+        "updated record"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Outdated phone or family physician left in the record, so results or reports go astray.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Personal Health Information Protection Act: record consent directives (lock-box) and keep personal health information accurate",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Validate the health card with the Ministry",
+      "description": "The card swipe sends the health card number and version code to the Ministry of Health's health card validation service, which returns a response code within seconds showing whether the card is valid and the patient is eligible for OHIP.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "health card number and version code"
+      ],
+      "outputs": [
+        "validation response code"
+      ],
+      "systems": [
+        "hcv",
+        "his"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Health Insurance Act (Ontario): insured hospital services require OHIP eligibility",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.93,
+          "condition": "valid and eligible"
+        },
+        {
+          "to": "s09",
+          "prob": 0.055,
+          "condition": "invalid version code, expired or not eligible"
+        },
+        {
+          "to": "s10",
+          "prob": 0.015,
+          "condition": "no Ontario coverage"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "omd_hcv"
+        ],
+        "note": "omd_hcv describes the real-time check of number and version code returning a response code within seconds; failure shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Resolve a failed validation",
+      "description": "The clerk asks for a newer card, re-keys the number, or calls the Ministry's voice response line, and if the card is expired asks the patient to renew at ServiceOntario while recording the visit as insured pending proof; during 2020-2022 expired cards were accepted under the pandemic rules.",
+      "role": "registration_clerk",
+      "kind": "validation",
+      "inputs": [
+        "validation response code"
+      ],
+      "outputs": [
+        "insured visit or uninsured flag"
+      ],
+      "systems": [
+        "hcv",
+        "email_phone",
+        "his"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Visit recorded as insured without proof and later rejected.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.85,
+          "condition": "resolved"
+        },
+        {
+          "to": "s10",
+          "prob": 0.15,
+          "condition": "not eligible"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the 2020-2022 acceptance of expired photo health cards is from the author's general knowledge of Ministry bulletins, which could not be opened."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Register an uninsured or third-party patient",
+      "description": "For a visitor, new resident in the waiting period, out-of-province patient or a workplace injury, the clerk records the payer (another province's plan, the Interim Federal Health Program, WSIB, private insurer or self-pay) and the policy details.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "payer information"
+      ],
+      "outputs": [
+        "account with payer"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Wrong payer or missing policy number.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.6,
+          "condition": "self-pay or deposit required"
+        },
+        {
+          "to": "s12",
+          "prob": 0.4,
+          "condition": "third party billed directly"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Take a deposit or signed undertaking",
+      "description": "The clerk explains the estimated charge, takes a deposit by card at the desk or has the patient sign an undertaking to pay, and gives a receipt.",
+      "role": "registration_clerk",
+      "kind": "communication",
+      "inputs": [
+        "account with payer"
+      ],
+      "outputs": [
+        "deposit or undertaking"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital uninsured patient deposit and financial responsibility policy",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Flag the account for patient billing",
+      "description": "The clerk sets the account type and a billing flag in the hospital system so patient accounts can invoice the patient or third party after the visit.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "account with payer"
+      ],
+      "outputs": [
+        "flagged patient account"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Complete admission details for an inpatient",
+      "description": "For an inpatient admission, planned or from the emergency department, the clerk converts or creates the inpatient encounter, records the admitting physician and service, the patient's room preference and supplementary insurance for semi-private or private accommodation, and has the patient sign the accommodation agreement.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "admission order",
+        "insurance details"
+      ],
+      "outputs": [
+        "admission record"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Accommodation or insurer not recorded, so preferred accommodation cannot be billed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Create the visit and print the armband and labels",
+      "description": "The clerk creates the encounter with patient type, service, location and attending or ordering physician, then prints the identification armband where needed, the labels and the requisition copies, and directs the patient to the department.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "patient record",
+        "visit request"
+      ],
+      "outputs": [
+        "registered visit",
+        "armband and labels"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1.5,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong patient type, service or physician attached to the visit.",
+        "typically_caught_at": "s19"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada required organizational practice on client identification: armband and labels with two identifiers",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.05,
+          "condition": "inpatient admission"
+        },
+        {
+          "to": "s15",
+          "prob": 0.95,
+          "condition": "outpatient or diagnostic visit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Scan the requisition and signed forms",
+      "description": "The clerk scans the paper requisition, consent and financial forms into the patient's electronic record, or places them in the visit folder for health records to scan later.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "paper requisition",
+        "forms"
+      ],
+      "outputs": [
+        "scanned documents"
+      ],
+      "systems": [
+        "document_scanning"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.5,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Document scanned to the wrong visit.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Send the registration to departmental systems",
+      "description": "The hospital system sends the registration message to the radiology, laboratory, clinic and billing systems, and the overnight duplicate-detection job compares new records with existing ones.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "registered visit"
+      ],
+      "outputs": [
+        "patient account in downstream systems"
+      ],
+      "systems": [
+        "his",
+        "ris_pacs",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.012,
+          "condition": "possible duplicate flagged"
+        },
+        {
+          "to": "s19",
+          "prob": 0.02,
+          "condition": "registration error found downstream"
+        },
+        {
+          "to": "END",
+          "prob": 0.968,
+          "condition": "registered",
+          "outcome": "registered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of a duplicate rate on new registrations; widely quoted duplicate rates of several percent of all records apply to the whole index, not to each registration."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Review a possible duplicate and merge records",
+      "description": "A health records clerk works the duplicate-candidate report, compares the two records' identifiers, visits and health card history, and merges confirmed duplicates so results and reports sit under one medical record number.",
+      "role": "him_clerk",
+      "kind": "analysis",
+      "inputs": [
+        "duplicate candidate report"
+      ],
+      "outputs": [
+        "merged record"
+      ],
+      "systems": [
+        "his",
+        "ris_pacs",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 20160
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Two different patients merged.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.2,
+          "condition": "complex merge or overlay"
+        },
+        {
+          "to": "END",
+          "prob": 0.8,
+          "condition": "merged",
+          "outcome": "registered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "just2016"
+        ],
+        "note": "just2016 recommends monitoring and correcting duplicates; the health records clerk is not listed for this process in the organisation file."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Approve a complex merge or correct an overlay",
+      "description": "The health information manager reviews merges that span radiology, laboratory and clinic systems or where one patient's results were filed to another's record, approves the correction and notifies the departments and, if information was disclosed to the wrong person, the privacy officer.",
+      "role": "him_manager",
+      "kind": "approval",
+      "inputs": [
+        "merge request"
+      ],
+      "outputs": [
+        "approved correction"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Personal Health Information Protection Act: correct records and report privacy breaches",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "corrected",
+          "outcome": "registered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Correct a registration error found downstream",
+      "description": "When coding, patient accounts or a department finds a wrong patient type, payer, physician or address, the registration clerk corrects the visit and resends it to the downstream systems.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "error report"
+      ],
+      "outputs": [
+        "corrected visit"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "corrected",
+          "outcome": "registered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "New patient",
+      "share_of_cases": 0.11,
+      "description": "No record is found and the clerk creates one; a mistyped name here is the usual start of a duplicate.",
+      "path": [
+        "s05",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Failed health card validation",
+      "share_of_cases": 0.055,
+      "description": "The card's version code is out of date, the card has expired or eligibility has lapsed; most are resolved at the desk.",
+      "path": [
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Uninsured or third-party payer",
+      "share_of_cases": 0.023,
+      "description": "The patient is registered to another payer or as self-pay with a deposit or undertaking and the account is flagged for billing.",
+      "path": [
+        "s10",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Duplicate record merge",
+      "share_of_cases": 0.012,
+      "description": "The overnight check flags a possible duplicate, which health records review and merge; one in five needs the manager's approval.",
+      "path": [
+        "s16",
+        "s17",
+        "s18"
+      ]
+    },
+    {
+      "name": "Pre-registration",
+      "share_of_cases": 0.06,
+      "description": "Surgical, planned admission and maternity patients are registered by phone days before and confirmed on arrival.",
+      "path": [
+        "s02",
+        "s03"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.01,
+        "p90": 0.04
+      },
+      "unit": "calendar days from arrival at the desk (or the pre-registration request) to registration complete",
+      "population": "Non-emergency registrations in an Ontario community hospital, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of about 10-15 minutes from taking a number to leaving the desk on an ordinary morning, longer at clinic start times."
+      }
+    },
+    {
+      "metric": "duplicate_pairs_with_middle_name_mismatch",
+      "value": 0.583,
+      "unit": "share of confirmed duplicate pairs",
+      "population": "398,939 patient records with confirmed duplicates, United States multisite data",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "just2016"
+        ],
+        "note": "United States data; shows that name entry at registration is the main source of duplicates."
+      }
+    },
+    {
+      "metric": "health_card_validation_response",
+      "value": "response code within a few seconds",
+      "unit": "description",
+      "population": "Ontario health card validation service",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "omd_hcv"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Desk queues build at the morning start of clinics, lab and imaging, so patients arrive late to appointments.",
+      "steps": [
+        "s04"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Misspelled names and mistyped birth dates at registration create duplicate records that health records must merge, and results can be filed under the wrong record in the meantime.",
+      "steps": [
+        "s05",
+        "s06",
+        "s17",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "just2016"
+        ],
+        "note": "Middle name mismatched in 58.30% of confirmed duplicate pairs; most name mismatches were misspellings or swapped fields."
+      }
+    },
+    {
+      "description": "Expired cards and outdated version codes fail validation and need a call or a workaround at the desk.",
+      "steps": [
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "omd_hcv"
+        ],
+        "note": "The validation service checks the version code as well as the number; failure share is the author's estimate."
+      }
+    },
+    {
+      "description": "Outdated phone numbers and family physicians in the record send results, reports and reminders to the wrong place.",
+      "steps": [
+        "s07"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "just2016",
+      "title": "Why Patient Matching Is a Challenge: Research on Master Patient Index (MPI) Data Discrepancies in Key Identifying Fields",
+      "publisher": "Perspectives in Health Information Management 13 (Just BH, Marc D, Munns M, Sandefer R); abstract read through the Europe PMC record",
+      "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=PMCID:PMC4832129&resultType=core&format=json",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Multisite data set of 398,939 patient records with confirmed duplicates: middle name mismatched in 58.30% of duplicate pairs and social security number in 53.54%; most name mismatches were misspellings or swapped fields; the authors recommend naming conventions, staff training and monitoring because technology alone does not remove registration errors"
+    },
+    {
+      "id": "omd_hcv",
+      "title": "Health Card Validation",
+      "publisher": "OntarioMD",
+      "url": "https://ontariomd.ca/products-and-services/health-card-validation",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "Health Card Validation checks a health card number and version code against Ministry of Health databases in real time and returns only a response code on the card's status and OHIP eligibility within a few seconds; it returns no personal health information and does not guarantee claim payment (the OntarioMD basic service was discontinued in July 2024, after the reference period)"
+    },
+    {
+      "id": "hh2122",
+      "title": "2021-2022 Annual Community Report (Halton Healthcare by the numbers)",
+      "publisher": "Halton Healthcare",
+      "url": "https://www.haltonhealthcare.on.ca/about/reports-and-publications/2021-2022-annual-community-report",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "2021/22: 298,482 diagnostic imaging exams, 161,049 emergency visits, 45,256 surgeries, 4,690 births, 37,964 dialysis visits, 19,600 oncology visits, 62,508 mental health and addictions ambulatory visits, 40,428 fracture clinic visits, 3,220,658 laboratory tests, 5,228 staff, 931 physicians, dentists and midwives"
+    }
+  ],
+  "assumptions": [
+    "Emergency department registrations (about 13,000 a month) belong to ed-patient-triage and are excluded.",
+    "All registrations are drawn as done by central registration clerks. In many Ontario hospitals imaging and clinic reception clerks also register patients at their own desks; that work would move to di_clerk and clinic_clerk without changing the steps.",
+    "Triggers add primary_care imaging orders (walk-in X-ray) and emergency admissions from ed-admission-boarding (the clerk converts the emergency visit to an inpatient encounter), and outputs add dx-imaging-exam and dx-lab-specimen-collection; the organisation file lacks these links.",
+    "The health records clerk (him_clerk) is added for duplicate review and merges; the organisation file lists only registration clerks and the manager.",
+    "Corrections found downstream and duplicate merges happen days after the visit but are drawn on the same path, adding days to about 3% of simulated cases.",
+    "Simulated median cycle time is about 0.02 days (roughly 25 minutes) against a tier C benchmark of 0.01 days, mostly the desk queue.",
+    "Simulated hands-on time implies about 58 FTE against 49 stated. With emergency registration (about 13,000 visits a month at 5-6 minutes, roughly 9-10 FTE), the 75 registration clerks in the organisation file would need about 60 FTE of desk time, which is tight for a 24/7 part-time workforce; either decentralised imaging and clinic clerks register part of the volume, or the headcount is low.",
+    "Loaded costs from the organisation file (wage times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

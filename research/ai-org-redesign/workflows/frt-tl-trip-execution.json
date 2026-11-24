@@ -1,0 +1,2045 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-tl-trip-execution",
+  "name": "Run a truckload trip",
+  "org": "freight-carrier-co",
+  "process": "tl-trip-execution",
+  "sector": "trucking and freight transportation",
+  "function": "truckload fleet operations",
+  "summary": "A truckload trip moves one full trailer from a shipper to a consignee, usually several hundred to a few thousand kilometres. The driver, a company long-haul or regional driver or a contracted owner-operator, inspects the truck, drives to the shipper, waits to be loaded or hooks a pre-loaded trailer, checks and seals the load, and drives to the consignee within hours-of-service limits, crossing the US border on about a third of trips. Driver managers track the trip and handle late deliveries, road service fixes breakdowns, and the signed delivery receipt and ELD times feed billing, pay and detention claims. Dock waits at shippers and receivers, border queues, winter storms and breakdowns make the elapsed time much longer than the driving time.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees whose truckload division runs about 400 company sleeper tractors and 380 owner-operators within Canada and across the US border, on a carrier TMS with EDI, ELDs and an eManifest service provider.",
+    "org_size_employees": 3000,
+    "notes": "About 7,500 truckload trips a month by 300 company long-haul drivers, 130 regional drivers and 380 owner-operators; ELDs were mandatory from June 2021 with penalties phased in from 2022."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one truckload trip",
+  "trigger": "A driver accepts a trip assignment and the trip is released to the in-cab unit.",
+  "end_state": "The freight is delivered, the signed delivery receipt is scanned and the trip record is posted for billing, pay and settlements.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 6600,
+      "mode": 7500,
+      "high": 8600
+    },
+    "seasonality": "Lower in January and spring 2020; higher from September to mid-December; winter storms delay trips from December to March.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Taken from the org file's process map and its tl-loads demand driver (about 780 tractors at 9 to 11 loads a month)."
+    },
+    "surge": {
+      "cause": "Winter storm or highway closure (snowstorms, freezing rain, mountain pass closures)",
+      "events_per_year": {
+        "low": 4,
+        "mode": 8,
+        "high": 14
+      },
+      "duration_days": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "volume_multiplier": {
+        "low": 1.1,
+        "mode": 1.2,
+        "high": 1.4
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Copied from the org file's process map entry; backlog clears over the days after a closure. Author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "tl-load-planning",
+        "object": "trip_assignment",
+        "share": 0.97
+      },
+      {
+        "from": "tl-customs-emanifest",
+        "object": "customs_release",
+        "share": 0.03
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "delivered",
+        "to": "consignee",
+        "object": "delivered_freight"
+      },
+      {
+        "outcome": "delivered",
+        "to": "fin-rating-invoicing",
+        "object": "trip_record"
+      },
+      {
+        "outcome": "delivered",
+        "to": "fin-driver-pay",
+        "object": "trip_record"
+      },
+      {
+        "outcome": "delivered",
+        "to": "fin-oo-settlements",
+        "object": "trip_record"
+      },
+      {
+        "outcome": "delivered",
+        "to": "tl-detention-accessorials",
+        "object": "detention_record"
+      },
+      {
+        "outcome": "delivered",
+        "to": "tl-driver-management",
+        "object": "hos_record"
+      },
+      {
+        "outcome": "delivered",
+        "to": "saf-hos-log-audit",
+        "object": "hos_record"
+      },
+      {
+        "outcome": "delivered",
+        "to": "tl-trailer-pools",
+        "object": "trailer_status"
+      },
+      {
+        "outcome": "delivered",
+        "to": "mnt-defect-repair",
+        "object": "dvir"
+      },
+      {
+        "outcome": "delivered",
+        "to": "mnt-preventive-maintenance",
+        "object": "odometer_data"
+      },
+      {
+        "outcome": "delivered",
+        "to": "fin-fuel-tax-reporting",
+        "object": "jurisdiction_mileage"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-roadside-breakdown",
+        "object": "breakdown_call"
+      },
+      {
+        "outcome": "any",
+        "to": "saf-collision-management",
+        "object": "collision_report"
+      },
+      {
+        "outcome": "any",
+        "to": "saf-driver-performance",
+        "object": "telematics_event"
+      },
+      {
+        "outcome": "any",
+        "to": "saf-cargo-security",
+        "object": "security_incident"
+      },
+      {
+        "outcome": "any",
+        "to": "it-service-desk",
+        "object": "it_ticket"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "tl-driver-longhaul",
+      "title": "Long-haul truckload driver (company)",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 285.0,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 37,
+        "high": 44
+      },
+      "occupation_code": "NOC 73300",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Most of the 300 long-haul drivers' working time; the rest is training, shop visits and dedicated work."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "tl-driver-regional",
+      "title": "Regional truckload driver (company)",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 115.0,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 36,
+        "high": 42
+      },
+      "occupation_code": "NOC 73300",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Most of the 130 regional drivers' working time."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "owner-operator",
+      "title": "Owner-operator, truckload (contracted, not an employee)",
+      "department": "Truckload fleet operations",
+      "layer": "external_party",
+      "fte_on_process": 0.0,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 65,
+        "high": 78
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "380 owner-operators drive about 40% of trips; as contractors they are not counted in staffing."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "driver-manager",
+      "title": "Driver manager (fleet manager)",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 14.0,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Trip tracking, late calls and trip closing take about a quarter to a third of the 36 driver managers' time; author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "road-service-tech",
+      "title": "Road service technician",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 5.0,
+      "loaded_cost_per_hour": {
+        "low": 42,
+        "mode": 48,
+        "high": 56
+      },
+      "occupation_code": "NOC 72410",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Road service technicians are not listed for this process in the org file; about 4% of trips need a road call. Author's estimate."
+      },
+      "shift_pattern": "on_call"
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "edi-gateway",
+      "name": "EDI gateway (204 tenders, 211 bills of lading, 214 status, 210 invoices)",
+      "kind": "workflow"
+    },
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    }
+  ],
+  "resources": [
+    {
+      "id": "tl-tractor",
+      "name": "Truckload sleeper tractor (company)",
+      "kind": "vehicle",
+      "count": 400,
+      "cost_per_hour": {
+        "low": 45,
+        "mode": 56,
+        "high": 70
+      }
+    },
+    {
+      "id": "oo-tractor",
+      "name": "Owner-operator tractor under contract",
+      "kind": "vehicle",
+      "count": 380
+    },
+    {
+      "id": "tl-dry-van",
+      "name": "Truckload 53-foot dry van",
+      "kind": "vehicle",
+      "count": 1400,
+      "cost_per_hour": {
+        "low": 1.5,
+        "mode": 2.5,
+        "high": 4
+      }
+    },
+    {
+      "id": "tl-reefer",
+      "name": "Refrigerated trailer",
+      "kind": "vehicle",
+      "count": 200,
+      "cost_per_hour": {
+        "low": 4,
+        "mode": 6,
+        "high": 9
+      }
+    },
+    {
+      "id": "flatdeck",
+      "name": "Flatdeck and step-deck trailer",
+      "kind": "vehicle",
+      "count": 120,
+      "cost_per_hour": {
+        "low": 1.5,
+        "mode": 2.5,
+        "high": 4
+      }
+    },
+    {
+      "id": "road-service-truck",
+      "name": "Road service truck",
+      "kind": "vehicle",
+      "count": 14,
+      "cost_per_hour": {
+        "low": 25,
+        "mode": 32,
+        "high": 42
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Release the trip to the in-cab unit",
+      "description": "Once the driver has accepted the load, the TMS creates the trip with its stops, appointments and trailer and sends it to the in-cab unit, where the driver sees directions and the shipper's instructions.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "trip assignment"
+      ],
+      "outputs": [
+        "active trip"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.33,
+          "condition": "company long-haul driver"
+        },
+        {
+          "to": "s03",
+          "prob": 0.27,
+          "condition": "company regional driver"
+        },
+        {
+          "to": "s04",
+          "prob": 0.4,
+          "condition": "owner-operator"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common TMS and telematics behaviour; author's description."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Inspect the truck and drive to the shipper (company long-haul driver)",
+      "description": "The company long-haul driver does the daily trip inspection of tractor and trailer (brakes, tires, lights, coupling, load securement devices), records it on the ELD or paper report, then drives empty, or with an empty trailer, to the shipper. Defects are reported to maintenance; a major defect stops the truck.",
+      "role": "tl-driver-longhaul",
+      "kind": "travel",
+      "inputs": [
+        "trip assignment",
+        "previous inspection report"
+      ],
+      "outputs": [
+        "trip inspection report",
+        "truck at shipper"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 110,
+        "high": 420
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 600
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A defect is missed and found at a roadside inspection.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Provincial commercial vehicle trip inspection rules based on National Safety Code Standard 13: inspection every 24 hours, written report, no driving with a major defect",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "tl-tractor",
+          "occupied_min": {
+            "low": 30,
+            "mode": 110,
+            "high": 420
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ns-trip"
+        ],
+        "note": "24-hour trip inspection rule as written in Nova Scotia's regulation, which follows the national standard. Empty-leg length (about 15% of kilometres) and inspection minutes are the author's estimate; the wait is the end of the driver's off-duty rest before the trip starts. Driver-type shares (33% long-haul, 27% regional, 40% owner-operator) are the author's estimate from the org file's 300 long-haul and 130 regional company drivers and 380 owner-operators, with regional drivers running about twice as many, shorter, loads a month."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Inspect the truck and drive to the shipper (company regional driver)",
+      "description": "The company regional driver does the daily trip inspection of tractor and trailer (brakes, tires, lights, coupling, load securement devices), records it on the ELD or paper report, then drives empty, or with an empty trailer, to the shipper. Defects are reported to maintenance; a major defect stops the truck.",
+      "role": "tl-driver-regional",
+      "kind": "travel",
+      "inputs": [
+        "trip assignment",
+        "previous inspection report"
+      ],
+      "outputs": [
+        "trip inspection report",
+        "truck at shipper"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 25,
+        "mode": 75,
+        "high": 240
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 600
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A defect is missed and found at a roadside inspection.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Provincial commercial vehicle trip inspection rules based on National Safety Code Standard 13: inspection every 24 hours, written report, no driving with a major defect",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "tl-tractor",
+          "occupied_min": {
+            "low": 25,
+            "mode": 75,
+            "high": 240
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ns-trip"
+        ],
+        "note": "24-hour trip inspection rule as written in Nova Scotia's regulation, which follows the national standard. Empty-leg length (about 15% of kilometres) and inspection minutes are the author's estimate; the wait is the end of the driver's off-duty rest before the trip starts. Driver-type shares (33% long-haul, 27% regional, 40% owner-operator) are the author's estimate from the org file's 300 long-haul and 130 regional company drivers and 380 owner-operators, with regional drivers running about twice as many, shorter, loads a month."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Inspect the truck and drive to the shipper (owner-operator)",
+      "description": "The owner-operator does the daily trip inspection of tractor and trailer (brakes, tires, lights, coupling, load securement devices), records it on the ELD or paper report, then drives empty, or with an empty trailer, to the shipper. Defects are reported to maintenance; a major defect stops the truck.",
+      "role": "owner-operator",
+      "kind": "travel",
+      "inputs": [
+        "trip assignment",
+        "previous inspection report"
+      ],
+      "outputs": [
+        "trip inspection report",
+        "truck at shipper"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 110,
+        "high": 420
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 600
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A defect is missed and found at a roadside inspection.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Provincial commercial vehicle trip inspection rules based on National Safety Code Standard 13: inspection every 24 hours, written report, no driving with a major defect",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "oo-tractor",
+          "occupied_min": {
+            "low": 30,
+            "mode": 110,
+            "high": 420
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ns-trip"
+        ],
+        "note": "24-hour trip inspection rule as written in Nova Scotia's regulation, which follows the national standard. Empty-leg length (about 15% of kilometres) and inspection minutes are the author's estimate; the wait is the end of the driver's off-duty rest before the trip starts. Driver-type shares (33% long-haul, 27% regional, 40% owner-operator) are the author's estimate from the org file's 300 long-haul and 130 regional company drivers and 380 owner-operators, with regional drivers running about twice as many, shorter, loads a month."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Check in at the shipper",
+      "description": "The driver checks in at the shipping office or guard shack with the pickup number and waits to be told whether to back into a door for a live load or to hook a trailer already loaded in the yard. Busy docks and early or late arrivals make this wait long.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "pickup number"
+      ],
+      "outputs": [
+        "door or trailer assignment"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.43,
+          "condition": "live load into a dry van"
+        },
+        {
+          "to": "s07",
+          "prob": 0.37,
+          "condition": "pre-loaded trailer (drop and hook)"
+        },
+        {
+          "to": "s08",
+          "prob": 0.12,
+          "condition": "live load into a reefer"
+        },
+        {
+          "to": "s09",
+          "prob": 0.08,
+          "condition": "flatdeck load"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mhl-atri"
+        ],
+        "note": "Long dwell at shippers is reported in ATRI's detention surveys; the split by trailer type follows the org file's 1,400 dry vans, 200 reefers and 120 flatdecks with the share of drop-and-hook loads as the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Shipper loads the dry van",
+      "description": "The shipper's dock crew loads the van from the dock with forklifts while the driver waits in the cab, on duty but not driving. Loading itself takes under an hour for most loads; waiting for a door, labour or the freight to be ready adds the rest.",
+      "role": "external",
+      "kind": "physical",
+      "inputs": [
+        "empty van at door"
+      ],
+      "outputs": [
+        "loaded trailer"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 480
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Freight loaded without proper bracing, causing damage in transit.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "tl-dry-van",
+          "occupied_min": {
+            "low": 600,
+            "mode": 1800,
+            "high": 4800
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.33,
+          "condition": "company long-haul driver"
+        },
+        {
+          "to": "s11",
+          "prob": 0.27,
+          "condition": "company regional driver"
+        },
+        {
+          "to": "s12",
+          "prob": 0.4,
+          "condition": "owner-operator"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mhl-atri",
+          "src-oig-detention"
+        ],
+        "note": "In 2018, 23.7% of drivers reported dock delays of four hours or more; detention is usually counted only beyond two free hours. Wait range is the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Driver drops the empty and hooks the loaded trailer",
+      "description": "At shippers with a trailer pool the driver drops the empty trailer in the yard, finds the pre-loaded trailer, checks its seal and paperwork at the office, and hooks up, with no wait for loading.",
+      "role": "external",
+      "kind": "physical",
+      "inputs": [
+        "empty trailer",
+        "pre-loaded trailer"
+      ],
+      "outputs": [
+        "loaded trailer"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 25,
+        "high": 90
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong trailer hooked.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "tl-dry-van",
+          "occupied_min": {
+            "low": 1440,
+            "mode": 3600,
+            "high": 8640
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.33,
+          "condition": "company long-haul driver"
+        },
+        {
+          "to": "s11",
+          "prob": 0.27,
+          "condition": "company regional driver"
+        },
+        {
+          "to": "s12",
+          "prob": 0.4,
+          "condition": "owner-operator"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Drop-and-hook practice is common for large shippers with trailer pools; minutes are the author's estimate. Driver time for the hook is inside the loaded-drive step."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Shipper loads the reefer",
+      "description": "The driver pre-cools the reefer to the set point on the bill of lading, the shipper's crew checks pulp temperatures and loads it, and the driver confirms the setting before leaving. Food shippers often run late, and reefer loads see the longest dock waits.",
+      "role": "external",
+      "kind": "physical",
+      "inputs": [
+        "pre-cooled reefer"
+      ],
+      "outputs": [
+        "loaded reefer"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 40,
+        "mode": 120,
+        "high": 600
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong set point or warm product loaded, leading to a claim.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "tl-reefer",
+          "occupied_min": {
+            "low": 600,
+            "mode": 1800,
+            "high": 4800
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.33,
+          "condition": "company long-haul driver"
+        },
+        {
+          "to": "s11",
+          "prob": 0.27,
+          "condition": "company regional driver"
+        },
+        {
+          "to": "s12",
+          "prob": 0.4,
+          "condition": "owner-operator"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mhl-atri"
+        ],
+        "note": "36.5% of reefer drivers reported delays of four hours or more in 2018; range is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Shipper loads the flatdeck",
+      "description": "The shipper loads steel, lumber or machinery on the flatdeck by forklift or crane; the driver then secures it with straps or chains to the cargo securement standard and tarps it, which is counted in the driver's loaded-drive step.",
+      "role": "external",
+      "kind": "physical",
+      "inputs": [
+        "empty flatdeck"
+      ],
+      "outputs": [
+        "loaded flatdeck"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 360
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Load secured with too few tie-downs, found at a roadside inspection.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "National Safety Code Standard 10 (cargo securement) as adopted by the provinces",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "flatdeck",
+          "occupied_min": {
+            "low": 600,
+            "mode": 1800,
+            "high": 4800
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.33,
+          "condition": "company long-haul driver"
+        },
+        {
+          "to": "s11",
+          "prob": 0.27,
+          "condition": "company regional driver"
+        },
+        {
+          "to": "s12",
+          "prob": 0.4,
+          "condition": "owner-operator"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the cargo securement standard text was not opened."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Check the load and drive it to the consignee (company long-haul driver)",
+      "description": "The company long-haul driver counts the freight against the bill of lading, checks weight and, on flatdecks, secures and tarps the load, records the seal number and signs the bill. The driver then drives to the consignee within the daily driving and on-duty limits, logging time on the ELD and taking the required off-duty rest on multi-day runs; on cross-border trips the route passes through a port of entry.",
+      "role": "tl-driver-longhaul",
+      "kind": "travel",
+      "inputs": [
+        "bill of lading",
+        "loaded trailer"
+      ],
+      "outputs": [
+        "freight in transit",
+        "ELD records"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 250,
+        "mode": 720,
+        "high": 2100
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Count or seal not checked, so a shortage cannot be traced to the shipper.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Commercial Vehicle Drivers Hours of Service Regulations SOR/2005-313 s.12-14 and 77 (ELD from June 2021); 49 CFR 395.3 on US legs",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.05,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "tl-tractor",
+          "occupied_min": {
+            "low": 250,
+            "mode": 720,
+            "high": 2100
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-hos",
+          "src-cfr-395",
+          "src-statcan-cfaf"
+        ],
+        "note": "Driving limits from the regulations; for-hire trucking shipments had a median length of 635 km in 2016. Loaded legs here average about 1,000 km for long-haul and owner-operator trips and 300 km for regional trips (author's estimate consistent with about 9 to 11 loads per tractor a month). Off-duty rest is not touch time; it sits in the wait before delivery (s18). Driver-type shares (33% long-haul, 27% regional, 40% owner-operator) are the author's estimate from the org file's 300 long-haul and 130 regional company drivers and 380 owner-operators, with regional drivers running about twice as many, shorter, loads a month."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Check the load and drive it to the consignee (company regional driver)",
+      "description": "The company regional driver counts the freight against the bill of lading, checks weight and, on flatdecks, secures and tarps the load, records the seal number and signs the bill. The driver then drives to the consignee within the daily driving and on-duty limits, logging time on the ELD and taking the required off-duty rest on multi-day runs; on cross-border trips the route passes through a port of entry.",
+      "role": "tl-driver-regional",
+      "kind": "travel",
+      "inputs": [
+        "bill of lading",
+        "loaded trailer"
+      ],
+      "outputs": [
+        "freight in transit",
+        "ELD records"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 90,
+        "mode": 240,
+        "high": 600
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Count or seal not checked, so a shortage cannot be traced to the shipper.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Commercial Vehicle Drivers Hours of Service Regulations SOR/2005-313 s.12-14 and 77 (ELD from June 2021); 49 CFR 395.3 on US legs",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.05,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "tl-tractor",
+          "occupied_min": {
+            "low": 90,
+            "mode": 240,
+            "high": 600
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-hos",
+          "src-cfr-395",
+          "src-statcan-cfaf"
+        ],
+        "note": "Driving limits from the regulations; for-hire trucking shipments had a median length of 635 km in 2016. Loaded legs here average about 1,000 km for long-haul and owner-operator trips and 300 km for regional trips (author's estimate consistent with about 9 to 11 loads per tractor a month). Off-duty rest is not touch time; it sits in the wait before delivery (s18). Driver-type shares (33% long-haul, 27% regional, 40% owner-operator) are the author's estimate from the org file's 300 long-haul and 130 regional company drivers and 380 owner-operators, with regional drivers running about twice as many, shorter, loads a month."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Check the load and drive it to the consignee (owner-operator)",
+      "description": "The owner-operator counts the freight against the bill of lading, checks weight and, on flatdecks, secures and tarps the load, records the seal number and signs the bill. The driver then drives to the consignee within the daily driving and on-duty limits, logging time on the ELD and taking the required off-duty rest on multi-day runs; on cross-border trips the route passes through a port of entry.",
+      "role": "owner-operator",
+      "kind": "travel",
+      "inputs": [
+        "bill of lading",
+        "loaded trailer"
+      ],
+      "outputs": [
+        "freight in transit",
+        "ELD records"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 200,
+        "mode": 600,
+        "high": 1800
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Count or seal not checked, so a shortage cannot be traced to the shipper.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Commercial Vehicle Drivers Hours of Service Regulations SOR/2005-313 s.12-14 and 77 (ELD from June 2021); 49 CFR 395.3 on US legs",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.05,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "oo-tractor",
+          "occupied_min": {
+            "low": 200,
+            "mode": 600,
+            "high": 1800
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-hos",
+          "src-cfr-395",
+          "src-statcan-cfaf"
+        ],
+        "note": "Driving limits from the regulations; for-hire trucking shipments had a median length of 635 km in 2016. Loaded legs here average about 1,000 km for long-haul and owner-operator trips and 300 km for regional trips (author's estimate consistent with about 9 to 11 loads per tractor a month). Off-duty rest is not touch time; it sits in the wait before delivery (s18). Driver-type shares (33% long-haul, 27% regional, 40% owner-operator) are the author's estimate from the org file's 300 long-haul and 130 regional company drivers and 380 owner-operators, with regional drivers running about twice as many, shorter, loads a month."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Driver manager tracks the trip",
+      "description": "While the driver is on the road, the driver manager watches the trip on the TMS map against the delivery appointment, answers the driver's messages, and calls customer service and the consignee when the truck will be late.",
+      "role": "driver-manager",
+      "kind": "coordination",
+      "inputs": [
+        "active trip",
+        "GPS positions"
+      ],
+      "outputs": [
+        "ETA updates",
+        "late notices"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Late delivery not flagged to the customer.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s10",
+        "s11",
+        "s12"
+      ],
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.57,
+          "condition": "no border, breakdown or weather event"
+        },
+        {
+          "to": "s14",
+          "prob": 0.35,
+          "condition": "cross-border trip"
+        },
+        {
+          "to": "s16",
+          "prob": 0.04,
+          "condition": "breakdown on the road"
+        },
+        {
+          "to": "s17",
+          "prob": 0.04,
+          "condition": "storm or highway closure"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Runs alongside the loaded drive. Event shares: 35% cross-border from the org file; breakdown and weather shares are the author's estimate for a Canadian fleet averaged over the year."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Clear primary inspection at the border",
+      "description": "The driver queues at the port of entry and presents the manifest number, PARS or PAPS labels and travel documents to the CBSA or CBP officer at the primary booth, who checks that the eManifest and the broker's release are on file and releases the truck or refers it.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "eManifest number",
+        "PARS or PAPS labels",
+        "driver documents"
+      ],
+      "outputs": [
+        "border decision"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 45,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Customs Act reporting at the first port of arrival (CBSA ACI eManifest) and 19 CFR 123.92 (CBP ACE eManifest)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.91,
+          "condition": "released at primary"
+        },
+        {
+          "to": "s15",
+          "prob": 0.09,
+          "condition": "referred inside"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-cbsa-eval",
+          "src-mtri"
+        ],
+        "note": "About 9% of highway crossings into Canada were referred from primary to the counter (7% to 13% by year, 2018-19 to 2022-23); inspections take one to two minutes. Queue times are the author's estimate; MTRI found US-bound waits always longer."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Referral or examination at the port",
+      "description": "The driver parks and takes the papers inside; the officer resolves a missing release, a data mismatch or selects the load for examination, while the customs desk and the broker work the problem by phone. Most referrals are released within hours; holds go to the border-hold process.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "border decision"
+      ],
+      "outputs": [
+        "release or hold"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 720
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "released, or the hold is handed to the border-hold process"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cbsa-eval",
+          "src-d17-1-4"
+        ],
+        "note": "Goods without a release request cannot be released at the first port; referral waits are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Road service repairs a breakdown",
+      "description": "The driver calls the after-hours or road service desk; a road service technician drives out with parts, or a tow and a third-party shop are arranged, and the driver waits with the load. Tires, air leaks, electrical faults and reefer units are the usual causes.",
+      "role": "road-service-tech",
+      "kind": "physical",
+      "inputs": [
+        "breakdown call"
+      ],
+      "outputs": [
+        "repaired truck",
+        "repair record"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 300
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 600
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Temporary repair fails later in the trip.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "road-service-truck",
+          "occupied_min": {
+            "low": 90,
+            "mode": 180,
+            "high": 420
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Breakdown rate and repair times are the author's estimate; travel to the truck is part of the technician's touch time. Far from a company shop, a third-party vendor does the work instead."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Wait out a storm or highway closure",
+      "description": "Snowstorms, freezing rain and mountain pass closures stop trucks on Highway 401, the Trans-Canada and the Coquihalla several times a winter; the driver parks at a truck stop until the road reopens and the driver manager rebooks the delivery.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "road closure notice"
+      ],
+      "outputs": [
+        "delayed trip"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate, consistent with the org file's winter storm surge of 4 to 14 events a year."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Wait for the appointment and unload at the consignee",
+      "description": "The driver reaches the consignee, often after an off-duty rest on multi-day runs, waits for the appointment and a door, and the receiver's crew unloads and counts the freight. Grocery and retail distribution centres may refuse early trucks and turn away late ones.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "freight in transit",
+        "delivery appointment"
+      ],
+      "outputs": [
+        "unloaded freight"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 300,
+        "high": 2400
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Receiver miscounts and signs clean for a short load.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.33,
+          "condition": "company long-haul driver"
+        },
+        {
+          "to": "s20",
+          "prob": 0.27,
+          "condition": "company regional driver"
+        },
+        {
+          "to": "s21",
+          "prob": 0.4,
+          "condition": "owner-operator"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hos",
+          "src-mhl-atri"
+        ],
+        "note": "Includes the 10 hours of daily off-duty time required on longer runs and dock waits reported in ATRI's surveys; the range is the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Get the delivery receipt signed and close the paperwork (company long-haul driver)",
+      "description": "After unloading, the company long-haul driver gets the consignee to sign the bill of lading or delivery receipt, notes any shortage or damage, scans the signed paperwork with the in-cab or phone app, sends the empty call, and finishes the post-trip entries in the ELD.",
+      "role": "tl-driver-longhaul",
+      "kind": "data_entry",
+      "inputs": [
+        "signed delivery receipt"
+      ],
+      "outputs": [
+        "proof of delivery image",
+        "empty call"
+      ],
+      "systems": [
+        "eld-telematics",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Blurred or missing scan, or exceptions not noted, delaying the invoice.",
+        "typically_caught_at": "s24"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice; scanning apps were widespread among Canadian carriers by 2019, with some drivers still dropping paperwork at terminals. Driver-type shares (33% long-haul, 27% regional, 40% owner-operator) are the author's estimate from the org file's 300 long-haul and 130 regional company drivers and 380 owner-operators, with regional drivers running about twice as many, shorter, loads a month."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Get the delivery receipt signed and close the paperwork (company regional driver)",
+      "description": "After unloading, the company regional driver gets the consignee to sign the bill of lading or delivery receipt, notes any shortage or damage, scans the signed paperwork with the in-cab or phone app, sends the empty call, and finishes the post-trip entries in the ELD.",
+      "role": "tl-driver-regional",
+      "kind": "data_entry",
+      "inputs": [
+        "signed delivery receipt"
+      ],
+      "outputs": [
+        "proof of delivery image",
+        "empty call"
+      ],
+      "systems": [
+        "eld-telematics",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Blurred or missing scan, or exceptions not noted, delaying the invoice.",
+        "typically_caught_at": "s24"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice; scanning apps were widespread among Canadian carriers by 2019, with some drivers still dropping paperwork at terminals. Driver-type shares (33% long-haul, 27% regional, 40% owner-operator) are the author's estimate from the org file's 300 long-haul and 130 regional company drivers and 380 owner-operators, with regional drivers running about twice as many, shorter, loads a month."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Get the delivery receipt signed and close the paperwork (owner-operator)",
+      "description": "After unloading, the owner-operator gets the consignee to sign the bill of lading or delivery receipt, notes any shortage or damage, scans the signed paperwork with the in-cab or phone app, sends the empty call, and finishes the post-trip entries in the ELD.",
+      "role": "owner-operator",
+      "kind": "data_entry",
+      "inputs": [
+        "signed delivery receipt"
+      ],
+      "outputs": [
+        "proof of delivery image",
+        "empty call"
+      ],
+      "systems": [
+        "eld-telematics",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Blurred or missing scan, or exceptions not noted, delaying the invoice.",
+        "typically_caught_at": "s24"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice; scanning apps were widespread among Canadian carriers by 2019, with some drivers still dropping paperwork at terminals. Driver-type shares (33% long-haul, 27% regional, 40% owner-operator) are the author's estimate from the org file's 300 long-haul and 130 regional company drivers and 380 owner-operators, with regional drivers running about twice as many, shorter, loads a month."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Driver manager closes the trip and checks dock times",
+      "description": "The driver manager compares the ELD arrival and departure times at each stop with the appointments; where the truck waited beyond the free time, usually two hours, the manager opens a detention record and asks the driver for the in and out times on the bill.",
+      "role": "driver-manager",
+      "kind": "review",
+      "inputs": [
+        "ELD stop times",
+        "appointments"
+      ],
+      "outputs": [
+        "closed trip",
+        "detention flag"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 960
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Detention not claimed because the times were not checked.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 0.75,
+          "condition": "no detention"
+        },
+        {
+          "to": "s23",
+          "prob": 0.25,
+          "condition": "detention beyond free time"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-oig-detention",
+          "src-mhl-atri"
+        ],
+        "note": "Free time of two hours is standard in shipping contracts; the 25% detention share is the author's estimate below the US survey figures."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Send the detention record to customer service",
+      "description": "The driver manager attaches the in and out times and the signed bill to a detention record in the TMS and sends it to the truckload customer service desk, which bills the customer and adds detention pay for the driver.",
+      "role": "driver-manager",
+      "kind": "communication",
+      "inputs": [
+        "detention flag"
+      ],
+      "outputs": [
+        "detention record"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Times missing, so the customer disputes the charge.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Post the trip record for billing and pay",
+      "description": "The TMS links the proof-of-delivery image to the order, marks the load delivered, sends the EDI 214 delivery status, and makes the trip record available to billing, driver pay, owner-operator settlements and fuel tax reporting by province and state.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "closed trip",
+        "proof of delivery image"
+      ],
+      "outputs": [
+        "trip record",
+        "jurisdiction mileage"
+      ],
+      "systems": [
+        "tms",
+        "imaging",
+        "edi-gateway"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "delivered",
+          "outcome": "delivered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common TMS behaviour; author's description."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Long dock wait at the shipper",
+      "share_of_cases": 0.15,
+      "description": "The driver waits several hours for a door or for freight to be ready, eating into driving hours and sometimes forcing an overnight rest before the delivery.",
+      "path": [
+        "s05",
+        "s06"
+      ]
+    },
+    {
+      "name": "Referral at the border",
+      "share_of_cases": 0.03,
+      "description": "About 9% of cross-border trips are referred inside at the port for a missing release, a data mismatch or an examination.",
+      "path": [
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Breakdown on the road",
+      "share_of_cases": 0.04,
+      "description": "A road service technician or third-party vendor repairs the truck while the driver waits with the load.",
+      "path": [
+        "s13",
+        "s16",
+        "s18"
+      ]
+    },
+    {
+      "name": "Winter storm or highway closure",
+      "share_of_cases": 0.04,
+      "description": "The driver parks until the road reopens and the delivery is rebooked.",
+      "path": [
+        "s13",
+        "s17",
+        "s18"
+      ]
+    },
+    {
+      "name": "Detention beyond free time",
+      "share_of_cases": 0.25,
+      "description": "The truck waits beyond the two free hours at a stop; the driver manager sends a detention record so the customer can be billed and the driver paid.",
+      "path": [
+        "s22",
+        "s23"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.8,
+        "p90": 3.5
+      },
+      "unit": "calendar days from trip release to the trip record being posted",
+      "population": "Canadian truckload trips, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from fleet productivity: about 9.6 loads per tractor a month means a tractor turns about every 3.1 days, of which roughly 1.5 to 2 days is the trip itself and the rest empty time, driver home time and waiting for the next load."
+      }
+    },
+    {
+      "metric": "shipment_distance_median",
+      "value": 635,
+      "unit": "km",
+      "population": "Canadian for-hire trucking shipments, 2016 (truckload and LTL)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-statcan-cfaf"
+        ],
+        "note": "Canadian Freight Analysis Framework."
+      }
+    },
+    {
+      "metric": "border_referral_rate",
+      "value": 0.09,
+      "unit": "share of highway crossings into Canada referred from primary inspection",
+      "population": "CBSA highway mode, average 2018-19 to 2022-23",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-cbsa-eval"
+        ],
+        "note": "Ranges from 7% to 13% by year."
+      }
+    },
+    {
+      "metric": "dock_delay_4h_or_more",
+      "value": 0.237,
+      "unit": "share of drivers reporting delays of four hours or more",
+      "population": "US drivers surveyed by ATRI, 2018 (36.5% for reefer)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mhl-atri"
+        ],
+        "note": "As reported by MH&L."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Dock waits at shippers and receivers use up drivers' hours of service, cause missed appointments and overnight rests, and are only partly recovered through detention charges.",
+      "steps": [
+        "s05",
+        "s06",
+        "s08",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mhl-atri",
+          "src-oig-detention"
+        ],
+        "note": "79% of surveyed drivers had run out of hours at a customer facility; detention raises crash risk and cuts driver earnings."
+      }
+    },
+    {
+      "description": "Border queues and referrals add hours to cross-border trips, longer for US-bound trucks.",
+      "steps": [
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-cbsa-eval",
+          "src-mtri"
+        ],
+        "note": "Referral rates and direction of longer waits from the sources; hours are the author's estimate."
+      }
+    },
+    {
+      "description": "Winter closures and breakdowns cannot be planned for and push deliveries back by a day or more.",
+      "steps": [
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Detention is missed when driver managers do not check stop times against appointments, so the carrier absorbs the cost.",
+      "steps": [
+        "s22",
+        "s23"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "assumptions": [
+    "The driver is chosen three times (before the empty leg, the loaded leg and the paperwork) with the same shares, because the simulation does not carry the driver type forward. Totals and costs are right on average, but one simulated case can mix driver types.",
+    "Driving and on-duty working time count as touch time; off-duty rest on multi-day runs and dock waits count as waits. The time at the border is listed after the loaded drive but happens during it.",
+    "Staffing check: the validator warns because it converts touch time (about 15 hours per trip) at 130 productive hours a month and counts owner-operator time (about 45% of the total) without counting owner-operators as staff. Spread over the drivers who do the work, the touch time is about 166 hours a month per long-haul driver, 116 hours per regional driver (who also spend more time waiting at docks) and 141 hours per owner-operator, which fits the 160 to 200 on-duty hours a month typical of these drivers under the 70-hour cycle. The org file's 430 company drivers and 380 owner-operators therefore fit the 7,500 trips a month.",
+    "Trailers are tied up from loading to the empty call; pre-loaded drop trailers are held longer because they wait in the shipper's pool. Tractors are counted as occupied only while driving, because the org file's tractor cost per hour is a running cost (fuel and maintenance); tractors waiting at docks or during rest are idle but unavailable.",
+    "Breakdowns are handled by road service technicians (not listed in the process map roles) or third-party vendors; the after-hours dispatcher's part is in the load planning file.",
+    "Objects marked with outcome 'any' (breakdown calls, collision reports, telematics events, security incidents, IT tickets) are produced only when those events occur.",
+    "Loaded costs come from the org file; the owner-operator rate includes the truck, so owner-operator tractor running cost is not added again."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  },
+  "sources": [
+    {
+      "id": "src-ns-trip",
+      "accessed": "2026-11-24",
+      "title": "Commercial Vehicle Trip Inspection Regulations (Motor Vehicle Act, Nova Scotia)",
+      "publisher": "Province of Nova Scotia",
+      "url": "https://novascotia.ca/just/regulations/regs/mvcvtrip.htm",
+      "year": null,
+      "supports": "Each commercial vehicle inspected at least once every 24 hours against the schedule for its type (s.6); written inspection report with defects found (s.7); defects reported to the carrier before the next inspection and major defects immediately (s.11); no driving with a major defect (s.13). Provincial trip inspection rules follow the same pattern across Canada."
+    },
+    {
+      "id": "src-mhl-atri",
+      "accessed": "2026-11-24",
+      "title": "Truck Driver Wait Times Cost Big Bucks",
+      "publisher": "MH&L (Material Handling & Logistics)",
+      "url": "https://www.mhlnews.com/transportation-distribution/article/22055790/truck-driver-wait-times-cost-big-bucks",
+      "year": 2019,
+      "supports": "Reports ATRI's 2014 and 2018 detention surveys: in 2018, 23.7% of drivers (36.5% of reefer drivers) reported delays of four hours or more; 79% of drivers had run out of hours at a customer facility because of detention; average detention fee charged US$63.71 an hour."
+    },
+    {
+      "id": "src-oig-detention",
+      "accessed": "2026-11-24",
+      "title": "Detention costs $1 billion, increases crash risk: report",
+      "publisher": "Trucknews.com",
+      "url": "https://www.trucknews.com/transportation/detention-costs-1-billion-increases-crash-risk-report/1003083500",
+      "year": 2018,
+      "supports": "Reports the US DOT Inspector General audit: a 15-minute increase in average dwell time raises the expected crash rate by 6.2%; detention cuts driver earnings by US$1.1 to 1.3 billion a year; detention is usually counted only beyond the two hours allowed in shipping contracts."
+    },
+    {
+      "id": "src-hos",
+      "accessed": "2026-11-24",
+      "title": "Commercial Vehicle Drivers Hours of Service Regulations (SOR/2005-313)",
+      "publisher": "Government of Canada, Justice Laws Website",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2005-313/FullText.html",
+      "year": 2005,
+      "supports": "South of 60 degrees: 13 h driving and 14 h on duty per day (s.12), 8 consecutive hours off before driving again (s.13), 10 h off duty per day (s.14); cycle 1 of 70 h in 7 days and cycle 2 of 120 h in 14 days (s.26-27); cycle reset after 36 or 72 h off (s.28); daily record of duty status (s.77, 81, 82)."
+    },
+    {
+      "id": "src-cfr-395",
+      "accessed": "2026-11-24",
+      "title": "49 CFR 395.3 Maximum driving time for property-carrying vehicles",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/395.3",
+      "year": null,
+      "supports": "US limits for property-carrying drivers: 11 h driving within a 14 h window after 10 h off, 30-minute break after 8 h of driving, 60 h in 7 days or 70 h in 8 days, 34 h restart."
+    },
+    {
+      "id": "src-statcan-cfaf",
+      "accessed": "2026-11-24",
+      "title": "Commodity flows by mode in Canada: Canadian Freight Analysis Framework, 2016",
+      "publisher": "Statistics Canada, The Daily",
+      "url": "https://www150.statcan.gc.ca/n1/daily-quotidien/190315/dq190315c-eng.htm",
+      "year": 2019,
+      "supports": "For-hire trucking shipments in 2016 travelled a median distance of 635 km."
+    },
+    {
+      "id": "src-cbsa-eval",
+      "accessed": "2026-11-24",
+      "title": "Evaluation of eManifest, Final Report",
+      "publisher": "Canada Border Services Agency, Program Evaluation Division",
+      "url": "https://www.cbsa-asfc.gc.ca/agency-agence/reports-rapports/ae-ve/mani/menu-eng.html",
+      "year": 2024,
+      "supports": "Highway pre-arrival transmissions of about 14 million (2019-20) to 16 million (2021-22) a year; electronic submission 99.2% to 99.7%; referrals from primary inspection to the counter 13% (2018-19), 10% (2019-20), 8% (2020-21), 7% (2021-22), about 9% on average; a release recommendation was available on arrival for 99.4% of release requests sent at least one hour before arrival."
+    },
+    {
+      "id": "src-mtri",
+      "accessed": "2026-11-24",
+      "title": "Documenting and Determining Distributions, Trends, and Relations in Truck Lanes at International Border Crossing Facilities",
+      "publisher": "Michigan Tech Research Institute",
+      "url": "https://www.mtu.edu/mtri/research/project-areas/transportation/mobility/truck-border-crossing/",
+      "year": null,
+      "supports": "1,085 truck crossings at the Ambassador Bridge in June 2014: crossing time always higher for trucks entering the US, peaks near 8 a.m. and 5 p.m., crossings concentrated Tuesday to Thursday; 19 of 1,085 trucks (1.75%) sent to secondary inspection; inspections generally 1 to 2 minutes."
+    },
+    {
+      "id": "src-d17-1-4",
+      "accessed": "2026-11-24",
+      "title": "Memorandum D17-1-4: Release of Commercial Goods",
+      "publisher": "Canada Border Services Agency",
+      "url": "https://www.cbsa-asfc.gc.ca/publications/dm-md/d17/d17-1-4-eng.html",
+      "year": 2025,
+      "supports": "Importers or brokers may submit PARS release requests electronically up to 45 days before arrival; a border services officer reviews them and records a release or refer recommendation; the cargo control number links release and cargo documents; on arrival release or refer notices go to the broker; without a release request the goods cannot be released at the first port and are held or moved in-bond to a sufferance warehouse."
+    }
+  ]
+}

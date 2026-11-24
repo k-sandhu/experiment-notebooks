@@ -1,0 +1,1714 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-cs-alc-management",
+  "name": "Manage patients waiting in hospital for an alternate level of care",
+  "org": "community-hospital-corp",
+  "process": "cs-alc-management",
+  "sector": "healthcare (acute care hospital)",
+  "function": "clinical support: patient flow",
+  "summary": "When a patient no longer needs acute care but cannot leave because the next setting is not ready, the physician designates them alternate level of care (ALC). The hospital registers the wait in the provincial system, social workers and the home care placement coordinator work through long-term care, rehabilitation or home care applications, and the patient waits on an acute unit or in a transitional bed until a place is offered. Long-term care applications are slow because eligibility, family choice of homes and the homes' own reviews happen in sequence, and accepted applicants then join long wait lists, while every ALC day blocks a bed needed for ED admissions.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital corporation with about 640 beds and a 35-bed regional ALC transitional unit, working with the LHIN home care organisation (HCCSS from 2021).",
+    "org_size_employees": 4900,
+    "notes": "Pre-COVID practice. In spring 2020 hospitals moved many ALC patients out quickly, and the 2022 More Beds, Better Care Act later allowed placement in homes the patient had not chosen; neither is modelled."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one ALC designation (waitlist entry)",
+  "trigger": "A physician designates an inpatient ALC because the next care setting is not available.",
+  "end_state": "The patient has moved to the destination and the WTIS entry is closed, or the designation is discontinued because the patient's condition changed or the patient died.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 90,
+      "mode": 120,
+      "high": 160
+    },
+    "seasonality": "Designations rise in winter with medicine admissions; long-term care placements slowed during COVID-19 outbreaks in homes in 2020 and 2021.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "cihi_stays"
+      ],
+      "note": "Organisation file estimate kept. Cross-check: about 6% of the 1,500 to 1,950 medicine and surgical discharges a month (this file's discharge-planning workflow) plus some from complex care. CIHI reports 5.8% of stays with ALC days in 2021-2022 (cihi_stays)."
+    },
+    "surge": {
+      "cause": "long-term care home outbreaks closing homes to admissions",
+      "events_per_year": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "duration_days": {
+        "low": 14,
+        "mode": 30,
+        "high": 60
+      },
+      "volume_multiplier": {
+        "low": 1.0,
+        "mode": 1.1,
+        "high": 1.3
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; outbreaks stop admissions to a home and lengthen waits more than they raise designations."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cs-discharge-planning",
+        "object": "alc_designation",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ltc_homes",
+        "object": "bed_offer"
+      },
+      {
+        "from": "hccss",
+        "object": "care_plan_confirmation"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "hccss",
+        "object": "ltc_application"
+      },
+      {
+        "outcome": "discharged_to_destination",
+        "to": "med-ccc-rehab-stay",
+        "object": "admitted_patient"
+      },
+      {
+        "outcome": "discharged_to_destination",
+        "to": "ltc_homes",
+        "object": "transfer_package"
+      },
+      {
+        "outcome": "any",
+        "to": "ontario_health",
+        "object": "wait_time_record"
+      },
+      {
+        "outcome": "discharged_to_destination",
+        "to": "fs-environmental-cleaning",
+        "object": "cleaning_request"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "bed_flow_coordinator",
+      "title": "Patient flow coordinator (bed allocation)",
+      "department": "Patient flow and bed management",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 51,
+        "mode": 63,
+        "high": 70
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Opens, updates and closes ALC waitlist entries in WTIS and arranges moves to the transitional unit. In some hospitals health records or unit clerks keep WTIS; author's estimate. Loaded costs are the organisation file's ranges: hourly wage x 1.35 (about 25% benefits and HOOPP pension plus 10% overhead). Physician costs are gross clinical earnings paid by the province, not hospital payroll. Roles added here use the same 1.35 factor."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "social_worker",
+      "title": "Hospital social worker",
+      "department": "Allied health",
+      "layer": "individual_contributor",
+      "fte_on_process": 4.0,
+      "loaded_cost_per_hour": {
+        "low": 47,
+        "mode": 58,
+        "high": 65
+      },
+      "occupation_code": "NOC 2016 4152",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "Social workers support families through destination choice and long-term care applications (oag2010). FTE is the author's estimate."
+      }
+    },
+    {
+      "id": "hospitalist",
+      "title": "Hospitalist physician",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 130,
+        "mode": 160,
+        "high": 200
+      },
+      "occupation_code": "NOC 2016 3112",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Completes the physician parts of applications, reviews ALC patients and writes transfer orders. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "patient_flow_manager",
+      "title": "Manager, patient flow",
+      "department": "Patient flow and bed management",
+      "layer": "manager",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 74,
+        "mode": 84,
+        "high": 94
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Chairs weekly ALC rounds with the home care organisation and escalates long waits. Author's estimate."
+      }
+    },
+    {
+      "id": "med_rn",
+      "title": "Inpatient registered nurse",
+      "department": "Inpatient medicine units",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 61,
+        "high": 68
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Nurses deliver restorative care to ALC patients on acute units; oag2016 found ALC patients fell more often and received more antipsychotics than LTC residents. FTE is the author's estimate of extra restorative and transfer work."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "unit_clerk",
+      "title": "Inpatient unit clerk",
+      "department": "Inpatient medicine units",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 35,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Books transport and faxes the transfer package. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "patient_care_coordinator",
+      "title": "Patient care coordinator / discharge planner (RN)",
+      "department": "Inpatient medicine and surgery units",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 52,
+        "mode": 63,
+        "high": 70
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Sends home care and placement referrals in the provincial portal; author's estimate. Not in the organisation file."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "hccss_care_coordinator",
+      "title": "Home and community care coordinator based in the hospital (employed by the LHIN / HCCSS)",
+      "department": "Home and Community Care Support Services (outside the hospital)",
+      "layer": "external_party",
+      "fte_on_process": 0.0,
+      "loaded_cost_per_hour": {
+        "low": 48,
+        "mode": 57,
+        "high": 65
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "Placement coordinators employed by the CCAC/LHIN (HCCSS from 2021) determine long-term care eligibility, manage applications and make bed offers (oag2010). Not hospital staff, so no hospital FTE."
+      },
+      "not_in_org_file": true,
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "wtis",
+      "name": "Provincial Wait Time Information System",
+      "kind": "external_portal"
+    },
+    {
+      "id": "hpg",
+      "name": "Home and community care referral portal (Health Partner Gateway)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "bed_board",
+      "name": "Electronic bed board and patient flow dashboard",
+      "kind": "workflow"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    },
+    {
+      "id": "fax",
+      "name": "Fax (referrals, requisitions and reports to community physicians)",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "bed_alc_transitional",
+      "name": "Regional ALC transitional beds",
+      "kind": "bed",
+      "count": 35
+    },
+    {
+      "id": "bed_medicine",
+      "name": "Inpatient medicine beds",
+      "kind": "bed",
+      "count": 300
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Open the ALC waitlist entry",
+      "description": "The patient flow coordinator opens an ALC waitlist entry in the provincial Wait Time Information System with the designation date, inpatient service, intended destination (or TBD) and any specialized needs such as behaviours, bariatric equipment or dialysis.",
+      "role": "bed_flow_coordinator",
+      "kind": "intake",
+      "inputs": [
+        "ALC designation"
+      ],
+      "outputs": [
+        "WTIS ALC waitlist entry"
+      ],
+      "systems": [
+        "wtis",
+        "his",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.07,
+        "defect_description": "Wrong designation date or destination, distorting provincial ALC reports",
+        "typically_caught_at": "s21"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Health provincial ALC definition and WTIS-ALC reporting required of hospitals",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "alc_method"
+        ],
+        "note": "WTIS-ALC records designation date, destination (TBD until specified) and specialized needs categories (alc_method). Minutes and wait are the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Explain ALC status and confirm the destination",
+      "description": "The social worker meets the patient and substitute decision-maker, explains that acute care is finished, what the ALC designation means, any daily co-payment that applies while waiting for long-term care, and confirms the preferred destination and whether the Home First option is possible.",
+      "role": "social_worker",
+      "kind": "communication",
+      "inputs": [
+        "ALC designation",
+        "discharge plan"
+      ],
+      "outputs": [
+        "confirmed destination"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.38,
+          "condition": "long-term care"
+        },
+        {
+          "to": "s13",
+          "prob": 0.3,
+          "condition": "rehabilitation, complex continuing care or convalescent care"
+        },
+        {
+          "to": "s15",
+          "prob": 0.22,
+          "condition": "home with expanded home care"
+        },
+        {
+          "to": "s16",
+          "prob": 0.1,
+          "condition": "retirement home, supportive housing or hospice"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Of ALC patients waiting on 31 March 2016, 45% awaited long-term care, 19% rehabilitation, complex or convalescent care, 15% home care and 22% other settings (oag2016). Those are census shares, which over-weight long waits; the flow shares here shift toward shorter-wait destinations, the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Refer for long-term care eligibility",
+      "description": "The patient care coordinator sends a long-term care referral to the home care placement coordinator in the Health Partner Gateway, attaching the medical, functional and behavioural information the coordinator needs to assess eligibility.",
+      "role": "patient_care_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "confirmed destination",
+        "chart"
+      ],
+      "outputs": [
+        "long-term care referral"
+      ],
+      "systems": [
+        "hpg",
+        "his"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "Hospital staff contact the CCAC, which assesses eligibility and processes applications; no advance-notice guidance existed (oag2010). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Assess long-term care eligibility",
+      "description": "The placement coordinator meets the patient and family, completes the standardized assessment, and decides whether the patient is eligible for a long-term care home, explaining wait lists, basic and preferred accommodation, and the rules for accepting a bed offer.",
+      "role": "hccss_care_coordinator",
+      "kind": "analysis",
+      "inputs": [
+        "long-term care referral"
+      ],
+      "outputs": [
+        "eligibility determination"
+      ],
+      "systems": [
+        "hpg"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 90,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Long-Term Care Homes Act, 2007: placement co-ordinators determine eligibility and authorise admission; homes must answer an application within five business days",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "CCAC goals were to start or complete the assessment within 48 to 72 hours; one CCAC did almost all within three days (oag2010)."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Complete the physician health assessment",
+      "description": "The hospitalist fills in the health assessment section of the long-term care application: diagnoses, medications, tuberculosis screening, behaviours and care needs, and signs it so the application can go to the chosen homes.",
+      "role": "hospitalist",
+      "kind": "drafting",
+      "inputs": [
+        "eligibility determination",
+        "chart"
+      ],
+      "outputs": [
+        "signed health assessment"
+      ],
+      "systems": [
+        "his",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.12,
+        "defect_description": "Incomplete form returned by a home or the placement coordinator",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; forms wait for the physician's next shift on the unit."
+      },
+      "concurrent_with": [
+        "s04"
+      ]
+    },
+    {
+      "id": "s06",
+      "name": "Help the family choose homes and sign the application",
+      "description": "The social worker reviews the list of homes with the family (distance, language, culture, wait list length), helps them choose up to five, and gets the consent and application forms signed and sent to the placement coordinator.",
+      "role": "social_worker",
+      "kind": "communication",
+      "inputs": [
+        "signed health assessment"
+      ],
+      "outputs": [
+        "long-term care application"
+      ],
+      "systems": [
+        "hpg",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 90,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "Hospital policies allowed families three days at one hospital and two weeks at another to choose homes (oag2010)."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Long-term care homes review the application",
+      "description": "Each chosen home reviews the application and the assessment and either accepts the applicant onto its wait list or rejects it, most often for care needs, weight or behaviours the home says it cannot manage.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "long-term care application"
+      ],
+      "outputs": [
+        "acceptance or refusal"
+      ],
+      "systems": [
+        "hpg",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Long-Term Care Homes Act, 2007: placement co-ordinators determine eligibility and authorise admission; homes must answer an application within five business days",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.78,
+          "condition": "accepted by at least one home"
+        },
+        {
+          "to": "s06",
+          "prob": 0.22,
+          "condition": "refused by all chosen homes"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "Homes must respond within five business days, yet averaged 3 to 22 days; homes rejected 25% to 33% of applications at one CCAC (oag2010)."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Decide where the patient waits",
+      "description": "The patient flow coordinator decides with the unit manager whether the patient moves to the regional ALC transitional unit, based on bed availability, the patient's care needs and the expected wait, or stays on the acute unit.",
+      "role": "bed_flow_coordinator",
+      "kind": "judgment",
+      "inputs": [
+        "acceptance",
+        "bed board"
+      ],
+      "outputs": [
+        "waiting location"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.4,
+          "condition": "transitional bed available"
+        },
+        {
+          "to": "s10",
+          "prob": 0.6,
+          "condition": "stays on the acute unit"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "The organisation file lists a 35-bed regional ALC transitional unit; oag2016 notes one audited hospital co-located all ALC patients on a special ward. Shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Move the patient to the transitional unit",
+      "description": "The coordinator books the transitional bed, arranges a porter and the nursing handover, and updates the bed board, freeing an acute bed. The transitional bed is then held until the long-term care home has a bed.",
+      "role": "bed_flow_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "waiting location"
+      ],
+      "outputs": [
+        "patient in transitional bed"
+      ],
+      "systems": [
+        "bed_board",
+        "his"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; transitional bed occupancy equals the wait for a long-term care bed."
+      },
+      "resources": [
+        {
+          "id": "bed_alc_transitional",
+          "occupied_min": {
+            "low": 10080,
+            "mode": 36000,
+            "high": 172800
+          }
+        }
+      ]
+    },
+    {
+      "id": "s10",
+      "name": "Deliver restorative care on the acute unit",
+      "description": "Nurses keep the waiting patient mobile and engaged with a restorative care plan (walking, meals out of bed, activity), review falls risk and antipsychotic use, and the patient keeps an acute medicine bed until placement. Minutes are the extra nursing time over the wait.",
+      "role": "med_rn",
+      "kind": "physical",
+      "inputs": [
+        "waiting location"
+      ],
+      "outputs": [
+        "restorative care record"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 120,
+        "mode": 300,
+        "high": 900
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada Required Organizational Practice: falls prevention and injury reduction",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "ALC patients at one audited hospital fell 2.5 times as often as LTC residents and 37% received antipsychotics; the Ministry expects restorative care while waiting (oag2016). Minutes are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "bed_medicine",
+          "occupied_min": {
+            "low": 10080,
+            "mode": 36000,
+            "high": 172800
+          }
+        }
+      ]
+    },
+    {
+      "id": "s11",
+      "name": "Review the case at weekly ALC rounds",
+      "description": "Each week the patient flow manager reviews every long-waiting ALC patient with the home care placement coordinator: wait list position, whether more homes should be added, and whether a short-stay interim bed is an option. Minutes add up the reviews.",
+      "role": "patient_flow_manager",
+      "kind": "coordination",
+      "inputs": [
+        "WTIS entry",
+        "wait list status"
+      ],
+      "outputs": [
+        "escalation actions"
+      ],
+      "systems": [
+        "wtis",
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "The Interim Bed Short-Stay program moves eligible LTC applicants out of hospital (oag2016). Weekly review is the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Receive a long-term care bed offer",
+      "description": "When a bed comes free in one of the chosen homes, the placement coordinator phones the patient or substitute decision-maker, who must accept or refuse quickly, and tells the hospital the admission date.",
+      "role": "hccss_care_coordinator",
+      "kind": "external_wait",
+      "inputs": [
+        "wait list position"
+      ],
+      "outputs": [
+        "placement offer"
+      ],
+      "systems": [
+        "hpg",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 7200,
+        "mode": 28800,
+        "high": 172800
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.88,
+          "condition": "offer accepted"
+        },
+        {
+          "to": "s06",
+          "prob": 0.04,
+          "condition": "offer refused, application revised"
+        },
+        {
+          "to": "s20",
+          "prob": 0.08,
+          "condition": "patient deteriorates or dies while waiting"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2010",
+          "oag2016"
+        ],
+        "note": "Province-wide 50% of ALC patients waiting for long-term care were placed within 30 days and 90% within 128 days (oag2010, 2009/10); the median wait for placement rose from 73 days in 2012/13 to 85 days in 2015/16, 90th percentile 406 days (oag2016). The wait here follows earlier steps that take two to four weeks."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Refer to rehabilitation or complex continuing care",
+      "description": "The social worker sends the referral to the hospital's own complex continuing care or rehabilitation unit, or to an outside rehabilitation or convalescent care program, with therapy notes and goals.",
+      "role": "social_worker",
+      "kind": "drafting",
+      "inputs": [
+        "confirmed destination",
+        "therapy notes"
+      ],
+      "outputs": [
+        "post-acute referral"
+      ],
+      "systems": [
+        "his",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "Hospitals arrange rehabilitation and complex continuing care placements; from 2009 LHINs could move this to CCACs (oag2010). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Receiving program accepts and offers a bed",
+      "description": "The receiving program screens the referral for rehabilitation potential or medical complexity, accepts it, and offers a bed when one frees up; it may decline patients without clear goals or with behaviours.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "post-acute referral"
+      ],
+      "outputs": [
+        "acceptance and bed date"
+      ],
+      "systems": [
+        "fax",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 5760,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.85,
+          "condition": "accepted and bed offered"
+        },
+        {
+          "to": "s02",
+          "prob": 0.15,
+          "condition": "declined, destination re-planned"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2010",
+          "oag2016"
+        ],
+        "note": "Rehabilitation and complex care facilities accept fewer patients on weekends (oag2010); 19% of ALC patients wait for these settings (oag2016). Waits are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Arrange expanded home care",
+      "description": "The home care coordinator reassesses the patient, builds a higher-intensity plan (more personal support hours, nursing, equipment) and waits for a provider agency able to staff it before confirming a start date.",
+      "role": "hccss_care_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "confirmed destination"
+      ],
+      "outputs": [
+        "home care service confirmation"
+      ],
+      "systems": [
+        "hpg",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 5760,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.85,
+          "condition": "services confirmed"
+        },
+        {
+          "to": "s03",
+          "prob": 0.15,
+          "condition": "home not workable, long-term care application started"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cihi_homecare",
+          "oag2010"
+        ],
+        "note": "Half of patients who wait for home care wait 8 days or less and 10% wait 41 days or more (cihi_homecare); ALC patients waiting for home care averaged six days in 2009 (oag2010)."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Arrange retirement home, supportive housing or hospice",
+      "description": "The social worker helps the family find and apply to a retirement home, supportive housing unit or hospice, coordinates tours and assessments by the receiving setting, and confirms the move-in date.",
+      "role": "social_worker",
+      "kind": "coordination",
+      "inputs": [
+        "confirmed destination"
+      ],
+      "outputs": [
+        "placement confirmation"
+      ],
+      "systems": [
+        "email_phone",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 240
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 14400,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Retirement home, supportive housing, palliative and other destinations made up 22% of ALC patients waiting in 2016 (oag2016). Times are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Book the transfer and send the transfer package",
+      "description": "The unit clerk confirms the transfer date with the receiving setting, books non-urgent patient transport and faxes the transfer package (medication list, care plan, recent notes). Many settings do not admit on weekends.",
+      "role": "unit_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "placement offer or confirmation"
+      ],
+      "outputs": [
+        "transfer package",
+        "transport booking"
+      ],
+      "systems": [
+        "fax",
+        "email_phone",
+        "his"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Package missing the medication list or recent changes",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "Patients are almost four times as likely to go to long-term care on a weekday as on a weekend day (oag2010). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Write the transfer order and reconcile medications",
+      "description": "On the transfer day the hospitalist re-examines the patient, writes the discharge or transfer order and reconciles medications for the receiving home, and updates the discharge summary.",
+      "role": "hospitalist",
+      "kind": "approval",
+      "inputs": [
+        "transfer package"
+      ],
+      "outputs": [
+        "transfer order"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Public Hospitals Act: the physician determines when a patient is discharged (as summarised in oag2010)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Give report and see the patient off",
+      "description": "The nurse phones a verbal report to the receiving nurse, sends the medications and belongings with the transport crew, and records the departure time. The bed is then released for cleaning.",
+      "role": "med_rn",
+      "kind": "communication",
+      "inputs": [
+        "transfer order"
+      ],
+      "outputs": [
+        "admitted patient at destination"
+      ],
+      "systems": [
+        "his",
+        "email_phone",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; transport arrival times vary."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Discontinue the ALC designation",
+      "description": "If the patient becomes acutely ill again or dies while waiting, the hospitalist documents the change and cancels the ALC designation; any active applications are put on hold or withdrawn.",
+      "role": "hospitalist",
+      "kind": "judgment",
+      "inputs": [
+        "clinical change"
+      ],
+      "outputs": [
+        "ALC discontinuation"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 720
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "alc_method"
+        ],
+        "note": "Discontinuation reasons include change in medical status, death and transfer to acute care (alc_method). Share is the author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Close the WTIS entry as discharged",
+      "description": "The patient flow coordinator closes the ALC waitlist entry with the discharge date and the actual destination type, which must be filled in before the entry can close, so the province can count ALC days.",
+      "role": "bed_flow_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "departure record"
+      ],
+      "outputs": [
+        "closed WTIS entry"
+      ],
+      "systems": [
+        "wtis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Entry left open past discharge, inflating ALC days",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Health provincial ALC definition and WTIS-ALC reporting required of hospitals",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "discharged_to_destination"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "alc_method"
+        ],
+        "note": "An ALC waitlist entry cannot be closed until the destination is updated; WTIS-ALC data is cut on the sixth business day of each month (alc_method)."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Close the WTIS entry as discontinued",
+      "description": "The patient flow coordinator closes the waitlist entry with the discontinuation reason, such as change in medical status or death, and the date, so the days stop counting as ALC.",
+      "role": "bed_flow_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "ALC discontinuation"
+      ],
+      "outputs": [
+        "closed WTIS entry"
+      ],
+      "systems": [
+        "wtis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Health provincial ALC definition and WTIS-ALC reporting required of hospitals",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "alc_discontinued"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "alc_method"
+        ],
+        "note": "Discontinued cases and their reasons are defined in alc_method."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Refused by all chosen homes",
+      "share_of_cases": 0.08,
+      "description": "Every home the family chose refuses the applicant, usually for behaviours or heavy care needs, so the family must choose again and the wait restarts.",
+      "path": [
+        "s07",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Home care plan fails",
+      "share_of_cases": 0.03,
+      "description": "No agency can staff the expanded home care plan, or the family cannot cope, so a long-term care application starts after weeks of waiting.",
+      "path": [
+        "s15",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Deterioration or death while waiting",
+      "share_of_cases": 0.03,
+      "description": "The patient becomes acutely ill or dies before a long-term care bed is offered and the designation is discontinued.",
+      "path": [
+        "s12",
+        "s20",
+        "s22"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 18,
+        "p90": 110
+      },
+      "unit": "days from ALC designation to discharge",
+      "population": "ALC designations in an Ontario large community hospital, all destinations",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate weighting destination waits: long-term care median 30 days in 2009/10 (oag2010) rising to 85 days in 2015/16 (oag2016); home care median 8 days among those who wait (cihi_homecare); rehabilitation and other settings one to three weeks."
+      }
+    },
+    {
+      "metric": "ltc_placement_wait_median",
+      "value": 85,
+      "unit": "days",
+      "population": "Ontario patients awaiting long-term care placement, 2015/16",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "90th percentile 406 days."
+      }
+    },
+    {
+      "metric": "share_of_beds_occupied_by_alc",
+      "value": 0.14,
+      "unit": "share of hospital beds",
+      "population": "Ontario hospitals, 2015/16",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2016"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "hospital_cost_per_alc_day",
+      "value": 730,
+      "unit": "CAD per day",
+      "population": "Ontario ALC patient in a hospital bed, 2015/16, versus about 130 CAD per day Ministry-funded in long-term care",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2016"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Long-term care eligibility, family choice and home review run one after another and take weeks before the patient even joins a wait list.",
+      "steps": [
+        "s04",
+        "s05",
+        "s06",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "More than four weeks from referral to placement decision; homes took 3 to 22 days to answer."
+      }
+    },
+    {
+      "description": "Patients may wait in hospital for their chosen homes, so waits for popular homes run for months.",
+      "steps": [
+        "s12"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Median 85 days, 90th percentile 406 days; other provinces require the first available bed."
+      }
+    },
+    {
+      "description": "Waiting on acute units leads to falls, deconditioning and antipsychotic use, and blocks beds needed for ED admissions.",
+      "steps": [
+        "s10"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Falls 2.5 times the LTC rate; 37% given antipsychotics; about 37,550 more patients could have been treated."
+      }
+    },
+    {
+      "description": "Refusals by homes send families back to choose again.",
+      "steps": [
+        "s07",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2010"
+        ],
+        "note": "25% to 33% of applications rejected at one CCAC."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oag2010",
+      "title": "2010 Annual Report, Chapter 3, Section 3.02: Discharge of Hospital Patients",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en10/302en10.pdf",
+      "year": 2010,
+      "accessed": "2026-11-24",
+      "supports": "Long-term care placement steps and timings (assessment within 2 to 3 days, family choice 3 days to 2 weeks, home response 3 to 22 days, 25% to 33% rejections), placement waits in 2009/10, home care waits, weekend transfer pattern."
+    },
+    {
+      "id": "oag2016",
+      "title": "2016 Annual Report, Chapter 3, Section 3.08: Large Community Hospital Operations",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en16/v1_308en16.pdf",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "ALC census by destination, median and 90th percentile LTC placement wait, share of beds, cost per day, falls and antipsychotic findings, interim bed program, co-located ALC ward."
+    },
+    {
+      "id": "alc_method",
+      "title": "Alternate Level of Care (ALC) Methodology Document (Health System Insights ALC performance reports)",
+      "publisher": "Ontario Health",
+      "url": "https://hsihelp.ontariohealth.ca/hsi/assets/misc_doc/ALC%20Methodology%20Report.pdf",
+      "year": 2023,
+      "accessed": "2026-11-24",
+      "supports": "WTIS-ALC data elements, destinations, specialized needs, discontinuation reasons, closing rules and monthly data cut."
+    },
+    {
+      "id": "cihi_homecare",
+      "title": "Hospital Stay Extended Until Home Care Services or Supports Ready (indicator)",
+      "publisher": "Canadian Institute for Health Information",
+      "url": "https://www.cihi.ca/en/indicators/hospital-stay-extended-until-home-care-services-or-supports-ready",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "Waits for home care: half 8 days or less, 10% 41 days or more."
+    },
+    {
+      "id": "cihi_stays",
+      "title": "Hospital stays in Canada, 2021-2022",
+      "publisher": "Canadian Institute for Health Information",
+      "url": "https://www.cihi.ca/en/hospital-stays-in-canada-2021-2022",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "5.8% of stays with ALC days, 2021-2022."
+    }
+  ],
+  "assumptions": [
+    "Destination shares are by flow of new designations, not by census: patients waiting for long-term care stay longest, so they dominate a point-in-time count (45% in oag2016) more than new designations.",
+    "Time spent waiting for a bed offer is the calendar wait before s12; the bed held while waiting is recorded on s09 (transitional bed) or s10 (acute medicine bed).",
+    "The home care placement coordinator is employed outside the hospital; their minutes are in the simulated labour cost but no hospital FTE is stated.",
+    "WTIS entries are kept by the patient flow coordinators; in some hospitals health records clerks or unit clerks do this.",
+    "The simulated labour cost covers the hospital and home care staff steps only; the ALC bed-day cost (oag2016: about 730 CAD a day) is far larger and is not included.",
+    "Loaded costs are the organisation file's ranges: hourly wage x 1.35 (about 25% benefits and HOOPP pension plus 10% overhead). Physician costs are gross clinical earnings paid by the province, not hospital payroll. Roles added here use the same 1.35 factor."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

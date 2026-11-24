@@ -1,0 +1,1760 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-mb-ltc-scheduling",
+  "name": "Take LTC orders and schedule collection runs",
+  "org": "diagnostic-lab-services-co",
+  "process": "mb-ltc-scheduling",
+  "sector": "health care: medical laboratory testing and health services",
+  "function": "mobile collection services",
+  "summary": "Long-term care and retirement homes rely on the laboratory's mobile team to draw residents' blood and record ECGs on fixed visit days, and a central scheduling desk turns the homes' orders into those visits. Schedulers keep standing orders in the LIS, key and check new requisitions faxed by the homes, chase missing physician signatures and expired standing orders, send each home its draw list with fasting instructions, and build the next day's run for each mobile lab assistant. The work is a high-volume desk routine; delay comes mostly from waiting for each home's next visit day and for physicians to sign renewals, and errors come from incomplete faxed requisitions, residents who move to hospital and last-minute changes.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "The mobile services division of a large Canadian community laboratory, serving long-term care and retirement homes in Ontario and Manitoba from a central scheduling desk of about 14 schedulers.",
+    "org_size_employees": 3300,
+    "notes": "Paper and faxed requisitions with standing orders held in the LIS; runs built by schedulers with spreadsheets and LIS lists rather than routing software, which was common practice in the period. COVID-19 outbreak restrictions in homes in 2020-2021 caused extra postponements that are not modelled separately."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one resident collection request",
+  "trigger": "A standing-order occurrence falls due in the LIS, or a home faxes, phones or emails a new collection request for a resident.",
+  "end_state": "The resident is on a released collection run with requisition and labels printed, or the request is cancelled with a reason recorded.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 18000,
+      "mode": 24000,
+      "high": 30000
+    },
+    "seasonality": "Steady through the year; a little lower in summer and over holidays when physician rounds are fewer, and disrupted during respiratory outbreaks when homes close units.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "fao2019",
+        "paltmed"
+      ],
+      "note": "Matches the organisation file's driver d_ltc_collections. Ontario has 626 homes with over 78,000 residents (fao2019); monitoring labs every one to three months are typical (paltmed), so serving a share of homes yields about 24,000 resident requests a month."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltc_home",
+        "object": "ltc_collection_request",
+        "share": 1.0
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "scheduled",
+        "to": "mb-ltc-collection",
+        "object": "collection_schedule"
+      },
+      {
+        "outcome": "added_to_run",
+        "to": "mb-ltc-collection",
+        "object": "collection_schedule"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "mobile_scheduler",
+      "title": "Mobile collection scheduler",
+      "department": "Mobile scheduling desk",
+      "layer": "individual_contributor",
+      "fte_on_process": 11.0,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 30,
+        "high": 37
+      },
+      "occupation_code": "NOC 13112",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "lifelabs_ltc",
+          "apl_mobile",
+          "jb13112"
+        ],
+        "note": "Mobile laboratories take long-term care bookings by phone and orders by fax or email at a central desk (lifelabs_ltc, apl_mobile). FTE: 11.0 of the 14 schedulers; the collection workflow already claims 2.0 for rescheduling missed draws and about 1.0 is left for private house calls. Wage near the Job Bank 13112 Ontario median (jb13112); Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    },
+    {
+      "id": "mobile_team_lead",
+      "title": "Team lead, mobile collections",
+      "department": "Mobile collection teams",
+      "layer": "supervisor",
+      "fte_on_process": 0.8,
+      "loaded_cost_per_hour": {
+        "low": 34,
+        "mode": 40,
+        "high": 48
+      },
+      "occupation_code": "NOC 33101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Team leads rebalance runs when assistants are absent and approve urgent insertions; share of the 8 team leads, most of whose time is field supervision and collection. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    },
+    {
+      "id": "mobile_manager",
+      "title": "Mobile services regional manager",
+      "department": "Mobile and home collection (The model laboratory Mobile Services)",
+      "layer": "manager",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 60,
+        "high": 75
+      },
+      "occupation_code": "NOC 30010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Regional managers approve overtime or contractor cover for overloaded days; small share of 4 managers. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lis",
+      "name": "Laboratory information system (orders, accessioning, results, autoverification rules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "requisition_imaging",
+      "name": "Requisition scanning and document imaging",
+      "kind": "document_store"
+    },
+    {
+      "id": "fax",
+      "name": "Fax server",
+      "kind": "communication"
+    },
+    {
+      "id": "telephony",
+      "name": "Contact centre telephony with IVR, queues and call recording",
+      "kind": "communication"
+    },
+    {
+      "id": "collection_list",
+      "name": "Printed daily collection list, requisitions and LIS specimen labels",
+      "kind": "document_store"
+    },
+    {
+      "id": "logistics_tracking",
+      "name": "Courier routing, dispatch and web-based order and tracking system",
+      "kind": "workflow"
+    },
+    {
+      "id": "phone",
+      "name": "Mobile phone (calls and texts with the scheduling desk and couriers)",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Log the incoming request in the desk queue",
+      "description": "A resident collection request reaches the scheduling desk in one of three ways: the LIS lists a standing order whose next occurrence falls due, the fax server drops a new requisition from the home into the desk's electronic queue, or a nurse phones or emails. The system time-stamps the item and files it under the home.",
+      "role": "system",
+      "kind": "intake",
+      "inputs": [
+        "standing order due date",
+        "faxed requisition",
+        "phone or email request"
+      ],
+      "outputs": [
+        "queued request"
+      ],
+      "systems": [
+        "lis",
+        "fax",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.7,
+          "condition": "occurrence of an existing standing order falls due"
+        },
+        {
+          "to": "s04",
+          "prob": 0.24,
+          "condition": "new requisition faxed by the home"
+        },
+        {
+          "to": "s03",
+          "prob": 0.06,
+          "condition": "phone or email request from the home"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dbc_standing",
+          "apl_mobile",
+          "paltmed",
+          "dyn_services",
+          "dyn_hcp"
+        ],
+        "note": "The company visits residents of long-term care and retirement homes for blood and ECG collections (dyn_services, dyn_hcp). Standing orders held in the LIS until expiry (dbc_standing); orders sent by fax or email (apl_mobile); standing monitoring labs common in nursing homes (paltmed). The 70/24/6 split is an estimate: with monthly to quarterly monitoring and one-year standing orders, most monthly occurrences come from orders already on file."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check the due standing-order occurrence against the home's census",
+      "description": "Working through the LIS pending list for the home's next visit day, the scheduler confirms the standing order has not passed its expiry date, the resident is still on the home's census and not in hospital, and the tests, frequency and fasting flag are unchanged since the last draw.",
+      "role": "mobile_scheduler",
+      "kind": "validation",
+      "inputs": [
+        "LIS pending standing-order list",
+        "home census"
+      ],
+      "outputs": [
+        "confirmed occurrence"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "An expired order or a discharged resident is left on the list.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Laboratory standing order policy: a standing order is valid only to its expiry date (one year maximum at a comparable Canadian laboratory before 2025) and cannot be extended in the LIS",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.86,
+          "condition": "valid and resident present"
+        },
+        {
+          "to": "s05",
+          "prob": 0.09,
+          "condition": "standing order expired or about to expire"
+        },
+        {
+          "to": "s09",
+          "prob": 0.05,
+          "condition": "resident discharged, deceased, palliative or in hospital"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dbc_standing"
+        ],
+        "note": "One-year maximum validity and no extension in the LIS stated in dbc_standing (LifeLabs, British Columbia). Branch shares and times are estimates; the pending list is worked a day or two before each home's visit day."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Take a phone or email request from the home",
+      "description": "A nurse or unit clerk calls the desk line or emails to request a draw, ask for an earlier date or add a test. The scheduler notes the resident, tests and urgency, explains that a signed requisition is needed and asks the nurse to fax it, or flags the request as urgent for today's run.",
+      "role": "mobile_scheduler",
+      "kind": "communication",
+      "inputs": [
+        "call or email from the home"
+      ],
+      "outputs": [
+        "request note"
+      ],
+      "systems": [
+        "telephony",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2.5,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Resident or test written down wrongly from the call.",
+        "typically_caught_at": "s06"
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.78,
+          "condition": "routine; requisition to follow by fax"
+        },
+        {
+          "to": "s23",
+          "prob": 0.22,
+          "condition": "urgent request for today or tomorrow morning"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "lifelabs_ltc",
+          "lifelabs_central"
+        ],
+        "note": "Booking by telephone at a central desk (lifelabs_ltc, lifelabs_central). Urgent share and times are estimates."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Open and index the faxed requisition",
+      "description": "The scheduler opens the fax image from the queue, matches it to the home and resident, splits multi-page faxes that hold several residents, and files each requisition image in the imaging system so it can be printed for the collection and kept with the order.",
+      "role": "mobile_scheduler",
+      "kind": "data_entry",
+      "inputs": [
+        "fax image"
+      ],
+      "outputs": [
+        "indexed requisition image"
+      ],
+      "systems": [
+        "fax",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.6,
+        "high": 1.2
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 120,
+        "high": 960
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Requisition filed under the wrong resident or home.",
+        "typically_caught_at": "s06"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "indexed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "apl_mobile",
+          "ccl_extended"
+        ],
+        "note": "Requisitions faxed or emailed to the mobile desk (apl_mobile); a completed requisition is required for each specimen (ccl_extended). Faxes that arrive after the desk closes wait overnight; times are estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Ask the home for a corrected or renewed requisition",
+      "description": "For an expired standing order or a requisition with missing items, the scheduler faxes or phones the home naming what is missing (physician signature or billing number, health card number, test names, frequency, fasting instructions or the full facility address) and puts the request on hold in the LIS.",
+      "role": "mobile_scheduler",
+      "kind": "communication",
+      "inputs": [
+        "deficiency list"
+      ],
+      "outputs": [
+        "request to the home",
+        "held request"
+      ],
+      "systems": [
+        "fax",
+        "telephony",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "apl_mobile",
+          "dbc_standing"
+        ],
+        "note": "Incomplete or incorrect details are a major deficiency that can prevent service (apl_mobile); expired standing orders need a new requisition from the physician (dbc_standing). Times are estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Check the requisition for completeness",
+      "description": "The scheduler reads the requisition for two resident identifiers and the health card number, the ordering physician's name, billing number and signature, the tests and any frequency for a standing order, the start and stop dates, fasting or timed-collection instructions and whether an ECG is requested.",
+      "role": "mobile_scheduler",
+      "kind": "validation",
+      "inputs": [
+        "indexed requisition image"
+      ],
+      "outputs": [
+        "accepted requisition or deficiency list"
+      ],
+      "systems": [
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0.4,
+        "mode": 0.8,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A missing item is not noticed and surfaces at collection or billing.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Laboratory and Specimen Collection Centre Licensing Act (Ontario) and its general regulation: specimens are collected and tested only on the requisition of an authorised practitioner with required patient and practitioner details",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.85,
+          "condition": "complete"
+        },
+        {
+          "to": "s05",
+          "prob": 0.15,
+          "condition": "missing or unclear item"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "apl_mobile",
+          "ccl_extended"
+        ],
+        "note": "Required content of mobile collection orders (apl_mobile, ccl_extended). The legal basis is named from the Ontario licensing framework; its text was not opened. The 15 percent deficiency rate is an estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Find or create the resident in the LIS",
+      "description": "The scheduler searches the LIS by health card number and date of birth, checks the match against the home and the name spelling, and creates a patient record for a new admission with the home as the location and the attending physician as the copy-to.",
+      "role": "mobile_scheduler",
+      "kind": "lookup",
+      "inputs": [
+        "accepted requisition"
+      ],
+      "outputs": [
+        "matched patient record"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.7,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Order attached to a duplicate or wrong patient record.",
+        "typically_caught_at": "s12"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189 and Accreditation Canada Diagnostics requirements for positive patient identification with at least two identifiers",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "record found or created"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common LIS practice for long-term care orders; identification standard named from the accreditation framework in the organisation file. Times are estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Wait for the home to send the corrected requisition",
+      "description": "The home's nurse has to reach the attending physician, who often signs orders only on the weekly visit to the home, and fax the corrected or renewed requisition back. The scheduler sees the reply arrive in the fax queue.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "request to the home"
+      ],
+      "outputs": [
+        "corrected or renewed requisition, or no reply"
+      ],
+      "systems": [
+        "fax"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.82,
+          "condition": "corrected or renewed requisition received"
+        },
+        {
+          "to": "s09",
+          "prob": 0.18,
+          "condition": "physician does not renew or home cancels"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "dbc_standing"
+        ],
+        "note": "Renewals depend on the physician issuing a new requisition (dbc_standing). The wait (mode one day, up to five) reflects weekly physician rounds in homes; estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Cancel the request and tell the home",
+      "description": "The scheduler cancels the occurrence or the standing order in the LIS with a reason (discharged, deceased, hospitalised, palliative, not renewed) and notes it on the home's next draw list or faxes a short notice so the nurses know no draw will happen.",
+      "role": "mobile_scheduler",
+      "kind": "data_entry",
+      "inputs": [
+        "cancellation reason"
+      ],
+      "outputs": [
+        "cancelled order with reason"
+      ],
+      "systems": [
+        "lis",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong occurrence cancelled.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "cancelled",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Assign the collection date",
+      "description": "The scheduler places the request on the home's next visit day that meets the due date, the fasting and timed-collection needs and the stability of the tests, and checks whether an ECG device must be on that run. Homes are visited on fixed weekdays by a regular team.",
+      "role": "mobile_scheduler",
+      "kind": "judgment",
+      "inputs": [
+        "confirmed request",
+        "home visit calendar"
+      ],
+      "outputs": [
+        "request booked to a date"
+      ],
+      "systems": [
+        "lis",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.3,
+        "high": 0.6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Date that breaks a fasting or timing requirement.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "date assigned"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "lifelabs_ltc",
+          "locus_phleb",
+          "speedy_ltc"
+        ],
+        "note": "Regular visit schedule per facility (lifelabs_ltc); recurring draw schedules by resident (speedy_ltc); sequencing must respect fasting and stability (locus_phleb). Times are estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Enter the order or standing order in the LIS",
+      "description": "From the requisition image the scheduler keys the test codes, the ordering physician and copy-to, the clinical notes and, for a standing order, the frequency, start and expiry dates so the LIS generates future occurrences. Fasting, timed-draw and ECG flags are set so they print on the collection list.",
+      "role": "mobile_scheduler",
+      "kind": "data_entry",
+      "inputs": [
+        "accepted requisition",
+        "matched patient record"
+      ],
+      "outputs": [
+        "order or standing order in the LIS"
+      ],
+      "systems": [
+        "lis",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 1.2,
+        "mode": 2.2,
+        "high": 4.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong test code, frequency or expiry date keyed.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "entered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dbc_standing",
+          "lifelabs_ltc"
+        ],
+        "note": "Standing orders are held in the LIS with an expiry date (dbc_standing). Entry time and error rate are estimates based on accessioning practice for paper requisitions."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Check the entered order against the requisition image",
+      "description": "Before saving, the scheduler compares the order on screen with the requisition image line by line: tests, frequency, expiry, physician and flags. New standing orders get this check every time because one keying error repeats at every occurrence.",
+      "role": "mobile_scheduler",
+      "kind": "review",
+      "inputs": [
+        "entered order",
+        "requisition image"
+      ],
+      "outputs": [
+        "verified order"
+      ],
+      "systems": [
+        "lis",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Keying error passes the check.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Laboratory order-entry verification procedure under the quality management system",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.97,
+          "condition": "matches"
+        },
+        {
+          "to": "s11",
+          "prob": 0.03,
+          "condition": "discrepancy found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common order-entry verification practice; shares and times are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Send the home its draw list and fasting instructions",
+      "description": "A day or two before each visit day the scheduler prints or faxes the home a list of residents due, with tests that need fasting or timed collection, so the nurses can hold breakfasts, collect urines and prepare residents. Most of the request's elapsed time is spent waiting for the home's visit day.",
+      "role": "mobile_scheduler",
+      "kind": "communication",
+      "inputs": [
+        "requests booked to the date"
+      ],
+      "outputs": [
+        "draw list sent to the home"
+      ],
+      "systems": [
+        "lis",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.15,
+        "high": 0.4
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Resident left off the list sent to the home.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "list sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "paltmed",
+          "apl_mobile"
+        ],
+        "note": "Draws happen on the home's next lab day (paltmed); orders are needed about two days before collection (apl_mobile). Wait from date assignment to the list being sent is an estimate: mode a little over a day, up to six days for homes visited weekly."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Home reviews the list and reports changes",
+      "description": "The charge nurse checks the list against residents who are newly in hospital, isolated in an outbreak, refusing, palliative or newly admitted and calls or faxes the desk with changes before the cut-off the afternoon before the visit.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "draw list"
+      ],
+      "outputs": [
+        "confirmed list or changes"
+      ],
+      "systems": [
+        "fax",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.9,
+          "condition": "no change for this resident"
+        },
+        {
+          "to": "s15",
+          "prob": 0.1,
+          "condition": "postpone or cancel"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; the 10 percent change rate is an estimate. The nurse's time is the home's, so no touch time is counted."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Update the occurrence after the home's change",
+      "description": "The scheduler moves the occurrence to a later visit day, cancels it with a reason, or changes the fasting flag, and corrects the home's list and the run if it is already built.",
+      "role": "mobile_scheduler",
+      "kind": "data_entry",
+      "inputs": [
+        "change from the home"
+      ],
+      "outputs": [
+        "updated or cancelled occurrence"
+      ],
+      "systems": [
+        "lis",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Change applied to the wrong resident.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.6,
+          "condition": "postponed to another visit day"
+        },
+        {
+          "to": "s09",
+          "prob": 0.4,
+          "condition": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Build the next day's run for each mobile lab assistant",
+      "description": "Around midday the scheduler groups the next day's homes into runs of about 15 to 30 residents per assistant, orders them so fasting residents are drawn first and specimens reach the courier drop point inside the processing window, and allows for travel between homes and for ECGs.",
+      "role": "mobile_scheduler",
+      "kind": "coordination",
+      "inputs": [
+        "requests booked to tomorrow",
+        "assistant roster",
+        "courier pickup times"
+      ],
+      "outputs": [
+        "draft runs"
+      ],
+      "systems": [
+        "lis",
+        "spreadsheets",
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 0.8
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Run too long to meet the courier cut-off, or a resident dropped from the run.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.88,
+          "condition": "runs balanced"
+        },
+        {
+          "to": "s17",
+          "prob": 0.12,
+          "condition": "assistant absent or run overloaded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "locus_phleb",
+          "ccl_extended",
+          "lifelabs_ltc"
+        ],
+        "note": "Routes must respect fasting windows, sample stability and lab cut-offs (locus_phleb); routine draws start as early as 4 a.m. (ccl_extended); consistent teams on regular schedules (lifelabs_ltc). Residents per run and per-resident time are estimates; route knowledge is mostly unwritten."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Rebalance runs for an absence or overload",
+      "description": "The team lead moves homes between runs, calls a casual or contracted collector, or asks an assistant to take an extra home, and tells the scheduler which residents must move to another day.",
+      "role": "mobile_team_lead",
+      "kind": "coordination",
+      "inputs": [
+        "draft runs",
+        "absence or overload"
+      ],
+      "outputs": [
+        "rebalanced runs"
+      ],
+      "systems": [
+        "phone",
+        "spreadsheets",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Home left uncovered.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.84,
+          "condition": "covered by moving homes"
+        },
+        {
+          "to": "s18",
+          "prob": 0.06,
+          "condition": "needs overtime or extra contractor"
+        },
+        {
+          "to": "s10",
+          "prob": 0.1,
+          "condition": "resident moved to another day"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_opps"
+        ],
+        "note": "The mobile team uses independent contractors chosen by business need (dyn_opps). Shares and times are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Approve overtime or contractor cover",
+      "description": "For a day that cannot be covered from the roster, the regional manager approves overtime or extra paid contractor visits within the budget and records the reason.",
+      "role": "mobile_manager",
+      "kind": "approval",
+      "inputs": [
+        "coverage request"
+      ],
+      "outputs": [
+        "approved cover"
+      ],
+      "systems": [
+        "phone",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company overtime and contractor spending approval policy",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Print the run package",
+      "description": "Once runs are final the LIS prints, for each assistant, the collection list in run order with fasting and ECG flags, the requisitions and the barcode specimen labels for every resident.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "final runs"
+      ],
+      "outputs": [
+        "collection lists",
+        "requisitions",
+        "labels"
+      ],
+      "systems": [
+        "lis",
+        "collection_list"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Label batch misprints or a requisition is missing.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "printed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Printed collection list, requisitions and labels are described for the collection workflow in the organisation file; timing is an estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Check each run package against the run",
+      "description": "The scheduler counts labels and requisitions against the list for each run, adds reprints for missing items and places the package in the assistant's pickup slot or sends it to the assistant's printer.",
+      "role": "mobile_scheduler",
+      "kind": "validation",
+      "inputs": [
+        "run package"
+      ],
+      "outputs": [
+        "checked run package"
+      ],
+      "systems": [
+        "collection_list",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.15,
+        "high": 0.3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Missing labels not noticed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Specimen labelling and identification requirements of the accreditation standard (labels must match the requisition)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.98,
+          "condition": "complete"
+        },
+        {
+          "to": "s19",
+          "prob": 0.02,
+          "condition": "reprint needed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Send drop points and pickup times to courier dispatch",
+      "description": "The scheduler enters or confirms each run's drop points and expected handover times in the courier tracking system so dispatch can place pickups on the next morning's routes.",
+      "role": "mobile_scheduler",
+      "kind": "coordination",
+      "inputs": [
+        "final runs"
+      ],
+      "outputs": [
+        "courier pickup requests"
+      ],
+      "systems": [
+        "logistics_tracking"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Pickup time missing for a drop point.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Hand-off to courier routes is described in the organisation file's process map; estimate."
+      },
+      "concurrent_with": [
+        "s20"
+      ]
+    },
+    {
+      "id": "s22",
+      "name": "Release the schedule to the mobile team",
+      "description": "The scheduler marks the day's runs as released, which the assistants see when they collect their packages the afternoon or early morning before the run, and answers any questions from assistants about the order of homes.",
+      "role": "mobile_scheduler",
+      "kind": "communication",
+      "inputs": [
+        "checked run package"
+      ],
+      "outputs": [
+        "collection schedule"
+      ],
+      "systems": [
+        "lis",
+        "phone"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "scheduled",
+          "outcome": "scheduled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Fit an urgent request into a run already planned or on the road",
+      "description": "For an urgent request, the scheduler checks the runs for today or tomorrow, phones the nearest assistant to add the resident and confirms with the home that the signed requisition is ready at the nursing station; labels are printed at the home or added to the package.",
+      "role": "mobile_scheduler",
+      "kind": "coordination",
+      "inputs": [
+        "urgent request"
+      ],
+      "outputs": [
+        "resident added to a run"
+      ],
+      "systems": [
+        "lis",
+        "phone",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Requisition not ready on arrival.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.8,
+          "condition": "added to a run",
+          "outcome": "added_to_run"
+        },
+        {
+          "to": "s10",
+          "prob": 0.2,
+          "condition": "no capacity; booked to next visit day"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "paltmed",
+          "ccl_extended"
+        ],
+        "note": "Stat orders carry different collection expectations (paltmed); return visits on request (ccl_extended). Shares and times are estimates."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Expired standing order",
+      "share_of_cases": 0.06,
+      "description": "The standing order has passed its expiry date, so the desk holds the occurrence and asks the home to get a new signed requisition from the physician.",
+      "path": [
+        "s02",
+        "s05",
+        "s08",
+        "s04",
+        "s06",
+        "s07",
+        "s11",
+        "s12",
+        "s10"
+      ]
+    },
+    {
+      "name": "Incomplete faxed requisition",
+      "share_of_cases": 0.04,
+      "description": "A faxed requisition lacks a signature, billing number, health card number, tests or frequency and goes back to the home.",
+      "path": [
+        "s06",
+        "s05",
+        "s08",
+        "s04",
+        "s06"
+      ]
+    },
+    {
+      "name": "Resident discharged, hospitalised or deceased",
+      "share_of_cases": 0.05,
+      "description": "The resident is no longer at the home or not available and the occurrence is cancelled.",
+      "path": [
+        "s02",
+        "s09"
+      ]
+    },
+    {
+      "name": "Home postpones or cancels before the visit",
+      "share_of_cases": 0.09,
+      "description": "The home reports an outbreak, refusal, palliative status or hospital stay before the cut-off and the draw is moved or cancelled.",
+      "path": [
+        "s14",
+        "s15",
+        "s10"
+      ]
+    },
+    {
+      "name": "Assistant absent or run overloaded",
+      "share_of_cases": 0.11,
+      "description": "The team lead moves homes between runs or arranges cover; some residents move to another day.",
+      "path": [
+        "s16",
+        "s17",
+        "s18",
+        "s19"
+      ]
+    },
+    {
+      "name": "Urgent request",
+      "share_of_cases": 0.013,
+      "description": "A home needs a draw today or tomorrow morning and the scheduler adds the resident to a planned or active run.",
+      "path": [
+        "s03",
+        "s23"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 2.5,
+        "p90": 7
+      },
+      "unit": "calendar days from the request reaching the desk (or the standing occurrence falling due) to release of the run that includes the resident",
+      "population": "Long-term care and retirement home collection requests at a large community laboratory",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "apl_mobile",
+          "lifelabs_ltc"
+        ],
+        "note": "No published cycle time found. A comparable public laboratory asks for orders two days before collection (apl_mobile) and homes are visited on a regular schedule (lifelabs_ltc); weekly visit days give a longer tail."
+      }
+    },
+    {
+      "metric": "mobile_order_lead_time_days",
+      "value": 2,
+      "unit": "days before the scheduled collection that a mobile order must be submitted",
+      "population": "Alberta Precision Laboratories mobile collections",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "apl_mobile"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "standing_order_maximum_validity_years",
+      "value": 1,
+      "unit": "years (before 4 August 2025)",
+      "population": "LifeLabs standing orders in British Columbia",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dbc_standing"
+        ],
+        "note": "Raised to two years from August 2025, after the reference period."
+      }
+    },
+    {
+      "metric": "monitoring_lab_frequency_months",
+      "value": {
+        "low": 1,
+        "high": 3
+      },
+      "unit": "months between routine monitoring labs suggested as optimum",
+      "population": "Nursing home residents (US guidance)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "paltmed"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "ontario_ltc_homes_and_residents",
+      "value": {
+        "homes": 626,
+        "residents": 78000
+      },
+      "unit": "homes and residents",
+      "population": "Ontario, 2019",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "fao2019"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Faxed requisitions arrive incomplete or unreadable, and expired standing orders wait on physicians who sign orders only on weekly rounds, so requests sit on hold.",
+      "steps": [
+        "s05",
+        "s06",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "apl_mobile",
+          "dbc_standing"
+        ],
+        "note": "Incomplete details block service (apl_mobile); renewals require new physician requisitions and create paperwork (dbc_standing)."
+      }
+    },
+    {
+      "description": "Runs are built by hand from LIS lists and spreadsheets, so balancing fasting residents, travel and courier cut-offs depends on a few experienced schedulers and breaks down when an assistant calls in sick.",
+      "steps": [
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "locus_phleb"
+        ],
+        "note": "Spreadsheets and basic tools cannot keep pace and routes must respect fasting and stability windows (locus_phleb)."
+      }
+    },
+    {
+      "description": "Late changes from homes (hospital transfers, outbreaks, refusals) arrive after lists are sent and force rework of lists and runs.",
+      "steps": [
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; estimate."
+      }
+    },
+    {
+      "description": "Every new standing order must be keyed and checked carefully because one keying error repeats at every occurrence for up to a year.",
+      "steps": [
+        "s11",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dbc_standing"
+        ],
+        "note": "Standing orders persist in the LIS until expiry (dbc_standing)."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "dyn_services",
+      "title": "Services (the five brands)",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "The model laboratory Mobile Services performs mobile blood and ECG collections in long-term care and retirement homes plus private house call visits."
+    },
+    {
+      "id": "dyn_hcp",
+      "title": "Healthcare provider solutions",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "The company visits patients in long-term care facilities and collects specimens at homes and workplaces; results go to EMRs and the eResults service; menu offers requisition upload and printed forms."
+    },
+    {
+      "id": "dyn_opps",
+      "title": "Opportunities for health professionals",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Mobile Services seeks registered nurses, LPNs and laboratory assistants or technicians, often as independent contractors, for blood and ECG collections in long-term care and retirement homes; needs a smartphone, email, vehicle, computer and printer, and ability to work independently."
+    },
+    {
+      "id": "lifelabs_ltc",
+      "title": "Long term care: mobile lab services",
+      "publisher": "LifeLabs",
+      "url": "https://www.lifelabs.com/corporate-customers/ltc-retirement-residence/mobile-lab-services",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "A consistent team of mobile service technicians visits each long-term care or retirement facility on a regular schedule; booking is by telephone to a central number in Ontario."
+    },
+    {
+      "id": "lifelabs_central",
+      "title": "Update for homecare and MyVisit home services",
+      "publisher": "LifeLabs",
+      "url": "https://lifelabs.com/notification/update-for-homecare-and-myvisit-home-services",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "The laboratory centralized its appointment booking for homecare and long-term care; home care visit prices for homebound patients rose to 55 dollars from 1 January 2024."
+    },
+    {
+      "id": "apl_mobile",
+      "title": "Mobile collection orders",
+      "publisher": "Alberta Precision Laboratories",
+      "url": "https://www.albertaprecisionlabs.ca/hp/Page13822.aspx",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Mobile collection orders are faxed or emailed on the mobile collection requisition with a coversheet giving the ordering provider's contact; orders must be submitted 2 days before the scheduled collection (Monday noon for a Wednesday collection); a preferred day may be noted and the lab notifies the provider if it cannot accommodate it; demographics, provider and full facility address are required and incomplete or incorrect addresses are a major deficiency that can prevent service."
+    },
+    {
+      "id": "dbc_standing",
+      "title": "Reducing burdens: Doctors of BC works with LifeLabs to extend standing order policy to two years",
+      "publisher": "Doctors of BC",
+      "url": "https://www.doctorsofbc.ca/advocacy/2025/reducing-burdens-doctors-bc-works-lifelabs-extend-standing-order-policy-two-years",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Until 4 August 2025 LifeLabs standing orders expired after a maximum of one year; standing orders live in the LIS until their expiry date and cannot be extended there, so physicians must issue a new standing order requisition; renewals created paperwork, with physicians submitting several orders for the same patient each year."
+    },
+    {
+      "id": "ccl_extended",
+      "title": "Extended care laboratory services",
+      "publisher": "Cleveland Clinic Laboratories",
+      "url": "https://clevelandcliniclabs.com/healthcare-provider-resources/extended-care/",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Nursing home clients order through a web system or interfaces with long-term care EMRs; a completed requisition is required for each specimen; routine draws can be scheduled as early as 4 a.m. with return visits on request; client services available 24 hours a day."
+    },
+    {
+      "id": "paltmed",
+      "title": "Everything you should know about lab work",
+      "publisher": "Caring for the Ages (AMDA, the Society for Post-Acute and Long-Term Care Medicine)",
+      "url": "https://paltmed.org/news-media/everything-you-should-know-about-lab-work",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Nursing homes schedule standing lab tests as a monitoring mechanism; admission labs are drawn on the next lab day or within a week; a period of one to three months may be an optimum ordering frequency; it is unlikely that all residents warrant monthly CBC testing; stat orders carry different collection and reporting expectations."
+    },
+    {
+      "id": "locus_phleb",
+      "title": "Which of these 6 home phlebotomy software platforms fits your operations?",
+      "publisher": "Locus",
+      "url": "https://locus.sh/blogs/best-home-phlebotomy-software/",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Mobile phlebotomy appointments must align with fasting requirements, technician skill and lab cut-off times; samples that arrive beyond stability windows delay processing; spreadsheets and basic scheduling tools cannot keep pace as volumes grow; routes should be recalculated when delays occur."
+    },
+    {
+      "id": "speedy_ltc",
+      "title": "Phlebotomy for long-term care",
+      "publisher": "Speedy Sticks",
+      "url": "https://www.speedysticks.com/services/phlebotomy-for-long-term-care",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Long-term care phlebotomy runs on recurring weekly, bi-weekly or custom draw schedules by resident, with bedside collection, labelling and chain of custody to lab pickup."
+    },
+    {
+      "id": "fao2019",
+      "title": "Long-Term Care Homes Program: a review of the plan to create 15,000 new long-term care beds in Ontario",
+      "publisher": "Financial Accountability Office of Ontario",
+      "url": "https://fao-on.org/en/report/ontario-long-term-care-program/",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "626 long-term care homes in Ontario house over 78,000 residents; 78,664 beds in operation in 2018-19; over 80 per cent of residents are over 75."
+    },
+    {
+      "id": "jb13112",
+      "title": "Wages: Medical administrative assistant in Ontario (NOC 13112)",
+      "publisher": "Government of Canada Job Bank",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/25791/ON",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low 17.95, median 25.00, high 32.70 dollars (2023-2024)."
+    }
+  ],
+  "assumptions": [
+    "The case starts when the request reaches the desk or the standing occurrence falls due and ends when the run that includes the resident is released, normally the afternoon before collection. Collection, missed draws and their rescheduling belong to the mb-ltc-collection workflow, which already claims 2.0 scheduler FTE.",
+    "About 70 percent of monthly requests are occurrences of standing orders already in the LIS, 24 percent are new faxed requisitions and 6 percent start with a phone or email request; these shares are estimates.",
+    "Run building is shown per resident (about 0.4 minutes each, or 6 to 12 minutes per run of 15 to 30 residents). Routing software was not common at this desk in 2019-2022.",
+    "The home's own staff time (nurses reviewing lists, physicians signing renewals) is outside the company and counted as waiting only.",
+    "The fax and telephony systems are used here by the scheduling desk although the organisation file lists other units as their users; the org file's collection_list and phone systems belong to the field teams.",
+    "Most elapsed time is waiting for the home's fixed visit day, so cycle time depends on how often each home is visited (one to five days a week); a single mixed distribution is used.",
+    "Hands-on time times volume implies about 14 to 15 FTE against 11.9 stated. The organisation file gives the desk 14 schedulers, of whom 2.0 FTE are already claimed by the collection workflow, so the desk is fully loaded at these times; either standing occurrences are handled faster than estimated or the desk has a few more people (casual or float staff) than the org file lists. The desk also handles house call bookings, which are outside this workflow."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

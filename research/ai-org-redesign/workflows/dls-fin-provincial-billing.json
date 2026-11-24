@@ -1,0 +1,1662 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-fin-provincial-billing",
+  "name": "Bill provincial health plans for community laboratory tests",
+  "org": "diagnostic-lab-services-co",
+  "process": "fin-provincial-billing",
+  "sector": "medical laboratory services",
+  "function": "finance and billing",
+  "summary": "Each completed community requisition for an insured patient in Ontario or Manitoba becomes an electronic claim to the provincial health plan, priced per test from the provincial laboratory price list. Most claims pass the billing system's rules and an overnight health number check and are paid in the next payment run without anyone touching them. Billing clerks work the few per cent that fail: invalid health numbers or version codes, missing practitioner numbers, uninsured tests, rejections on the province's error report and adjustments on the remittance. Ontario pays only up to the company's annual funding cap, so the billing manager tracks billings against the cap and finance accrues the difference, and the monthly payment cycle means each correction costs weeks.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "The provincial billing team of a large Canadian community laboratory company with capped Ontario funding and Manitoba provincial billing.",
+    "org_size_employees": 3300,
+    "notes": "About 88 per cent of the volume is Ontario (OHIP) and 12 per cent Manitoba; Quebec community testing is patient-paid and not in this process."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one billable requisition",
+  "trigger": "The LIS releases a completed community requisition with insured tests to the billing system.",
+  "end_state": "The claim is paid, reconciled and posted to the ledger, or written off, or moved to patient billing.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 500000,
+      "mode": 580000,
+      "high": 660000
+    },
+    "seasonality": "Follows collection volumes; lower in July, August and late December. COVID-19 testing in 2020 to 2022 was funded separately and is not included.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "oag2017"
+      ],
+      "note": "Follows the organisation file. Check: Ontario community labs did more than 121 million tests in 2015/16 and the company received about 30 per cent of funding, roughly 3 million tests a month, or about 500,000 requisitions at five to six tests each, plus Manitoba."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cl-result-reporting",
+        "object": "billable_order",
+        "share": 1.0
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "ontario_moh",
+        "object": "provincial_claim"
+      },
+      {
+        "outcome": "any",
+        "to": "manitoba_health",
+        "object": "provincial_claim"
+      },
+      {
+        "outcome": "paid",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      },
+      {
+        "outcome": "written_off",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ex-government-funding-agreement",
+        "object": "funding_agreement"
+      },
+      {
+        "from": "ontario_moh",
+        "object": "payment_remittance"
+      },
+      {
+        "from": "manitoba_health",
+        "object": "payment_remittance"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "billing_clerk",
+      "title": "Billing clerk",
+      "department": "Billing and revenue cycle",
+      "layer": "individual_contributor",
+      "fte_on_process": 28.0,
+      "loaded_cost_per_hour": {
+        "low": 29,
+        "mode": 33,
+        "high": 42
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file headcount 60; the rest work patient billing, client invoicing and calls. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    },
+    {
+      "id": "billing_supervisor",
+      "title": "Senior billing clerk and billing supervisor",
+      "department": "Billing and revenue cycle",
+      "layer": "supervisor",
+      "fte_on_process": 4.0,
+      "loaded_cost_per_hour": {
+        "low": 33,
+        "mode": 38,
+        "high": 46
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_billclerk"
+        ],
+        "note": "Organisation file headcount 10 senior clerks and supervisors; duties of re-billing unpaid claims, reconciling non-payments and recommending write-offs match the posting. A 2026 posting pays CAD 40,000 to 46,000 a year, below the organisation file's cost range. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    },
+    {
+      "id": "billing_manager",
+      "title": "Billing manager",
+      "department": "Billing and revenue cycle",
+      "layer": "manager",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 66,
+        "high": 80
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "One manager per payer stream; the provincial stream manager tracks the cap and signs off reconciliations. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lis",
+      "name": "Laboratory information system (orders, accessioning, results, autoverification rules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "billing_system",
+      "name": "Laboratory billing and accounts receivable system (provincial claims, patient, client invoices)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "requisition_imaging",
+      "name": "Requisition scanning and document imaging",
+      "kind": "document_store"
+    },
+    {
+      "id": "erp",
+      "name": "ERP for general ledger, payables, procurement and inventory",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "bi",
+      "name": "Data warehouse and management dashboards",
+      "kind": "analytics"
+    },
+    {
+      "id": "email_office",
+      "name": "Email and office suite",
+      "kind": "communication"
+    },
+    {
+      "id": "fax",
+      "name": "Fax server",
+      "kind": "communication"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive the completed order in the billing system",
+      "description": "When the final report is issued, the LIS interface sends the order to the billing system with test codes, collection date, patient demographics, health number and version code, ordering practitioner number, payer and a link to the scanned requisition. Orders arrive in a nightly batch.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "billable order"
+      ],
+      "outputs": [
+        "billing record"
+      ],
+      "systems": [
+        "lis",
+        "billing_system",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Order sent with a missing test or wrong payer code.",
+        "typically_caught_at": "s04"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Typical LIS-to-billing interface; timing is an estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Apply billing rules and map tests to fee codes",
+      "description": "The billing system maps each LIS test to its fee code on the provincial laboratory price list, drops tests that are uninsured or insured only when eligibility criteria are ticked on the requisition (such as vitamin D), checks the test is on the laboratory's licence and flags missing practitioner numbers, duplicates and out-of-province patients.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "billing record",
+        "price list rule table"
+      ],
+      "outputs": [
+        "coded claim or edit"
+      ],
+      "systems": [
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Rule table out of date after a price list change.",
+        "typically_caught_at": "s11"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Schedule of Benefits for Laboratory Services (community laboratory price list) and OHIP eligibility criteria for restricted tests; Manitoba laboratory tariff",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.975,
+          "condition": "all rules passed"
+        },
+        {
+          "to": "s04",
+          "prob": 0.025,
+          "condition": "rule edit raised"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2017"
+        ],
+        "note": "Per-test price list and eligibility criteria for vitamin D and AST are documented; the edit rate is an estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Validate health numbers in batch",
+      "description": "Overnight the billing system checks each health number and version code against the province's eligibility service for the date of service; claims with invalid numbers, old version codes or no coverage go to the edit queue.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "coded claim"
+      ],
+      "outputs": [
+        "validated claim or edit"
+      ],
+      "systems": [
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 300,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Health Insurance Act (Ontario) and Health Services Insurance Act (Manitoba): only insured persons' insured services may be claimed; a valid health number is mandatory on every claim",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.985,
+          "condition": "valid and eligible"
+        },
+        {
+          "to": "s04",
+          "prob": 0.015,
+          "condition": "invalid number, version code or coverage"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mb_manual"
+        ],
+        "note": "A claim without a correct health number is automatically rejected (Manitoba); batch eligibility checking before submission and its failure rate are estimates."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Work the pre-submission edit queue",
+      "description": "A billing clerk opens the edited claim beside the scanned requisition and the LIS registration, corrects keying errors in the health number, version code, date of birth or practitioner number, checks coverage online, and decides whether the test is billable to the province, should be charged to the patient or cannot be billed.",
+      "role": "billing_clerk",
+      "kind": "validation",
+      "inputs": [
+        "edited claim",
+        "requisition image",
+        "LIS registration"
+      ],
+      "outputs": [
+        "corrected claim or payer decision"
+      ],
+      "systems": [
+        "billing_system",
+        "requisition_imaging",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong correction keyed or a billable test dropped.",
+        "typically_caught_at": "s11"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Laboratory and Specimen Collection Centre Licensing Act: tests only on the requisition of an authorized practitioner; billed tests must be supported by a signed requisition (Ministry audit right)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.4,
+          "condition": "corrected in billing only"
+        },
+        {
+          "to": "s21",
+          "prob": 0.3,
+          "condition": "corrected, LIS record also needs updating"
+        },
+        {
+          "to": "s05",
+          "prob": 0.15,
+          "condition": "details needed from the patient or centre"
+        },
+        {
+          "to": "s20",
+          "prob": 0.1,
+          "condition": "not insured, charge the patient"
+        },
+        {
+          "to": "s19",
+          "prob": 0.05,
+          "condition": "cannot be billed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2017",
+          "dyn_billclerk"
+        ],
+        "note": "Requisition support for billed tests and the clerk duties are documented; branch shares are estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Update the patient record in the LIS to match",
+      "description": "The clerk re-keys the corrected health number, version code or name into the patient's LIS registration so the next requisition and any copy reports carry the right details, and notes the change in the order history.",
+      "role": "billing_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "corrected claim"
+      ],
+      "outputs": [
+        "updated LIS registration"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Typo when re-keying into the LIS.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "updated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Billing and LIS are separate systems; re-keying is common practice. Times are estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Request missing details from the patient or centre",
+      "description": "The clerk sends a letter or phones the patient to ask for a current health card, or emails the collection centre for a clearer requisition copy or the practitioner number, and sets a follow-up date on the claim.",
+      "role": "billing_clerk",
+      "kind": "communication",
+      "inputs": [
+        "edited claim"
+      ],
+      "outputs": [
+        "information request"
+      ],
+      "systems": [
+        "billing_system",
+        "email_office",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Times are estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Wait for the patient or centre to respond",
+      "description": "The claim sits in a pending status while the patient or centre replies. Patients who never provide valid coverage are billed directly; small amounts are written off.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "information request"
+      ],
+      "outputs": [
+        "details or no reply"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.6,
+          "condition": "details received"
+        },
+        {
+          "to": "s20",
+          "prob": 0.25,
+          "condition": "no valid coverage, charge the patient"
+        },
+        {
+          "to": "s19",
+          "prob": 0.15,
+          "condition": "no reply, small amount"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Reply times and shares are estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Generate the daily claims file",
+      "description": "Each evening the billing system collects all clean and corrected claims into the province's claim file format, one file for OHIP and one for Manitoba Health, with batch control totals.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "validated claims"
+      ],
+      "outputs": [
+        "claims file"
+      ],
+      "systems": [
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "file built"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mb_manual"
+        ],
+        "note": "Electronic claim files submitted daily are documented for Manitoba; the Ontario equivalent is assumed."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Upload the claims file and log the submission",
+      "description": "A billing clerk uploads the file through the province's secure electronic claims transfer service (MC EDT for OHIP, EPiCS for Manitoba) and records the file name, claim count and dollar total in the submission log. Hands-on time is spread across the day's claims.",
+      "role": "billing_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "claims file"
+      ],
+      "outputs": [
+        "submitted batch",
+        "submission log entry"
+      ],
+      "systems": [
+        "billing_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0.001,
+        "high": 0.003
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0005,
+        "defect_description": "File uploaded twice or not at all.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "uploaded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mb_manual"
+        ],
+        "note": "Electronic submission is mandatory in Manitoba; the upload routine is an estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Review the batch edit report",
+      "description": "The next business day the clerk downloads the province's batch acknowledgement and checks that the accepted claim count and value match the submission log; a rejected batch is rebuilt and resent.",
+      "role": "billing_clerk",
+      "kind": "review",
+      "inputs": [
+        "batch acknowledgement",
+        "submission log"
+      ],
+      "outputs": [
+        "confirmed batch"
+      ],
+      "systems": [
+        "billing_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0.001,
+        "high": 0.003
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control: reconcile submitted and accepted claim counts and totals for each batch",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.998,
+          "condition": "batch accepted"
+        },
+        {
+          "to": "s07",
+          "prob": 0.002,
+          "condition": "batch rejected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common claims practice; times are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Wait for the province's claims error report",
+      "description": "The province adjudicates each claim against eligibility, fee code, licence and duplicate rules and returns an error report listing claims it refused, usually within days of submission.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "submitted claims"
+      ],
+      "outputs": [
+        "claims error report"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.982,
+          "condition": "claim accepted for payment"
+        },
+        {
+          "to": "s11",
+          "prob": 0.015,
+          "condition": "claim rejected on the error report"
+        },
+        {
+          "to": "s12",
+          "prob": 0.003,
+          "condition": "claim neither paid nor rejected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Rejection share and timing are estimates; registration-time card checks keep it low."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Work the claims error report",
+      "description": "The clerk reads the error code for each rejected claim (health number not eligible on the service date, invalid version code, duplicate, test not insured for this laboratory, invalid practitioner), looks up the requisition and coverage, corrects and resubmits, transfers the charge to the patient or proposes a write-off.",
+      "role": "billing_clerk",
+      "kind": "validation",
+      "inputs": [
+        "claims error report",
+        "requisition image"
+      ],
+      "outputs": [
+        "corrected claim, transfer or write-off proposal"
+      ],
+      "systems": [
+        "billing_system",
+        "requisition_imaging",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Claim resubmitted without fixing the cause.",
+        "typically_caught_at": "s10"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Claim correction and resubmission within the six-month submission limit (Manitoba Regulation 49/93 s. 4(2); Ontario equivalent rule)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.7,
+          "condition": "corrected and resubmitted"
+        },
+        {
+          "to": "s20",
+          "prob": 0.15,
+          "condition": "not covered, charge the patient"
+        },
+        {
+          "to": "s19",
+          "prob": 0.15,
+          "condition": "cannot be billed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mb_manual",
+          "dyn_billclerk"
+        ],
+        "note": "Correction within six months and re-billing duties are documented; shares and times are estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Review aged unpaid claims",
+      "description": "Each week a senior billing clerk runs the receivables aging report, finds claims that were neither paid nor rejected after two payment cycles, checks the submission log and remittances, and resubmits them or proposes a write-off before the six-month limit.",
+      "role": "billing_supervisor",
+      "kind": "analysis",
+      "inputs": [
+        "aging report",
+        "submission log"
+      ],
+      "outputs": [
+        "resubmission or write-off proposal"
+      ],
+      "systems": [
+        "billing_system",
+        "bi",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 20160,
+        "mode": 43200,
+        "high": 64800
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.8,
+          "condition": "resubmitted"
+        },
+        {
+          "to": "s19",
+          "prob": 0.2,
+          "condition": "past the limit or not recoverable"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_billclerk",
+          "mb_manual"
+        ],
+        "note": "Aging reports and re-billing of unpaid claims are documented duties; shares and timing are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Wait for the payment cycle",
+      "description": "Accepted claims wait for the province's payment run: monthly for OHIP and twice monthly for Manitoba Health. Ontario payments are limited by the company's corporate cap, so late in the funding year billed claims are recorded but not paid in full.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "accepted claims"
+      ],
+      "outputs": [
+        "payment and remittance advice"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 7200,
+        "mode": 30240,
+        "high": 64800
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "remittance issued"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mb_manual",
+          "oag2017",
+          "parent10k2018"
+        ],
+        "note": "Twice-monthly payment in Manitoba and capped Ontario funding are documented; the Ontario monthly cycle length is an estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Load the remittance advice and auto-post payments",
+      "description": "The billing system imports the remittance file, matches each paid line to its claim, posts payments and flags lines paid at a different amount, adjusted or refused, with their explanation codes.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "remittance advice"
+      ],
+      "outputs": [
+        "posted payments",
+        "remittance exceptions"
+      ],
+      "systems": [
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.99,
+          "condition": "paid as billed"
+        },
+        {
+          "to": "s15",
+          "prob": 0.01,
+          "condition": "adjusted or refused on the remittance"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mb_manual"
+        ],
+        "note": "Remittance advice with explanation codes is documented; the exception share is an estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Investigate remittance adjustments",
+      "description": "The clerk reviews each adjusted or refused line, compares it with the claim and the explanation code, and either resubmits a corrected claim, accepts the adjustment or proposes a write-off.",
+      "role": "billing_clerk",
+      "kind": "analysis",
+      "inputs": [
+        "remittance exception"
+      ],
+      "outputs": [
+        "resubmission, accepted adjustment or write-off proposal"
+      ],
+      "systems": [
+        "billing_system",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Adjustment accepted that should have been disputed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.4,
+          "condition": "corrected and resubmitted"
+        },
+        {
+          "to": "s19",
+          "prob": 0.3,
+          "condition": "write-off proposed"
+        },
+        {
+          "to": "s16",
+          "prob": 0.3,
+          "condition": "adjustment accepted"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_billclerk",
+          "mb_manual"
+        ],
+        "note": "Reconciling non-payments and resubmitting are documented duties; shares are estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Reconcile the remittance to the bank deposit and receivables",
+      "description": "A senior billing clerk ties the remittance total to the deposit on the bank statement and to the receivables movement in the billing system, investigates differences and signs the reconciliation. Hands-on time is spread across all claims on the remittance.",
+      "role": "billing_supervisor",
+      "kind": "validation",
+      "inputs": [
+        "posted remittance",
+        "bank statement"
+      ],
+      "outputs": [
+        "signed reconciliation"
+      ],
+      "systems": [
+        "billing_system",
+        "erp",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0.002,
+        "high": 0.005
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Sarbanes-Oxley section 404 internal control over financial reporting at the US-listed parent: monthly payer remittance to cash and receivables reconciliation",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "reconciled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_billclerk"
+        ],
+        "note": "Month-end reconciliation is a documented duty; the SOX basis follows from the parent's US listing."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Track billings against the funding cap",
+      "description": "The billing manager updates the cap workbook with the month's billed and paid amounts by payer, projects when the Ontario corporate cap will be reached and estimates the amount billed above it, and sends the figures for the month-end accrual.",
+      "role": "billing_manager",
+      "kind": "analysis",
+      "inputs": [
+        "billing and payment summary",
+        "funding agreement terms"
+      ],
+      "outputs": [
+        "cap position",
+        "accrual estimate"
+      ],
+      "systems": [
+        "bi",
+        "spreadsheets",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0.001,
+        "high": 0.003
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario corporate funding cap and transfer payment agreement terms for community laboratory funding",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "cap position updated"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2017",
+          "healthydebate2015",
+          "parent10k2018"
+        ],
+        "note": "Corporate cap, billing above the cap and annual volume-based revisions are documented; the monthly tracking routine is an estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Export billing and payments to the general ledger",
+      "description": "The billing system produces the month's revenue, receivable, cash and cap adjustment summary and posts it to the ERP general ledger for the month-end close.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "billing summary",
+        "accrual estimate"
+      ],
+      "outputs": [
+        "ledger postings"
+      ],
+      "systems": [
+        "billing_system",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "claim paid and posted",
+          "outcome": "paid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Typical billing-to-ERP interface."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Approve the write-off",
+      "description": "A billing supervisor reviews proposed write-offs with the reason and amount, approves them within delegated limits or sends large items to the billing manager, and the system posts the adjustment.",
+      "role": "billing_supervisor",
+      "kind": "approval",
+      "inputs": [
+        "write-off proposal"
+      ],
+      "outputs": [
+        "approved write-off"
+      ],
+      "systems": [
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Write-off authority matrix: the clerk who worked the claim cannot approve its write-off",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "written off",
+          "outcome": "written_off"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_billclerk"
+        ],
+        "note": "Clerks recommend write-offs for approval; limits and times are estimates."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Transfer the charge to patient billing",
+      "description": "For a test that is not insured for this patient, the clerk changes the payer to the patient, applies the uninsured price and releases the charge to the patient billing queue with a note explaining why.",
+      "role": "billing_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "claim with no valid coverage"
+      ],
+      "outputs": [
+        "patient charge"
+      ],
+      "systems": [
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong price applied.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "moved to patient billing",
+          "outcome": "transferred_to_patient_billing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2017"
+        ],
+        "note": "Patients pay for tests outside OHIP coverage or eligibility criteria; times are estimates."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Pre-submission edit",
+      "share_of_cases": 0.04,
+      "description": "Rule edits or a failed health number check send the claim to a clerk, who corrects it, often re-keys the LIS record, or asks the patient or centre.",
+      "path": [
+        "s02",
+        "s04",
+        "s21",
+        "s07"
+      ]
+    },
+    {
+      "name": "Missing coverage details",
+      "share_of_cases": 0.006,
+      "description": "The clerk writes to the patient or centre; a quarter end up billed to the patient.",
+      "path": [
+        "s04",
+        "s05",
+        "s06",
+        "s04"
+      ]
+    },
+    {
+      "name": "Rejected on the claims error report",
+      "share_of_cases": 0.015,
+      "description": "The province refuses the claim; the clerk corrects and resubmits, adding a payment cycle.",
+      "path": [
+        "s10",
+        "s11",
+        "s07"
+      ]
+    },
+    {
+      "name": "Lost claim",
+      "share_of_cases": 0.003,
+      "description": "Neither paid nor rejected; found on the aging report and resubmitted before the six-month limit.",
+      "path": [
+        "s10",
+        "s12",
+        "s07"
+      ]
+    },
+    {
+      "name": "Remittance adjustment",
+      "share_of_cases": 0.01,
+      "description": "Paid at a different amount or refused on the remittance and investigated.",
+      "path": [
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Write-off",
+      "share_of_cases": 0.005,
+      "description": "Unbillable or past the limit; approved by a supervisor.",
+      "path": [
+        "s19"
+      ]
+    },
+    {
+      "name": "Transferred to patient billing",
+      "share_of_cases": 0.008,
+      "description": "No valid coverage or test outside eligibility criteria; the patient is charged.",
+      "path": [
+        "s20"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 35,
+        "p90": 55
+      },
+      "unit": "calendar days from completed order to payment posted and reconciled",
+      "population": "Provincial laboratory claims, Ontario and Manitoba, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "mb_manual"
+        ],
+        "note": "Manitoba pays twice monthly with remittances from the 3rd business day after cut-off; Ontario's monthly cycle and the month-end reconciliation are assumed, giving about a month for clean claims and an extra cycle for rejected ones."
+      }
+    },
+    {
+      "metric": "billings_above_cap",
+      "value": 0.3,
+      "unit": "share by which community lab billings exceeded payments, 2011/12 to 2015/16 (over 30 per cent)",
+      "population": "Ontario community laboratory sector",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2017"
+        ],
+        "note": "CAD 868 million billed against CAD 606 million paid in 2015/16."
+      }
+    },
+    {
+      "metric": "company_ontario_funding",
+      "value": 194700000,
+      "unit": "CAD in 2015/16 (30.4 per cent of sector funding)",
+      "population": "The modelled company",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2017",
+          "tvo2017"
+        ],
+        "note": "TVO reports CAD 195.7 million; the parent reported CAD 188.1 million capitated revenue in 2018 (parent10k2018)."
+      }
+    },
+    {
+      "metric": "ontario_community_tests",
+      "value": 121000000,
+      "unit": "tests in 2015/16 (more than)",
+      "population": "Ontario community laboratory sector",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2017"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "claim_submission_limit",
+      "value": 6,
+      "unit": "months from date of service",
+      "population": "Manitoba Health claims",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "mb_manual"
+        ],
+        "note": "Ontario has a similar six-month rule (not opened)."
+      }
+    },
+    {
+      "metric": "initial_claim_exception_rate",
+      "value": 0.055,
+      "unit": "share of requisitions needing a clerk before payment (pre-submission edits plus error report rejections)",
+      "population": "Modelled",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; card checks at registration keep provincial rejections far below the 10 per cent or more seen in private insurance billing."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Health number and version errors made at registration surface in billing days later and must be fixed in both the billing system and the LIS.",
+      "steps": [
+        "s03",
+        "s04",
+        "s21"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mb_manual"
+        ],
+        "note": "Claims without a correct health number are rejected automatically."
+      }
+    },
+    {
+      "description": "Each rejection or adjustment costs another payment cycle of two to four weeks.",
+      "steps": [
+        "s10",
+        "s11",
+        "s13",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mb_manual"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Ontario pays only up to the corporate cap, so late in the year corrected claims add recorded billings but little cash, and finance has to estimate the cap adjustment every month.",
+      "steps": [
+        "s13",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2017",
+          "healthydebate2015"
+        ],
+        "note": "Billings exceeded payments by over 30 per cent."
+      }
+    },
+    {
+      "description": "Every billed test must be traceable to a signed requisition image for Ministry audits, which the Ministry planned to reinstate under the transfer payment agreements.",
+      "steps": [
+        "s04",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2017"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Lost or unanswered claims are found only on the weekly aging report and chased by hand before the six-month limit.",
+      "steps": [
+        "s12"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_billclerk",
+          "mb_manual"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Price list and eligibility rule changes (such as the 2017/18 price list) must be built into the billing rule table, and gaps show up as rejections.",
+      "steps": [
+        "s02",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2017"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oag2017",
+      "title": "2017 Annual Report, Volume 1, Section 3.07: Laboratory Services in the Health Sector",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Community labs paid per test from a Ministry price list largely unchanged since 1999, subject to an industry cap (since 1993/94) and a corporate cap per company (since 1996/97); in 2015/16 community labs performed more than 121 million tests, billed about CAD 868 million and were paid about CAD 606 million under the cap plus CAD 34 million for separately funded tests; providers billed over 30 per cent more than they received from 2011/12 to 2015/16 and keep submitting bills after reaching the cap; the model laboratory received CAD 194.7 million (30.40 per cent); the Ministry stopped auditing that billed tests were supported by signed requisitions in 2013 and planned audit provisions in transfer payment agreements; short-term transfer payment agreements with annually revised caps based on relative volume planned for 2017/18; utilization discount modifier to be discontinued; vitamin D and AST insured only under eligibility criteria, otherwise the patient pays; 1.1 million uninsured community tests in 2015/16."
+    },
+    {
+      "id": "healthydebate2015",
+      "title": "Ontario's private outpatient lab sector needs overhaul, say critics",
+      "publisher": "Healthy Debate (Glauser and Remfry)",
+      "url": "https://healthydebate.ca/2015/02/topic/private-medical-labs-ontario/",
+      "year": 2015,
+      "accessed": "2026-11-17",
+      "supports": "Ontario pays seven private companies per test, about CAD 600 million a year; each company's annual maximum is based on its 1996 market share; executives said their companies always exceed their caps; 8 per cent of funding tied to patient access benchmarks."
+    },
+    {
+      "id": "tvo2017",
+      "title": "There's a lot we don't know about Ontario's private medical labs",
+      "publisher": "TVO Today (Reid)",
+      "url": "",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "The model laboratory received more than 30 per cent (CAD 195.7 million) of 2015-16 community lab funding; fee-for-service from a price list not significantly updated since 1999; the Ministry had not verified that community labs billed OHIP accurately."
+    },
+    {
+      "id": "parent10k2018",
+      "title": "The US parent Form 10-K for 2018",
+      "publisher": "U.S. Securities and Exchange Commission (EDGAR)",
+      "url": "",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "Ontario Ministry licenses community laboratories and caps what each can bill the provincial plan; annual maximum for all community tests; rates subject to year-end review and adjustment for actual volume and mix; capitated revenue from the Ontario plan CAD 188.1 million in 2018."
+    },
+    {
+      "id": "mb_manual",
+      "title": "Manitoba Physician's Manual: claims submission and payment procedures",
+      "publisher": "Manitoba Health",
+      "url": "https://www.gov.mb.ca/health/documents/physmanual.pdf",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "All fee-for-service claims submitted electronically (EPiCS); the PHIN is mandatory and claims without a correct PHIN are automatically rejected; claims adjudicated continually and paid by EFT twice monthly (mid-month and month end) with two cut-offs a month; remittance advice with Explanation of Benefits codes downloadable from the 3rd business day after cut-off and billing staff must reconcile it; claims more than 6 months after the service date rejected (code C2) under Regulation 49/93 s. 4(2); corrections resubmitted within six months; queries answered within 90 days."
+    },
+    {
+      "id": "dyn_billclerk",
+      "title": "Senior Billing Clerk, Winnipeg (job posting 2026-12300)",
+      "publisher": "The model laboratory via Jobvite",
+      "url": "",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Duties: review, investigate and re-bill outstanding unpaid claims; reconcile non-payments and resubmit; recommend write-offs; generate receivables aging reports; post payments, adjustments and transfers; month-end reconciliation; answer billing calls; requisition entry for private accounts; 2+ years billing experience; CAD 40,000 to 46,000 a year, 37.5 hours a week."
+    }
+  ],
+  "assumptions": [
+    "One case is one requisition billed as one claim with several test lines; 88 per cent Ontario and 12 per cent Manitoba by the author's estimate from collection centre staffing in the organisation file.",
+    "Ontario claims mechanics (MC EDT upload, batch edit report, claims error report, monthly remittance advice, six-month limit) are described from general knowledge because the Ministry's OHIP technical manuals could not be opened; the Manitoba manual is used as the documented analogue. These steps are tier C or B.",
+    "Under the transfer payment agreements from 2017/18 the company still submits per-test claims, which set its volume and payments within the cap; the exact payment mechanics in 2019-2022 are not public and are simplified to a monthly payment limited by the cap.",
+    "Health cards are checked at registration (cl-psc-registration), so provincial rejection rates here are low (about 1.5 per cent after a 4 per cent pre-submission edit rate); these rates are estimates.",
+    "Daily uploads, batch checks, reconciliations and cap tracking are done once for thousands of claims; their hands-on time is spread across claims as fractions of a minute.",
+    "The funding agreement and remittances are inputs rather than case starts, so they are listed in triggered_by with a share of 0.",
+    "Claims moved to patient billing go to fin-patient-billing, but the organisation file does not list fin-provincial-billing as a source for fin-patient-billing, so that link is not in this workflow's interfaces.",
+    "The 2026 Senior Billing Clerk posting pays CAD 40,000 to 46,000 a year (about CAD 28 to 32 an hour loaded), below the organisation file's cost range for billing supervisors; the organisation file's figures are kept.",
+    "Web search capacity ran out during this workflow, so fewer sources were opened than for the other two."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

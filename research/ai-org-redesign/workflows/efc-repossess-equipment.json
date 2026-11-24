@@ -1,0 +1,1535 @@
+{
+  "schema_version": "0.2",
+  "id": "efc-repossess-equipment",
+  "name": "Repossess leased equipment",
+  "org": "equipment-finance-co",
+  "process": "repossess-equipment",
+  "sector": "equipment leasing and finance",
+  "function": "collections and recoveries",
+  "summary": "When late-stage collections gives up on a defaulted lease, a recovery officer takes the equipment back so it can be sold against the balance. The officer confirms that notices have run, no insolvency stay applies and the registration is valid, tries for a voluntary surrender, otherwise instructs a licensed bailiff, arranges transport and storage, sends the notice of intended disposition the provincial PPSA requires to the customer, guarantors and other secured parties, and hands the equipment to remarketing once the notice period ends. It takes five to seven weeks, most of it waiting for the bailiff, the carrier and the statutory notice period, and goes wrong when equipment has been moved, a notice is defective or the customer files for insolvency first.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A mid-size Canadian independent equipment lessor with about 55,000 active contracts and a five-person recoveries team that uses outside bailiffs, carriers and storage yards.",
+    "org_size_employees": 340,
+    "notes": "Most repossessions are trucks, trailers and construction equipment. Rules described are the common-law provinces' PPSAs; Quebec seizures rely on the lessor's ownership and may need a court order when the customer refuses."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one repossession",
+  "trigger": "Late-stage collections sends an approved repossession order, or a bailiff reports equipment found or abandoned on an account already in recovery.",
+  "end_state": "The equipment is in storage, the notice period has passed and the file is with remarketing, or the account is reinstated, redeemed, stayed by insolvency, sent to legal or recorded as equipment not recovered.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 30,
+      "mode": 45,
+      "high": 75
+    },
+    "seasonality": "Follows defaults with a lag of two to four months; rose in late 2020 and 2021 once deferrals ended, though government support kept losses lower than feared.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file process map, set from about 650 late-stage accounts a month of which a small share are repossessed."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "collect-late-stage",
+        "object": "repossession_order",
+        "share": 0.95
+      },
+      {
+        "from": "bailiff",
+        "object": "bailiff_report",
+        "share": 0.05
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "bailiff",
+        "object": "repossession_order"
+      },
+      {
+        "outcome": "any",
+        "to": "pay-operating-suppliers",
+        "object": "ap_invoice"
+      },
+      {
+        "outcome": "repossessed",
+        "to": "transport_storage",
+        "object": "transport_order"
+      },
+      {
+        "outcome": "redeemed",
+        "to": "transport_storage",
+        "object": "transport_order"
+      },
+      {
+        "outcome": "repossessed",
+        "to": "customer",
+        "object": "disposition_notice"
+      },
+      {
+        "outcome": "repossessed",
+        "to": "remarket-equipment",
+        "object": "repossessed_asset"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "recovery_officer",
+      "title": "Recovery officer",
+      "department": "Recoveries and insolvency",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.4,
+      "loaded_cost_per_hour": {
+        "low": 34,
+        "mode": 42,
+        "high": 52
+      },
+      "occupation_code": "NOC 14202",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_jb_14202"
+        ],
+        "note": "Wage basis from Job Bank NOC 14202, loaded as in the organisation file. FTE is a tier C estimate: about 4 hours per repossession at 45 a month; the four recovery officers also work deficiency recovery, write-offs and insolvency claims."
+      }
+    },
+    {
+      "id": "recovery_mgr",
+      "title": "Recovery and insolvency manager",
+      "department": "Recoveries and insolvency",
+      "layer": "manager",
+      "fte_on_process": 0.12,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 72,
+        "high": 88
+      },
+      "occupation_code": "NOC 10021",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_jb_10021"
+        ],
+        "note": "Wage basis from Job Bank NOC 10021. FTE is a tier C estimate for approvals of reinstatements, complex seizures and invoices."
+      }
+    },
+    {
+      "id": "asset_coord",
+      "title": "Asset logistics coordinator",
+      "department": "Asset management and remarketing",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.15,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Arranges transport and storage for about 40 seized or surrendered units a month. Cost from the organisation file."
+      }
+    },
+    {
+      "id": "remarketing_spec",
+      "title": "Remarketing specialist",
+      "department": "Asset management and remarketing",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 40,
+        "high": 50
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Inspects and values each unit on arrival at the yard. Cost from the organisation file."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lms",
+      "name": "Lease management system (contracts, schedules, billing, tax codes, asset records, servicing)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "collections_system",
+      "name": "Collections queue manager and dialer",
+      "kind": "workflow"
+    },
+    {
+      "id": "registry_portals",
+      "name": "Provincial personal property registry and Quebec RDPRM search and registration portals",
+      "kind": "external_portal"
+    },
+    {
+      "id": "bureau_portals",
+      "name": "Commercial and consumer credit bureau portals (Equifax, PayNet)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "doc_imaging",
+      "name": "Document imaging and contract file store",
+      "kind": "document_store"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, calendars and team chat",
+      "kind": "communication"
+    },
+    {
+      "id": "gl_erp",
+      "name": "General ledger and accounts payable (mid-market ERP)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheet models (pool cuts, borrowing base, covenants, budget, tax workpapers)",
+      "kind": "spreadsheet"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Open the recovery file from the repossession order",
+      "description": "A recovery officer receives the repossession package from late-stage collections (contract, guarantees, registration verification, default notice with proof of delivery, equipment list with serial numbers, location and contacts, recovery value estimate), opens a recovery file in the collections system and imaging, and notes the province, because seizure and notice rules differ.",
+      "role": "recovery_officer",
+      "kind": "intake",
+      "inputs": [
+        "repossession order",
+        "repossession package"
+      ],
+      "outputs": [
+        "recovery file"
+      ],
+      "systems": [
+        "collections_system",
+        "doc_imaging",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Package accepted with a missing guarantee or notice proof.",
+        "typically_caught_at": "s02"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Package contents follow efc-collect-late-stage s17; times are estimates."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Confirm the right to seize",
+      "description": "The officer checks that the lease is in default and terminated, that the demand, default notice and any section 244 notice were delivered and their periods have run, refreshes the insolvency search for a notice of intention, proposal or bankruptcy that would stay enforcement, and searches the registry to confirm the company's registration (or Quebec publication) is in place and the serial numbers match.",
+      "role": "recovery_officer",
+      "kind": "validation",
+      "inputs": [
+        "recovery file"
+      ],
+      "outputs": [
+        "clearance to seize or defect list"
+      ],
+      "systems": [
+        "registry_portals",
+        "bureau_portals",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A notice period or stay is misread.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "PPSA right to take possession on default (BC s.58, Ontario s.62), common-law reasonable notice before seizure, BIA s.244 ten-day notice and BIA stays of proceedings; Quebec Civil Code art. 1852 publication of lease rights",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.85,
+          "condition": "clear to seize"
+        },
+        {
+          "to": "s03",
+          "prob": 0.15,
+          "condition": "defect or insolvency found"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_bc_ppsa",
+          "src_bia_s244",
+          "src_lawtimes_priest",
+          "src_lerners_walgre",
+          "src_legal500_demand",
+          "src_elfa_quebec_pub"
+        ],
+        "note": "The legal tests are stated in the sources; the 15% defect share is tier C."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Resolve a defect before seizure",
+      "description": "The officer deals with what the check found: waits out a notice period that has not run, gets a missing notice re-served, corrects a registration error with the registration clerks, or, when the customer has filed for insolvency, stops the seizure and refers the file to recoveries' insolvency work and legal.",
+      "role": "recovery_officer",
+      "kind": "coordination",
+      "inputs": [
+        "defect list"
+      ],
+      "outputs": [
+        "defect cleared or file referred"
+      ],
+      "systems": [
+        "registry_portals",
+        "email_collab",
+        "collections_system"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.7,
+          "condition": "defect cleared"
+        },
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "insolvency stay, referred",
+          "outcome": "stopped_insolvency"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_lerners_walgre",
+          "src_bia_s244"
+        ],
+        "note": "Whether enforcement can continue depends on what was complete before the filing. Shares and times are tier C."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Offer a voluntary surrender or a last chance to pay",
+      "description": "Before sending a bailiff the officer calls the customer and guarantors to ask them to surrender the equipment at an agreed place and time, which saves bailiff and towing costs, or to pay the full arrears and costs to reinstate. Many customers who are closing down agree to surrender.",
+      "role": "recovery_officer",
+      "kind": "communication",
+      "inputs": [
+        "clearance to seize"
+      ],
+      "outputs": [
+        "surrender arrangement, payment or refusal"
+      ],
+      "systems": [
+        "collections_system",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.25,
+          "condition": "customer agrees to surrender"
+        },
+        {
+          "to": "s05",
+          "prob": 0.08,
+          "condition": "customer pays to reinstate"
+        },
+        {
+          "to": "s06",
+          "prob": 0.67,
+          "condition": "refuses or cannot be reached"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shares are estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Approve reinstatement or settlement",
+      "description": "The recovery manager confirms the funds have cleared and that the payment covers arrears, costs and any conditions, approves cancelling the repossession and returns the account to collections with a note.",
+      "role": "recovery_mgr",
+      "kind": "approval",
+      "inputs": [
+        "payment confirmation"
+      ],
+      "outputs": [
+        "reinstatement approval"
+      ],
+      "systems": [
+        "lms",
+        "collections_system"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Recovery policy: delegated authority to reinstate a terminated lease or accept a settlement",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "reinstated",
+          "outcome": "reinstated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Instruct the bailiff",
+      "description": "The officer picks a licensed bailiff from the company's panel for the province, sends the written repossession instruction with copies of the lease, the registration verification, the notices, the equipment list with serial numbers and photos, the location and any known hazards, and agrees the fee and the date.",
+      "role": "recovery_officer",
+      "kind": "communication",
+      "inputs": [
+        "clearance to seize",
+        "repossession package"
+      ],
+      "outputs": [
+        "repossession order to bailiff"
+      ],
+      "systems": [
+        "email_collab",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong serial number or location sent to the bailiff.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.2,
+          "condition": "costly or complex seizure"
+        },
+        {
+          "to": "s08",
+          "prob": 0.8,
+          "condition": "standard seizure"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Bailiff instruction practice is the author's description; no Canadian bailiff source was opened."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Approve a costly or complex seizure",
+      "description": "The recovery manager approves seizures expected to cost more than the officer's limit, such as heavy equipment needing low-bed transport, several sites, a hostile customer needing a police standby, or equipment on a third party's premises.",
+      "role": "recovery_mgr",
+      "kind": "approval",
+      "inputs": [
+        "bailiff estimate"
+      ],
+      "outputs": [
+        "seizure approval"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Recovery policy: approval limits for repossession costs",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Bailiff locates and seizes the equipment",
+      "description": "The bailiff schedules the seizure, attends the site, identifies the units by serial number, takes possession or seizes them in place, serves the seizure documents on the customer and photographs the condition. Equipment that is moved, hidden, locked in or at a job site needs repeat attempts.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "repossession order to bailiff"
+      ],
+      "outputs": [
+        "seized equipment or failed attempt"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 7200,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.78,
+          "condition": "seized"
+        },
+        {
+          "to": "s09",
+          "prob": 0.22,
+          "condition": "not found or access refused"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Elapsed time and success rate are estimates."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Trace the equipment or deal with a blocked seizure",
+      "description": "The officer works out where the equipment went: calls guarantors and the dealer, checks bureau and corporate records for new addresses, uses truck GPS or ELD data where the lease allows, and asks legal for a court order when the customer refuses access. The bailiff is sent again once a location is found.",
+      "role": "recovery_officer",
+      "kind": "analysis",
+      "inputs": [
+        "failed attempt report"
+      ],
+      "outputs": [
+        "new location, legal referral or loss finding"
+      ],
+      "systems": [
+        "bureau_portals",
+        "collections_system",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.6,
+          "condition": "found, bailiff sent again"
+        },
+        {
+          "to": "END",
+          "prob": 0.15,
+          "condition": "court order needed, referred to legal",
+          "outcome": "referred_to_legal"
+        },
+        {
+          "to": "END",
+          "prob": 0.25,
+          "condition": "equipment cannot be found",
+          "outcome": "not_recovered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shares are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Bailiff reports the seizure",
+      "description": "The bailiff sends the report: date and place of seizure, units taken with serial numbers, hour or odometer readings, condition notes and photos, items left behind, and the invoice for the seizure.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "seized equipment"
+      ],
+      "outputs": [
+        "bailiff report",
+        "bailiff invoice"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The bailiff report is a business object in the organisation file; timing is an estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Arrange transport and storage",
+      "description": "The asset logistics coordinator books a carrier and a storage or auction yard near the equipment, sends the transport order with pickup details, dimensions, keys and access instructions, and tells the yard what to expect. For trucks the bailiff's tow often goes straight to the yard.",
+      "role": "asset_coord",
+      "kind": "coordination",
+      "inputs": [
+        "bailiff report or surrender arrangement"
+      ],
+      "outputs": [
+        "transport and storage order"
+      ],
+      "systems": [
+        "email_collab",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong yard or equipment size given to the carrier.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The organisation file names transport and storage providers as outside parties; times are estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Carrier moves the equipment to the yard",
+      "description": "The carrier picks the equipment up from the customer's site or the bailiff's lot and delivers it to the storage or auction yard, which signs a receipt with any visible damage noted.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "transport order"
+      ],
+      "outputs": [
+        "equipment at the yard",
+        "carrier invoice"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Inspect and value the equipment on arrival",
+      "description": "A remarketing specialist reviews the yard's receipt, the bailiff's photos and, for higher-value units, a yard or appraiser inspection; records condition, missing parts and repairs needed; arranges return of the customer's personal property left in the equipment; and updates the expected recovery value.",
+      "role": "remarketing_spec",
+      "kind": "analysis",
+      "inputs": [
+        "yard receipt",
+        "bailiff report"
+      ],
+      "outputs": [
+        "condition report",
+        "updated recovery value"
+      ],
+      "systems": [
+        "spreadsheets",
+        "doc_imaging",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Damage or missing parts not recorded.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate based on remarketing practice."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Send the notice of intended disposition",
+      "description": "The officer searches the registry for other secured parties, prepares the notice of disposition from the provincial template (the equipment, the amount needed to redeem, the date after which it may be sold, and that the debtor may be liable for a deficiency) and sends it by registered mail to the customer, each guarantor and the registered secured parties, keeping proof of mailing.",
+      "role": "recovery_officer",
+      "kind": "drafting",
+      "inputs": [
+        "condition report",
+        "registry search"
+      ],
+      "outputs": [
+        "notice of intended disposition"
+      ],
+      "systems": [
+        "registry_portals",
+        "doc_imaging",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A guarantor or registered secured party is left off the notice.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "PPSA notice of disposition: at least 20 days in British Columbia (s.59(6)) and 15 days in Ontario (s.63(4)) before sale, to the debtor, owners and registered secured parties, with prescribed contents",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_bc_ppsa",
+          "src_lawtimes_priest"
+        ],
+        "note": "Notice periods, recipients and contents are stated in the sources. Times are tier C."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Update the contract and the accounts",
+      "description": "The officer records the repossession in the lease system: terminates the contract, stops billing and debits, moves the balance to repossessed status with the equipment's estimated value, flags a securitised contract as defaulted for the funder report, and updates the collections system.",
+      "role": "recovery_officer",
+      "kind": "data_entry",
+      "inputs": [
+        "seizure details",
+        "updated recovery value"
+      ],
+      "outputs": [
+        "contract in repossessed status"
+      ],
+      "systems": [
+        "lms",
+        "collections_system"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Billing not stopped, so an invoice or debit goes out after repossession.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Check and code the recovery invoices",
+      "description": "The officer checks the bailiff, carrier and storage invoices against the quotes and the work done, codes them to the contract's recovery costs and sends them to accounts payable. This runs while the notice period passes.",
+      "role": "recovery_officer",
+      "kind": "validation",
+      "inputs": [
+        "bailiff, transport and storage invoices"
+      ],
+      "outputs": [
+        "supplier invoices for payment"
+      ],
+      "systems": [
+        "gl_erp",
+        "email_collab",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Invoice coded to the wrong contract.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s18"
+      ],
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.3,
+          "condition": "above the officer's limit"
+        },
+        {
+          "to": "s18",
+          "prob": 0.7,
+          "condition": "within limit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Approve recovery invoices above the limit",
+      "description": "The recovery manager approves bailiff, towing and storage invoices above the officer's limit, querying charges that exceed the agreed fee.",
+      "role": "recovery_mgr",
+      "kind": "approval",
+      "inputs": [
+        "supplier invoices"
+      ],
+      "outputs": [
+        "approved invoices"
+      ],
+      "systems": [
+        "gl_erp",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Accounts payable approval limits",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s18"
+      ],
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Notice period runs",
+      "description": "The case waits until the notice period has passed. The customer, a guarantor or another secured party may redeem by paying the full amount owed and costs; very few do.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "notice of intended disposition"
+      ],
+      "outputs": [
+        "redemption or expired notice period"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 21600,
+        "mode": 28800,
+        "high": 36000
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.04,
+          "condition": "redeemed"
+        },
+        {
+          "to": "s20",
+          "prob": 0.96,
+          "condition": "notice period expired"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_bc_ppsa",
+          "src_lawtimes_priest"
+        ],
+        "note": "15 to 20 days plus mailing time. The 4% redemption rate is tier C."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Release the equipment on redemption",
+      "description": "The officer confirms the redemption funds have cleared, has the contract paid out or reinstated as agreed, and arranges with the yard and carrier for the equipment's release to the customer once storage and transport costs are paid.",
+      "role": "recovery_officer",
+      "kind": "coordination",
+      "inputs": [
+        "redemption funds"
+      ],
+      "outputs": [
+        "equipment released"
+      ],
+      "systems": [
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "redeemed",
+          "outcome": "redeemed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_bc_ppsa"
+        ],
+        "note": "Right of redemption under s.62. Times are tier C."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Hand the equipment to remarketing",
+      "description": "The officer passes the file to remarketing: condition report, keys and documents, notice dates and the earliest sale date, the balance and recovery costs, so the equipment can be sold in a commercially reasonable way and any deficiency pursued afterwards.",
+      "role": "recovery_officer",
+      "kind": "coordination",
+      "inputs": [
+        "expired notice period",
+        "recovery file"
+      ],
+      "outputs": [
+        "repossessed asset handed to remarketing"
+      ],
+      "systems": [
+        "lms",
+        "doc_imaging",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Sale date given before the notice period ends.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "handed to remarketing",
+          "outcome": "repossessed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_charter_424b",
+          "src_bc_ppsa"
+        ],
+        "note": "Commercially reasonable disposal and deficiency liability are described in the sources. Times are tier C."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Defect or insolvency found before seizure",
+      "share_of_cases": 0.15,
+      "description": "A notice period has not run, a notice or registration is defective, or the customer has filed a notice of intention or bankruptcy; about a third of these stop at an insolvency stay.",
+      "path": [
+        "s02",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Voluntary surrender",
+      "share_of_cases": 0.21,
+      "description": "The customer agrees to hand the equipment over, avoiding the bailiff.",
+      "path": [
+        "s04",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Reinstated before seizure",
+      "share_of_cases": 0.07,
+      "description": "The customer pays arrears and costs at the last call; the manager approves cancelling the repossession.",
+      "path": [
+        "s04",
+        "s05"
+      ]
+    },
+    {
+      "name": "Equipment not found or access refused",
+      "share_of_cases": 0.13,
+      "description": "The equipment was moved, hidden or is locked in; the officer traces it and sends the bailiff again, refers it for a court order or records it as not recovered.",
+      "path": [
+        "s08",
+        "s09",
+        "s08"
+      ]
+    },
+    {
+      "name": "Redeemed during the notice period",
+      "share_of_cases": 0.03,
+      "description": "The customer, a guarantor or another secured party pays the full amount and the equipment is released.",
+      "path": [
+        "s18",
+        "s19"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 40,
+        "p90": 60
+      },
+      "unit": "calendar days from the repossession order to the equipment handed to remarketing or the case closed",
+      "population": "Author's estimate for a Canadian lessor using outside bailiffs",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_bc_ppsa",
+          "src_lawtimes_priest"
+        ],
+        "note": "The 15 to 20 day statutory notice period after seizure is sourced; bailiff, transport and queue times are tier C."
+      }
+    },
+    {
+      "metric": "ppsa_disposition_notice",
+      "value": {
+        "ontario": 15,
+        "british_columbia": 20
+      },
+      "unit": "days' notice before disposing of seized collateral",
+      "population": "Ontario and British Columbia PPSAs",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_bc_ppsa",
+          "src_lawtimes_priest"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "bia_244_notice_period",
+      "value": 10,
+      "unit": "days after sending the notice before enforcement",
+      "population": "Enforcement against all or substantially all business property of an insolvent person",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_bia_s244"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "ppsa_accounting_deadline",
+      "value": 30,
+      "unit": "days after a written demand to give an accounting of the disposition",
+      "population": "British Columbia PPSA",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_bc_ppsa"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "A missed or short notice, or an insolvency filing before termination and notices are complete, can stop the seizure or expose the company to damages, so every file needs a careful legal check before the bailiff goes out.",
+      "steps": [
+        "s02",
+        "s03"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_lawtimes_priest",
+          "src_lerners_walgre"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Equipment that has been moved, hidden or sold, especially trucks and mobile machinery, needs tracing and repeat bailiff attempts, and some is never recovered.",
+      "steps": [
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "description": "The statutory notice period and outside parties (bailiff, carrier, yard) set most of the elapsed time while storage charges accrue and the equipment loses value.",
+      "steps": [
+        "s08",
+        "s12",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_bc_ppsa"
+        ],
+        "note": "Notice period from the statute; cost effect is tier C."
+      }
+    },
+    {
+      "description": "Bailiff, towing and storage invoices arrive separately and late and must be matched to files by hand.",
+      "steps": [
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src_bc_ppsa",
+      "title": "Personal Property Security Act [RSBC 1996] chapter 359",
+      "publisher": "Government of British Columbia (BC Laws)",
+      "url": "https://www.bclaws.gov.bc.ca/civix/document/id/complete/statreg/96359_01",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Section 58: on default the secured party has, unless otherwise agreed, the right to take possession of the collateral by any method permitted by law, or to seize without removal if perfected by registration. Section 59(6): not less than 20 days before disposition the secured party must give notice of disposition to the debtor and other owners and to registered secured parties; 59(7) sets the contents, including that the debtor may be liable for a deficiency; 59(17) lists exceptions such as perishable collateral or disproportionate storage cost. Section 60: written accounting within 30 days of a demand; debtor liable for any deficiency. Section 62: persons entitled to notice may redeem by tendering fulfilment of the secured obligations."
+    },
+    {
+      "id": "src_bia_s244",
+      "title": "Bankruptcy and Insolvency Act, section 244 (notice of intention to enforce security)",
+      "publisher": "Justice Laws Website, Government of Canada",
+      "url": "https://laws-lois.justice.gc.ca/eng/acts/B-3/page-33.html",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "A secured creditor who intends to enforce security on all or substantially all of the inventory, receivables or other business property of an insolvent person must send a notice and may not enforce until 10 days after sending it, unless the insolvent person consents."
+    },
+    {
+      "id": "src_lawtimes_priest",
+      "title": "Secured creditor must give reasonable notice before seizing defaulted assets: Court of Appeal",
+      "publisher": "Law Times",
+      "url": "https://www.lawtimesnews.com/news/general/secured-creditor-must-give-reasonable-notice-before-seizing-defaulted-assets-court-of-appeal/359419",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "In 1758704 Ontario Inc. v. Priest (2021 ONCA 588) the Court of Appeal held that a secured creditor must give the debtor reasonable notice of its intention to seize and an opportunity to cure; Ontario PPSA s.63(4) requires 15 days' notice; seizing too fast exposed the creditor to damages for conversion."
+    },
+    {
+      "id": "src_lerners_walgre",
+      "title": "Lessor repossession during a stay: Walgre Transport Inc. (Re)",
+      "publisher": "Lerners LLP",
+      "url": "https://lerners.ca/insights/lessor-repossession-during-a-stay-walgre-transport-inc-(re)",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "An equipment lessor sent a BIA s.244 notice, a demand and termination letter and a PPSA s.63(4) notice; because termination and the notice periods were complete before the lessee filed a notice of intention, the court let the lessor take possession despite the stay; deadlines in s.244 and s.63 notices are critical."
+    },
+    {
+      "id": "src_legal500_demand",
+      "title": "Lessons learned, lesson two: serve a demand notice before taking enforcement action",
+      "publisher": "Cassels via Legal 500",
+      "url": "https://www.legal500.com/intelligence/canada/finance-and-banking/lessons-learned-lesson-two-serve-a-demand-notice-before-taking-enforcement-action",
+      "year": 2016,
+      "accessed": "2026-11-17",
+      "supports": "There is no statutory form or prescribed period for a demand; reasonable notice depends on the facts, including the cure period in the security agreement and whether the collateral depreciates quickly; a section 244 notice may also be needed."
+    },
+    {
+      "id": "src_elfa_quebec_pub",
+      "title": "State law compendium: Quebec, publication",
+      "publisher": "Equipment Leasing and Finance Association",
+      "url": "https://www.elfaonline.org/advocacy/state-issues/state-law-compendium/quebec-canada/publication",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Civil Code of Quebec article 1852: rights under a lease of more than one year of a road vehicle or movable property used to operate an enterprise must be published to be set up against third parties; the lessor's ownership is enforceable against the lessee whether or not published."
+    },
+    {
+      "id": "src_charter_424b",
+      "title": "Charter Equipment Lease 1998-1 LLC prospectus (Form 424B1)",
+      "publisher": "Charter Financial via SEC EDGAR",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001070771/000089155499001687/0000891554-99-001687.txt",
+      "year": 1999,
+      "accessed": "2026-11-17",
+      "supports": "A New York and Toronto lessor's servicer may sell the equipment securing a defaulted lease at public or private sale or take any other action permitted by law, and uses commercially reasonable efforts to dispose of equipment. Read from a text copy saved under scratch/ by earlier work."
+    },
+    {
+      "id": "src_jb_14202",
+      "title": "Wages: Collector in Ontario (NOC 14202)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/19300/ON",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low $17.95, median $25.38, high $36.69 (2023-2024)."
+    },
+    {
+      "id": "src_jb_10021",
+      "title": "Wages: Operations manager, banking, credit and investment in Ontario (NOC 10021)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/17461/ON",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low $38.46, median $58.97, high $96.15 (2023-2024)."
+    }
+  ],
+  "assumptions": [
+    "The workflow covers taking possession up to the hand-off to remarketing; the sale, deficiency claim and write-off belong to remarket-equipment and recover-deficiencies-and-write-off.",
+    "Outcome shares (about 21% voluntary surrender, 7% reinstated, 5% stopped by insolvency, 13% needing tracing, 4% redeemed) are the author's estimates; no Canadian lessor statistics were found.",
+    "Bailiff licensing and seizure procedure differ by province (licensed bailiffs in Ontario and British Columbia, civil enforcement agencies in Alberta, court process in Quebec when the lessee refuses); no bailiff source was opened, so the bailiff steps are tier C.",
+    "The asset logistics coordinator arranges transport and the remarketing specialist inspects on arrival, as the organisation file lists both roles for this process.",
+    "About 4 hours of recovery officer time per repossession is the author's estimate; at 45 a month that is about 1.4 of the four recovery officers, the rest working deficiencies and insolvencies.",
+    "Web search capacity ran out while this file was researched; the legal sources were fetched by known address and other facts are marked tier C.",
+    "Loaded hourly costs are the organisation file's (wage times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

@@ -1,0 +1,1640 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-cd-portal-results",
+  "name": "Release laboratory results to the patient portal",
+  "org": "diagnostic-lab-services-co",
+  "process": "cd-portal-results",
+  "sector": "medical laboratory services",
+  "function": "consumer and digital services",
+  "summary": "This process publishes a patient's finished laboratory report to the company's results portal, with plain-language explanations and trends, after release rules have removed tests that must go only to the physician and held a few for a delay. Almost all of it runs automatically between the laboratory information system and the portal. People are needed when the report cannot be matched to a verified account, when a patient cannot find a result or asks what it means, when an interface fault blocks publication, and in the rare case of a report shown to the wrong person. Support works weekday office hours while results arrive around the clock, so patient questions wait.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A large Canadian community laboratory company with a subscription patient portal in Ontario and Quebec, fed from its LIS, with a small digital support team.",
+    "org_size_employees": 3300,
+    "notes": "One case is one requisition's report (final or revised) for a patient with a verified portal account."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one result release",
+  "trigger": "The LIS finalises or revises a report for a patient with a portal account, or a newly verified account pulls in the patient's recent reports.",
+  "end_state": "The report is published and the patient notified, or it is withheld by rule, not linked to any account, or withdrawn; any patient query is answered or routed.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 150000,
+      "mode": 250000,
+      "high": 350000
+    },
+    "seasonality": "Follows collection volumes: lower in summer and late December, higher in January; COVID-19 test results added a surge in 2020 to 2022.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Follows the organisation file's portal driver (d_portal_releases), itself an estimate."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cl-result-reporting",
+        "object": "test_result",
+        "share": 0.96
+      },
+      {
+        "from": "cd-portal-registration",
+        "object": "portal_account",
+        "share": 0.04
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "released",
+        "to": "patient",
+        "object": "patient_result_release"
+      },
+      {
+        "outcome": "released_after_support",
+        "to": "patient",
+        "object": "patient_result_release"
+      },
+      {
+        "outcome": "transferred_to_contact_centre",
+        "to": "cs-client-inquiries",
+        "object": "client_inquiry"
+      },
+      {
+        "outcome": "partner_referral",
+        "to": "digital_health_partner",
+        "object": "partner_referral"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "consumer_support_agent",
+      "title": "Patient digital support agent",
+      "department": "Patient digital support",
+      "layer": "individual_contributor",
+      "fte_on_process": 7.0,
+      "loaded_cost_per_hour": {
+        "low": 24,
+        "mode": 29,
+        "high": 40
+      },
+      "occupation_code": "NOC 64409",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jobbank_64409"
+        ],
+        "note": "Organisation file headcount 14; the rest of their time goes to registration help and online test orders. Cost from Job Bank 64409. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    },
+    {
+      "id": "developer",
+      "title": "Application developer (portals and integrations)",
+      "department": "LIS and integration",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.8,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 68,
+        "high": 85
+      },
+      "occupation_code": "NOC 21232",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Portal and interface developers spend part of their time on failed messages and result display defects. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    },
+    {
+      "id": "digital_product_manager",
+      "title": "Product manager, patient portal",
+      "department": "Digital product and marketing",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 65,
+        "high": 80
+      },
+      "occupation_code": "NOC 21221",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Product managers own release rules, approve fixes and escalate misdirected releases; rule maintenance itself is not modelled per case. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lis",
+      "name": "Laboratory information system (orders, accessioning, results, autoverification rules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "hl7_engine",
+      "name": "Interface engine for HL7 orders and results with EMRs and hospital LIS",
+      "kind": "workflow"
+    },
+    {
+      "id": "consumer_health_service",
+      "name": "The consumer health service patient portal and online test shop",
+      "kind": "external_portal"
+    },
+    {
+      "id": "crm",
+      "name": "CRM for client accounts, sales pipeline and service cases",
+      "kind": "workflow"
+    },
+    {
+      "id": "telephony",
+      "name": "Contact centre telephony with IVR, queues and call recording",
+      "kind": "communication"
+    },
+    {
+      "id": "email_office",
+      "name": "Email and office suite",
+      "kind": "communication"
+    },
+    {
+      "id": "itsm",
+      "name": "IT service management ticketing",
+      "kind": "workflow"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Queue the final or revised report for the portal",
+      "description": "When the LIS marks a requisition's results final, or issues a revised report, it writes an outbound result message for the patient portal alongside the messages to the clinician's EMR. The message carries patient identifiers, test codes, values, reference ranges and flags.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "verified test results"
+      ],
+      "outputs": [
+        "outbound portal message"
+      ],
+      "systems": [
+        "lis",
+        "hl7_engine"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_faq"
+        ],
+        "note": "Reports are posted to the account as the LIS processes the order and results; timing is an estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Match the report to a verified portal account",
+      "description": "On each interface run the portal looks for a verified account whose name, date of birth and health card or PIN match the LIS order, for an order within the last 30 days. Exact matches are linked automatically; close matches go to an exceptions queue and malformed messages to the developers' error queue.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "outbound portal message",
+        "verified accounts"
+      ],
+      "outputs": [
+        "linked report or exception"
+      ],
+      "systems": [
+        "consumer_health_service",
+        "hl7_engine"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0005,
+        "defect_description": "Report linked to the wrong account through a near-identical identity.",
+        "typically_caught_at": "s14"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "PHIPA s. 12: reasonable steps to protect personal health information against unauthorized use or disclosure; matching only to identity-verified accounts",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.987,
+          "condition": "exact match to a verified account"
+        },
+        {
+          "to": "s03",
+          "prob": 0.01,
+          "condition": "close match needs review"
+        },
+        {
+          "to": "s20",
+          "prob": 0.003,
+          "condition": "message failed validation"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_faq",
+          "oma_privacy"
+        ],
+        "note": "Matching on details in the lab order within 30 days is documented; the batch interval and shares are estimates."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Review the close match in the exceptions queue",
+      "description": "A patient digital support agent opens the exception, compares the account profile with the LIS demographics (spelling, hyphenated surname, date of birth, health card version) and the identity verification record, and links the report only if the identity is certain.",
+      "role": "consumer_support_agent",
+      "kind": "validation",
+      "inputs": [
+        "exception record",
+        "LIS demographics",
+        "account profile"
+      ],
+      "outputs": [
+        "linked report or rejected match"
+      ],
+      "systems": [
+        "consumer_health_service",
+        "lis",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Two different people with similar details linked.",
+        "typically_caught_at": "s14"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Portal identity matching procedure: link only when identity is confirmed (PHIPA safeguards)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.7,
+          "condition": "same person, linked"
+        },
+        {
+          "to": "s04",
+          "prob": 0.2,
+          "condition": "needs confirmation from the patient"
+        },
+        {
+          "to": "END",
+          "prob": 0.1,
+          "condition": "different person, not linked",
+          "outcome": "not_released_no_match"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_faq"
+        ],
+        "note": "Profile details must match the lab order; the exceptions-queue handling and shares are estimates."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Message the patient to confirm identity details",
+      "description": "The agent sends a secure portal message or email asking the patient to confirm or correct the profile details, or to bring photo identification to a collection centre for a PIN, and logs a case in the CRM.",
+      "role": "consumer_support_agent",
+      "kind": "communication",
+      "inputs": [
+        "rejected match"
+      ],
+      "outputs": [
+        "confirmation request"
+      ],
+      "systems": [
+        "consumer_health_service",
+        "crm",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "message sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Wait for the patient to reply",
+      "description": "The patient may correct the profile, visit a centre for verification or ignore the message. Results stay unpublished in the meantime, though the ordering clinician already has them.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "confirmation request"
+      ],
+      "outputs": [
+        "corrected profile or no reply"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.7,
+          "condition": "patient corrects details"
+        },
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "no reply",
+          "outcome": "not_released_no_match"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Reply share and time are estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Apply the result release rules",
+      "description": "The portal compares each test code with the release rule table approved by the laboratory medical directors: genetic, pathology and cardiology tests, tests done by a government laboratory and tests that must go only to the physician are suppressed, and some tests are held for a set delay. Reports with nothing releasable are not published.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "linked report",
+        "release rule table"
+      ],
+      "outputs": [
+        "releasable report",
+        "suppressed lines"
+      ],
+      "systems": [
+        "consumer_health_service"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.001,
+        "defect_description": "A test missing from the rule table is released that should have been suppressed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Laboratory release rules: results restricted by regulation or required to go directly to the physician are not shown; medical director approved delay list",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.9,
+          "condition": "release now"
+        },
+        {
+          "to": "s07",
+          "prob": 0.05,
+          "condition": "test on the delay list"
+        },
+        {
+          "to": "END",
+          "prob": 0.05,
+          "condition": "every test on the report is excluded",
+          "outcome": "withheld_by_rule"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_faq",
+          "dyn_privacy",
+          "dplus_terms"
+        ],
+        "note": "Excluded categories and a 14-day delay for one test type are documented; shares are estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Hold the report until the release delay ends",
+      "description": "Reports with a delayed test wait in the portal so that the ordering clinician can see and act on them first, then are released automatically on the release date.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "releasable report"
+      ],
+      "outputs": [
+        "report due for release"
+      ],
+      "systems": [
+        "consumer_health_service"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 20160
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Clinician-first delay for selected results set by the medical directors",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "delay ended"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_faq",
+          "steitz2021"
+        ],
+        "note": "Delay lengths of 1 to 14 days are documented in comparable systems; the share and length here are estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Publish the report with explanations and trends",
+      "description": "The portal stores the report against the account, adds the plain-language explanation for each test and plots it against the patient's earlier values; a revised report replaces the earlier version and is marked REVISED.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "releasable report"
+      ],
+      "outputs": [
+        "published report"
+      ],
+      "systems": [
+        "consumer_health_service"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0005,
+        "defect_description": "Display defect (wrong unit or trend).",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "published"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_plus_page",
+          "dplus_faq"
+        ],
+        "note": "Explanations, trends and revised-report labelling are documented."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Send the result-ready email",
+      "description": "The portal emails the patient that a new or updated report is ready, without any result content. Most patients log in, read the report and do nothing more; a small share contact support or open a partner service from the report page.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "published report"
+      ],
+      "outputs": [
+        "notification"
+      ],
+      "systems": [
+        "consumer_health_service",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.9825,
+          "condition": "patient notified",
+          "outcome": "released"
+        },
+        {
+          "to": "s10",
+          "prob": 0.0125,
+          "condition": "patient contacts support"
+        },
+        {
+          "to": "s19",
+          "prob": 0.005,
+          "condition": "patient opens a partner service"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_faq",
+          "dyn_partners2020"
+        ],
+        "note": "Email notification and partner services are documented; the contact and referral shares are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Triage the patient's message or call",
+      "description": "A support agent answers the digital support line or the web contact form during weekday business hours, verifies the caller against the account and sorts the issue: log-in or notification trouble, a missing result, a question about what a result means, a result that looks wrong, or a subscription question.",
+      "role": "consumer_support_agent",
+      "kind": "intake",
+      "inputs": [
+        "patient call or message"
+      ],
+      "outputs": [
+        "categorised case"
+      ],
+      "systems": [
+        "telephony",
+        "crm",
+        "consumer_health_service"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Case miscategorised.",
+        "typically_caught_at": "s11"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Caller identity verification before discussing account information (PHIPA safeguards)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "log-in or notification problem fixed",
+          "outcome": "released_after_support"
+        },
+        {
+          "to": "s11",
+          "prob": 0.3,
+          "condition": "result missing or incomplete"
+        },
+        {
+          "to": "s13",
+          "prob": 0.3,
+          "condition": "question about meaning or next steps"
+        },
+        {
+          "to": "s14",
+          "prob": 0.05,
+          "condition": "result looks wrong or not theirs"
+        },
+        {
+          "to": "s12",
+          "prob": 0.05,
+          "condition": "subscription or billing question"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_terms",
+          "dplus_faq"
+        ],
+        "note": "Weekday 8 to 4 support hours and the missing-result route are documented; the category shares are estimates. The wait includes the time the patient takes to read the report and get in touch."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Look up the missing result in the LIS and portal",
+      "description": "The agent looks up the order in the LIS and in the portal administration screen to see whether the result is still pending, on the excluded or delayed list, unlinked because of a demographic mismatch, or stuck by a fault.",
+      "role": "consumer_support_agent",
+      "kind": "lookup",
+      "inputs": [
+        "case",
+        "LIS order"
+      ],
+      "outputs": [
+        "cause of missing result"
+      ],
+      "systems": [
+        "lis",
+        "consumer_health_service",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Cause misread, patient given the wrong explanation.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.55,
+          "condition": "pending, excluded or delayed"
+        },
+        {
+          "to": "s03",
+          "prob": 0.3,
+          "condition": "demographic mismatch to fix"
+        },
+        {
+          "to": "s16",
+          "prob": 0.1,
+          "condition": "portal or interface fault"
+        },
+        {
+          "to": "s08",
+          "prob": 0.05,
+          "condition": "result found unpublished, republished manually"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_faq"
+        ],
+        "note": "Pending, excluded and mismatch causes are documented; shares are estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Reply to the patient with the explanation",
+      "description": "The agent explains on the phone or in a written reply why the result is not shown or when it will appear, or answers the subscription question, and closes the CRM case.",
+      "role": "consumer_support_agent",
+      "kind": "communication",
+      "inputs": [
+        "cause of missing result"
+      ],
+      "outputs": [
+        "reply",
+        "closed case"
+      ],
+      "systems": [
+        "crm",
+        "email_office",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "patient answered",
+          "outcome": "explained"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Times are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Refer the patient to the ordering clinician or contact centre",
+      "description": "Agents may not interpret results, so the agent tells the patient to discuss the result with the ordering clinician, points to the plain-language explanation, offers the virtual care partner, or transfers questions about collection, requisitions or report copies to the customer care contact centre.",
+      "role": "consumer_support_agent",
+      "kind": "communication",
+      "inputs": [
+        "result question"
+      ],
+      "outputs": [
+        "referral advice or transfer"
+      ],
+      "systems": [
+        "telephony",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Portal terms: only a qualified healthcare provider interprets results; support staff do not give clinical advice",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.7,
+          "condition": "advised to contact the clinician",
+          "outcome": "routed_to_clinician"
+        },
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "transferred to the contact centre",
+          "outcome": "transferred_to_contact_centre"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_terms"
+        ],
+        "note": "The no-interpretation rule is documented; the split is an estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Check whether the result belongs to someone else",
+      "description": "The agent compares the identifiers on the published report with the account's verification record and the LIS order, and checks whether the patient is querying a value they think is wrong rather than a report that is not theirs.",
+      "role": "consumer_support_agent",
+      "kind": "validation",
+      "inputs": [
+        "disputed report"
+      ],
+      "outputs": [
+        "confirmed owner or suspected misdirection"
+      ],
+      "systems": [
+        "consumer_health_service",
+        "lis",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.7,
+          "condition": "report is the patient's own"
+        },
+        {
+          "to": "s13",
+          "prob": 0.2,
+          "condition": "value queried, routed to clinician or laboratory"
+        },
+        {
+          "to": "s15",
+          "prob": 0.1,
+          "condition": "report belongs to another patient"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shares are estimates."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Withdraw the report and escalate to the privacy office",
+      "description": "The product manager unpublishes the report, suspends the affected links, records who viewed it from the access log and opens a privacy incident so the privacy office can assess notification of both patients.",
+      "role": "digital_product_manager",
+      "kind": "judgment",
+      "inputs": [
+        "misdirected report",
+        "access log"
+      ],
+      "outputs": [
+        "withdrawn report",
+        "privacy incident"
+      ],
+      "systems": [
+        "consumer_health_service",
+        "itsm",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "PHIPA s. 12(2): notify individuals at the first reasonable opportunity when personal health information is used or disclosed without authority",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "escalated",
+          "outcome": "withdrawn_privacy_incident"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oma_privacy",
+          "dyn_privacy"
+        ],
+        "note": "PHIPA safeguards and privacy officer role are documented; the handling steps are common practice."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Log a portal defect ticket",
+      "description": "The agent records the account, order and screenshots in an IT ticket for the portal developers and tells the patient the result will appear once the fault is fixed.",
+      "role": "consumer_support_agent",
+      "kind": "data_entry",
+      "inputs": [
+        "fault description"
+      ],
+      "outputs": [
+        "IT ticket"
+      ],
+      "systems": [
+        "itsm",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "ticket logged"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Times are estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Developer investigates and fixes the portal fault",
+      "description": "A developer reproduces the fault, checks the interface logs and mapping tables, and corrects the data or the mapping, or finds there is no fault and returns the ticket.",
+      "role": "developer",
+      "kind": "analysis",
+      "inputs": [
+        "IT ticket",
+        "interface logs"
+      ],
+      "outputs": [
+        "fix or explanation"
+      ],
+      "systems": [
+        "itsm",
+        "hl7_engine",
+        "consumer_health_service"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 300
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Fix introduces a new display or mapping error.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.9,
+          "condition": "fix ready"
+        },
+        {
+          "to": "s12",
+          "prob": 0.1,
+          "condition": "no fault found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Times are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Approve the fix through change control",
+      "description": "The product manager reviews the test evidence for a mapping or code change and approves deployment in the next change window; data-only corrections are approved the same day.",
+      "role": "digital_product_manager",
+      "kind": "approval",
+      "inputs": [
+        "fix",
+        "test evidence"
+      ],
+      "outputs": [
+        "approved change"
+      ],
+      "systems": [
+        "itsm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "IT change management and computerized system validation for patient-facing systems",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "deployed, report republished"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common change-control practice; times are estimates."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Pass the partner referral",
+      "description": "When the patient chooses virtual care or digital therapy from the report page, the portal opens the partner's booking page with the patient's consent and records the referral; the partner handles the rest.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "patient choice"
+      ],
+      "outputs": [
+        "partner referral"
+      ],
+      "systems": [
+        "consumer_health_service"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "referral passed",
+          "outcome": "partner_referral"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_partners2020",
+          "lifelabs2020"
+        ],
+        "note": "Partner services reached through the portal are documented; the share is an estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Fix the failed interface message",
+      "description": "A developer reads the interface error queue, finds the cause (missing field, unmapped test code, character problem), corrects the mapping or the message and resubmits it to the portal.",
+      "role": "developer",
+      "kind": "analysis",
+      "inputs": [
+        "failed message"
+      ],
+      "outputs": [
+        "resubmitted message"
+      ],
+      "systems": [
+        "hl7_engine",
+        "itsm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Wrong mapping applied.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "resubmitted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common interface support practice; error rate and times are estimates."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Close match needs review",
+      "share_of_cases": 0.01,
+      "description": "Profile and LIS demographics differ slightly; an agent links the report or asks the patient to confirm.",
+      "path": [
+        "s02",
+        "s03",
+        "s04",
+        "s05",
+        "s03"
+      ]
+    },
+    {
+      "name": "Interface message failure",
+      "share_of_cases": 0.003,
+      "description": "A malformed or unmapped message is fixed by a developer and resubmitted.",
+      "path": [
+        "s02",
+        "s20",
+        "s02"
+      ]
+    },
+    {
+      "name": "Delayed release",
+      "share_of_cases": 0.05,
+      "description": "A test on the delay list holds the report for 1 to 14 days so the clinician sees it first.",
+      "path": [
+        "s06",
+        "s07",
+        "s08"
+      ]
+    },
+    {
+      "name": "Whole report excluded",
+      "share_of_cases": 0.05,
+      "description": "All tests are genetic, pathology, cardiology, government-lab or physician-only, so nothing is published.",
+      "path": [
+        "s06"
+      ]
+    },
+    {
+      "name": "Missing result query",
+      "share_of_cases": 0.004,
+      "description": "The patient cannot find a result; the agent finds it pending, excluded, mismatched or stuck.",
+      "path": [
+        "s10",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Portal defect",
+      "share_of_cases": 0.0004,
+      "description": "A display or mapping fault goes through a ticket, a developer fix and change control before republishing.",
+      "path": [
+        "s11",
+        "s16",
+        "s17",
+        "s18",
+        "s08"
+      ]
+    },
+    {
+      "name": "Report shown to the wrong person",
+      "share_of_cases": 0.0001,
+      "description": "The report is withdrawn and a privacy incident opened.",
+      "path": [
+        "s14",
+        "s15"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.1,
+        "p90": 0.25
+      },
+      "unit": "calendar days from final result in the LIS to publication and notification",
+      "population": "Canadian community laboratory patient portals, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "dplus_faq",
+          "lifelabs2015"
+        ],
+        "note": "Reports appear within 3 hours of order entry and most results are posted within 24 to 48 hours of collection including testing time; the median of about two hours from final result is the author's estimate."
+      }
+    },
+    {
+      "metric": "portal_membership_price",
+      "value": 9.99,
+      "unit": "CAD per year",
+      "population": "The consumer health service",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dplus_faq",
+          "dyn_partners2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "portal_users_comparable_provider",
+      "value": 2600000,
+      "unit": "Ontario customers using the portal",
+      "population": "LifeLabs my results, 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "lifelabs2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "delayed_results_viewed_before_clinician",
+      "value": {
+        "with_delay": 0.104,
+        "immediate_release": 0.403
+      },
+      "unit": "share of results",
+      "population": "US academic medical centre, 2020-2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "steitz2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "support_hours",
+      "value": "Monday to Friday 8:00 to 16:00 Eastern",
+      "unit": "hours",
+      "population": "The consumer health service customer care",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dplus_terms"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Small demographic differences between the portal profile and the LIS order leave reports unpublished until the patient notices and calls.",
+      "steps": [
+        "s02",
+        "s03",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_faq"
+        ],
+        "note": "Patients are told to check that their details match the lab order."
+      }
+    },
+    {
+      "description": "Many test types are never shown, so patients expecting genetic, pathology or cardiology results call support or their clinician.",
+      "steps": [
+        "s06",
+        "s10",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_faq",
+          "dyn_privacy"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Support works weekday office hours while reports publish around the clock, so evening and weekend questions wait up to three days.",
+      "steps": [
+        "s10"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_terms"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Patients see results before discussing them with a clinician and support staff may not interpret them, so questions bounce to clinicians.",
+      "steps": [
+        "s09",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dplus_terms",
+          "steitz2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Interface faults and mapping changes need scarce developer time and a change window before results reappear.",
+      "steps": [
+        "s17",
+        "s18",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common in LIS-to-portal integrations."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "dplus_faq",
+      "title": "The consumer health service frequently asked questions",
+      "publisher": "The consumer health service",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Lab reports appear in the account within 3 hours of the order being entered; results generally take 1 calendar day to analyse; genetic, cardiology and pathology tests, tests controlled by regulatory requirements, tests sent to a government lab and tests that must go directly to the physician are not shown; food intolerance reports released 14 days after results are final; revised reports marked REVISED; one-time identity verification by in-person PIN or Interac verification and the patient's details must match the lab order, with a model laboratory test in the last 30 days; five failed attempts lock the account; email notifications when reports are ready or updated; missing results: check profile details match the order, then contact customer care at 855.748.1115; membership CAD 9.99 a year; results always sent to the ordering physician separately."
+    },
+    {
+      "id": "dplus_terms",
+      "title": "The consumer health service terms of use",
+      "publisher": "The consumer health service",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Portal shows results of select tests; the model laboratory may limit distribution of certain tests by jurisdiction; only a qualified healthcare provider can interpret results and patients should discuss results with the ordering provider; one-time passcode at login; customer care 1-855-748-1115 Monday to Friday 8 a.m. to 4 p.m. Eastern; subscription renews automatically."
+    },
+    {
+      "id": "dyn_privacy",
+      "title": "Privacy policy",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Not all test results are available through the consumer health service; patients must contact their ordering physician for sensitive results, results under regulatory controls, results sent to a government lab and results required to go directly to the physician; privacy officers handle access and complaints; safeguards include need-to-know access, passwords and encryption."
+    },
+    {
+      "id": "dyn_plus_page",
+      "title": "The consumer health service",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Portal available in Quebec and Ontario; lab results with a clear explanation of what they mean; track results over time; appointment tracking."
+    },
+    {
+      "id": "dyn_partners2020",
+      "title": "The consumer health service expands digital offerings with access to mental health therapy and virtual care",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "The consumer health service at CAD 9.99 a year; virtual care with Tia Health and therapist-guided digital CBT with MindBeacon reached through the portal website and app; explanations of results."
+    },
+    {
+      "id": "lifelabs2015",
+      "title": "LifeLabs announces Ontario launch of my results",
+      "publisher": "Canadian Healthcare Technology",
+      "url": "https://www.canhealth.com/2015/07/08/lifelabs-announces-ontario-launch-of-my-results/",
+      "year": 2015,
+      "accessed": "2026-11-17",
+      "supports": "Most LifeLabs results available online, posted within 24 to 48 hours, free of charge; over 500,000 British Columbians accessed results online after the 2010 launch."
+    },
+    {
+      "id": "lifelabs2020",
+      "title": "LifeLabs online portal update provides convenient virtual care options to over 2.6 million Ontarians",
+      "publisher": "GlobeNewswire via BioSpace",
+      "url": "https://www.biospace.com/lifelabs-online-portal-update-provides-convenient-virtual-care-options-to-over-2-6-million-ontarians",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "Over 2.6 million Ontario customers use the my results portal to book appointments and view results; more than 4 million Canadians receive results online; virtual care partners reached after viewing results."
+    },
+    {
+      "id": "steitz2021",
+      "title": "Association of immediate release of test results to patients with implications for clinical workflow",
+      "publisher": "JAMA Network Open (Steitz, Sulieman, Wright, Rosenbloom)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8524306",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Before the US Cures Act rule, results were released immediately or after a 1-, 3-, 7- or 14-day delay; patients viewed 10.4 per cent of delayed-release results before clinicians, rising to 40.3 per cent after immediate release; median daily patient messages within 6 hours of viewing a delayed-release test rose from 77.5 to 146."
+    },
+    {
+      "id": "oma_privacy",
+      "title": "Privacy and secure electronic communication",
+      "publisher": "Ontario Medical Association",
+      "url": "https://www.oma.org/practice-professional-support/running-your-practice/operations-and-practice-management/cybersecurity/privacy-and-secure-electronic-communication/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Custodians must take reasonable steps to protect personal health information under PHIPA, including against unauthorized access; electronic communication of PHI must be secure; failures can lead to IPC and CPSO penalties."
+    },
+    {
+      "id": "jobbank_64409",
+      "title": "Wages: Customer Service Representative - Call Centre in Ontario (NOC 64409)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/15201/ON",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low 17.95, median 21.50, high 33.17 (2023-2024)."
+    }
+  ],
+  "assumptions": [
+    "A case is one requisition's report, final or revised, for a patient with a verified account; interim reports for pending tests are counted as separate releases.",
+    "Identity verification and payment happen in cd-portal-registration; this process starts from a verified account.",
+    "The release rule table is maintained periodically by the product manager with the laboratory medical directors and is not modelled per case.",
+    "The share of releases that lead to a support contact (1.25 per cent) and the category split are estimates; they are set so the stated support time fits a team of 14 agents who also handle registration and online orders.",
+    "Some patients phone the main contact centre about portal results instead; those calls belong to cs-client-inquiries and are not counted here.",
+    "A misdirected report leads to a privacy incident (lp-privacy-incident), but the organisation file links that process only to result reporting and security incidents, so it is not listed in this workflow's interfaces.",
+    "The Interac identity verification and some FAQ details come from current pages and may postdate 2019-2022; the matching and exclusion rules are assumed to have applied in the reference period."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

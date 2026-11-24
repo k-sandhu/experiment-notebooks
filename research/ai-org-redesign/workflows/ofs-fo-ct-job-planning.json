@@ -1,0 +1,1503 @@
+{
+  "schema_version": "0.3",
+  "id": "ofs-fo-ct-job-planning",
+  "name": "Plan a coiled tubing job",
+  "org": "oilfield-services-co",
+  "process": "fo-ct-job-planning",
+  "sector": "oil and gas services",
+  "function": "field operations (coiled tubing)",
+  "summary": "Before a coiled tubing crew goes to a well, an engineer turns the customer's well data into a written program: which string and bottomhole tools to use, how far the pipe can be pushed along the horizontal section before it locks up, what pump rates and fluids will carry plug debris out, and whether the chosen string has enough fatigue life left. The coiled tubing supervisor and operations manager review it, the customer's completions engineer approves it, and dispatch and the crew line up the unit, string and tools. It is slow when the customer sends incomplete surveys or plug depths, when a long lateral is near the reach limit and has to be re-modelled with other strings or friction reducers, and when the right string is on a unit at another job.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian pressure pumping company with six 24-hour coiled tubing crews that mill frac plugs and clean out long horizontal wells for WCSB producers, with engineers in a Calgary technical group.",
+    "org_size_employees": 1350,
+    "notes": "Most programs are for post-fracturing plug millouts and cleanouts on multi-well pads; repeat wells on a pad reuse the first well's model. Engineering work done in commercial coiled tubing modelling software and Word or Excel program templates; well data arrives by email."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one coiled tubing program (one well or one job)",
+  "trigger": "District dispatch issues a dispatch order for a coiled tubing millout, cleanout or acid job and sends it to the coiled tubing engineer and supervisor.",
+  "end_state": "An approved coiled tubing program with force, hydraulic and fatigue checks is filed and issued to the crew, and the unit, string and tools are prepared; or the job is cancelled by the customer.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 40,
+      "mode": 80,
+      "high": 110
+    },
+    "seasonality": "Highest January to March and again in late summer and autumn when fracturing peaks; lowest in spring break-up (April to May); 2020 at the low end.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "step-2021"
+      ],
+      "note": "Organisation file volume kept: six crews; STEP's seven active Canadian units ran 1,569 operating days in 2021 (about 19 days a unit a month), so six crews at 1.4-2 operating days a job give about 60-110 coiled tubing jobs a month. Nitrogen-only jobs are planned in fo-ct-nitrogen-services and are excluded."
+    },
+    "surge": {
+      "cause": "Winter completion peak on frozen ground (January to mid-March) before spring break-up",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 45,
+        "mode": 60,
+        "high": 75
+      },
+      "volume_multiplier": {
+        "low": 1.1,
+        "mode": 1.25,
+        "high": 1.4
+      },
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "step-2021"
+        ],
+        "note": "STEP reports seasonal weather and spring break-up effects on coiled tubing; multiplier tier C."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "fo-dist-job-call-intake-and-dispatch",
+        "object": "dispatch_order",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "fo-ct-string-management",
+        "object": "string_record"
+      },
+      {
+        "from": "producer",
+        "object": "site_safety_requirements"
+      },
+      {
+        "from": "em-pressure-iron-certification",
+        "object": "iron_certificate"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "program_issued",
+        "to": "fo-ct-job-execution",
+        "object": "ct_program"
+      },
+      {
+        "outcome": "program_issued",
+        "to": "producer",
+        "object": "ct_program"
+      },
+      {
+        "outcome": "program_issued",
+        "to": "hs-pre-job-hazard-assessment",
+        "object": "ct_program"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "design-engineer",
+      "title": "Completions design engineer",
+      "department": "Technical services and engineering",
+      "layer": "senior_specialist",
+      "fte_on_process": 4.8,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 90,
+        "high": 115
+      },
+      "occupation_code": "NOC 21332",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "trican-ct"
+        ],
+        "note": "Coiled tubing work takes about four of the 16 completions design engineers (planning here; real-time job support and string records elsewhere); FTE from touch time times volume."
+      }
+    },
+    {
+      "id": "ct-supervisor",
+      "title": "Coiled tubing supervisor",
+      "department": "Coiled tubing and nitrogen service line",
+      "layer": "supervisor",
+      "fte_on_process": 0.7,
+      "loaded_cost_per_hour": {
+        "low": 62,
+        "mode": 80,
+        "high": 104
+      },
+      "occupation_code": "NOC 82021",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Each program is reviewed by the supervisor who will run it; about 2 hours a program, at 200 productive hours a month on rotation."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "ct-ops-manager",
+      "title": "Coiled tubing operations manager",
+      "department": "Coiled tubing and nitrogen service line",
+      "layer": "manager",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 90,
+        "mode": 112,
+        "high": 140
+      },
+      "occupation_code": "NOC 80010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Review of new or non-routine programs, string swaps."
+      }
+    },
+    {
+      "id": "dispatcher",
+      "title": "Service dispatcher",
+      "department": "District operations and dispatch",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 45,
+        "high": 58
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Not in the organisation file's role list for this process; confirms unit, string, nitrogen and crew on the board."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "ct-operator",
+      "title": "Coiled tubing unit operator",
+      "department": "Coiled tubing and nitrogen service line",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.1,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 50,
+        "high": 66
+      },
+      "occupation_code": "NOC 84101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Not in the organisation file's role list for this process; operators prepare the unit, reel and tools at the base when the unit is between jobs."
+      },
+      "shift_pattern": "field_rotation"
+    }
+  ],
+  "systems": [
+    {
+      "id": "ct-modelling",
+      "name": "Coiled tubing force, hydraulics and fatigue modelling software",
+      "kind": "analytics"
+    },
+    {
+      "id": "email",
+      "name": "Email, Microsoft Teams and mobile phones",
+      "kind": "communication"
+    },
+    {
+      "id": "doc-store",
+      "name": "Document management (SharePoint and network drives)",
+      "kind": "document_store"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Excel workbooks",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "dispatch-board",
+      "name": "Dispatch and crew scheduling board (scheduling module, whiteboards, spreadsheets)",
+      "kind": "workflow"
+    },
+    {
+      "id": "erp",
+      "name": "ERP (finance, procurement, inventory, plant maintenance, billing)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "cmms",
+      "name": "Maintenance work order and equipment history module",
+      "kind": "system_of_record"
+    }
+  ],
+  "resources": [
+    {
+      "id": "coiled-tubing-unit",
+      "name": "Coiled tubing unit with injector, reel and control cab",
+      "kind": "equipment",
+      "count": 9,
+      "cost_per_hour": {
+        "low": 250,
+        "mode": 380,
+        "high": 550
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Open the job file from the dispatch order",
+      "description": "The coiled tubing engineer reads the dispatch order email, creates a job folder on the network drive from the program template, and notes the customer, well licence, pad, service (plug millout, cleanout, acid) and the target start date from dispatch.",
+      "role": "design-engineer",
+      "kind": "intake",
+      "inputs": [
+        "dispatch order"
+      ],
+      "outputs": [
+        "job folder",
+        "draft program shell"
+      ],
+      "systems": [
+        "email",
+        "doc-store"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong well or pad copied from a previous job folder.",
+        "typically_caught_at": "s04"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Request well data from the customer",
+      "description": "The engineer emails the customer's completions engineer for the wellbore schematic, directional survey, casing and liner sizes, plug type and depths from the frac summary, expected wellhead pressure, H2S content and any site requirements, or pulls them from the customer's file share.",
+      "role": "design-engineer",
+      "kind": "communication",
+      "inputs": [
+        "job folder"
+      ],
+      "outputs": [
+        "well data request"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Wait for the customer's well data",
+      "description": "The customer's completions engineer or wellsite supervisor collects the survey, frac report and plug tally, which are often not final until fracturing on the pad has finished, and emails them back to the engineer.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "well data request"
+      ],
+      "outputs": [
+        "well data package"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "data received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check the well data is complete",
+      "description": "The engineer checks that the survey reaches total depth, that plug depths and counts match the frac summary, that casing weights and the restriction list (liner tops, ports, landing nipples) are given, and that pressures and H2S are stated; missing items go back to the customer.",
+      "role": "design-engineer",
+      "kind": "validation",
+      "inputs": [
+        "well data package"
+      ],
+      "outputs": [
+        "checked well data"
+      ],
+      "systems": [
+        "doc-store",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "A restriction or plug depth error is not noticed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.85,
+          "condition": "complete"
+        },
+        {
+          "to": "s02",
+          "prob": 0.15,
+          "condition": "survey, plug depths or restrictions missing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "trican-ct",
+          "nov-cerberus"
+        ],
+        "note": "Trican's engineers use force analysis and hydraulic modelling to choose the coiled tubing configuration (trican-ct); commercial software predicts forces at each stage of a job (nov-cerberus). Times tier C."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Look up strings available in the district",
+      "description": "The engineer opens the string records to see which reels are on units in the district, their outside diameter, wall thickness, length after cuts, welds and the fatigue life already used along their length, and picks a candidate string for the depth and pressure of this well.",
+      "role": "design-engineer",
+      "kind": "lookup",
+      "inputs": [
+        "checked well data",
+        "string condition records"
+      ],
+      "outputs": [
+        "candidate string"
+      ],
+      "systems": [
+        "ct-modelling",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Out-of-date string length or fatigue record used.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "trican-ct",
+          "nov-cerberus"
+        ],
+        "note": "Trican's engineers use force analysis and hydraulic modelling to choose the coiled tubing configuration (trican-ct); commercial software predicts forces at each stage of a job (nov-cerberus). Times tier C."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Run the tubing force model",
+      "description": "The engineer loads the survey, completion and candidate string into the modelling software and runs trips in and out with plug-milling weight on bit, checking predicted lockup depth, set-down weight at total depth, pick-up weight against string yield and helical buckling; repeat wells on a pad only need the new survey.",
+      "role": "design-engineer",
+      "kind": "analysis",
+      "inputs": [
+        "checked well data",
+        "candidate string"
+      ],
+      "outputs": [
+        "force model results"
+      ],
+      "systems": [
+        "ct-modelling"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 40,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Friction factor chosen too low, overstating reach.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.75,
+          "condition": "reaches total depth with margin"
+        },
+        {
+          "to": "s07",
+          "prob": 0.25,
+          "condition": "reach marginal or lockup before total depth"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "trican-ct",
+          "nov-cerberus"
+        ],
+        "note": "Trican's engineers use force analysis and hydraulic modelling to choose the coiled tubing configuration (trican-ct); commercial software predicts forces at each stage of a job (nov-cerberus). Times tier C."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Evaluate reach options and re-model",
+      "description": "For long laterals near the reach limit the engineer tries a larger or tapered string, metal-to-metal lubricant or friction reducer in the fluid, an agitator or extended reach tool, and lower circulating pressure, reruns the model for each, and notes the chosen option and its cost for the customer.",
+      "role": "design-engineer",
+      "kind": "judgment",
+      "inputs": [
+        "force model results"
+      ],
+      "outputs": [
+        "chosen reach option"
+      ],
+      "systems": [
+        "ct-modelling",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.85,
+          "condition": "option found on current string"
+        },
+        {
+          "to": "s05",
+          "prob": 0.15,
+          "condition": "needs a different string"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "trican-ct",
+          "step-coilplus"
+        ],
+        "note": "Force analysis to choose configuration (trican-ct); friction and lockup limit reach in long Montney laterals (step-coilplus, dated after the period). Share and times tier C."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Run the hydraulics model",
+      "description": "The engineer models pump rates and circulating pressures through the string and motor, annular velocity needed to carry plug debris and sand up the lateral, wellhead and return pressures, and the nitrogen rate if the well needs energised returns, and sets the pump schedule and sweep plan.",
+      "role": "design-engineer",
+      "kind": "analysis",
+      "inputs": [
+        "force model results",
+        "checked well data"
+      ],
+      "outputs": [
+        "pump schedule",
+        "fluid and nitrogen volumes"
+      ],
+      "systems": [
+        "ct-modelling",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Annular velocity too low for debris in the build section.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "trican-ct",
+          "nov-cerberus"
+        ],
+        "note": "Trican's engineers use force analysis and hydraulic modelling to choose the coiled tubing configuration (trican-ct); commercial software predicts forces at each stage of a job (nov-cerberus). Times tier C."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Check string fatigue and pressure limits",
+      "description": "The engineer runs the fatigue model for the planned trips at the expected circulating pressure, adds the predicted damage to the string's used life, and checks burst and collapse limits against maximum wellhead pressure; if the string would pass the company's retirement limit or has thin wall, another string is needed.",
+      "role": "design-engineer",
+      "kind": "analysis",
+      "inputs": [
+        "candidate string",
+        "pump schedule",
+        "string condition records"
+      ],
+      "outputs": [
+        "fatigue and limits check"
+      ],
+      "systems": [
+        "ct-modelling"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Fatigue from the previous job not yet entered, understating used life.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company string management standard: string fatigue and pressure rating checked before each job (IRP 21 coiled tubing specifications)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.9,
+          "condition": "string fit for the job"
+        },
+        {
+          "to": "s10",
+          "prob": 0.1,
+          "condition": "string near retirement or limits exceeded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "irp21",
+          "nov-cerberus"
+        ],
+        "note": "IRP 21 includes coiled tubing specifications; modelling software tracks forces and limits. Times and shares tier C."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Arrange a string swap",
+      "description": "The operations manager decides where a suitable reel can come from (another unit, the base or a new string from the mill), agrees with dispatch which unit will carry it, and books a reel swap or spooling at the base with the shop.",
+      "role": "ct-ops-manager",
+      "kind": "coordination",
+      "inputs": [
+        "fatigue and limits check"
+      ],
+      "outputs": [
+        "string swap plan"
+      ],
+      "systems": [
+        "email",
+        "dispatch-board",
+        "cmms"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "new string selected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Specify bottomhole assembly and confirm tools",
+      "description": "The coiled tubing supervisor who will run the job reviews the models, picks the connector, check valves, disconnect, motor, agitator and mill size for the plug type, and phones the tool room to confirm the motor and mills are redressed and available for the start date.",
+      "role": "ct-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "force model results",
+        "pump schedule"
+      ],
+      "outputs": [
+        "BHA list",
+        "tool reservation"
+      ],
+      "systems": [
+        "email",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Mill size does not suit the plug or casing restriction.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Draft the coiled tubing program",
+      "description": "The engineer writes the program in the company template: well summary, string and BHA, pressure control stack and test pressures, run-in speeds and weight limits, plug milling procedure, pump and sweep schedule, fluid and chemical list, nitrogen volumes, contingencies for stuck pipe and motor stall, and hazard notes for the site.",
+      "role": "design-engineer",
+      "kind": "drafting",
+      "inputs": [
+        "force model results",
+        "pump schedule",
+        "fatigue and limits check",
+        "BHA list"
+      ],
+      "outputs": [
+        "draft program"
+      ],
+      "systems": [
+        "doc-store",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Copy-over error from a previous well's program (depths, test pressure).",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "irp21"
+        ],
+        "note": "IRP 21 covers operations planning, well control equipment, coiled tubing specifications and fluids. Times tier C."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Operations manager reviews the program",
+      "description": "The operations manager reads new, deep or non-routine programs and checks limits, contingencies and test pressures against company standards; routine repeat-well programs get a quick scan. Errors and missing contingencies go back to the engineer.",
+      "role": "ct-ops-manager",
+      "kind": "review",
+      "inputs": [
+        "draft program"
+      ],
+      "outputs": [
+        "reviewed program"
+      ],
+      "systems": [
+        "doc-store",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company engineering review of coiled tubing programs before issue",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.88,
+          "condition": "accepted"
+        },
+        {
+          "to": "s12",
+          "prob": 0.12,
+          "condition": "corrections needed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Send the program to the customer for approval",
+      "description": "The engineer emails the program and model plots to the customer's completions engineer, with any options that change cost such as an agitator, extra friction reducer or a larger string.",
+      "role": "design-engineer",
+      "kind": "communication",
+      "inputs": [
+        "reviewed program"
+      ],
+      "outputs": [
+        "program for approval"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Wait for the customer's approval",
+      "description": "The customer's completions engineer reviews the program against the well plan and the frac results, approves it, asks for changes such as a different plug count or fluid, or postpones or cancels the job when the pad schedule changes.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "program for approval"
+      ],
+      "outputs": [
+        "approved program or change request"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.83,
+          "condition": "approved"
+        },
+        {
+          "to": "s12",
+          "prob": 0.12,
+          "condition": "changes requested"
+        },
+        {
+          "to": "END",
+          "prob": 0.05,
+          "condition": "job cancelled or deferred past the planning horizon",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Supervisor and engineer hand over the job",
+      "description": "The supervisor and engineer talk through the approved program by phone or in the district office: the reach margin, weight and pressure limits, where debris is expected, contingency triggers, and what real-time data the engineer wants to watch during the job.",
+      "role": "ct-supervisor",
+      "kind": "review",
+      "inputs": [
+        "approved program"
+      ],
+      "outputs": [
+        "handover notes"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Confirm unit, string, nitrogen and crew on the board",
+      "description": "The dispatcher checks the board for the coiled tubing unit carrying the chosen string, the nitrogen pumper and transports, fluid trucks and the 24-hour crew, moves bookings when the previous job runs long, and confirms the start time with the customer's wellsite supervisor.",
+      "role": "dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "approved program",
+        "string swap plan"
+      ],
+      "outputs": [
+        "confirmed equipment and crew booking"
+      ],
+      "systems": [
+        "dispatch-board",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong unit or nitrogen unit booked.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Check pressure control equipment certification",
+      "description": "The supervisor checks that the blowout preventer, stripper, riser and treating iron on the unit have current pressure test and recertification records for the well's pressure rating, and asks the shop for replacements where a certificate is expired.",
+      "role": "ct-supervisor",
+      "kind": "validation",
+      "inputs": [
+        "iron and BOP certificates",
+        "approved program"
+      ],
+      "outputs": [
+        "equipment check"
+      ],
+      "systems": [
+        "cmms",
+        "doc-store"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "IRP 21 well control equipment and quality assurance of pressure control equipment; customer well control requirements",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.4,
+          "condition": "unit at the base between jobs"
+        },
+        {
+          "to": "s20",
+          "prob": 0.6,
+          "condition": "unit moves directly from the previous job"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "irp21"
+        ],
+        "note": "IRP 21 covers operations planning, well control equipment, coiled tubing specifications and fluids. Times tier C."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Prepare the unit and tools at the base",
+      "description": "Operators at the base change stripper elements, function test the BOP rams and accumulator, check the injector chains and gooseneck, confirm the reel and string length, load the BHA, mills, motor and chemicals, and record the checks before the unit is released to travel.",
+      "role": "ct-operator",
+      "kind": "physical",
+      "inputs": [
+        "BHA list",
+        "equipment check"
+      ],
+      "outputs": [
+        "unit ready to travel"
+      ],
+      "systems": [
+        "cmms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 120,
+        "mode": 240,
+        "high": 480
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Element or seal not changed, found at the pressure test on location.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Company pre-mobilisation equipment checklist; IRP 21 accumulator and well control equipment",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "irp21"
+        ],
+        "note": "IRP 21 covers operations planning, well control equipment, coiled tubing specifications and fluids. Times tier C."
+      },
+      "people": 3,
+      "resources": [
+        {
+          "id": "coiled-tubing-unit",
+          "occupied_min": {
+            "low": 180,
+            "mode": 300,
+            "high": 600
+          }
+        }
+      ]
+    },
+    {
+      "id": "s20",
+      "name": "Issue the final program to the field",
+      "description": "The engineer saves the approved program as a PDF in the job folder, emails it to the supervisor, night supervisor and customer, and updates the planned equipment list used later for the field ticket.",
+      "role": "design-engineer",
+      "kind": "data_entry",
+      "inputs": [
+        "approved program",
+        "confirmed equipment and crew booking"
+      ],
+      "outputs": [
+        "issued coiled tubing program"
+      ],
+      "systems": [
+        "doc-store",
+        "email",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Older revision of the program sent to the crew.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "program issued",
+          "outcome": "program_issued"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB coiled tubing and pressure pumping field practice in 2019-2022."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Incomplete well data",
+      "share_of_cases": 0.15,
+      "description": "Survey, plug depths or restrictions are missing and the engineer has to ask again, often waiting for fracturing on the pad to finish.",
+      "path": [
+        "s04",
+        "s02",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Reach marginal",
+      "share_of_cases": 0.25,
+      "description": "Long laterals model close to lockup and need lubricant, an agitator, or a bigger or tapered string.",
+      "path": [
+        "s06",
+        "s07",
+        "s08"
+      ]
+    },
+    {
+      "name": "String swap",
+      "share_of_cases": 0.12,
+      "description": "No reel in the district has enough fatigue life, wall or length; a reel is moved or spooled at the base.",
+      "path": [
+        "s09",
+        "s10",
+        "s05"
+      ]
+    },
+    {
+      "name": "Customer changes the program",
+      "share_of_cases": 0.12,
+      "description": "The customer changes plug counts, fluids or timing after frac results, and the program is revised.",
+      "path": [
+        "s15",
+        "s12",
+        "s13",
+        "s14",
+        "s15"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 4,
+        "p90": 9
+      },
+      "unit": "calendar days from dispatch order to issued program",
+      "population": "Coiled tubing millout and cleanout programs, WCSB, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "No published planning cycle time found. Rests on customers booking post-frac millouts about one to two weeks ahead and on the waits for well data and approval in this file."
+      }
+    },
+    {
+      "metric": "coiled tubing revenue per operating day",
+      "value": 51278,
+      "unit": "CAD per operating day",
+      "population": "STEP Energy Services Canadian coiled tubing, 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "step-2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "operating days per active unit",
+      "value": 224,
+      "unit": "days per year",
+      "population": "STEP Canadian coiled tubing, 2021 (1,569 days, 7 active units)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "step-2021"
+        ],
+        "note": "Derived by dividing the two published figures."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Plug depths and surveys arrive late or incomplete because the customer finalises them only after fracturing, pushing modelling into the last day.",
+      "steps": [
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Practitioner knowledge of millout planning after plug-and-perf completions."
+      }
+    },
+    {
+      "description": "Long laterals sit near the lockup limit, so models are rerun with several strings, lubricants and tools, and string choice depends on which reel is free.",
+      "steps": [
+        "s06",
+        "s07",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "trican-ct",
+          "step-coilplus"
+        ],
+        "note": "Force analysis and lockup limits on long laterals."
+      }
+    },
+    {
+      "description": "String fatigue records are kept in modelling files and spreadsheets updated after each job; a late update means the next program uses an understated used life.",
+      "steps": [
+        "s05",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "General knowledge of string management practice in the period."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "trican-ct",
+      "accessed": "2026-11-24",
+      "title": "Trican - Coiled Tubing",
+      "publisher": "Trican Well Service Ltd.",
+      "url": "https://tricanwellservice.com/coiled-tubing/",
+      "year": 2026,
+      "supports": "Coiled tubing services: milling frac plugs, ports, stage tools and cement, cleanouts, coiled tubing fracturing, E-Coil logging, acidizing; tubing sizes 1.25 to 2.875 inches; in-house engineering uses force analysis and hydraulic modelling to recommend the coiled tubing configuration; engineers and operations analyse well conditions before milling; nitrogen supplied as required; job data streamed in real time to the engineering group; work on live wells without joining pipe on a rig floor."
+    },
+    {
+      "id": "step-2021",
+      "accessed": "2026-11-24",
+      "title": "STEP Energy Services Ltd. Reports Fourth Quarter and Year End 2021 Results",
+      "publisher": "STEP Energy Services Ltd.",
+      "url": "https://www.stepenergyservices.com/news-releases/step-energy-services-ltd-reports-fourth-quarter-and-year-end-2021-results",
+      "year": 2022,
+      "supports": "Canadian coiled tubing: 1,569 operating days in 2021 and 1,373 in 2020 with 7 and 5 active units of 16; 448 operating days in Q4 2021; revenue per operating day $51,278 in 2021; units designed for the deepest wells in the WCSB; weather delays in late December 2021; spring break-up affects northern operations in Q2."
+    },
+    {
+      "id": "irp21",
+      "accessed": "2026-11-24",
+      "title": "DACC IRP Volume 21: Coiled Tubing Operations",
+      "publisher": "Energy Safety Canada",
+      "url": "https://www.energysafetycanada.com/resource/dacc-irp-volume-21-coiled-tubing-operations",
+      "year": 2021,
+      "supports": "Industry recommended practice for coiled tubing fluid conveyance (fracturing, acidizing, sand, scale and wax removal) and mechanical work on oil and gas wells; sections on operations planning, well control equipment, accumulator equipment, coiled tubing specifications, fluids and circulating systems, quality assurance of well pressure control equipment and elastomeric seals; sanctioned September 2021 after a review opened in 2018 (an earlier edition applied before)."
+    },
+    {
+      "id": "nov-cerberus",
+      "accessed": "2026-11-24",
+      "title": "Cerberus Modeling Software",
+      "publisher": "NOV",
+      "url": "https://nov.com/products/cerberus-modeling-software",
+      "year": 2026,
+      "supports": "Commercial intervention modelling software used to predict and analyse cumulative forces at each stage of a coiled tubing job, also covering wireline, slickline and jointed pipe; runs on Windows desktops."
+    },
+    {
+      "id": "step-coilplus",
+      "accessed": "2026-11-24",
+      "title": "COIL+ sets new Montney depth record as adoption accelerates in Canada",
+      "publisher": "STEP Energy Services Ltd.",
+      "url": "https://www.stepenergyservices.com/articles/coil-tm-sets-new-montney-depth-record-as-adoption-accelerates-in-canada",
+      "year": 2026,
+      "supports": "Montney coiled tubing run to 8,295 m measured depth with a 5,824 m lateral; friction factor and lockup limit reach in long laterals; agitators used to delay lockup. Dated 2026, after the reference period; used only to show that lateral reach and lockup set the limits of coiled tubing millouts."
+    }
+  ],
+  "assumptions": [
+    "Loaded cost per hour comes from the organisation file (base wage x 1.35).",
+    "The coiled tubing engineer is one of the organisation file's completions design engineers; the file has no separate coiled tubing engineer role.",
+    "Dispatcher and coiled tubing operator take part but are not in the process map's role list.",
+    "Unit preparation at the base happens only when the unit is between jobs (40%); otherwise checks are done on location and fall in fo-ct-job-execution.",
+    "Travel to the lease is documented in fo-dist-job-call-intake-and-dispatch; this file ends when the program is issued and the unit is ready.",
+    "The simulated median (about 6 days) is above the 4-day tier C benchmark because the waits for customer data and approval each average about a day; customers that book millouts with complete data and pre-approved pad programs fall near the benchmark, so the benchmark is kept as a separate estimate rather than tuned to the model.",
+    "Nitrogen-only jobs (about 60 a month) are planned in fo-ct-nitrogen-services and are not counted here."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

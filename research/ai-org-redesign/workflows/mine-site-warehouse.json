@@ -1,0 +1,1541 @@
+{
+  "schema_version": "0.3",
+  "id": "mine-site-warehouse",
+  "name": "Receiving, stores and inventory",
+  "org": "mining-operator-co",
+  "process": "site-warehouse",
+  "sector": "mining (underground gold)",
+  "function": "supply chain",
+  "summary": "The mine's warehouse receives every supplier delivery against a purchase order, keeps several thousand spare parts and consumables, and issues them to mechanics, electricians and mining crews around the clock. Warehouse attendants on 14-on/14-off rotation check deliveries against orders in the ERP, put stock away, issue parts against work orders, exchange rotable components, and send parts underground by cage. Discrepancies go to the buyers, and stockouts turn into urgent orders. Errors come from issues not recorded against a work order, parts put in the wrong bin and vague requests, which spoil stock records and job costs and show up as stockouts when a machine is down.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A single-mine Canadian gold producer running a 500-650 tpd underground mine and its own mill near Wawa in northern Ontario, with 12-hour shifts on 14-on/14-off rotations and a camp.",
+    "org_size_employees": 300,
+    "notes": "A warehouse building with a receiving bay, counter, bulk storage and yard; the ERP inventory module holds the item master and stock."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one receipt (one supplier delivery) or one stores issue",
+  "trigger": "A supplier truck arrives with a delivery, or a mechanic or crew asks for parts.",
+  "end_state": "The receipt is posted and the stock put away or staged for the job, or the parts are issued and charged to a work order (or an urgent order is raised when nothing is on site).",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 1500,
+      "mode": 2200,
+      "high": 3000
+    },
+    "seasonality": "Deliveries peak before spring break-up load restrictions and before planned shutdowns; issues follow maintenance work and rise during shutdowns.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Kept from the organisation file: about 500 purchase orders a month and several thousand stores transactions."
+    },
+    "surge": {
+      "cause": "Planned mill or hoist shutdown",
+      "events_per_year": {
+        "low": 2,
+        "mode": 3,
+        "high": 4
+      },
+      "duration_days": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "volume_multiplier": {
+        "low": 1.5,
+        "mode": 2.0,
+        "high": 3.0
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The organisation file shows three planned shutdowns a year (mnt-shutdown); the multiplier is the author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "suppliers",
+        "object": "goods_delivery",
+        "share": 0.24
+      },
+      {
+        "from": "mine-explosives",
+        "object": "goods_receipt",
+        "share": 0.01
+      },
+      {
+        "from": "mill-reagents",
+        "object": "goods_receipt",
+        "share": 0.01
+      },
+      {
+        "from": "site-fuel",
+        "object": "fuel_delivery",
+        "share": 0.02
+      },
+      {
+        "from": "mnt-mobile-pm",
+        "object": "stores_request",
+        "share": 0.2
+      },
+      {
+        "from": "mnt-breakdown-repair",
+        "object": "stores_request",
+        "share": 0.3
+      },
+      {
+        "from": "mnt-fixed-plant",
+        "object": "stores_request",
+        "share": 0.12
+      },
+      {
+        "from": "mnt-component-rebuild",
+        "object": "rebuilt_component",
+        "share": 0.03
+      },
+      {
+        "from": "mine-ug-services",
+        "object": "stores_request",
+        "share": 0.07
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "received_to_stock",
+        "to": "site-ap",
+        "object": "goods_receipt"
+      },
+      {
+        "outcome": "received_direct",
+        "to": "site-ap",
+        "object": "goods_receipt"
+      },
+      {
+        "outcome": "backordered",
+        "to": "site-purchasing",
+        "object": "purchase_requisition"
+      },
+      {
+        "outcome": "issued_reorder",
+        "to": "site-purchasing",
+        "object": "purchase_requisition"
+      },
+      {
+        "outcome": "issued",
+        "to": "site-cost-reporting",
+        "object": "stores_issue"
+      },
+      {
+        "outcome": "issued_underground",
+        "to": "site-cost-reporting",
+        "object": "stores_issue"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-component-rebuild",
+        "object": "component_for_rebuild"
+      },
+      {
+        "outcome": "returned",
+        "to": "suppliers",
+        "object": "goods_delivery"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "warehouse-attendant",
+      "title": "Warehouse attendant",
+      "department": "Supply chain and warehouse",
+      "layer": "individual_contributor",
+      "fte_on_process": 5.0,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 37,
+        "high": 44
+      },
+      "occupation_code": "NOC 1522",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "noc-14401"
+        ],
+        "note": "All five attendants work in this process; duties as in NOC 14401."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "supply-manager",
+      "title": "Supply chain supervisor",
+      "department": "Supply chain and warehouse",
+      "layer": "supervisor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 70,
+        "high": 84
+      },
+      "occupation_code": "NOC 1225",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approvals of requisitions and adjustments, stock reviews."
+      }
+    },
+    {
+      "id": "buyer",
+      "title": "Buyer",
+      "department": "Supply chain and warehouse",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 45,
+        "high": 54
+      },
+      "occupation_code": "NOC 1225",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Receiving discrepancies and expediting."
+      }
+    },
+    {
+      "id": "security-officer",
+      "title": "Security officer",
+      "department": "Site services",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 35,
+        "high": 42
+      },
+      "occupation_code": "NOC 6541",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Gate check-in of deliveries."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "hd-mechanic",
+      "title": "Heavy-duty equipment mechanic",
+      "department": "Mobile equipment maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 53,
+        "high": 63
+      },
+      "occupation_code": "NOC 7312",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Time mechanics and crews spend asking for and collecting parts at the counter."
+      },
+      "shift_pattern": "field_rotation"
+    }
+  ],
+  "systems": [
+    {
+      "id": "erp",
+      "name": "Mid-market ERP for finance, purchasing, inventory and fixed assets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "cmms",
+      "name": "Maintenance management system (ERP maintenance module or standalone)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "access-control",
+      "name": "Gate access, camp booking and gold room access logs",
+      "kind": "workflow"
+    },
+    {
+      "id": "radio",
+      "name": "Leaky feeder radio and surface radio network",
+      "kind": "communication"
+    },
+    {
+      "id": "email",
+      "name": "Email and calendar (Microsoft Outlook/Exchange)",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "warehouse-forklift",
+      "name": "Warehouse forklift and yard loader",
+      "kind": "equipment",
+      "count": 2,
+      "cost_per_hour": {
+        "low": 15,
+        "mode": 25,
+        "high": 40
+      }
+    },
+    {
+      "id": "shaft-hoist",
+      "name": "Production shaft hoist, skip and cage (loading pocket below 460 m level to dump at 70 m level)",
+      "kind": "plant",
+      "count": 1,
+      "cost_per_hour": {
+        "low": 40,
+        "mode": 60,
+        "high": 90
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Pick up the next job at the warehouse",
+      "description": "The warehouse attendant on shift takes the next piece of work: a supplier truck at the gate with a delivery, or a mechanic or crew member at the counter, on the phone or on a pick list asking for parts. They decide whether it is a receipt or an issue.",
+      "role": "warehouse-attendant",
+      "kind": "intake",
+      "inputs": [
+        "delivery notice or parts request"
+      ],
+      "outputs": [
+        "job type"
+      ],
+      "systems": [
+        "radio"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.28,
+          "condition": "supplier delivery to receive"
+        },
+        {
+          "to": "s09",
+          "prob": 0.72,
+          "condition": "parts request to issue"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Split assumes about 600 receipts and 1,600 issues a month from the organisation file's 500 purchase orders and 2,200 transactions."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check the delivery truck in at the gate",
+      "description": "The security officer checks the driver's identity and paperwork at the gatehouse, records the truck in the gate log, gives the site safety rules and radios the warehouse that a delivery is coming.",
+      "role": "security-officer",
+      "kind": "validation",
+      "inputs": [
+        "bill of lading"
+      ],
+      "outputs": [
+        "gate log entry"
+      ],
+      "systems": [
+        "access-control",
+        "radio"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Site access and security procedure: all vehicles logged at the gatehouse",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at a remote mine with a staffed gatehouse (security officers in the organisation file)."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Unload the delivery",
+      "description": "The attendant unloads pallets, crates and long material from the truck with the forklift into the receiving bay or yard and signs the driver's bill of lading, noting any visible damage.",
+      "role": "warehouse-attendant",
+      "kind": "physical",
+      "inputs": [
+        "gate log entry",
+        "bill of lading"
+      ],
+      "outputs": [
+        "goods in receiving bay",
+        "signed bill of lading"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 240
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Damage not noted on the bill of lading, so a later claim against the carrier fails.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "warehouse-forklift",
+          "occupied_min": {
+            "low": 10,
+            "mode": 15,
+            "high": 30
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Match the packing slip to the purchase order and count",
+      "description": "The attendant looks up the purchase order in the ERP from the packing slip, counts and inspects each line, and compares part numbers and quantities with what was ordered.",
+      "role": "warehouse-attendant",
+      "kind": "validation",
+      "inputs": [
+        "packing slip",
+        "goods in receiving bay"
+      ],
+      "outputs": [
+        "checked receipt"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Quantity or part miscounted, so stock and the supplier invoice disagree.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.87,
+          "condition": "matches the order"
+        },
+        {
+          "to": "s05",
+          "prob": 0.13,
+          "condition": "short, over, wrong part, damaged or no purchase order"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "noc-14401"
+        ],
+        "note": "Receiving and sorting of incoming parts is a core storekeeper duty (NOC 14401); discrepancy share and minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Ask the buyer to sort out the discrepancy",
+      "description": "The attendant emails the buyer with photos and the packing slip; the buyer calls the supplier, agrees a credit, a replacement or a return, or raises a missing purchase order, and tells the warehouse what to do with the goods.",
+      "role": "buyer",
+      "kind": "communication",
+      "inputs": [
+        "checked receipt",
+        "photos"
+      ],
+      "outputs": [
+        "supplier resolution"
+      ],
+      "systems": [
+        "email",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.82,
+          "condition": "accepted or partly accepted"
+        },
+        {
+          "to": "END",
+          "prob": 0.18,
+          "condition": "goods returned to supplier",
+          "outcome": "returned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Post the goods receipt in the ERP",
+      "description": "The attendant enters the received quantities against the purchase order lines in the ERP, which updates stock on hand and makes the receipt available for three-way matching in accounts payable.",
+      "role": "warehouse-attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "checked receipt"
+      ],
+      "outputs": [
+        "goods receipt"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Receipt posted to the wrong line or not posted, so the invoice is held.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Internal control over purchasing: goods receipt posted by stores, separate from the buyer and accounts payable, for three-way match",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.7,
+          "condition": "stock item"
+        },
+        {
+          "to": "s08",
+          "prob": 0.3,
+          "condition": "direct-charge item for a job"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "noc-14401"
+        ],
+        "note": "Keeping records of stock on hand is a storekeeper duty (NOC 14401); three-way matching is the author's description of common ERP practice."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Label and put away the stock",
+      "description": "The attendant labels each item with its stock number and bin location and puts it away on the shelves, in the bulk storage or the yard, using the forklift for heavy items.",
+      "role": "warehouse-attendant",
+      "kind": "physical",
+      "inputs": [
+        "goods receipt"
+      ],
+      "outputs": [
+        "stock in bin"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Item put in the wrong bin, so it shows in stock but cannot be found.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "warehouse-forklift",
+          "occupied_min": {
+            "low": 0,
+            "mode": 5,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "put away",
+          "outcome": "received_to_stock"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "noc-14401"
+        ],
+        "note": "Storing items in an orderly and accessible manner is a storekeeper duty (NOC 14401); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Stage the direct-charge item and notify the requester",
+      "description": "The attendant puts the item on the hold shelf tagged with the work order or job, and calls or emails the planner or supervisor who ordered it to collect it or have it sent to the shop.",
+      "role": "warehouse-attendant",
+      "kind": "communication",
+      "inputs": [
+        "goods receipt"
+      ],
+      "outputs": [
+        "item staged for the job"
+      ],
+      "systems": [
+        "email",
+        "radio"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "requester told",
+          "outcome": "received_direct"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Ask for parts at the counter",
+      "description": "A mechanic or crew member comes to the counter with a work order number or a pick list from the planner, or phones from underground, and describes the parts needed, often by machine model and description rather than part number.",
+      "role": "hd-mechanic",
+      "kind": "intake",
+      "inputs": [
+        "work order",
+        "pick list"
+      ],
+      "outputs": [
+        "parts request"
+      ],
+      "systems": [
+        "cmms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Mechanics are the main warehouse customers at a mine (organisation file triggers from maintenance processes); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Look up the part and its stock",
+      "description": "The attendant searches the ERP item master by part number, description or machine, checks the quantity on hand and bin location, and checks interchangeable numbers when the first one is not found.",
+      "role": "warehouse-attendant",
+      "kind": "lookup",
+      "inputs": [
+        "parts request"
+      ],
+      "outputs": [
+        "item and bin location"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong part identified from a vague description.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.88,
+          "condition": "in stock"
+        },
+        {
+          "to": "s14",
+          "prob": 0.06,
+          "condition": "out of stock"
+        },
+        {
+          "to": "s13",
+          "prob": 0.03,
+          "condition": "rotable component exchange"
+        },
+        {
+          "to": "s19",
+          "prob": 0.03,
+          "condition": "system shows stock but the bin is empty"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mmh-mro"
+        ],
+        "note": "Stockout share near the 7.4% industry average stockout rate and the 94.6% inventory accuracy reported by the MMH article; the split between stockout and record error is the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Pick the parts",
+      "description": "The attendant walks to the bins or the yard, picks the quantity, checks it against the request with the mechanic, and brings heavy items with the forklift.",
+      "role": "warehouse-attendant",
+      "kind": "physical",
+      "inputs": [
+        "item and bin location"
+      ],
+      "outputs": [
+        "picked parts"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "warehouse-forklift",
+          "occupied_min": {
+            "low": 0,
+            "mode": 2,
+            "high": 15
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "noc-14401"
+        ],
+        "note": "Issuing parts for internal use is a storekeeper duty (NOC 14401); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Record the issue against the work order",
+      "description": "The attendant enters the issue in the ERP against the work order or cost centre and the equipment number, prints or signs the issue slip, and hands over the parts. On night shift or when the counter is busy, issues are written on paper and keyed in later.",
+      "role": "warehouse-attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "picked parts",
+        "work order"
+      ],
+      "outputs": [
+        "stores issue record"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Issue charged to the wrong work order or not keyed in, so stock and job costs are wrong.",
+        "typically_caught_at": "s19"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Inventory control: every stores issue recorded against a work order or cost centre",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.7,
+          "condition": "parts handed over at the counter",
+          "outcome": "issued"
+        },
+        {
+          "to": "s16",
+          "prob": 0.2,
+          "condition": "parts sent underground"
+        },
+        {
+          "to": "s17",
+          "prob": 0.1,
+          "condition": "issue takes the item below its reorder point"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file notes unrecorded issues spoil inventory accuracy; shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Exchange a rotable component",
+      "description": "For a rotable part (a pump, starter, hydraulic cylinder or transmission) the attendant takes the failed core from the mechanic, tags it for rebuild with the work order, and issues a rebuilt unit from stock.",
+      "role": "warehouse-attendant",
+      "kind": "physical",
+      "inputs": [
+        "parts request",
+        "failed core"
+      ],
+      "outputs": [
+        "tagged core for rebuild",
+        "rebuilt unit picked"
+      ],
+      "systems": [
+        "erp",
+        "cmms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "warehouse-forklift",
+          "occupied_min": {
+            "low": 5,
+            "mode": 10,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file lists rebuilt components flowing back to stores; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Look for a substitute or another source",
+      "description": "With the planner or the mechanic the attendant checks alternative part numbers, a cannibalized unit, or parts on an order that has arrived but not been received, before raising an urgent order.",
+      "role": "warehouse-attendant",
+      "kind": "lookup",
+      "inputs": [
+        "item and bin location"
+      ],
+      "outputs": [
+        "substitute or shortage"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.35,
+          "condition": "substitute found"
+        },
+        {
+          "to": "s15",
+          "prob": 0.65,
+          "condition": "nothing on site: urgent order"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Raise an urgent requisition",
+      "description": "The attendant raises a rush purchase requisition in the ERP with the work order and equipment down, and phones the buyer to expedite with the supplier and a hot-shot courier.",
+      "role": "warehouse-attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "substitute or shortage"
+      ],
+      "outputs": [
+        "urgent purchase requisition"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "requisition raised; issue completes when the order arrives",
+          "outcome": "backordered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Send the parts underground",
+      "description": "The attendant packs the parts in a tote or on a pallet tagged with the level and work order, books space on the next material cage or personnel-carrier run, and radios the underground crew when they are on their way.",
+      "role": "warehouse-attendant",
+      "kind": "coordination",
+      "inputs": [
+        "stores issue record",
+        "picked parts"
+      ],
+      "outputs": [
+        "parts delivered underground"
+      ],
+      "systems": [
+        "radio"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "shaft-hoist",
+          "occupied_min": {
+            "low": 5,
+            "mode": 10,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "delivered underground",
+          "outcome": "issued_underground"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Material moves by cage or ramp between shift changes; wait and minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Raise a replenishment requisition",
+      "description": "When the ERP shows the item below its reorder point, the attendant reviews usage and raises a replenishment requisition for the reorder quantity.",
+      "role": "warehouse-attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "stores issue record"
+      ],
+      "outputs": [
+        "replenishment requisition"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "noc-14401"
+        ],
+        "note": "Preparing requisitions to replenish stock is a storekeeper duty (NOC 14401); the daily batch is the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Approve the replenishment requisition",
+      "description": "The supply chain supervisor reviews the day's replenishment requisitions in the ERP for quantity and value, adjusts reorder points for slow movers, and releases them to the buyers.",
+      "role": "supply-manager",
+      "kind": "approval",
+      "inputs": [
+        "replenishment requisition"
+      ],
+      "outputs": [
+        "approved purchase requisition"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Purchasing authority limits: requisitions approved by the supply chain supervisor before purchase",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "released to purchasing",
+          "outcome": "issued_reorder"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Count the bin and adjust the stock record",
+      "description": "The attendant counts the bin and nearby locations, searches for the item, checks recent issues and receipts, and prepares a stock adjustment in the ERP with the reason.",
+      "role": "warehouse-attendant",
+      "kind": "validation",
+      "inputs": [
+        "item and bin location"
+      ],
+      "outputs": [
+        "count result",
+        "draft stock adjustment"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mmh-mro"
+        ],
+        "note": "Inventory accuracy near 95% means about one lookup in twenty finds a record error; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Approve the stock adjustment",
+      "description": "The supply chain supervisor reviews the adjustment and its value, approves it in the ERP or asks for a recount, and the attendant then treats the item as out of stock.",
+      "role": "supply-manager",
+      "kind": "approval",
+      "inputs": [
+        "draft stock adjustment"
+      ],
+      "outputs": [
+        "posted stock adjustment"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Inventory control: stock adjustments approved by someone other than the person who counted",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Receiving discrepancy",
+      "share_of_cases": 0.036,
+      "description": "About 13% of deliveries are short, over, wrong, damaged or arrive without a purchase order; the buyer resolves them with the supplier and about one in five is returned.",
+      "path": [
+        "s04",
+        "s05",
+        "s06"
+      ]
+    },
+    {
+      "name": "Stockout",
+      "share_of_cases": 0.05,
+      "description": "The part is not on site; a substitute is found for about a third, the rest become urgent orders.",
+      "path": [
+        "s10",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Phantom stock",
+      "share_of_cases": 0.02,
+      "description": "The ERP shows stock but the bin is empty, usually after an unrecorded issue or a wrong put-away; the attendant counts, the supervisor approves an adjustment and the request becomes a stockout.",
+      "path": [
+        "s10",
+        "s19",
+        "s20",
+        "s14"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.05,
+        "p90": 1.0
+      },
+      "unit": "calendar days from the job reaching the warehouse to receipt posted and put away or parts handed over",
+      "population": "Mine site warehouse issuing to maintenance around the clock",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Counter issues take minutes to an hour including queueing; receipts are usually put away the same or next day."
+      }
+    },
+    {
+      "metric": "stockout_rate",
+      "value": 0.074,
+      "unit": "share of requests not filled from stock (industry average)",
+      "population": "MRO storerooms",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mmh-mro"
+        ],
+        "note": "Practitioner benchmark, not specific to mining; target 5% or lower."
+      }
+    },
+    {
+      "metric": "inventory_accuracy",
+      "value": 0.946,
+      "unit": "share of items with correct record (industry average)",
+      "population": "MRO storerooms",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mmh-mro"
+        ],
+        "note": "Practitioner benchmark, target 95%."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Parts issued without a slip on night shift or taken underground directly are keyed in late or never, so the ERP shows stock that is not there and job costs are wrong.",
+      "steps": [
+        "s12",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file process description and author's estimate."
+      }
+    },
+    {
+      "description": "Requests by description rather than part number take repeated searches and lead to wrong parts.",
+      "steps": [
+        "s09",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Stockouts of critical spares leave equipment down while urgent orders travel to a remote site.",
+      "steps": [
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mmh-mro"
+        ],
+        "note": "Industry average stockout rate of 7.4%; the downtime effect is the author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "noc-14401",
+      "title": "NOC 2021 unit group 14401: Storekeepers and partspersons",
+      "publisher": "Employment and Social Development Canada, National Occupational Classification",
+      "url": "https://noc.esdc.gc.ca/Structure/NOCProfile?GocTemplateCulture=en-CA&code=14401&version=2021.0",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Storekeepers receive and sort incoming parts and supplies, store them in a warehouse, tool room or supply room, process requisitions and issue parts for internal use, keep records of the amount, kind and location of stock in a manual or computerized inventory system, and prepare requisitions to replenish stock."
+    },
+    {
+      "id": "mmh-mro",
+      "title": "MRO efficiency can help keep costs down (Phil Hebert and Rick Wakeland)",
+      "publisher": "Modern Materials Handling",
+      "url": "https://www.mmh.com/article/managing_mro_for_a_profit/MRO",
+      "year": 2018,
+      "accessed": "2026-11-24",
+      "supports": "MRO storeroom key performance indicators: industry average stockouts 7.4% against a target of 5% or lower; inventory accuracy 94.6% against a 95% target; customer service level 95% or higher; inventory turns 2 a year against a target of 4."
+    }
+  ],
+  "assumptions": [
+    "About 28% of cases are receipts and 72% issues. Cycle time for backorders ends when the urgent requisition is raised; the wait for the supplier belongs to site-purchasing.",
+    "Fuel deliveries and underground services materials were added as triggers; the organisation file routes fuel to site-fuel only and lists no stores requests from mine-ug-services.",
+    "Mechanics stand in for all requesters at the counter (electricians, millwrights, miners).",
+    "The forklift is not in the organisation file and was added as a resource.",
+    "The simulated median (about 0.09 days, roughly two hours) is above the 0.05-day estimate because receipts wait for counting and put-away and parts for underground wait for the cage; counter issues alone take under an hour.",
+    "The staffing check implies about 11 FTE against 7.3 stated because triangular step times have long tails and requesters' counter time is included; attendants on 14/14 rotation also work about 168 hours a month rather than 130.",
+    "Attendants on a 14/14 rotation with 12-hour shifts work about 168 hours a month, more than the 130 productive hours the staffing check assumes.",
+    "Loaded costs are the organisation file's rates: base wage times 1.30 for office and staff roles and 1.35 for hourly site roles.",
+    "Organisation file corrected on 2026-11-24 to match this workflow's sources: ids were renamed (mill-elution-refining to mill-gold-room-refining, loaded_carbon to gold_concentrate, tailings_slurry to filtered_tailings, elution-circuit to refinery), and roles and resources this workflow added are now in the organisation file. Notes above that describe a mismatch refer to the file before the correction."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

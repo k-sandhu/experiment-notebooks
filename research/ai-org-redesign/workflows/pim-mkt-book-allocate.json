@@ -1,0 +1,1629 @@
+{
+  "schema_version": "0.2",
+  "id": "pim-mkt-book-allocate",
+  "name": "Book, allocate and enrich executed trades",
+  "org": "pension-investment-manager",
+  "process": "mkt-book-allocate",
+  "sector": "asset management (public pension fund investment)",
+  "function": "investment operations (middle office)",
+  "summary": "Trade support turns each executed order into booked trades in the investment book of record, split across the portfolios and custody accounts named on the order and enriched with settlement dates, standing settlement instructions and fees, ready for confirmation with the broker. Most trades flow from the order management system into SimCorp Dimension without anyone touching them; analysts work the exceptions, such as manual tickets for funding and OTC trades, allocations that do not divide cleanly, unknown securities, missing broker instructions and breaks between the order system and the book of record. Every manual booking, amendment and instruction change is checked by a second person, and breaks must be cleared the same day because errors here become confirmation mismatches and settlement fails later.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A very large Canadian national pension fund manager with an internal trading desk, an order and execution management system and SimCorp Dimension as its investment book of record.",
+    "org_size_employees": 2052,
+    "notes": "Volume follows the organisation file estimate of about 40,000 trade allocations a month. One order produces on average about 1.6 allocations (several portfolios or accounts, or several executing brokers)."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one trade allocation",
+  "trigger": "An execution report for a completed order arrives from the OMS, or a trader's ticket arrives for a trade executed outside the OMS.",
+  "end_state": "The allocation is booked, enriched and released to confirmation as a trade ticket, or cancelled as a duplicate or busted trade.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 28000,
+      "mode": 40000,
+      "high": 58000
+    },
+    "seasonality": "Follows trading volume: peaks in volatile markets, at quarter-ends and on index rebalancing dates; most allocations arrive after the North American close.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "t1report"
+      ],
+      "note": "Organisation file estimate (process mkt-book-allocate); timing of allocations after the close from t1report."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "mkt-execute-trades",
+        "object": "execution_report",
+        "share": 0.96
+      },
+      {
+        "from": "ci-public-credit-decisions",
+        "object": "execution_report",
+        "share": 0.03
+      },
+      {
+        "from": "cmf-short-term-funding",
+        "object": "trade_ticket",
+        "share": 0.01
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "booked",
+        "to": "mkt-confirm-affirm",
+        "object": "trade_ticket"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "ts_analyst",
+      "title": "Analyst or Associate, trade support",
+      "department": "Middle office and trade support",
+      "layer": "individual_contributor",
+      "fte_on_process": 9.0,
+      "loaded_cost_per_hour": {
+        "low": 65,
+        "mode": 81,
+        "high": 105
+      },
+      "occupation_code": "NOC 11109",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jobbank_11109"
+        ],
+        "note": "26 trade support analysts split between booking and allocation, confirmation and affirmation and OTC lifecycle events. Loaded cost from the organisation file; Job Bank NOC 11109 Toronto median is C$34.62 an hour before incentives, benefits and overhead."
+      }
+    },
+    {
+      "id": "ts_senior",
+      "title": "Senior Associate, trade support",
+      "department": "Middle office and trade support",
+      "layer": "senior_specialist",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 125,
+        "mode": 156,
+        "high": 203
+      },
+      "occupation_code": "NOC 11109",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Maker-checker approvals and SSI verification; 10 seniors share several processes."
+      }
+    },
+    {
+      "id": "ts_director",
+      "title": "Director, middle office and trade support",
+      "department": "Middle office and trade support",
+      "layer": "manager",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 346,
+        "mode": 432,
+        "high": 562
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Aged break escalations only."
+      }
+    },
+    {
+      "id": "cmf_trader",
+      "title": "Trader, global trading and execution",
+      "department": "Global trading and execution",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 298,
+        "mode": 373,
+        "high": 485
+      },
+      "occupation_code": "NOC 11103",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Answering trade support queries on breaks."
+      }
+    },
+    {
+      "id": "cmf_trading_director",
+      "title": "Director, head of trading desk",
+      "department": "Global trading and execution",
+      "layer": "manager",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 864,
+        "mode": 1080,
+        "high": 1404
+      },
+      "occupation_code": "NOC 11103",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Rare non-pro-rata allocation approvals."
+      }
+    },
+    {
+      "id": "data_ops_analyst",
+      "title": "Analyst, investment data management",
+      "department": "Investment data management",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 65,
+        "mode": 81,
+        "high": 105
+      },
+      "occupation_code": "NOC 21223",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "New securities and accounts triggered by trades; most security setup happens in io-data-management ahead of trading."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "oms_ems",
+      "name": "Order and execution management system with pre-trade compliance rules",
+      "kind": "workflow"
+    },
+    {
+      "id": "simcorp",
+      "name": "SimCorp Dimension investment book of record (portfolio accounting, treasury, performance)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "bloomberg",
+      "name": "Bloomberg terminals, market data and trade messaging",
+      "kind": "analytics"
+    },
+    {
+      "id": "email",
+      "name": "Email, chat and video conferencing",
+      "kind": "communication"
+    },
+    {
+      "id": "excel",
+      "name": "Spreadsheets (models, valuations, reconciliations, forecasts)",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "ctm",
+      "name": "DTCC Central Trade Manager trade matching",
+      "kind": "external_portal"
+    },
+    {
+      "id": "data_platform",
+      "name": "Cloud enterprise data platform and data warehouse",
+      "kind": "analytics"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Execution report or trade ticket arrives for booking",
+      "description": "When an order is done the OMS sends the execution report with average price, quantity, broker and the pre-allocation by portfolio and account. Credit trades from Credit Investments arrive the same way; funding trades, OTC derivatives and some voice trades arrive as tickets from the trader instead.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "execution report",
+        "trader ticket"
+      ],
+      "outputs": [
+        "trade awaiting booking"
+      ],
+      "systems": [
+        "oms_ems"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.94,
+          "condition": "electronic execution report from the OMS"
+        },
+        {
+          "to": "s02",
+          "prob": 0.06,
+          "condition": "manual ticket (funding, OTC derivative, voice or off-system trade)"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "t1report",
+          "dtcc_auto"
+        ],
+        "note": "Allocation is the first post-trade step and about 80% of institutional allocations happen after the close (t1report). The manual share is an author estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Key a manual trade ticket into the book of record",
+      "description": "A trade support analyst reads the trader's ticket, Bloomberg message or term sheet and keys the trade into SimCorp Dimension: instrument, counterparty, portfolio, quantity or notional, price, trade and settlement dates and fees.",
+      "role": "ts_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "trader ticket"
+      ],
+      "outputs": [
+        "manually booked trade"
+      ],
+      "systems": [
+        "simcorp",
+        "bloomberg",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 45,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Keying error in counterparty, notional, price, dates or portfolio.",
+        "typically_caught_at": "s03"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "isda_obs"
+        ],
+        "note": "ISDA found 11% of interest rate derivative trade records contained errors in 2011, most from the front office, with counterparty name and payment dates the top causes (isda_obs). Touch time is an author estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Second person checks the manual ticket",
+      "description": "A senior associate compares the booked trade field by field with the source ticket or term sheet and approves it in SimCorp, or sends it back with the error marked.",
+      "role": "ts_senior",
+      "kind": "review",
+      "inputs": [
+        "manually booked trade",
+        "trader ticket"
+      ],
+      "outputs": [
+        "approved manual trade"
+      ],
+      "systems": [
+        "simcorp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 40,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Maker-checker on manual bookings: trades authorised and recorded accurately (SOC 1 baseline trading objective)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.94,
+          "condition": "ticket correct"
+        },
+        {
+          "to": "s02",
+          "prob": 0.06,
+          "condition": "returned for correction"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sifma_soc"
+        ],
+        "note": "SOC 1 baseline objective that trades are properly authorised and recorded accurately (sifma_soc); return rate is an author estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Apply the allocation across portfolios and accounts",
+      "description": "The OMS or SimCorp splits the block across the portfolios and custody accounts named on the order at the average price, pro rata for partial fills, and rounds to board lots or minimum bond denominations.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "trade awaiting booking"
+      ],
+      "outputs": [
+        "proposed allocations"
+      ],
+      "systems": [
+        "oms_ems",
+        "simcorp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.94,
+          "condition": "allocation clean"
+        },
+        {
+          "to": "s05",
+          "prob": 0.06,
+          "condition": "rounding, minimum denomination or partial fill exception"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sifma_soc",
+          "fxgc"
+        ],
+        "note": "Block orders allocated according to management methodologies (sifma_soc); blocks reviewed and allocated as soon as practicable (fxgc). Exception share is an author estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Resolve an allocation exception",
+      "description": "The analyst adjusts allocations that do not divide cleanly (odd lots, bond minimum denominations, a partial fill across several accounts), applying the desk's pro-rata rule, and records the reason.",
+      "role": "ts_analyst",
+      "kind": "validation",
+      "inputs": [
+        "proposed allocations"
+      ],
+      "outputs": [
+        "adjusted allocations"
+      ],
+      "systems": [
+        "oms_ems",
+        "simcorp",
+        "excel"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Allocation adjusted to the wrong account or quantity.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.85,
+          "condition": "adjusted within the pro-rata rule"
+        },
+        {
+          "to": "s06",
+          "prob": 0.15,
+          "condition": "proposed allocation departs from pro rata"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Approve a non-pro-rata allocation",
+      "description": "The head of the trading desk reviews why the allocation departs from pro rata (for example a mandate limit or a minimum holding) and approves or rejects it in writing.",
+      "role": "cmf_trading_director",
+      "kind": "approval",
+      "inputs": [
+        "adjusted allocations",
+        "reason"
+      ],
+      "outputs": [
+        "approved allocation"
+      ],
+      "systems": [
+        "oms_ems",
+        "email"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 90,
+        "high": 480
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Fair allocation policy: allocations follow the stated method and departures are approved by management (SOC 1 baseline allocation objective)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sifma_soc"
+        ],
+        "note": "Allocations approved by management (sifma_soc)."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Interface loads allocations into SimCorp",
+      "description": "The interface between the OMS and SimCorp Dimension, the investment book of record, posts each allocation as a trade in the right portfolio. It runs in frequent intraday batches.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "allocations"
+      ],
+      "outputs": [
+        "trade in book of record"
+      ],
+      "systems": [
+        "oms_ems",
+        "simcorp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.975,
+          "condition": "loaded"
+        },
+        {
+          "to": "s08",
+          "prob": 0.025,
+          "condition": "rejected: unknown security, account or broker code"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "fund_simcorp",
+          "ar21"
+        ],
+        "note": "SimCorp is the book of record (fund_simcorp); the order-to-settlement chain was not yet one integrated platform (ar21). Rejection share is an author estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Investigate an interface rejection",
+      "description": "The analyst opens the interface error queue, reads the reject reason and checks whether the security, portfolio, account or broker code is missing or mapped wrongly in reference data.",
+      "role": "ts_analyst",
+      "kind": "lookup",
+      "inputs": [
+        "interface reject"
+      ],
+      "outputs": [
+        "diagnosed reject"
+      ],
+      "systems": [
+        "simcorp",
+        "oms_ems",
+        "bloomberg"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 45,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.45,
+          "condition": "new security or account must be set up"
+        },
+        {
+          "to": "s07",
+          "prob": 0.55,
+          "condition": "mapping fixed and trade resubmitted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Set up the new security or account in reference data",
+      "description": "An investment data analyst creates the security master record from Bloomberg (identifiers, currency, conventions, pricing source, settlement market) or maps the new account, and a second person approves it before trades can load.",
+      "role": "data_ops_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "setup request"
+      ],
+      "outputs": [
+        "approved reference data record"
+      ],
+      "systems": [
+        "simcorp",
+        "bloomberg"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong convention, currency or settlement market on the new security.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "New securities and changes authorised and processed accurately (SOC 1 baseline objective); maker-checker on the security master",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "record approved and trade resubmitted"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sifma_soc",
+          "t1report"
+        ],
+        "note": "New security setup control objective (sifma_soc); stale reference data causes settlement errors (t1report)."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Enrich the trade with settlement details",
+      "description": "SimCorp adds the settlement date from the market calendar, the custody account, the place of settlement and the counterparty's standing settlement instructions, and calculates commissions, fees and transaction taxes.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "trade in book of record",
+        "standing settlement instructions"
+      ],
+      "outputs": [
+        "enriched trade"
+      ],
+      "systems": [
+        "simcorp",
+        "ctm"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.94,
+          "condition": "SSI found and unique"
+        },
+        {
+          "to": "s11",
+          "prob": 0.03,
+          "condition": "SSI missing, expired or conflicting"
+        },
+        {
+          "to": "s14",
+          "prob": 0.03,
+          "condition": "commission, fee or tax outside tolerance"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dtcc_alert",
+          "dtcc_ctm"
+        ],
+        "note": "Automated SSI enrichment from ALERT supports straight-through processing (dtcc_alert, dtcc_ctm). Exception shares are author estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Research a missing or conflicting SSI",
+      "description": "The analyst looks up the broker's instructions in ALERT and earlier emails, works out which instruction applies to the market and asset type and asks the broker to update ALERT or confirm the instruction in writing.",
+      "role": "ts_analyst",
+      "kind": "lookup",
+      "inputs": [
+        "enriched trade with SSI exception"
+      ],
+      "outputs": [
+        "SSI request to broker"
+      ],
+      "systems": [
+        "simcorp",
+        "ctm",
+        "email"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dtcc_alert",
+          "t1report"
+        ],
+        "note": "Outdated, incomplete or inaccurate SSI data is a leading cause of trade exceptions and settlement failure (dtcc_alert); missing or incorrect SSIs and customers not updating SSIs are named causes of settlement errors (t1report)."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Wait for the broker to supply the instruction",
+      "description": "The broker's operations team updates its ALERT record or sends the instruction on letterhead or authenticated message. Small or foreign brokers can take longer.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "SSI request to broker"
+      ],
+      "outputs": [
+        "broker SSI"
+      ],
+      "systems": [
+        "email",
+        "ctm"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 720
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Verify and approve the SSI change",
+      "description": "A senior associate verifies the new instruction against an independent source (ALERT record or a call-back to a known contact), checks it was not changed by an email request alone, and approves it in the SSI table.",
+      "role": "ts_senior",
+      "kind": "approval",
+      "inputs": [
+        "broker SSI"
+      ],
+      "outputs": [
+        "approved SSI"
+      ],
+      "systems": [
+        "simcorp",
+        "ctm",
+        "email"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Wrong instruction approved, causing a mismatch at the custodian.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "SSI changes verified independently and approved by a second person (payment fraud and settlement control); FX Global Code principle 51 on standard settlement instructions",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "SSI approved and trade re-enriched"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "fxgc",
+          "sifma_soc"
+        ],
+        "note": "Use of SSIs (fxgc principle 51) and accurate recording of trades (sifma_soc). Call-back practice is common anti-fraud control; time is an author estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Check commissions, fees and taxes",
+      "description": "The analyst compares the calculated commission with the broker's agreed rate and checks stamp duty, financial transaction tax or exchange fees for the market, then corrects the trade or asks the broker to correct its figures.",
+      "role": "ts_analyst",
+      "kind": "validation",
+      "inputs": [
+        "enriched trade",
+        "broker rate card"
+      ],
+      "outputs": [
+        "fee-checked trade"
+      ],
+      "systems": [
+        "simcorp",
+        "excel",
+        "email"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Fee corrected on our side when the broker was wrong.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; commission differences are a common matching exception in CTM."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Hourly trade reconciliation of the OMS against SimCorp",
+      "description": "An automated control compares executions in the OMS with trades in SimCorp each hour and at end of day by quantity, price, portfolio and broker, and lists missing, duplicate or different trades.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "enriched trade",
+        "OMS executions"
+      ],
+      "outputs": [
+        "reconciliation result"
+      ],
+      "systems": [
+        "oms_ems",
+        "simcorp",
+        "data_platform"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 40,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.97,
+          "condition": "trade agrees"
+        },
+        {
+          "to": "s16",
+          "prob": 0.03,
+          "condition": "break"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file process description: breaks between the order system and the book of record are fixed the same day. Hourly cadence and break share are author estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Investigate a trade break",
+      "description": "The analyst compares the OMS execution, the SimCorp trade and the broker's execution summary to find which side is wrong (missing or duplicate trade, wrong portfolio, price, quantity or broker).",
+      "role": "ts_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "reconciliation break"
+      ],
+      "outputs": [
+        "break diagnosis"
+      ],
+      "systems": [
+        "oms_ems",
+        "simcorp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 300
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.4,
+          "condition": "trader must confirm the correct details"
+        },
+        {
+          "to": "s18",
+          "prob": 0.55,
+          "condition": "cause clear from the records"
+        },
+        {
+          "to": "END",
+          "prob": 0.05,
+          "condition": "duplicate or busted trade cancelled with no rebooking",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Trader confirms the correct trade details",
+      "description": "The analyst messages the trader, who checks the execution in the EMS or with the broker and confirms the right price, quantity, broker or portfolio.",
+      "role": "cmf_trader",
+      "kind": "communication",
+      "inputs": [
+        "break diagnosis"
+      ],
+      "outputs": [
+        "confirmed details"
+      ],
+      "systems": [
+        "oms_ems",
+        "email"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 45,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Amend or cancel and rebook the trade",
+      "description": "The analyst corrects the SimCorp trade, or cancels it and books it again, with a reason code so that the change is visible downstream to confirmation and settlement.",
+      "role": "ts_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "confirmed details"
+      ],
+      "outputs": [
+        "amended trade"
+      ],
+      "systems": [
+        "simcorp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Correction itself mistyped.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "t1report"
+        ],
+        "note": "Cancel and rebill processes create inconsistencies and drive settlement errors (t1report)."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Second person approves the amendment",
+      "description": "A senior associate checks the amendment against the confirmed details and approves it, or rejects it back to the analyst.",
+      "role": "ts_senior",
+      "kind": "review",
+      "inputs": [
+        "amended trade"
+      ],
+      "outputs": [
+        "approved amendment"
+      ],
+      "systems": [
+        "simcorp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Maker-checker on trade amendments and cancellations",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.92,
+          "condition": "approved"
+        },
+        {
+          "to": "s18",
+          "prob": 0.04,
+          "condition": "rejected for correction"
+        },
+        {
+          "to": "s20",
+          "prob": 0.04,
+          "condition": "still unresolved at end of day"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sifma_soc"
+        ],
+        "note": "Trades recorded accurately and completely (sifma_soc)."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Escalate an aged break",
+      "description": "Breaks not cleared by end of day are reported to the director of trade support with the cause and owner, logged on the daily break report and chased first thing the next morning.",
+      "role": "ts_director",
+      "kind": "approval",
+      "inputs": [
+        "unresolved break"
+      ],
+      "outputs": [
+        "escalated break"
+      ],
+      "systems": [
+        "simcorp",
+        "email",
+        "excel"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Investment operations break management standard: breaks cleared the same day or escalated",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "chased next morning"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate based on the same-day break rule in the organisation file description."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Release the booked trade ticket to confirmation",
+      "description": "The booked, allocated and enriched trade ticket becomes available to confirmation: SimCorp or the OMS sends the allocation to CTM for broker-matched trades, or queues it for FX and OTC confirmation.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "enriched trade"
+      ],
+      "outputs": [
+        "trade ticket"
+      ],
+      "systems": [
+        "simcorp",
+        "ctm"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "booked"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dtcc_ctm",
+          "dtcc_auto"
+        ],
+        "note": "Allocations go to the broker through CTM to start confirmation and affirmation (dtcc_ctm, dtcc_auto)."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Manual ticket",
+      "share_of_cases": 0.06,
+      "description": "Funding, OTC derivative and voice trades are keyed by hand and checked by a second person.",
+      "path": [
+        "s02",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Allocation exception",
+      "share_of_cases": 0.06,
+      "description": "Odd lots, bond minimum denominations or partial fills need manual adjustment; a few need desk-head approval for a non-pro-rata split.",
+      "path": [
+        "s04",
+        "s05",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Unknown security or account",
+      "share_of_cases": 0.011,
+      "description": "The book of record rejects the trade until reference data sets up the new security or account.",
+      "path": [
+        "s07",
+        "s08",
+        "s09",
+        "s07"
+      ]
+    },
+    {
+      "name": "Missing or conflicting SSI",
+      "share_of_cases": 0.03,
+      "description": "The broker's settlement instruction is missing, out of date or ambiguous and must be obtained, verified and approved.",
+      "path": [
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s10"
+      ]
+    },
+    {
+      "name": "OMS to book of record break",
+      "share_of_cases": 0.03,
+      "description": "A missing, duplicate or different trade is investigated, often with the trader, then amended under maker-checker; unresolved breaks are escalated at day end.",
+      "path": [
+        "s15",
+        "s16",
+        "s17",
+        "s18",
+        "s19",
+        "s20"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.06,
+        "p90": 0.25
+      },
+      "unit": "calendar days from execution report to trade ticket released to confirmation",
+      "population": "Author estimate for a large buy-side middle office using an OMS feeding a book of record",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "t1report"
+        ],
+        "note": "Clean trades load and enrich within about an hour of the order completing; exceptions take hours and aged breaks run to the next morning. Allocation timing (80% after the close) from t1report."
+      }
+    },
+    {
+      "metric": "share_of_allocations_made_after_market_close",
+      "value": 0.8,
+      "unit": "share of institutional allocations",
+      "population": "U.S. institutional trades processed through DTCC, 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "t1report"
+        ],
+        "note": "About 20% of allocations occur during the trading day and 80% after the close (DTCC internal analysis)."
+      }
+    },
+    {
+      "metric": "otc_trade_records_containing_errors",
+      "value": 0.11,
+      "unit": "share of interest rate derivative trade records",
+      "population": "ISDA Operations Benchmarking Survey 2011 respondents (dealers)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "isda_obs"
+        ],
+        "note": "18% in 2009, 14% in 2010, 11% in 2011; used to anchor the manual ticket error rate."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Most allocations arrive after the close in a burst, so exceptions pile up in the evening just when broker operations teams are also busiest.",
+      "steps": [
+        "s01",
+        "s05",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "t1report"
+        ],
+        "note": "80% of allocations after the close."
+      }
+    },
+    {
+      "description": "Missing or stale broker settlement instructions stop straight-through processing and, if missed, cause settlement fails later.",
+      "steps": [
+        "s11",
+        "s12",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dtcc_alert",
+          "t1report"
+        ],
+        "note": "Inaccurate SSI data is a leading cause of exceptions and fails."
+      }
+    },
+    {
+      "description": "Manual re-keying of funding, OTC and unusual trades introduces errors that need a second person to check.",
+      "steps": [
+        "s02",
+        "s03"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "isda_obs",
+          "ar21"
+        ],
+        "note": "OTC trade record error rates (isda_obs); the integrated trading life cycle platform was still being built (ar21)."
+      }
+    },
+    {
+      "description": "Separate order and accounting systems create breaks that must be found and fixed the same day.",
+      "steps": [
+        "s15",
+        "s16",
+        "s18",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ar21"
+        ],
+        "note": "Investment Lifecycle Technology & Data project to integrate the public markets trade life cycle (ar21)."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "ar21",
+      "title": "The model fund F2021 Annual Report (fiscal year ended March 31, 2021)",
+      "publisher": "The model fund",
+      "url": "",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Central trade execution by Financing, Collateral & Trading for all public assets except credit; multi-year Investment Lifecycle Technology & Data project to build an integrated platform for public market trades across the trading life cycle"
+    },
+    {
+      "id": "fund_simcorp",
+      "title": "The model fund Goes Live with SimCorp to Support Growth",
+      "publisher": "SimCorp via Cision",
+      "url": "",
+      "year": 2010,
+      "accessed": "2026-11-17",
+      "supports": "SimCorp Dimension used for portfolio accounting, treasury and performance measurement after the fund internalised record keeping"
+    },
+    {
+      "id": "t1report",
+      "title": "Accelerating the U.S. Securities Settlement Cycle to T+1",
+      "publisher": "SIFMA, ICI and DTCC (with Deloitte)",
+      "url": "https://www.sifma.org/wp-content/uploads/2021/12/Accelerating-the-U.S.-Securities-Settlement-Cycle-to-T1-December-1-2021.pdf",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "About 20% of institutional allocations occur during the trading day and 80% after the close; affirmation deadline 11:30 AM ET on T+1 under T+2; confirmation and affirmation can only start once allocations are complete; causes of settlement errors and fails include missing or incorrect SSIs, stale reference data, recalls and cancel and rebill"
+    },
+    {
+      "id": "sifma_soc",
+      "title": "Asset Manager's Guide to SOC 1",
+      "publisher": "SIFMA Asset Management Group and Grant Thornton",
+      "url": "https://www.sifma.org/wp-content/uploads/2017/08/SIFMA_AMG_asset-managers-guide-soc-2017.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Baseline SOC 1 control objectives: trades properly authorised, settled and recorded accurately, completely and timely; block orders allocated according to management methodologies and allocations approved; new securities authorised and processed accurately; cash and positions reconciled to custodians"
+    },
+    {
+      "id": "fxgc",
+      "title": "FX Global Code (updated December 2024; first published 2017)",
+      "publisher": "Global Foreign Exchange Committee",
+      "url": "https://www.globalfxc.org/docs/fx_global.pdf",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Principles 46 to 55: confirm trades as soon as practicable using automated matching; review, affirm and allocate block transactions as soon as practicable; resolve confirmation and settlement discrepancies; measure settlement risk and use PVP where practicable; use standard settlement instructions; request direct payments; reconcile accounts and submit compensation claims in a timely manner"
+    },
+    {
+      "id": "dtcc_alert",
+      "title": "ALERT: standing settlement instruction platform",
+      "publisher": "DTCC",
+      "url": "https://www.dtcc.com/institutional-trade-processing/itp/alert",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Industry's largest SSI database, shared automatically with counterparties; enrichment with CTM supports straight-through processing; 57% of ALERT SSIs managed by custodians and prime brokers; outdated, incomplete or inaccurate SSI data is a leading cause of trade exceptions and settlement failure"
+    },
+    {
+      "id": "dtcc_ctm",
+      "title": "Central Trade Manager (CTM)",
+      "publisher": "DTCC",
+      "url": "https://www.dtcc.com/institutional-trade-processing/itp/central-trade-manager",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Central matching platform automating allocation, confirmation and matching for equities, fixed income and money markets; Match to Instruct workflow with ALERT and TradeSuite ID; optional SSI enrichment; dashboards with same-day match agreed rates"
+    },
+    {
+      "id": "dtcc_auto",
+      "title": "Why Automation is Pivotal to Prepare for T+1 in U.S.",
+      "publisher": "DTCC",
+      "url": "https://www.dtcc.com/insights/2022/why-automation-is-pivotal-to-prepare-for-t1-in-us",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Workflow of allocation, confirmation and affirmation; centrally matched trades can be affirmed and instructed automatically; affirmation deadline 11:30 AM ET on T+1; near 100% affirmation by 9 PM on trade date for automated workflows"
+    },
+    {
+      "id": "isda_obs",
+      "title": "ISDA Operations Benchmarking Survey 2011",
+      "publisher": "International Swaps and Derivatives Association",
+      "url": "https://www.isda.org/a/ceiDE/obs-2011-final.pdf",
+      "year": 2011,
+      "accessed": "2026-11-17",
+      "supports": "Interest rate derivative trade records containing errors 18% (2009), 14% (2010), 11% (2011), most attributable to the front office; counterparty name and payment dates are top error sources; 83% of electronically eligible interest rate derivative events confirmed electronically in 2011; confirmation backlogs measured in business days outstanding"
+    },
+    {
+      "id": "jobbank_11109",
+      "title": "Wages: Credit Counsellor and other financial officers (NOC 11109) in the Toronto Region",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/296946/geo9219",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Toronto Region hourly wages for NOC 11109: low 23.00, median 34.62, high 66.46 (2023-2024)"
+    }
+  ],
+  "assumptions": [
+    "The unit of work is one allocation (one portfolio or account's share of one broker execution); about 1.6 allocations per order is assumed to reconcile 25,000 orders with 40,000 allocations a month.",
+    "The OMS sends pre-allocated executions to SimCorp Dimension through an interface; SimCorp is the book of record and holds the SSI table, enriched from DTCC ALERT for brokers that use it.",
+    "Exception rates (6% manual tickets, 6% allocation exceptions, 3% SSI exceptions, 3% fee exceptions, 3% OMS to book of record breaks) are author estimates for a large buy-side middle office in 2019 to 2022.",
+    "Non-pro-rata allocation approval is given by the head of the trading desk (cmf_trading_director), a role not listed for this process in the organisation file; new security setup is done by the investment data team (data_ops_analyst), also not listed.",
+    "Trade support analysts and seniors also work on confirmation and affirmation and OTC lifecycle events, so their FTE here is a share of the team.",
+    "Loaded costs come from the organisation file; they include incentive pay and an overhead factor of 1.25."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

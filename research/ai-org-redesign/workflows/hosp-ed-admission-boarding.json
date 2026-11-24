@@ -1,0 +1,1699 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-ed-admission-boarding",
+  "name": "Admit emergency patients and hold them in the ED until an inpatient bed is free",
+  "org": "community-hospital-corp",
+  "process": "ed-admission-boarding",
+  "sector": "healthcare (acute care hospital)",
+  "function": "emergency program",
+  "summary": "Once the admitting physician decides that an emergency patient needs a hospital bed, the ED opens an inpatient encounter, the admitting physician writes orders and the patient flow coordinator looks for a bed. In most cases no clean bed of the right type is free, so the patient stays on an ED stretcher, often in a hallway, and ED nurses give inpatient-level care until a bed is assigned, report is given to the receiving unit and a porter moves the patient. The wait for a bed is the largest part of the time and it depends on inpatient discharges and bed cleaning, not on ED work. Boarded patients take ED treatment spaces and nursing time from new arrivals, which is the main reason Ontario EDs miss the 8-hour target for admitted patients.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A not-for-profit Ontario community hospital corporation with three hospitals, about 640 inpatient beds and an emergency department at each site, on a single hospital information system with an electronic bed board.",
+    "org_size_employees": 5790,
+    "notes": "Boarding time is the ED part of the Ontario 'time to inpatient bed' indicator (decision to admit to leaving the ED). Physicians are paid by OHIP, so their cost here is an estimate of clinical earnings, not a hospital expense."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one admission from the ED (decision to admit to the patient leaving the ED for an inpatient bed)",
+  "trigger": "The ED physician or a consultant decides the patient needs admission and the admitting service accepts the patient.",
+  "end_state": "The patient has left the ED for an inpatient bed, the ED visit is closed in ADT and the stretcher is cleaned; or, rarely, the patient improves and is discharged from the ED while still waiting.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 1100,
+      "mode": 1400,
+      "high": 1650
+    },
+    "seasonality": "Higher in December to March with respiratory viruses and lower in summer; 2020/21 was lower because ED visits fell during the first COVID-19 waves.",
+    "evidence": {
+      "tier": "A",
+      "sources": [
+        "cihi_nacrs",
+        "oag2023"
+      ],
+      "note": "ED visits of 10,530 to 13,420 a month (organisation file) times the admitted share of NACRS visits: 10.6% in 2018/19 and 2019/20, 12.4% in 2020/21 and 11.2% in 2021/22 (cihi_nacrs); OAG reports 12% in 2022/23. The organisation file's 1,100 to 1,600 (mode 1,350) implies about 10.4% and is close."
+    },
+    "surge": {
+      "cause": "Winter respiratory virus season (influenza and RSV; COVID-19 waves from 2020)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 60,
+        "mode": 90,
+        "high": 120
+      },
+      "volume_multiplier": {
+        "low": 1.03,
+        "mode": 1.08,
+        "high": 1.15
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Same winter surge as the organisation file: admissions rise more than total visits in respiratory season because older patients with pneumonia and COPD are admitted more often. Author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ed-physician-assessment",
+        "object": "admission_order",
+        "share": 0.55
+      },
+      {
+        "from": "ed-specialist-consult",
+        "object": "admission_order",
+        "share": 0.38
+      },
+      {
+        "from": "mh-ed-crisis-assessment",
+        "object": "admission_order",
+        "share": 0.07
+      }
+    ],
+    "inputs": [
+      {
+        "from": "cs-bed-management",
+        "object": "bed_assignment"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "cs-bed-management",
+        "object": "bed_request"
+      },
+      {
+        "outcome": "admitted_to_unit",
+        "to": "med-inpatient-medical-care",
+        "object": "admitted_patient"
+      },
+      {
+        "outcome": "admitted_to_unit",
+        "to": "sx-surgical-inpatient-care",
+        "object": "admitted_patient"
+      },
+      {
+        "outcome": "admitted_to_unit",
+        "to": "med-icu-critical-care",
+        "object": "admitted_patient"
+      },
+      {
+        "outcome": "admitted_to_unit",
+        "to": "mh-inpatient-psychiatry",
+        "object": "admitted_patient"
+      },
+      {
+        "outcome": "admitted_to_unit",
+        "to": "wc-paediatric-care",
+        "object": "admitted_patient"
+      },
+      {
+        "outcome": "admitted_to_unit",
+        "to": "fs-patient-portering",
+        "object": "transport_request"
+      },
+      {
+        "outcome": "discharged_from_ed",
+        "to": "ed-discharge-home",
+        "object": "ed_disposition"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "ed_unit_clerk",
+      "title": "Emergency unit clerk",
+      "department": "Emergency program",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 35,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 15 minutes of clerk time per admission (encounter, bed board, porter, closing the visit). Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "hospitalist",
+      "title": "Hospitalist physician",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 4.5,
+      "loaded_cost_per_hour": {
+        "low": 130,
+        "mode": 160,
+        "high": 200
+      },
+      "occupation_code": "NOC 2016 3112",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Admission history and orders for about 60% of admissions plus brief reviews of patients who board past morning rounds. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "consultant_specialist",
+      "title": "Consultant specialist (internal medicine, cardiology, nephrology, oncology and others)",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 160,
+        "mode": 200,
+        "high": 260
+      },
+      "occupation_code": "NOC 2016 3111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Admitting orders for patients taken by internal medicine subspecialties, surgery, psychiatry or paediatrics (about 40%). Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "on_call"
+    },
+    {
+      "id": "ed_charge_nurse",
+      "title": "Emergency charge nurse",
+      "department": "Emergency program",
+      "layer": "supervisor",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 57,
+        "mode": 63,
+        "high": 70
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Bed type and isolation checks, boarding placement and escalation of delayed report. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "ed_rn",
+      "title": "Emergency registered nurse",
+      "department": "Emergency program",
+      "layer": "individual_contributor",
+      "fte_on_process": 30.0,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 61,
+        "high": 68
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Carrying out admission orders and roughly a quarter of a nurse's time for every hour a patient boards (1:4 ratio), plus report and escorts. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "bed_flow_coordinator",
+      "title": "Patient flow coordinator (bed allocation)",
+      "department": "Patient flow and bed management",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 51,
+        "mode": 63,
+        "high": 70
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "First review of each ED bed request and the assignment itself; the bed search across all requesters is in cs-bed-management. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "med_rn",
+      "title": "Inpatient registered nurse",
+      "department": "Inpatient medicine units",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 61,
+        "high": 68
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Receiving nurse taking report and preparing the bed. Not listed among the process roles in the organisation file. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "porter",
+      "title": "Patient porter",
+      "department": "Portering and security",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.0,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 30,
+        "high": 32
+      },
+      "occupation_code": "NOC 2016 3413",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Moving the stretcher from the ED to the unit and returning. Not listed among the process roles in the organisation file. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "ed_assistant",
+      "title": "Emergency patient care assistant",
+      "department": "Emergency program",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 31,
+        "high": 34
+      },
+      "occupation_code": "NOC 2016 3413",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Cleaning and restocking the stretcher space after the patient leaves. Not listed among the process roles in the organisation file. Title, layer and loaded cost (wage x 1.35) are taken from the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    }
+  ],
+  "systems": [
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "ed_board",
+      "name": "Emergency department tracking board",
+      "kind": "workflow"
+    },
+    {
+      "id": "bed_board",
+      "name": "Electronic bed board and patient flow dashboard",
+      "kind": "workflow"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "ed_spaces_otmh",
+      "name": "Emergency treatment spaces, large site (stretchers, chairs and resuscitation bays)",
+      "kind": "facility",
+      "count": 60
+    },
+    {
+      "id": "ed_spaces_milton",
+      "name": "Emergency treatment spaces, mid-size site",
+      "kind": "facility",
+      "count": 30
+    },
+    {
+      "id": "ed_spaces_georgetown",
+      "name": "Emergency treatment spaces, small site",
+      "kind": "facility",
+      "count": 15
+    },
+    {
+      "id": "bed_medicine",
+      "name": "Inpatient medicine beds",
+      "kind": "bed",
+      "count": 300
+    },
+    {
+      "id": "bed_surgical",
+      "name": "Surgical inpatient beds",
+      "kind": "bed",
+      "count": 115
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Open inpatient encounter and bed request",
+      "description": "The ED unit clerk sees the admit flag on the ED tracking board, opens an inpatient encounter in ADT under the admitting physician and service, and enters a bed request on the electronic bed board with the service, bed type (medicine, telemetry, surgery, step-down) and any known isolation. This time stamp starts the provincial 'time to inpatient bed' clock in many hospitals.",
+      "role": "ed_unit_clerk",
+      "kind": "intake",
+      "inputs": [
+        "decision to admit",
+        "ED record"
+      ],
+      "outputs": [
+        "inpatient encounter",
+        "bed request"
+      ],
+      "systems": [
+        "his",
+        "ed_board",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong service, attending or bed type entered, so the request sits in the wrong queue.",
+        "typically_caught_at": "s04"
+      },
+      "control": null,
+      "desk_work_share": 0.95,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.6,
+          "condition": "admitted to the hospitalist service"
+        },
+        {
+          "to": "s03",
+          "prob": 0.4,
+          "condition": "admitted to a specialist or surgical service"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oh_ed"
+        ],
+        "note": "Admitted ED stays are measured from the decision to admit; the clerk workflow is the author's description of common practice with an ADT bed board. Touch time tier C."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Hospitalist assesses patient and writes admission orders",
+      "description": "The hospitalist comes to the ED, reviews the ED record, labs and imaging, examines the patient and writes the admission history and order set in the hospital information system: medications, diet, activity, monitoring, VTE prophylaxis and code status. The physician also does medication reconciliation with the patient or family when no pharmacy help is available.",
+      "role": "hospitalist",
+      "kind": "drafting",
+      "inputs": [
+        "ED record",
+        "results"
+      ],
+      "outputs": [
+        "admission orders",
+        "admission history"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 90
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Home medication omitted or wrong dose in the admission orders.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "licensed_signoff",
+        "basis": "Only a physician with admitting privileges may write admission orders (hospital medical staff by-laws under the Public Hospitals Act).",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.55,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "orders written"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate. Hospitalists in Ontario community hospitals often cover several admissions at once, so orders lag the decision by about an hour."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Specialist or surgeon writes admission orders",
+      "description": "For patients admitted to cardiology, internal medicine, surgery, psychiatry or paediatrics, the on-call consultant who saw the patient writes the admission orders, often by phone order to the ED nurse when they are off site, and signs them later. The orders set the service, the bed type and any procedure planned for the next day.",
+      "role": "consultant_specialist",
+      "kind": "drafting",
+      "inputs": [
+        "consult note",
+        "ED record"
+      ],
+      "outputs": [
+        "admission orders"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 30,
+        "high": 150
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.07,
+        "defect_description": "Verbal orders incomplete or not countersigned, so the ED nurse must call back.",
+        "typically_caught_at": "s06"
+      },
+      "control": {
+        "type": "licensed_signoff",
+        "basis": "Admission orders by a physician with admitting privileges; verbal orders must be read back and countersigned (hospital medical staff rules).",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "orders written"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate. Consultants are on call from home or clinic, so the wait for orders is longer and more variable than for in-house hospitalists."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Confirm bed type, service and isolation",
+      "description": "The ED charge nurse checks the bed request against the orders: the right service, whether telemetry or step-down is needed, and whether the patient needs a private room for isolation. The nurse corrects the bed board entry or phones the patient flow coordinator so the request goes into the right queue.",
+      "role": "ed_charge_nurse",
+      "kind": "validation",
+      "inputs": [
+        "bed request",
+        "admission orders"
+      ],
+      "outputs": [
+        "confirmed bed request"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Isolation need missed, so a bed in a shared room is assigned and later refused.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "request confirmed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Screen and swab for infection risks",
+      "description": "The ED nurse asks the antibiotic-resistant organism screening questions (recent hospital stay, MRSA, VRE or CPE history), collects screening swabs and, from 2020, a COVID-19 swab and symptom screen. A positive screen or pending COVID-19 result means the patient needs a single room on precautions, which narrows the beds that can be assigned.",
+      "role": "ed_rn",
+      "kind": "validation",
+      "inputs": [
+        "admission orders"
+      ],
+      "outputs": [
+        "screening swabs",
+        "isolation flag"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Screening not done or not recorded, so the receiving unit holds the patient on precautions or refuses a shared room.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital infection prevention policy on admission screening for antibiotic-resistant organisms and, from 2020, COVID-19 admission testing directives.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "screening done"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate. Admission ARO screening was standard in Ontario hospitals; COVID-19 admission testing applied from 2020 to 2022."
+      },
+      "concurrent_with": [
+        "s04"
+      ]
+    },
+    {
+      "id": "s06",
+      "name": "Carry out admission orders in the ED",
+      "description": "The ED nurse gives the first inpatient medications, hangs IV therapy, sends admission bloodwork and arranges any test ordered for the same day. Orders are checked against the ED treatment already given so doses are not repeated.",
+      "role": "ed_rn",
+      "kind": "physical",
+      "inputs": [
+        "admission orders"
+      ],
+      "outputs": [
+        "medications given",
+        "updated MAR"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Dose given in the ED not charted and repeated on the unit.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "orders under way"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Patient flow coordinator reviews the ED request",
+      "description": "The patient flow coordinator opens the new request on the bed board, checks service, bed type and isolation, and compares it with clean beds and beds where a discharge is expected. If a matching clean bed is free the coordinator assigns it at once; otherwise the request joins the list for the next bed meeting and the patient boards in the ED.",
+      "role": "bed_flow_coordinator",
+      "kind": "lookup",
+      "inputs": [
+        "bed request"
+      ],
+      "outputs": [
+        "request in queue",
+        "possible bed"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Request overlooked on a busy board.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.18,
+          "condition": "matching clean bed free now"
+        },
+        {
+          "to": "s08",
+          "prob": 0.82,
+          "condition": "no suitable clean bed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: Ontario hospitals ran near or above 100% occupancy in 2019 and from 2021, so most ED admissions wait (oag2023 reports at least 1,000 hallway patients a day in 2019)."
+      },
+      "concurrent_with": [
+        "s06"
+      ]
+    },
+    {
+      "id": "s08",
+      "name": "Move patient to a boarding space",
+      "description": "The ED charge nurse decides where the admitted patient will wait: an ED room if the patient is unstable, otherwise a hallway stretcher or an admitted-patient holding area, freeing the treatment room for new arrivals. The patient is flagged as 'admitted, no bed' on the tracking board, which counts as a hallway patient in the daily bed census.",
+      "role": "ed_charge_nurse",
+      "kind": "coordination",
+      "inputs": [
+        "ED tracking board"
+      ],
+      "outputs": [
+        "boarding location"
+      ],
+      "systems": [
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "patient boarding"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "moh_dbcs",
+          "oag2023"
+        ],
+        "note": "Admitted patients held in the ED because no bed is available are counted as hallway patients (moh_dbcs); OAG observed boarded patients on stretchers in hallways (oag2023). Times are tier C."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Give inpatient-level care while boarding",
+      "description": "ED nurses give scheduled medications, vital signs, toileting, meals and repositioning to the boarded patient alongside their ED assignment, usually one nurse to four or more admitted patients. Touch time is the nursing time charged to this patient; the stretcher stays occupied for the whole wait.",
+      "role": "ed_rn",
+      "kind": "physical",
+      "inputs": [
+        "admission orders",
+        "MAR"
+      ],
+      "outputs": [
+        "care documented"
+      ],
+      "systems": [
+        "his",
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 40,
+        "high": 200
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Scheduled inpatient medication delayed or missed because ED priorities take over.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.25,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.4,
+          "condition": "still boarding at the morning round"
+        },
+        {
+          "to": "s11",
+          "prob": 0.57,
+          "condition": "bed comes free before the round"
+        },
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "condition improves and the physician discharges from the ED",
+          "outcome": "discharged_from_ed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "OAG notes ED staff remain responsible for boarded patients, which reduces their capacity for new arrivals. Nursing time per case and the 1:4 ratio are tier C."
+      },
+      "resources": [
+        {
+          "id": "ed_spaces_otmh",
+          "occupied_min": {
+            "low": 33,
+            "mode": 132,
+            "high": 605
+          }
+        },
+        {
+          "id": "ed_spaces_milton",
+          "occupied_min": {
+            "low": 18,
+            "mode": 72,
+            "high": 330
+          }
+        },
+        {
+          "id": "ed_spaces_georgetown",
+          "occupied_min": {
+            "low": 9,
+            "mode": 36,
+            "high": 165
+          }
+        }
+      ]
+    },
+    {
+      "id": "s10",
+      "name": "Hospitalist reviews boarded patient in the ED",
+      "description": "Patients still in the ED at morning rounds are seen by the admitting physician in the ED: progress note, adjusted orders and a check that tests are done. The physician walks between the ED and the wards for these patients, which lengthens rounds.",
+      "role": "hospitalist",
+      "kind": "review",
+      "inputs": [
+        "admission orders",
+        "overnight notes"
+      ],
+      "outputs": [
+        "progress note",
+        "updated orders"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "reviewed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Assign an inpatient bed when one is clean",
+      "description": "When a discharge on a matching unit is cleaned and marked available on the bed board, the patient flow coordinator assigns it, ranking the ED patient against PACU, ICU step-downs and transfers by the hospital's priority rules. The coordinator records the assignment, which sends the bed number to the ED tracking board.",
+      "role": "bed_flow_coordinator",
+      "kind": "judgment",
+      "inputs": [
+        "bed board",
+        "priority list"
+      ],
+      "outputs": [
+        "bed assignment"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 900
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Bed assigned that does not meet isolation or telemetry needs.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 0.85,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "bed assigned"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023",
+          "cihi_nacrs"
+        ],
+        "note": "The wait is set so that decision-to-departure has a median of about 6 to 7 hours and a long tail: OAG gives provincial average waits for an inpatient bed of about 8 to 10 hours before COVID-19 and 10.8 hours for the Mississauga Halton sub-region in 2021/22; CIHI median ED stay for admitted patients was 702 to 786 minutes including care before the decision."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Update ED board and tell the nurse",
+      "description": "The ED unit clerk sees the bed number on the tracking board, confirms it in ADT and tells the patient's nurse and the family which unit and room the patient is going to.",
+      "role": "ed_unit_clerk",
+      "kind": "communication",
+      "inputs": [
+        "bed assignment"
+      ],
+      "outputs": [
+        "notified nurse"
+      ],
+      "systems": [
+        "ed_board",
+        "his"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Nurse not told; assignment sits unnoticed.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "nurse informed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Call report to the receiving unit",
+      "description": "The ED nurse phones the receiving unit and gives a structured handover (SBAR) of diagnosis, orders, medications given, isolation status and lines. If the receiving nurse is busy, at break or in shift change, or the unit says the bed is not ready, the call is repeated.",
+      "role": "ed_rn",
+      "kind": "communication",
+      "inputs": [
+        "ED record",
+        "MAR"
+      ],
+      "outputs": [
+        "handover given"
+      ],
+      "systems": [
+        "email_phone",
+        "his"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Handover misses an outstanding order or a pending result.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada Required Organizational Practice on information transfer at care transitions.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.84,
+          "condition": "report accepted"
+        },
+        {
+          "to": "s15",
+          "prob": 0.12,
+          "condition": "unit cannot take report or refuses the bed"
+        },
+        {
+          "to": "s11",
+          "prob": 0.04,
+          "condition": "bed does not suit the patient and is reassigned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate. Delays in taking report at shift change are a common complaint in Ontario EDs."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Receiving nurse takes report and prepares the bed",
+      "description": "The inpatient nurse listens to report, checks the bed is made, sets up suction, oxygen and any monitor, and confirms the room signage for precautions. The receiving charge nurse then tells the ED the unit is ready.",
+      "role": "med_rn",
+      "kind": "communication",
+      "inputs": [
+        "handover"
+      ],
+      "outputs": [
+        "bed ready"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "unit ready"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      },
+      "concurrent_with": [
+        "s13"
+      ]
+    },
+    {
+      "id": "s15",
+      "name": "Escalate a delayed handover",
+      "description": "When the unit has not taken report within the hospital's expected time (often 30 minutes), the ED charge nurse calls the patient flow coordinator or, after hours, the clinical administrator, who calls the unit to accept the patient.",
+      "role": "ed_charge_nurse",
+      "kind": "coordination",
+      "inputs": [
+        "bed assignment"
+      ],
+      "outputs": [
+        "escalation"
+      ],
+      "systems": [
+        "email_phone",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital transfer-of-accountability and escalation policy for admitted ED patients.",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "call repeated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Book the porter",
+      "description": "The ED unit clerk enters a transport request for a stretcher move, with the isolation status and whether a nurse or monitor must go with the patient.",
+      "role": "ed_unit_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "bed assignment"
+      ],
+      "outputs": [
+        "transport request"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Isolation or monitor need not stated on the transport request.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "porter requested"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Porter moves patient to the unit",
+      "description": "A porter collects the patient on the stretcher, with belongings and chart, and takes them by elevator to the inpatient room, helps the unit staff slide the patient to the bed and returns the stretcher. The reserved bed sits empty until the patient arrives.",
+      "role": "porter",
+      "kind": "physical",
+      "inputs": [
+        "transport request"
+      ],
+      "outputs": [
+        "patient on unit"
+      ],
+      "systems": [
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.05,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.15,
+          "condition": "cardiac monitor or unstable: nurse escort"
+        },
+        {
+          "to": "s19",
+          "prob": 0.85,
+          "condition": "no escort needed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate. Porter availability drops in the evening and at night."
+      },
+      "resources": [
+        {
+          "id": "bed_medicine",
+          "occupied_min": {
+            "low": 21,
+            "mode": 52,
+            "high": 168
+          }
+        },
+        {
+          "id": "bed_surgical",
+          "occupied_min": {
+            "low": 4,
+            "mode": 11,
+            "high": 36
+          }
+        }
+      ]
+    },
+    {
+      "id": "s18",
+      "name": "Escort a monitored patient",
+      "description": "For patients on a cardiac monitor or with an unstable airway or infusion, an ED nurse goes with the porter, carries the transport monitor and gives a bedside handover on arrival.",
+      "role": "ed_rn",
+      "kind": "physical",
+      "inputs": [
+        "transport request"
+      ],
+      "outputs": [
+        "bedside handover"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.05,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "patient handed over"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      },
+      "concurrent_with": [
+        "s17"
+      ]
+    },
+    {
+      "id": "s19",
+      "name": "Close the ED visit in ADT",
+      "description": "The ED unit clerk records the time the patient left the ED and moves the patient from the ED to the inpatient unit in ADT, which removes the patient from the tracking board and sets the left-ED time used in NACRS reporting and the provincial wait-time measures.",
+      "role": "ed_unit_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "patient left ED"
+      ],
+      "outputs": [
+        "ED departure time",
+        "ADT transfer"
+      ],
+      "systems": [
+        "his",
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Departure time entered late, which overstates the ED stay.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Mandatory NACRS reporting of ED time stamps to CIHI and the Ontario wait time information system.",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "visit closed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cihi_nacrs",
+          "oh_ed"
+        ],
+        "note": "ED length of stay runs to the time the patient leaves the ED. Touch time tier C."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Clean and restock the stretcher space",
+      "description": "An ED patient care assistant strips the stretcher, wipes it and the monitor with disinfectant, restocks the space and marks it available on the tracking board so the next patient can be placed.",
+      "role": "ed_assistant",
+      "kind": "physical",
+      "inputs": [
+        "empty stretcher"
+      ],
+      "outputs": [
+        "clean ED space"
+      ],
+      "systems": [
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.05,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "patient on unit and space ready",
+          "outcome": "admitted_to_unit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Bed free at the time of request",
+      "share_of_cases": 0.18,
+      "description": "A matching clean bed is free when the request arrives, so the patient skips boarding.",
+      "path": [
+        "s07",
+        "s12",
+        "s13",
+        "s14",
+        "s16",
+        "s17",
+        "s19",
+        "s20"
+      ]
+    },
+    {
+      "name": "Long boarder seen on rounds in the ED",
+      "share_of_cases": 0.33,
+      "description": "The patient is still in the ED at morning rounds and the admitting physician must review them there.",
+      "path": [
+        "s09",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Handover refused or delayed",
+      "share_of_cases": 0.12,
+      "description": "The unit cannot take report (shift change, staffing, bed not ready) and the charge nurse escalates.",
+      "path": [
+        "s13",
+        "s15",
+        "s13"
+      ]
+    },
+    {
+      "name": "Bed reassigned",
+      "share_of_cases": 0.04,
+      "description": "The assigned bed turns out not to suit (isolation, telemetry, gender of room-mate) and a new bed is found.",
+      "path": [
+        "s13",
+        "s11"
+      ]
+    },
+    {
+      "name": "Discharged from the ED while boarding",
+      "share_of_cases": 0.025,
+      "description": "The patient improves while waiting and the physician discharges them home from the ED.",
+      "path": [
+        "s09"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.33,
+        "p90": 1.0
+      },
+      "unit": "days from decision to admit to leaving the ED",
+      "population": "Admitted ED patients, Ontario, 2019-2022",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023",
+          "cihi_nacrs"
+        ],
+        "note": "Derived: OAG provincial average wait for an inpatient bed about 8 to 10 hours before COVID-19 and 90th percentile about 21 hours in 2013/14 rising to 35 hours in 2022/23; the median is below the average for this skewed wait. CIHI median ED stay for admitted patients 702 to 786 minutes, of which roughly 4 to 5 hours is assessment before the decision, leaves about 7 to 9 hours; p50 set at 8 hours."
+      }
+    },
+    {
+      "metric": "average_wait_for_inpatient_bed_mississauga_halton_2021_22",
+      "value": 10.8,
+      "unit": "hours",
+      "population": "Admitted ED patients in the Mississauga Halton LHIN sub-region, 2021/22",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "Figure 16; 21.3 hours in 2022/23."
+      }
+    },
+    {
+      "metric": "average_wait_for_inpatient_bed_ontario_2022_23",
+      "value": 13.5,
+      "unit": "hours",
+      "population": "Admitted ED patients, Ontario, 2022/23",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "Figure 15; 90th percentile 35 hours."
+      }
+    },
+    {
+      "metric": "median_ed_length_of_stay_admitted",
+      "value": {
+        "2018_19": 702,
+        "2019_20": 720,
+        "2020_21": 642,
+        "2021_22": 786
+      },
+      "unit": "minutes from registration to leaving the ED",
+      "population": "Admitted patients, all NACRS-reporting EDs in Canada",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cihi_nacrs"
+        ],
+        "note": "Table 2, visit disposition 'Admitted', all ages."
+      }
+    },
+    {
+      "metric": "provincial_target_admitted_ed_length_of_stay",
+      "value": 8,
+      "unit": "hours (90th percentile)",
+      "population": "Admitted ED patients, Ontario",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oh_ed"
+        ],
+        "note": "Target stated by Ontario Health; most hospitals missed it in 2019-2022."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "The wait for a clean bed of the right type dominates the cycle; it depends on discharges happening late in the day and on cleaning, both outside the ED's control.",
+      "steps": [
+        "s11"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "Average waits of 8 to 10 hours before COVID-19 and 13 hours in 2022/23."
+      }
+    },
+    {
+      "description": "Boarded patients occupy ED stretchers and nurse time, so new ambulance and walk-in patients wait longer for a space and a physician.",
+      "steps": [
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "OAG observed boarded patients in hallways and staff unable to treat new patients promptly."
+      }
+    },
+    {
+      "description": "Admitting physicians round on patients scattered in the ED as well as on their wards, which delays orders and discharges elsewhere.",
+      "steps": [
+        "s10"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice."
+      }
+    },
+    {
+      "description": "Handover delays at shift change and refused beds add an hour or more after a bed is assigned.",
+      "steps": [
+        "s13",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Isolation needs found late (screening not done, COVID-19 result pending) narrow the beds that can be assigned and cause reassignments.",
+      "steps": [
+        "s05",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; 2020-2022 admission testing made this more frequent."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oag2023",
+      "title": "Value-for-Money Audit: Emergency Departments (2023 Annual Report)",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en23/AR_emergencydepts_en23.pdf",
+      "year": 2023,
+      "accessed": "2026-11-24",
+      "supports": "Average wait for an inpatient bed after the decision to admit: about 8 to 10 hours before COVID-19, 13 hours (90th percentile 35 hours) in 2022/23, about 21 hours at the 90th percentile in 2013/14; Mississauga Halton sub-region average 10.8 hours in 2021/22 and 21.3 hours in 2022/23; 12% of ED visits admitted in 2022/23; ALC about 15% of patient days; at least 1,000 hallway patients a day in January 2019; ED Return Visit Quality Program (72-hour and 7-day returns)."
+    },
+    {
+      "id": "cihi_nacrs",
+      "title": "NACRS Emergency Department Visits: Volumes and Median Lengths of Stay, 2003-2004 to 2021-2022, Supplementary Statistics (data tables)",
+      "publisher": "Canadian Institute for Health Information",
+      "url": "https://www.cihi.ca/sites/default/files/document/emergency-department-visits-2003-2021-supplementary-data-tables-en.xlsx",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Table 2, all reporting EDs: median ED length of stay for admitted patients 702, 720, 642 and 786 minutes and for patients discharged home 174, 180, 168 and 192 minutes in 2018/19 to 2021/22; admitted share of visits 10.6%, 10.6%, 12.4% and 11.2%; discharged home share 79.4%, 78.8%, 79.9% and 78.9%; left without being seen 4.5% to 6.9%."
+    },
+    {
+      "id": "oh_ed",
+      "title": "Time Spent in Emergency Departments",
+      "publisher": "Ontario Health",
+      "url": "https://ontariohealth.ca/System-Performance/Time-Spent-in-Emergency-Departments",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Provincial ED length-of-stay targets: 8 hours for admitted patients and high-urgency discharged patients, 4 hours for low-urgency discharged patients; admitted length of stay includes the wait for an inpatient bed."
+    },
+    {
+      "id": "moh_dbcs",
+      "title": "Conventional and Unconventional Spaces and Hallway Definitions",
+      "publisher": "Ontario Ministry of Health, Capacity Planning and Analytics Division",
+      "url": "https://hsihelp.ontariohealth.ca/hsi/BCM/MOH_Documents/dBCS%20(Bed%20Segmentation)%20Conventional_Unonventional%20Revised%20Info%20Sheet.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Definitions from February 18, 2020 of conventional and unconventional patient spaces; hallway patients counted as admitted patients held in the ED because no bed is available plus inpatients in unconventional spaces; reported through the daily bed census summary (segmented from October 2021)."
+    }
+  ],
+  "assumptions": [
+    "The process starts at the decision to admit and ends when the patient leaves the ED and the stretcher is cleaned; ED assessment and consultation before the decision belong to ed-physician-assessment and ed-specialist-consult.",
+    "Hospital-wide bed search, bed meetings and surge decisions are documented in cs-bed-management; here they appear only as the wait before s11, which is calibrated to the published wait for an inpatient bed.",
+    "Boarding nursing time (s09) is the share of an ED nurse's time charged to one patient at about 1:4, not the elapsed boarding time; the ED space is held for the whole boarding time through the resource entry.",
+    "ED space occupancy in s09 and bed reservation in s17 are split across the three sites (55%, 30%, 15%) and across medicine (70%) and surgical (15%) beds by expected share, so the occupied minutes on each resource are the expected minutes per case, not the minutes of one patient. Admissions to ICU, psychiatry and paediatric beds are not given a bed resource here because the process map lists only medicine and surgical beds.",
+    "The simulated mean (about 10.6 hours) matches the 10.8-hour average wait for an inpatient bed reported for the Mississauga Halton sub-region in 2021/22. The simulated median (about 10 hours) is above the benchmark p50 of 8 hours and the simulated 90th percentile (about 17 hours) is below the 21 to 35 hours reported at the provincial 90th percentile, because summed triangular waits are less skewed than the real distribution, which has many short waits and a long tail on gridlock days; the winter surge is recorded separately.",
+    "Porter, receiving inpatient nurse and ED assistant are added from the organisation file's roles; the process map entry does not list them.",
+    "Physician cost uses the organisation file's estimated clinical earnings; physicians are paid by OHIP, not the hospital."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

@@ -1,0 +1,1443 @@
+{
+  "schema_version": "0.3",
+  "id": "gen-mkt-submit-energy-offers",
+  "name": "Prepare and submit daily energy offers to the AESO",
+  "org": "power-generation-co",
+  "process": "mkt-submit-energy-offers",
+  "sector": "electric power generation",
+  "function": "energy marketing and trading",
+  "summary": "Every source asset of 5 MW or more must offer its output to the Alberta power pool for every hour, so each morning the real-time desk prepares the next day's offers for about thirty assets and enters them in the AESO Energy Trading System before 12:00. Wind farms and cogeneration sites roll forward standing offers at 0 CAD/MWh, while hydro and converted gas units are priced from water value or marginal cost, checked against the hedge book, reviewed by the desk lead and checked by a second person. The work is squeezed into a few morning hours, depends on late plant and fuel information, and a keyed error can sell a unit far below cost or strand it, so every offer and its rationale is recorded for the market surveillance administrator.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "An Alberta merchant generator with converted gas units, partner unit shares, cogeneration, reservoir hydro, wind farms and a small battery, offered by a central 24-hour real-time desk.",
+    "org_size_employees": 1300,
+    "notes": "Rules as in force in 2019-2022: offers before 12:00 the day before (203.1, 2013 version) and price restatements up to T-2 (203.3, 2014 version). The ETS was the AESO's offer system throughout the period."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one asset-day of offers",
+  "trigger": "The next-day forecasts are published and the desk starts the daily offer cycle ahead of the 12:00 deadline for the following delivery day.",
+  "end_state": "A valid offer for every hour of the delivery day is in the ETS (or the standing submission is confirmed), any price changes were made before T-2, and the offer and its rationale are filed.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 780,
+      "mode": 880,
+      "high": 960
+    },
+    "seasonality": "Flat: one case per offered asset per day. Work per case rises in winter and on volatile days when more offers are rebuilt and refreshed before T-2.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file driver dd_asset_days: about 29 to 32 separately offered assets times days in the month; agrees with the obligation to offer every asset of 5 MW or more in 203.1 s.3(1)."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "mkt-forecast-generation",
+        "object": "generation_forecast",
+        "share": 0.7
+      },
+      {
+        "from": "hyd-plan-water-schedule",
+        "object": "water_schedule",
+        "share": 0.3
+      }
+    ],
+    "inputs": [
+      {
+        "from": "aeso",
+        "object": "iso_rules"
+      },
+      {
+        "from": "mkt-market-analysis",
+        "object": "price_forecast"
+      },
+      {
+        "from": "mkt-procure-gas",
+        "object": "fuel_cost_estimate"
+      },
+      {
+        "from": "eng-performance-testing",
+        "object": "capability_declaration"
+      },
+      {
+        "from": "hse-market-compliance",
+        "object": "compliance_guidance"
+      },
+      {
+        "from": "mkt-offer-ancillary",
+        "object": "ancillary_award"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "offer_submitted",
+        "to": "aeso",
+        "object": "energy_offer"
+      },
+      {
+        "outcome": "any",
+        "to": "hse-market-compliance",
+        "object": "offer_record"
+      },
+      {
+        "outcome": "any",
+        "to": "mkt-settle-aeso",
+        "object": "offer_record"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "realtime_trader",
+      "title": "Real-time trader",
+      "department": "Real-time desk",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 90,
+        "high": 120
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Two traders for most of each morning building offers, plus delivery-day refreshes; estimate checked against hands-on time times volume."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "portfolio_optimizer",
+      "title": "Portfolio optimisation analyst",
+      "department": "Real-time desk",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.6,
+      "loaded_cost_per_hour": {
+        "low": 80,
+        "mode": 100,
+        "high": 130
+      },
+      "occupation_code": "NOC 11101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Optimisation team named in the organisation file; time share is an estimate."
+      }
+    },
+    {
+      "id": "realtime_lead",
+      "title": "Real-time desk lead",
+      "department": "Real-time desk",
+      "layer": "supervisor",
+      "fte_on_process": 0.25,
+      "loaded_cost_per_hour": {
+        "low": 95,
+        "mode": 120,
+        "high": 150
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Morning meeting and reviews of major offers."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "hydro_control_operator",
+      "title": "Hydro control centre operator",
+      "department": "Hydro control centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.05,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 68,
+        "high": 86
+      },
+      "occupation_code": "NOC 92100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Short daily confirmations of river and plant limits; not listed for this process in the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "gas_buyer",
+      "title": "Natural gas scheduler and buyer",
+      "department": "Commercial and trading",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 65,
+        "mode": 80,
+        "high": 100
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Fuel confirmations for gas units; not listed for this process in the organisation file."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "ets",
+      "name": "AESO Energy Trading System (offers, declarations and dispatch)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "etrm",
+      "name": "Energy trading and risk management system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "forecast_tools",
+      "name": "Load, price, wind and inflow forecasting models",
+      "kind": "analytics"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email",
+      "name": "Email, chat and video calls",
+      "kind": "communication"
+    },
+    {
+      "id": "bi",
+      "name": "Reporting and business intelligence",
+      "kind": "analytics"
+    },
+    {
+      "id": "scada",
+      "name": "Hydro, wind and battery SCADA and remote control",
+      "kind": "instrument"
+    },
+    {
+      "id": "pipeline_portal",
+      "name": "Gas pipeline customer portal (nominations)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "doc_store",
+      "name": "Document management and engineering drawings repository",
+      "kind": "document_store"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Publish next-day forecasts",
+      "description": "Overnight runs of the forecasting models publish the next-day hourly availability, wind, inflow and pool price forecasts to the desk's shared workbook and the ETRM, giving every asset a starting position for the offer day.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "weather forecast",
+        "unit status",
+        "water schedule"
+      ],
+      "outputs": [
+        "generation forecast",
+        "price forecast"
+      ],
+      "systems": [
+        "forecast_tools",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A stale weather or inflow feed leaves the forecast for some assets out of date.",
+        "typically_caught_at": "s02"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily forecast runs before the morning offer cycle are common desk practice; timing is an estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Confirm asset availability and constraints",
+      "description": "The portfolio optimisation analyst opens the outage schedule, the plant status notes and the latest capability declaration for the asset and confirms next-day maximum capability, known derates, ramp rate, minimum stable generation and initial start-up time.",
+      "role": "portfolio_optimizer",
+      "kind": "lookup",
+      "inputs": [
+        "generation forecast",
+        "outage schedule",
+        "capability declaration"
+      ],
+      "outputs": [
+        "confirmed availability and constraints"
+      ],
+      "systems": [
+        "forecast_tools",
+        "spreadsheets",
+        "email"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A derate reported by the plant late the previous evening is missed.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "iso2031",
+          "id2012008"
+        ],
+        "note": "Section 203.1 requires available capability, ramp rate and initial start-up time with each offer; 2012-008R says the constraints are used to judge compliance. Times are estimates."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Set the day's offer strategy at the desk meeting",
+      "description": "The real-time desk lead runs the morning meeting where traders and analysts review the supply cushion, intertie and outage reports, gas price and hedge position, and agree the broad price strategy for each group of assets. The time shown is this asset's share of the meeting.",
+      "role": "realtime_lead",
+      "kind": "coordination",
+      "inputs": [
+        "price forecast",
+        "hedge position",
+        "AESO supply and outage reports"
+      ],
+      "outputs": [
+        "agreed offer strategy"
+      ],
+      "systems": [
+        "bi",
+        "etrm",
+        "email"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.47,
+          "condition": "price-taking asset (wind farm or cogeneration net-to-grid)"
+        },
+        {
+          "to": "s05",
+          "prob": 0.3,
+          "condition": "hydro asset"
+        },
+        {
+          "to": "s07",
+          "prob": 0.23,
+          "condition": "converted gas unit, partner unit share or battery"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Morning desk meetings are common practice; per-asset share = about 30 minutes for five people across about 30 assets."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check the standing price-taker offer",
+      "description": "The real-time trader opens the standing submission for the wind farm or net-to-grid cogeneration asset, which offers its output at 0 CAD/MWh, and checks whether the available capability needs changing for turbines or host-plant demand known for tomorrow.",
+      "role": "realtime_trader",
+      "kind": "validation",
+      "inputs": [
+        "standing submission",
+        "turbine availability",
+        "host steam forecast"
+      ],
+      "outputs": [
+        "confirmed or changed standing offer"
+      ],
+      "systems": [
+        "ets",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Turbines out of service are not reflected in available capability.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.7,
+          "condition": "standing offer rolls forward unchanged",
+          "outcome": "standing_offer_confirmed"
+        },
+        {
+          "to": "s13",
+          "prob": 0.3,
+          "condition": "available capability or blocks need changing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "iso2031",
+          "id2012008"
+        ],
+        "note": "Standing submissions remain in place until changed (203.1 s.8); net-to-grid offers for sites with on-site load (2012-008R). The 70/30 split is an estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Turn the water schedule into hourly energy",
+      "description": "The portfolio optimisation analyst reads the weekly water schedule for the river system, the reservoir levels and the minimum flow limits, and spreads tomorrow's release volume across the hours with the highest expected prices, giving MW by hour and a water value per MWh.",
+      "role": "portfolio_optimizer",
+      "kind": "analysis",
+      "inputs": [
+        "water schedule",
+        "reservoir levels",
+        "price forecast"
+      ],
+      "outputs": [
+        "hourly hydro energy plan",
+        "water value"
+      ],
+      "systems": [
+        "forecast_tools",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Release volume spread against an outdated inflow figure, so the plan breaks a flow limit.",
+        "typically_caught_at": "s06"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.6,
+          "condition": "constraints may have changed"
+        },
+        {
+          "to": "s09",
+          "prob": 0.4,
+          "condition": "no change since the weekly schedule"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Hydro offers built from a water schedule and water value are standard for reservoir hydro; times are estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Confirm river and plant limits with hydro control",
+      "description": "The hydro control centre operator answers the analyst's call or email, confirming unit availability, ice or debris problems, licence minimum and maximum flows and any downstream requests for the next day, so the hourly plan can be offered as built or adjusted.",
+      "role": "hydro_control_operator",
+      "kind": "coordination",
+      "inputs": [
+        "hourly hydro energy plan"
+      ],
+      "outputs": [
+        "confirmed plant and river limits"
+      ],
+      "systems": [
+        "scada",
+        "email"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Coordination between the desk and the hydro control centre is assumed from the organisation file; times are estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Price the unit's marginal cost",
+      "description": "The analyst calculates the marginal cost of each output range of the converted gas unit or partner share from the heat rate curve, the next-day gas price, transport and the carbon cost above the TIER benchmark, plus start-up costs; for the battery the analyst plans charge and discharge hours from the price shape.",
+      "role": "portfolio_optimizer",
+      "kind": "analysis",
+      "inputs": [
+        "fuel and carbon cost estimate",
+        "heat rate curve",
+        "price forecast"
+      ],
+      "outputs": [
+        "marginal cost by block"
+      ],
+      "systems": [
+        "spreadsheets",
+        "forecast_tools"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong gas price or heat rate segment used, so blocks are priced below cost.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Cost-based offer preparation for thermal units is standard practice; times are estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Confirm fuel for the planned burn",
+      "description": "The natural gas scheduler checks the next-day gas nomination against the expected burn implied by the draft offer and confirms with the trader that the pipeline nomination and gas purchases cover the unit if it is dispatched.",
+      "role": "gas_buyer",
+      "kind": "communication",
+      "inputs": [
+        "marginal cost by block",
+        "gas nomination"
+      ],
+      "outputs": [
+        "fuel confirmation"
+      ],
+      "systems": [
+        "pipeline_portal",
+        "email"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Nomination does not cover the high-burn case.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Gas buyer role from the organisation file; daily gas nominations precede the energy offer; estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Build the price and quantity blocks",
+      "description": "The real-time trader sets up to seven operating blocks for each hour, choosing MW, price between 0 and 999.99 CAD/MWh and the flexible or inflexible flag, so that the top block equals maximum capability and minimum stable generation sits in the lowest block.",
+      "role": "realtime_trader",
+      "kind": "judgment",
+      "inputs": [
+        "marginal cost by block or hourly hydro plan",
+        "agreed offer strategy"
+      ],
+      "outputs": [
+        "draft offer"
+      ],
+      "systems": [
+        "spreadsheets",
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A block price or MW keyed into the wrong hour.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "iso2031",
+          "id2012008",
+          "msaew2020"
+        ],
+        "note": "Block structure and price range from 203.1 and 2012-008R; pricing above marginal cost is allowed (MSA 2020 statement). Times are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Check the offer against the hedge book",
+      "description": "The trader compares the offered volumes in each hour with forward sales, customer contract obligations and the fuel position in the ETRM, so the offer does not leave the company short of power it has already sold at a fixed price.",
+      "role": "realtime_trader",
+      "kind": "lookup",
+      "inputs": [
+        "draft offer",
+        "hedge position"
+      ],
+      "outputs": [
+        "position-checked offer"
+      ],
+      "systems": [
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Hedging of merchant output is described in the organisation file; the check is an estimate of common practice."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Record the offer rationale",
+      "description": "The trader writes the inputs and reasons behind the offer (cost basis, water value, price view, outage information used) in the desk offer log, keeping only public or own-company information so the record can be produced if the MSA asks.",
+      "role": "realtime_trader",
+      "kind": "drafting",
+      "inputs": [
+        "position-checked offer"
+      ],
+      "outputs": [
+        "offer rationale record"
+      ],
+      "systems": [
+        "spreadsheets",
+        "doc_store"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Rationale too thin to explain the offer later.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company market conduct policy under the Fair, Efficient and Open Competition Regulation (records of offer rationale and use of non-public information)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.45,
+          "condition": "large thermal or hydro asset, or a volatile day"
+        },
+        {
+          "to": "s13",
+          "prob": 0.55,
+          "condition": "routine offer"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "msaew2020",
+          "erq2015"
+        ],
+        "note": "The MSA looks at offer behaviour combined with other conduct (2020 statement); the 2015 TransAlta case turned on use of non-public information and outage timing. The record-keeping practice is an estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Lead reviews the offer",
+      "description": "The real-time desk lead compares the draft blocks with the agreed strategy, the marginal cost sheet and the previous day's offer, and either approves it or sends it back with a change to price levels or block sizes.",
+      "role": "realtime_lead",
+      "kind": "review",
+      "inputs": [
+        "draft offer",
+        "offer rationale record"
+      ],
+      "outputs": [
+        "approved offer"
+      ],
+      "systems": [
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Trading authority and risk policy: desk lead sign-off on offers for major assets",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.9,
+          "condition": "approved"
+        },
+        {
+          "to": "s09",
+          "prob": 0.1,
+          "condition": "sent back for changes"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Supervisory review of major offers is common desk practice; share and times are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Enter the offer in the ETS",
+      "description": "The trader enters or uploads the hourly blocks, available capability, minimum stable generation, ramp rate and initial start-up time for the asset in the AESO Energy Trading System before 12:00 on the day before delivery, or edits the standing submission.",
+      "role": "realtime_trader",
+      "kind": "data_entry",
+      "inputs": [
+        "approved offer"
+      ],
+      "outputs": [
+        "submitted offer"
+      ],
+      "systems": [
+        "ets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Fat-finger price or MW entry, or the wrong delivery date.",
+        "typically_caught_at": "s16"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 203.1 (offer deadline 12:00 the day before, offer content, available capability, operating constraints)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2031"
+        ],
+        "note": "Deadline and content are stated in 203.1 s.2 to s.6; entry time is an estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "ETS validates the offer",
+      "description": "The Energy Trading System acknowledges receipt and checks the offer against the rule, for example that the top block equals maximum capability and minimum stable generation does not exceed the lowest block, and returns a valid or invalid notice with a reason.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "submitted offer"
+      ],
+      "outputs": [
+        "acknowledgement",
+        "valid or invalid notice"
+      ],
+      "systems": [
+        "ets"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.97,
+          "condition": "valid"
+        },
+        {
+          "to": "s15",
+          "prob": 0.03,
+          "condition": "invalid"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2031"
+        ],
+        "note": "203.1 s.9 requires acknowledgement and a valid or invalid notice; the invalid share is an estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Correct an invalid offer",
+      "description": "The trader reads the ETS rejection reason, corrects the blocks, capability or minimum stable generation that broke the rule and resubmits, watching the clock because an asset without a valid offer by noon falls back to its standing submission.",
+      "role": "realtime_trader",
+      "kind": "data_entry",
+      "inputs": [
+        "invalid notice"
+      ],
+      "outputs": [
+        "resubmitted offer"
+      ],
+      "systems": [
+        "ets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Correction introduces a new keying error.",
+        "typically_caught_at": "s16"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 203.1 (offer deadline 12:00 the day before, offer content, available capability, operating constraints)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "resubmit"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "iso2031"
+        ],
+        "note": "Validation rules from 203.1 s.3 and s.9; times are estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Second person checks the submitted offer",
+      "description": "Another analyst pulls the ETS offer report for the asset and compares each hour's blocks, prices and capability with the approved offer sheet, looking for keyed errors that could sell output far below cost or strand the unit.",
+      "role": "portfolio_optimizer",
+      "kind": "review",
+      "inputs": [
+        "ETS offer report",
+        "approved offer"
+      ],
+      "outputs": [
+        "verified offer"
+      ],
+      "systems": [
+        "ets",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A keyed error is not spotted.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Desk procedure: four-eyes check of submitted offers against the approved sheet",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.66,
+          "condition": "matches, no further change expected"
+        },
+        {
+          "to": "s13",
+          "prob": 0.04,
+          "condition": "error found before the deadline"
+        },
+        {
+          "to": "s17",
+          "prob": 0.3,
+          "condition": "price view may change before delivery"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Four-eyes checks of offers are common practice after costly offer errors; shares are estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Refresh prices before the T-2 lock",
+      "description": "On the delivery day the trader revisits the offer as the pool price forecast, gas price or competitors' outages change, and submits price or MW restatements in the ETS for hours that are more than two hours away, after which the prices are locked.",
+      "role": "realtime_trader",
+      "kind": "judgment",
+      "inputs": [
+        "verified offer",
+        "updated price forecast"
+      ],
+      "outputs": [
+        "restated offer prices"
+      ],
+      "systems": [
+        "ets",
+        "forecast_tools"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 600,
+        "mode": 1080,
+        "high": 1800
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Restatement keyed for an hour already inside T-2 is rejected or wrong.",
+        "typically_caught_at": "s18"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 203.3 s.3 and s.4(1): price and MW restatements only before two hours ahead of the settlement interval",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2033",
+          "id2012009"
+        ],
+        "note": "T-2 limit on price restatements stated in 203.3 s.3 and 2012-009R; share and times are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "File the offer record",
+      "description": "The final offer for the asset-day, with the rationale and any restatements, is saved to the offer archive and copied to the settlement shadow records so settlement analysts and compliance can reconstruct what was offered in every hour.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "verified offer",
+        "offer rationale record"
+      ],
+      "outputs": [
+        "offer record"
+      ],
+      "systems": [
+        "doc_store",
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Record retention for MSA information requests and AESO settlement checks",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "offer_submitted"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "nsp2021112"
+        ],
+        "note": "The MSA relies on AESO offer and dispatch data and participant records (NSP 2021-112); archive mechanics are an estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Invalid offer rejected by the ETS",
+      "share_of_cases": 0.03,
+      "description": "The ETS returns an invalid notice (for example the top block does not equal maximum capability) and the trader must correct and resubmit before noon.",
+      "path": [
+        "s14",
+        "s15",
+        "s14"
+      ]
+    },
+    {
+      "name": "Lead sends the offer back",
+      "share_of_cases": 0.045,
+      "description": "On a major asset the desk lead changes the price levels or block sizes and the trader rebuilds the offer.",
+      "path": [
+        "s12",
+        "s09",
+        "s10",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Keyed error found in the second check",
+      "share_of_cases": 0.04,
+      "description": "The four-eyes check finds a price or MW keyed into the wrong hour and the trader re-enters the offer before the deadline.",
+      "path": [
+        "s16",
+        "s13",
+        "s14",
+        "s16"
+      ]
+    },
+    {
+      "name": "Delivery-day price refresh",
+      "share_of_cases": 0.3,
+      "description": "Prices or volumes are restated before T-2 on the delivery day after the price view changes.",
+      "path": [
+        "s16",
+        "s17",
+        "s18"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.15,
+        "p90": 0.9
+      },
+      "unit": "calendar days from forecast publication to the filed offer",
+      "population": "Asset-day offers of an Alberta generator, 2019-2022",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "iso2031",
+          "iso2033"
+        ],
+        "note": "Derived from the 12:00 day-ahead deadline (203.1) and an offer cycle starting about 06:30, so most offers are complete within 3 to 5 hours; the p90 reflects delivery-day restatements up to T-2 (203.3). Not a measured figure."
+      }
+    },
+    {
+      "metric": "operating_blocks_per_offer_max",
+      "value": 7,
+      "unit": "blocks",
+      "population": "AESO energy offers",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "id2012008"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "offer_price_range",
+      "value": {
+        "low": 0,
+        "high": 999.99
+      },
+      "unit": "CAD/MWh",
+      "population": "AESO energy offers for non-import source assets, 2019-2022",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2031"
+        ],
+        "note": "203.1 s.3(3): at least 0 and less than 1,000 CAD/MWh."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Everything for about thirty assets must be finished before 12:00, so late derates, fuel news or ancillary awards (which close around 10:00) arrive just as offers are being keyed.",
+      "steps": [
+        "s02",
+        "s09",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "iso2031",
+          "msa2009or"
+        ],
+        "note": "Noon offer deadline (203.1) and reserve auctions closing between 9:40 and 10:30 (MSA 2009)."
+      }
+    },
+    {
+      "description": "Offers are built in spreadsheets and re-keyed into the ETS, so keyed price or MW errors need a second-person check.",
+      "steps": [
+        "s09",
+        "s13",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Spreadsheet-to-ETS re-keying was common before automated offer uploads; estimate."
+      }
+    },
+    {
+      "description": "Offer rationale must be recorded every day because offer and outage behaviour has been the subject of MSA enforcement, including the 2015 case against the company modelled here.",
+      "steps": [
+        "s11"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "erq2015",
+          "msaew2020"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "iso2031",
+      "title": "ISO Rules Section 203.1, Offers and Bids for Energy (effective 2013-12-20)",
+      "publisher": "Alberta Electric System Operator",
+      "url": "https://www.aeso.ca/assets/documents/Section-203.1-Offers-and-Bids-for-Energy.pdf",
+      "year": 2013,
+      "supports": "Offers due before 12:00 on the day before the delivery day and no earlier than 7 days before; offer for every settlement interval for source assets of 5 MW or more; prices of at least 0 and under 1,000 CAD/MWh; block MW, flexible or inflexible flag and minimum stable generation; top block equals maximum capability; available capability equal to maximum capability unless an acceptable operational reason is given; ramp rate and initial start-up time; standing submissions; ETS acknowledgement and valid or invalid notice.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "id2012008",
+      "title": "Information Document 2012-008R, Energy Offers and Bids (posted 2017-04-04)",
+      "publisher": "Alberta Electric System Operator",
+      "url": "https://www.aeso.ca/assets/Uploads/2012-008R-Energy-Offers-and-Bids-2017-04-04.pdf",
+      "year": 2017,
+      "supports": "Offers have up to seven operating blocks; inflexible blocks dispatched only in full; net-to-grid offers for sites with on-site load; AESO expects operating constraints such as ramp rate to be updated within 15 minutes of becoming aware of a change; constraints are used to judge compliance.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "iso2033",
+      "title": "ISO Rules Section 203.3, Energy Restatements (effective 2014-07-02)",
+      "publisher": "Alberta Electric System Operator",
+      "url": "https://www.aeso.ca/assets/documents/Section-203-3-Energy-Restatements-July-2-2014.pdf",
+      "year": 2014,
+      "supports": "Available capability restatements only for an acceptable operational reason, an operational deviation or testing, submitted as soon as reasonably practicable with reasons; price and MW restatements allowed only before two hours ahead of the settlement interval (T-2); MW restatements within T-2 require reasons; minimum stable generation restatements. In force through the 2019-2022 period (replaced 2024-04-01).",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "id2012009",
+      "title": "Information Document 2012-009R, Restatements (posted 2017-05-11)",
+      "publisher": "Alberta Electric System Operator",
+      "url": "https://www.aeso.ca/assets/Uploads/2012-009R-Restatements-2017-05-11.pdf",
+      "year": 2017,
+      "supports": "How the Energy Trading System removes the highest priced blocks from the merit order when available capability is restated down and restores the lowest priced blocks first when restated up; price restatements need no operational reason but must be made before T-2 (for HE12, before 9:00); MW restatements keep block prices.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "msa2009or",
+      "title": "Operating Reserves Procurement: Understanding Market Outcomes (2009-09-16)",
+      "publisher": "Market Surveillance Administrator (Alberta)",
+      "url": "https://resources.albertamsa.ca/assets/Documents/Operating-Reserves-Procurement-Understanding-Market-Outcomes-2009-09-16.pdf",
+      "year": 2009,
+      "supports": "Watt-Ex day-ahead trading from 9:00 with closes at 9:40 (active regulating), 9:50 (spinning), 10:00 (supplemental), 10:10 to 10:30 (standby products), with over-the-counter trades after close; typical procured volumes (about 110 to 165 MW regulating, 170 to 260 MW spinning and supplemental); standby suppliers have fifteen minutes to get into position.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "msaew2020",
+      "title": "MSA Enforcement Statement: Economic Withholding (June 29, 2020)",
+      "publisher": "Market Surveillance Administrator (Alberta)",
+      "url": "https://www.albertamsa.ca/assets/Documents/MSA-Enforcement-statement-related-to-economic-withholding.pdf",
+      "year": 2020,
+      "supports": "Offering available capacity above short-run marginal and opportunity cost is not in itself a contravention; the MSA will act only when it is combined with conduct contrary to the Fair, Efficient and Open Competition Regulation.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "erq2015",
+      "title": "Market Manipulation in Alberta: TransAlta Pays $56 Million (case comment)",
+      "publisher": "Energy Regulation Quarterly",
+      "url": "https://energyregulationquarterly.ca/case-comments/market-manipulation-in-alberta-transalta-pays-56-million",
+      "year": 2015,
+      "supports": "The AUC found that outages at Sundance and Keephills units in late 2010 and early 2011 were timed on market conditions; one trader used non-public information; consent order of about 56 million CAD; the AUC suggested an independent review of compliance policies.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "nsp2021112",
+      "title": "Notice of Specified Penalty, MSA file 2021-112 (section 203.3, available capability not restated after a trip)",
+      "publisher": "Market Surveillance Administrator (Alberta)",
+      "url": "https://www.albertamsa.ca/assets/Documents/NSP-2021-112.pdf",
+      "year": 2021,
+      "supports": "A trip on February 16, 2021 left available capability unrestated for HE12 to HE14; self-reported on March 11, 2021; 750 CAD penalty for a first contravention in 12 months; the MSA relies on AESO available capability, dispatch, generation and offer data.",
+      "accessed": "2026-11-24"
+    }
+  ],
+  "assumptions": [
+    "One case is one asset-day. The case mix (47 percent price-taking wind and cogeneration, 30 percent hydro, 23 percent converted gas units, partner shares and battery) follows the asset counts in the organisation file.",
+    "Wind and net-to-grid cogeneration offers are standing submissions at 0 CAD/MWh; 70 percent roll forward without any change on a given day (estimate).",
+    "Times are estimates from general knowledge of Alberta trading desks in 2019-2022; no published time study of offer preparation was found.",
+    "The cycle starts when forecasts are published (about 06:00 on the day before delivery). The simulated median of about 0.2 days (about 5 hours) is a little longer than the 0.15-day benchmark because the simulation adds each queue wait in turn, while in practice the desk works the assets in parallel through the morning and must finish by noon; the gap is within the uncertainty of an estimated benchmark.",
+    "Offers are prepared on the day before delivery. On Fridays some desks prepare weekend offers in one batch; that is not modelled separately because each asset-day still passes through the same steps.",
+    "The step resources field is not used: preparing an offer does not occupy a plant. The organisation file lists converted_gas_unit, hydro_plant and wind_farm as resources of this process; they are the assets offered, not resources held by the work.",
+    "Loaded costs come from the organisation file (wage x 1.40)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

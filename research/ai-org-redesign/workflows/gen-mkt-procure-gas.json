@@ -1,0 +1,1640 @@
+{
+  "schema_version": "0.3",
+  "id": "gen-mkt-procure-gas",
+  "name": "Buy and nominate natural gas for the plants",
+  "org": "power-generation-co",
+  "process": "mkt-procure-gas",
+  "sector": "electric power generation",
+  "function": "energy marketing and trading",
+  "summary": "Every day, weekends included, the gas scheduler works out how much gas each gas-fired plant will burn on the next gas day, buys or sells the difference between that burn and the gas already bought under term contracts, and tells the pipelines where to deliver it by the nomination deadline. During the gas day the scheduler follows the plants' dispatch and buys, sells and renominates when units ramp, trip or the pipeline restricts flow, and the next morning checks the measured volumes for imbalances. Uncertain merchant dispatch, tight nomination windows, cold-weather pipeline restrictions and re-keying volumes between the exchange, the pipeline portal and the trading system make it error-prone.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "An Alberta merchant generator of about 1,300 staff with three coal units converted to gas in 2021, two cogeneration plants and a small gas desk inside its energy marketing group.",
+    "org_size_employees": 1300,
+    "notes": "Before 2021 the Wabamun-area units burned mostly coal with some gas co-firing, so daily gas volumes and intraday changes were smaller in 2019 and 2020; the step times describe 2021 and 2022 operation of the converted units."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one gas day of purchases and nominations for all gas-fired plants",
+  "trigger": "The day's generation forecast is published in the morning and the pipeline notices for the next gas day are out.",
+  "end_state": "The gas day has flowed, measured volumes are checked against nominations, any imbalance is traded or carried into the next nomination, and volumes are logged for the month-end supplier and pipeline reconciliation.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 28,
+      "mode": 30,
+      "high": 31
+    },
+    "seasonality": "Every calendar day. Winter days bring more pipeline restrictions and intraday changes; spring and autumn bring pipeline maintenance outages.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "w1",
+        "w2"
+      ],
+      "note": "Energy Marketing procures gas, transport and storage for the gas fleet (w1); one case per gas day by definition."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "mkt-forecast-generation",
+        "object": "generation_forecast",
+        "share": 0.85
+      },
+      {
+        "from": "gas_pipeline",
+        "object": "pipeline_notice",
+        "share": 0.15
+      }
+    ],
+    "inputs": [
+      {
+        "from": "mkt-execute-hedges",
+        "object": "hedge_trade"
+      },
+      {
+        "from": "mkt-respond-dispatch",
+        "object": "dispatch_instruction"
+      },
+      {
+        "from": "gas-operate-units",
+        "object": "unit_status"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "gas_day_closed",
+        "to": "mkt-submit-energy-offers",
+        "object": "fuel_cost_estimate"
+      },
+      {
+        "outcome": "gas_day_closed",
+        "to": "gas_suppliers",
+        "object": "gas_nomination"
+      },
+      {
+        "outcome": "gas_day_closed",
+        "to": "gas_pipeline",
+        "object": "gas_nomination"
+      },
+      {
+        "outcome": "gas_day_closed",
+        "to": "gas-operate-units",
+        "object": "gas_nomination"
+      },
+      {
+        "outcome": "gas_day_closed",
+        "to": "fin-pay-suppliers",
+        "object": "gas_nomination"
+      },
+      {
+        "outcome": "gas_day_closed",
+        "to": "energy_exchange",
+        "object": "hedge_trade"
+      },
+      {
+        "outcome": "gas_day_closed",
+        "to": "mkt-settle-trades",
+        "object": "hedge_trade"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "gas_buyer",
+      "title": "Natural gas scheduler and buyer",
+      "department": "Commercial and trading",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.6,
+      "loaded_cost_per_hour": {
+        "low": 65,
+        "mode": 80,
+        "high": 100
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Four schedulers in the organisation file cover seven days; the rest of their time goes to transport contracts, supplier invoices and storage."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "term_trader",
+      "title": "Term trader",
+      "department": "Commercial and trading",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.05,
+      "loaded_cost_per_hour": {
+        "low": 95,
+        "mode": 125,
+        "high": 170
+      },
+      "occupation_code": "NOC 11101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves purchases outside the scheduler's daily limit."
+      }
+    },
+    {
+      "id": "portfolio_optimizer",
+      "title": "Portfolio optimisation analyst",
+      "department": "Real-time desk",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 80,
+        "mode": 100,
+        "high": 130
+      },
+      "occupation_code": "NOC 11101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Agrees the expected dispatch range each morning."
+      }
+    },
+    {
+      "id": "shift_supervisor_gas",
+      "title": "Shift supervisor (first-class power engineer)",
+      "department": "Wabamun-area converted units",
+      "layer": "supervisor",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 75,
+        "mode": 92,
+        "high": 115
+      },
+      "occupation_code": "NOC 92100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Each plant's shift supervisor acknowledges the fuel schedule; share across 12 supervisors."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "realtime_trader",
+      "title": "Real-time trader",
+      "department": "Real-time desk",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.03,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 90,
+        "high": 120
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Told of pipeline restrictions that limit unit capability."
+      },
+      "shift_pattern": "shift_24x7"
+    }
+  ],
+  "systems": [
+    {
+      "id": "pipeline_portal",
+      "name": "Gas pipeline customer portal (nominations)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "exchange_screens",
+      "name": "Exchange and broker trading screens (NGX, ICE)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "etrm",
+      "name": "Energy trading and risk management system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "historian",
+      "name": "Plant data historian",
+      "kind": "analytics"
+    },
+    {
+      "id": "email",
+      "name": "Email, chat and video calls",
+      "kind": "communication"
+    },
+    {
+      "id": "forecast_tools",
+      "name": "Load, price, wind and inflow forecasting models",
+      "kind": "analytics"
+    }
+  ],
+  "resources": [
+    {
+      "id": "converted_gas_unit",
+      "name": "Gas-fired steam unit converted from coal (about 400 to 460 MW)",
+      "kind": "plant",
+      "count": 3,
+      "cost_per_hour": {
+        "low": 9000,
+        "mode": 14000,
+        "high": 26000
+      }
+    },
+    {
+      "id": "cogen_plant",
+      "name": "Gas cogeneration plant",
+      "kind": "plant",
+      "count": 2,
+      "cost_per_hour": {
+        "low": 2000,
+        "mode": 3500,
+        "high": 6000
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Load overnight data into gas workbook",
+      "description": "Overnight jobs copy the previous day's measured burn from the plant historian, the open gas trades from the trading system and the pipeline's posted notices into the scheduler's gas position workbook, ready for the morning.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "historian burn data",
+        "open gas trades",
+        "pipeline notices"
+      ],
+      "outputs": [
+        "gas position workbook"
+      ],
+      "systems": [
+        "historian",
+        "etrm",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A feed fails silently and yesterday's burn is missing.",
+        "typically_caught_at": "s03"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; overnight data jobs assumed."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Read pipeline notices",
+      "description": "The scheduler opens the NGTL and ATCO customer portals and reads operational notices for the next gas day: maintenance, capacity restrictions at delivery areas serving the plants, linepack warnings and any service interruptions.",
+      "role": "gas_buyer",
+      "kind": "lookup",
+      "inputs": [
+        "pipeline notices"
+      ],
+      "outputs": [
+        "list of restrictions"
+      ],
+      "systems": [
+        "pipeline_portal"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A restriction at a plant's delivery area is missed.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w2"
+        ],
+        "note": "Monitoring of pipeline maintenance schedules and transportation availability listed in w2; time estimated."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Estimate next-day burn by plant",
+      "description": "Once the morning generation forecast is out, the scheduler multiplies each unit's expected hourly output by its heat rate, adds start-up and minimum-load gas, and adds the cogeneration hosts' steam demand, to get GJ per plant for the gas day.",
+      "role": "gas_buyer",
+      "kind": "analysis",
+      "inputs": [
+        "generation forecast",
+        "heat rate curves",
+        "gas position workbook"
+      ],
+      "outputs": [
+        "burn estimate by plant"
+      ],
+      "systems": [
+        "spreadsheets",
+        "forecast_tools"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 300
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Burn under- or over-estimated because the dispatch assumption is off.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; heat-rate method is standard; times estimated."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Agree dispatch range with optimiser",
+      "description": "The scheduler calls the portfolio optimisation analyst to agree how likely each merchant gas unit is to run at full, part or minimum load tomorrow given the price outlook, and settles on a burn range to buy against.",
+      "role": "portfolio_optimizer",
+      "kind": "communication",
+      "inputs": [
+        "burn estimate by plant",
+        "price outlook"
+      ],
+      "outputs": [
+        "agreed burn range"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; short morning call assumed."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Compare burn with contracted supply",
+      "description": "The scheduler subtracts the term supply contracts, fixed-price hedges delivered that day and any storage withdrawal from the agreed burn to get the volume still to buy or sell on the day.",
+      "role": "gas_buyer",
+      "kind": "analysis",
+      "inputs": [
+        "agreed burn range",
+        "term supply schedule",
+        "physical hedge notices"
+      ],
+      "outputs": [
+        "net daily position"
+      ],
+      "systems": [
+        "spreadsheets",
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A term contract or physical hedge left out of the position.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.88,
+          "condition": "within the scheduler's daily limit"
+        },
+        {
+          "to": "s06",
+          "prob": 0.12,
+          "condition": "large or longer-term purchase needs desk approval"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w2"
+        ],
+        "note": "70 percent of 2021 gas consumption contractually fixed or passed through, with firm supply contracts and hedges (w2); split of day purchases estimated."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Approve purchase outside daily limit",
+      "description": "A term trader reviews a large day purchase, a weekend package or a balance-of-month deal that exceeds the scheduler's authority and approves it or changes the volume.",
+      "role": "term_trader",
+      "kind": "approval",
+      "inputs": [
+        "net daily position"
+      ],
+      "outputs": [
+        "approved purchase"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 45,
+        "high": 180
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Trading delegation of authority: per-trade volume and tenor limits for the gas scheduler",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.6,
+          "condition": "buy on exchange"
+        },
+        {
+          "to": "s08",
+          "prob": 0.4,
+          "condition": "buy from a supplier bilaterally"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; delegation limits assumed."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Trade day-ahead gas on NGX",
+      "description": "Before the exchange's next-day window closes in the morning, the scheduler buys or sells the net position as AB-NIT next-day gas on the NGX screen; on Friday the weekend package covers Saturday to Monday.",
+      "role": "gas_buyer",
+      "kind": "judgment",
+      "inputs": [
+        "net daily position"
+      ],
+      "outputs": [
+        "NGX next-day trades"
+      ],
+      "systems": [
+        "exchange_screens"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong product or quantity clicked on the screen.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "filled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w6"
+        ],
+        "note": "NGX AB-NIT next-day products and title transfers in w6; window timing and times estimated."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Buy from supplier bilaterally",
+      "description": "The scheduler phones or messages a producer or marketer for a firm daily or balance-of-month purchase at an AECO index or fixed price and receives a written confirmation.",
+      "role": "gas_buyer",
+      "kind": "communication",
+      "inputs": [
+        "approved purchase"
+      ],
+      "outputs": [
+        "supplier deal"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Delivery point or volume in the confirmation differs from the deal.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "agreed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; bilateral share estimated."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Capture gas deals in trading system",
+      "description": "The scheduler enters each exchange or supplier deal in the trading and risk system with counterparty, delivery point, daily volume, dates and price so settlement and risk can see it.",
+      "role": "gas_buyer",
+      "kind": "data_entry",
+      "inputs": [
+        "NGX next-day trades",
+        "supplier deal"
+      ],
+      "outputs": [
+        "gas deal tickets"
+      ],
+      "systems": [
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Volume or delivery date keyed wrongly.",
+        "typically_caught_at": "s21"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Deal capture procedure under the Energy Trading Code of Conduct",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w2"
+        ],
+        "note": "Energy Trading Code of Conduct in w2; times estimated."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Enter NGTL nominations",
+      "description": "In the NGTL customer portal the scheduler enters the receipt and delivery nominations for each plant's delivery meter station, matching supply packages at NIT, before the timely nomination deadline; NGX deals arrive as exchange title transfers.",
+      "role": "gas_buyer",
+      "kind": "data_entry",
+      "inputs": [
+        "gas deal tickets",
+        "burn estimate by plant"
+      ],
+      "outputs": [
+        "NGTL nominations"
+      ],
+      "systems": [
+        "pipeline_portal"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong meter station or package number on a nomination.",
+        "typically_caught_at": "s12"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "NGTL gas transportation tariff, approved by the Canada Energy Regulator: nominations by the cycle deadline for each gas day",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.5,
+          "condition": "a plant also takes gas off ATCO Pipelines"
+        },
+        {
+          "to": "s12",
+          "prob": 0.5,
+          "condition": "NGTL only"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w1",
+          "w6"
+        ],
+        "note": "NGTL transport agreements for the Sundance and Keephills units (w1) and NGX title transfers at AB-NIT (w6); deadlines and times estimated."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Enter ATCO Pipelines nominations",
+      "description": "For plants supplied through ATCO Pipelines the scheduler enters the matching nominations in ATCO's portal so that the second pipeline can deliver if NGTL is restricted.",
+      "role": "gas_buyer",
+      "kind": "data_entry",
+      "inputs": [
+        "burn estimate by plant"
+      ],
+      "outputs": [
+        "ATCO nominations"
+      ],
+      "systems": [
+        "pipeline_portal"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Nomination does not match the upstream transfer.",
+        "typically_caught_at": "s12"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ATCO Pipelines tariff approved by the Alberta Utilities Commission: nominations by the cycle deadline",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w1",
+          "w2"
+        ],
+        "note": "Pioneer pipeline integrated into NGTL and ATCO systems (w1) and a policy of at least two supply pipelines (w2); share estimated."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Pipeline confirms nominations",
+      "description": "The pipeline matches the company's nominations with the suppliers' and the exchange's transfers at the end of the cycle and posts confirmed or cut quantities in the portal.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "NGTL nominations",
+        "ATCO nominations"
+      ],
+      "outputs": [
+        "confirmed quantities"
+      ],
+      "systems": [
+        "pipeline_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 360
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.93,
+          "condition": "confirmed as nominated"
+        },
+        {
+          "to": "s13",
+          "prob": 0.07,
+          "condition": "quantity cut or mismatched"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w6"
+        ],
+        "note": "Rejected title transfers are notified to the participant (w6); cut rate and timing estimated."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Resolve nomination cut",
+      "description": "The scheduler compares the cut with the supplier's or exchange's transfer, calls the counterparty or the pipeline's gas control desk, and resubmits a corrected nomination or buys replacement gas.",
+      "role": "gas_buyer",
+      "kind": "coordination",
+      "inputs": [
+        "confirmed quantities"
+      ],
+      "outputs": [
+        "corrected nomination"
+      ],
+      "systems": [
+        "pipeline_portal",
+        "email"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Fix creates a new mismatch.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "resubmitted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; times estimated."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Send fuel schedule to plants",
+      "description": "The scheduler emails each plant's control room the confirmed GJ by hour block for the gas day and phones the shift supervisor when the schedule differs from what the plant expects.",
+      "role": "gas_buyer",
+      "kind": "communication",
+      "inputs": [
+        "confirmed quantities"
+      ],
+      "outputs": [
+        "plant fuel schedule"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Schedule sent to the wrong plant list.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; times estimated."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Acknowledge schedule and check fuel gas limits",
+      "description": "The plant shift supervisor reads the fuel schedule, checks it against the unit's planned load and minimum fuel gas pressure for the burners, and replies to confirm or to flag a mismatch.",
+      "role": "shift_supervisor_gas",
+      "kind": "validation",
+      "inputs": [
+        "plant fuel schedule"
+      ],
+      "outputs": [
+        "plant acknowledgement"
+      ],
+      "systems": [
+        "email",
+        "historian"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 360
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Plant fuel gas and burner management operating procedures for ABSA-registered boilers: supply pressure within limits before load changes",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.97,
+          "condition": "confirmed"
+        },
+        {
+          "to": "s13",
+          "prob": 0.03,
+          "condition": "mismatch with plant plan"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; acknowledgement and safety check assumed."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Send fuel cost to offer desk",
+      "description": "The scheduler sends the real-time desk the day's marginal gas cost per plant, including transport and fuel charges, so the energy offers reflect the cost of burning more gas.",
+      "role": "gas_buyer",
+      "kind": "communication",
+      "inputs": [
+        "gas deal tickets"
+      ],
+      "outputs": [
+        "fuel cost estimate"
+      ],
+      "systems": [
+        "email",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Old price used in the fuel cost.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; times estimated."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Monitor burn against nomination during the gas day",
+      "description": "From the start of the gas day the scheduler, or the on-call scheduler at weekends, watches plant burn in the historian, AESO dispatches and unit trips, and compares running burn with the nominated quantity.",
+      "role": "gas_buyer",
+      "kind": "analysis",
+      "inputs": [
+        "plant burn data",
+        "dispatch instructions"
+      ],
+      "outputs": [
+        "intraday position"
+      ],
+      "systems": [
+        "historian",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 900,
+        "mode": 1140,
+        "high": 1300
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A ramp is noticed late.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.55,
+          "condition": "burn on track"
+        },
+        {
+          "to": "s18",
+          "prob": 0.35,
+          "condition": "dispatch change or unit trip"
+        },
+        {
+          "to": "s20",
+          "prob": 0.1,
+          "condition": "pipeline restriction"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; share of days with intraday changes estimated for merchant gas units."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Trade same-day gas",
+      "description": "When a unit is dispatched up or trips, the scheduler buys or sells same-day gas on NGX or with a supplier to bring the position back toward the expected burn.",
+      "role": "gas_buyer",
+      "kind": "judgment",
+      "inputs": [
+        "intraday position"
+      ],
+      "outputs": [
+        "same-day trades"
+      ],
+      "systems": [
+        "exchange_screens",
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Same-day trade sized wrongly.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "traded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w6"
+        ],
+        "note": "NGX same-day products at AB-NIT in w6; times estimated."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Submit intraday renomination",
+      "description": "The scheduler enters a revised nomination in the pipeline portal for the next intraday cycle and tells the plant control room of the new quantity.",
+      "role": "gas_buyer",
+      "kind": "data_entry",
+      "inputs": [
+        "same-day trades"
+      ],
+      "outputs": [
+        "intraday nomination"
+      ],
+      "systems": [
+        "pipeline_portal",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 180
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Renomination misses the cycle deadline.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.9,
+          "condition": "confirmed"
+        },
+        {
+          "to": "s17",
+          "prob": 0.1,
+          "condition": "further change in the day"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; times estimated."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Respond to pipeline restriction",
+      "description": "When NGTL restricts deliveries, most often in cold weather or during maintenance, the scheduler checks how much gas each plant will get, warns the real-time desk so it can restate unit capability with the AESO, and switches supply to ATCO where possible.",
+      "role": "gas_buyer",
+      "kind": "coordination",
+      "inputs": [
+        "pipeline notice"
+      ],
+      "outputs": [
+        "restriction plan"
+      ],
+      "systems": [
+        "pipeline_portal",
+        "email"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 360
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Real-time desk not told in time to restate capability.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "renominate"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w2"
+        ],
+        "note": "Weather-related events and pipeline maintenance listed as gas supply risks in w2; share and times estimated."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Check measured volumes and imbalance",
+      "description": "The next morning the scheduler compares the pipeline's measured deliveries to each plant with the confirmed nominations and checks the imbalance account against the tolerance band.",
+      "role": "gas_buyer",
+      "kind": "validation",
+      "inputs": [
+        "pipeline measurement",
+        "confirmed quantities"
+      ],
+      "outputs": [
+        "imbalance check"
+      ],
+      "systems": [
+        "pipeline_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 600,
+        "mode": 900,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Daily balancing within the pipeline's imbalance tolerance to avoid charges",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 0.85,
+          "condition": "within tolerance"
+        },
+        {
+          "to": "s22",
+          "prob": 0.15,
+          "condition": "imbalance to correct"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; share outside tolerance estimated."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Correct imbalance",
+      "description": "The scheduler trades imbalance gas with another shipper or adjusts the next day's nomination so that the account returns inside the tolerance band.",
+      "role": "gas_buyer",
+      "kind": "data_entry",
+      "inputs": [
+        "imbalance check"
+      ],
+      "outputs": [
+        "imbalance trade or adjusted nomination"
+      ],
+      "systems": [
+        "pipeline_portal",
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Adjustment applied to the wrong account.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "corrected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; times estimated."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Log daily volumes for month-end reconciliation",
+      "description": "The scheduler records the day's bought, sold, nominated and measured volumes by supplier and pipeline in the volume log that settlement and accounts payable use to check supplier invoices and pipeline bills at month end.",
+      "role": "gas_buyer",
+      "kind": "data_entry",
+      "inputs": [
+        "imbalance check",
+        "gas deal tickets"
+      ],
+      "outputs": [
+        "daily volume log"
+      ],
+      "systems": [
+        "spreadsheets",
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Volume typed against the wrong supplier.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "logged",
+          "outcome": "gas_day_closed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tier C: author's estimate of common gas scheduling practice for Alberta gas-fired generators on NGTL; times estimated."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Unit trip or dispatch change",
+      "share_of_cases": 0.35,
+      "description": "A unit is dispatched up or down or trips during the gas day; the scheduler trades same-day gas and renominates.",
+      "path": [
+        "s17",
+        "s18",
+        "s19"
+      ]
+    },
+    {
+      "name": "Cold-weather pipeline restriction",
+      "share_of_cases": 0.1,
+      "description": "NGTL restricts deliveries; the scheduler reallocates gas, moves supply to ATCO and warns the real-time desk to restate capability.",
+      "path": [
+        "s17",
+        "s20",
+        "s19"
+      ]
+    },
+    {
+      "name": "Nomination cut",
+      "share_of_cases": 0.07,
+      "description": "The pipeline cuts a nomination because the counterparty's transfer does not match; fixed by phone and resubmitted.",
+      "path": [
+        "s12",
+        "s13",
+        "s12"
+      ]
+    },
+    {
+      "name": "Weekend package",
+      "share_of_cases": 0.14,
+      "description": "On Fridays the scheduler buys a Saturday-to-Monday package on the same day; weekend days are handled by the on-call scheduler from home.",
+      "path": [
+        "s07",
+        "s09",
+        "s10"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 2.1,
+        "p90": 2.4
+      },
+      "unit": "calendar days from morning forecast to imbalance check after the gas day",
+      "population": "One gas day at a gas-fired generator on NGTL",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Follows from the daily timetable: purchases and nominations on the day before, a 24-hour gas day, and measured volumes the following morning."
+      }
+    },
+    {
+      "metric": "gas_consumption_contractually_fixed_2021",
+      "value": 70,
+      "unit": "percent of gas used in generation",
+      "population": "TransAlta, 2021 (89 percent in 2020)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "w2"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "ngtl_firm_transport_contracted",
+      "value": 400,
+      "unit": "TJ per day of long-term NGTL transport for the Alberta gas units",
+      "population": "TransAlta, contracted by 2021 for delivery by end 2023",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "w1"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Burn depends on merchant dispatch that is not known when gas must be bought and nominated, so about a third of days need same-day trades and renominations.",
+      "steps": [
+        "s03",
+        "s17",
+        "s18",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "The same volumes are keyed into the exchange screen, the trading system, two pipeline portals and a spreadsheet log.",
+      "steps": [
+        "s07",
+        "s09",
+        "s10",
+        "s11",
+        "s23"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of 2019-2022 tooling."
+      }
+    },
+    {
+      "description": "Cold-weather and maintenance restrictions on NGTL can leave a plant short of gas at short notice.",
+      "steps": [
+        "s02",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "w2"
+        ],
+        "note": "Gas supply risks listed in w2."
+      }
+    },
+    {
+      "description": "Weekend and holiday gas days are covered by one on-call scheduler, so packages are bought on Friday with less information.",
+      "steps": [
+        "s07",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "w1",
+      "title": "TransAlta Corporation Annual Information Form for the year ended December 31, 2021 (Exhibit 13.1 to Form 40-F)",
+      "publisher": "TransAlta Corporation via U.S. SEC EDGAR",
+      "url": "https://www.sec.gov/Archives/edgar/data/1144800/000114480022000004/a20211231tacex131aif.htm",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Energy Marketing secures fuel supply and handles procurement of gas, transport and storage for the gas fleet; it trades power, natural gas and environmental products; the company regularly hedges portions of uncontracted merchant positions with physical and financial contracts; about 50 percent of capacity contracted in 2022 and 2023; an independent Risk Management group applies risk capital limits, value at risk, gross margin at risk, tail risk scenarios and position limits; the Pioneer Pipeline was integrated into NGTL and ATCO systems to supply Sundance and Keephills; long-term NGTL transportation agreements for 400 TJ per day; 1,282 employees at end 2021."
+    },
+    {
+      "id": "w2",
+      "title": "TransAlta Corporation Management's Discussion and Analysis for the year ended December 31, 2021 (Exhibit 13.2 to Form 40-F)",
+      "publisher": "TransAlta Corporation via U.S. SEC EDGAR",
+      "url": "https://www.sec.gov/Archives/edgar/data/1144800/000114480022000004/a20211231tacex132mda.htm",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "VaR is calculated and reported daily, over a three-day holding period at 95 percent confidence, by the historical variance/covariance method, with periodic stress tests; VaR on proprietary trading was 2 million CAD at Dec. 31, 2021 (1 million in 2020); the Audit, Finance and Risk Committee approves the Commodity and Financial Exposure Management policies; trading risk is reviewed monthly by the Commodity Risk and Compliance Committee chaired by the EVP Finance and Trading and CFO and weekly by the commodity risk team, commercial managers and the CFO; Energy Trading Code of Conduct; about 78 percent of 2021 production under contracts and hedges; 70 percent of 2021 gas consumption contractually fixed or passed through; gas supply risk managed with at least two pipelines, firm delivery and supply contracts, gas hedges and monitoring of pipeline maintenance; 2022 Alberta hedges of 6,278 GWh at 75 CAD/MWh and 50 million GJ of gas at 2.75 CAD/GJ; credit limits by counterparty with collateral when exceeded."
+    },
+    {
+      "id": "w6",
+      "title": "Schedule F to the ICE NGX Contracting Party Agreement: Physically Settled Gas Futures Products, Canadian Delivery Points",
+      "publisher": "ICE NGX",
+      "url": "https://www.ice.com/publicdocs/ICE_NGX_Schedule_F_Physically_Settled_Gas_Futures_Canadian_Delivery_Points.pdf",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "For AB-NIT trades the exchange aggregates each participant's daily quantities and submits title transfers to TCPL (NGTL) for next-day, same-day and yesterday products; participants enable a nomination waiver or appoint the exchange as agent; a rejected title transfer is notified by instant message, phone or email. The version read was amended in 2026; the author assumes the AB-NIT mechanics were the same in 2019 to 2022."
+    }
+  ],
+  "assumptions": [
+    "NGTL nomination cycle times and the NGX next-day window were not confirmed from an opened source; the waits use typical morning-trade, early-afternoon timely nomination and 24-hour gas day timing.",
+    "The converted units and cogeneration plants consume the gas but are not held or scheduled by this process, so they are listed as resources without step occupancy.",
+    "No travel or site access applies; schedulers work from the office or from home when on call.",
+    "Exchange and supplier gas purchases are sent to mkt-settle-trades and energy_exchange as 'hedge_trade' because the organisation file has no separate business object for day gas trades.",
+    "Portfolio optimiser, plant shift supervisor and real-time trader take part but are not listed in the organisation file's process roles.",
+    "Loaded costs come from the organisation file (wage x 1.40)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

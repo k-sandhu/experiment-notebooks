@@ -1,0 +1,1740 @@
+{
+  "schema_version": "0.3",
+  "id": "edu-cs-collections",
+  "name": "Collect overdue accounts",
+  "org": "electric-distribution-utility",
+  "process": "cs-collections",
+  "sector": "electricity distribution",
+  "function": "customer service (credit and collections)",
+  "summary": "When a customer does not pay a bill by the due date, the distributor follows a sequence set largely by Ontario Energy Board rules: a late charge and reminder, a disconnection notice with a fixed notice period, attempts to reach the customer, an offer of an arrears payment agreement or a referral to low-income assistance, and only then a field disconnection, followed by reconnection within two business days once the customer pays. Most accounts pay after the reminder; a few end in agency collection and write-off. Residential disconnections are banned from November 15 to April 30, and in 2020 the ban ran to July 31, so arrears grow through winter and the field work bunches into summer and autumn.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A municipally owned Ontario electricity distributor with about 350,000 customers and a ten-person credit and collections team using CIS collection treatment and field service representatives for disconnections.",
+    "org_size_employees": 571,
+    "notes": "OEB customer service rules changed on March 1, 2020; the pandemic ban, CEAP credits and pandemic-era arrears affected 2020-2021."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one account in arrears (one overdue bill episode)",
+  "trigger": "A bill is still unpaid after the minimum payment period, or a customer calls to arrange payment of an overdue balance.",
+  "end_state": "The arrears are paid, an agreement is completed, the service is reconnected after payment, the account is deferred to the next cycle, or the balance is written off.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 8000,
+      "mode": 12000,
+      "high": 18000
+    },
+    "seasonality": "Arrears build over the winter ban; disconnection notices and field disconnections bunch from May to mid-November. In 2020 disconnections only resumed in August.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file estimate (about 3.5% of customers enter collection treatment each month); no published count was opened."
+    },
+    "surge": {
+      "cause": "end of the winter disconnection ban (and in 2020 the end of the extended pandemic ban), when held residential arrears move to disconnection notices",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 30,
+        "mode": 45,
+        "high": 75
+      },
+      "volume_multiplier": {
+        "low": 1.2,
+        "mode": 1.5,
+        "high": 2.0
+      },
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ban2020",
+          "src-csr2020"
+        ],
+        "note": "Ban dates from the sources; size of the spring wave is the author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cs-payment-processing",
+        "object": "payment",
+        "share": 0.93
+      },
+      {
+        "from": "cs-contact-centre",
+        "object": "payment_arrangement",
+        "share": 0.05
+      },
+      {
+        "from": "ops-field-service-orders",
+        "object": "field_result",
+        "share": 0.02
+      }
+    ],
+    "inputs": [
+      {
+        "from": "cs-low-income-programs",
+        "object": "assistance_credit"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "residential-customer",
+        "object": "arrears_notice"
+      },
+      {
+        "outcome": "any",
+        "to": "business-customer",
+        "object": "arrears_notice"
+      },
+      {
+        "outcome": "reconnected",
+        "to": "ops-field-service-orders",
+        "object": "disconnect_order"
+      },
+      {
+        "outcome": "paid_at_door",
+        "to": "ops-field-service-orders",
+        "object": "disconnect_order"
+      },
+      {
+        "outcome": "written_off",
+        "to": "ops-field-service-orders",
+        "object": "disconnect_order"
+      },
+      {
+        "outcome": "written_off",
+        "to": "fin-month-end-close",
+        "object": "journal_entries"
+      },
+      {
+        "outcome": "any",
+        "to": "cs-low-income-programs",
+        "object": "customer_inquiry"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "collections-rep",
+      "title": "Credit and collections representative",
+      "department": "Credit and Collections",
+      "layer": "individual_contributor",
+      "fte_on_process": 8.0,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 44,
+        "high": 52
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Nine representatives in the organisation file; about 8 FTE on overdue accounts, the rest on low-income programs and deposits. Loaded cost = wage x 1.40."
+      }
+    },
+    {
+      "id": "credit-supervisor",
+      "title": "Credit and collections supervisor",
+      "department": "Credit and Collections",
+      "layer": "supervisor",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 58,
+        "high": 68
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Disconnection list release and write-offs; the rest of the time on team management. Loaded cost = wage x 1.40."
+      }
+    },
+    {
+      "id": "field-service-rep",
+      "title": "Field service representative",
+      "department": "Field Services",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.5,
+      "loaded_cost_per_hour": {
+        "low": 42,
+        "mode": 50,
+        "high": 58
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Disconnections and reconnections for non-payment are done by field service representatives in Distribution Operations; the organisation file does not list this role for cs-collections. Loaded cost = wage x 1.40."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "cis",
+      "name": "Customer information and billing system (CIS)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email",
+      "name": "Email, calendar and Teams",
+      "kind": "communication"
+    },
+    {
+      "id": "telephony",
+      "name": "Contact centre telephony, IVR and call recording",
+      "kind": "communication"
+    },
+    {
+      "id": "mwm",
+      "name": "Mobile workforce management and field tablets",
+      "kind": "workflow"
+    },
+    {
+      "id": "erp",
+      "name": "ERP: general ledger, work orders, purchasing, inventory, fixed assets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "resources": [
+    {
+      "id": "light-vehicle",
+      "name": "Light vehicle (pickup or van) for locators, meter technicians, inspectors and field service",
+      "kind": "vehicle",
+      "count": 130,
+      "cost_per_hour": {
+        "low": 12,
+        "mode": 18,
+        "high": 25
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Flag the unpaid bill and apply the late charge",
+      "description": "The nightly CIS aging run finds bills still unpaid after the minimum payment period (16 days, 20 days from March 2020), applies the 1.5% a month late payment charge and places the account on the collection treatment path for its customer class.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "unpaid bill"
+      ],
+      "outputs": [
+        "overdue account"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Payment posted late by the bank or lockbox, so a paid account is treated as overdue.",
+        "typically_caught_at": "s04"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.2.6.2-2.6.3 minimum payment period before late charges (raised to 20 days on March 1, 2020)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-csr2020",
+          "src-dsc"
+        ],
+        "note": "Payment periods from src-csr2020; the 1.5% monthly late charge is the standard Ontario rate (author's knowledge)."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Send the account overdue notice",
+      "description": "The CIS sends an account overdue reminder by the customer's preferred method, email or mail, stating the amount and the date after which a disconnection notice may follow. Before March 2020 a reminder was common practice but not required.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "overdue account"
+      ],
+      "outputs": [
+        "account overdue notice"
+      ],
+      "systems": [
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB customer service rules from March 1, 2020: account overdue notice at least 7 days before a disconnection notice",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-csr2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Recheck the balance after the reminder period",
+      "description": "After the reminder period the CIS rechecks the account. Most customers pay after the reminder; the rest are put on the representatives' daily collection worklist.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "account overdue notice"
+      ],
+      "outputs": [
+        "paid account or worklist item"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 7200,
+        "mode": 10080,
+        "high": 14400
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.55,
+          "condition": "paid after reminder",
+          "outcome": "paid"
+        },
+        {
+          "to": "s04",
+          "prob": 0.45,
+          "condition": "still overdue"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate that just over half of overdue accounts pay after a reminder."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Review the account on the collection worklist",
+      "description": "A collections representative opens the account and checks the exclusions: the winter ban or the 2020 pandemic ban for residential and small business customers, a pending LEAP assessment, an open billing dispute, an active arrangement, or a medical or vulnerability flag. The representative then decides the next action.",
+      "role": "collections-rep",
+      "kind": "review",
+      "inputs": [
+        "worklist item",
+        "account flags"
+      ],
+      "outputs": [
+        "collection decision"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Exclusion missed, for example an open dispute.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB winter disconnection ban (November 15 to April 30) and the March 19 to July 31, 2020 extended ban",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.52,
+          "condition": "eligible for a disconnection notice"
+        },
+        {
+          "to": "s05",
+          "prob": 0.38,
+          "condition": "residential or small business account in a ban period"
+        },
+        {
+          "to": "END",
+          "prob": 0.1,
+          "condition": "payment found, dispute moved to billing or other resolution",
+          "outcome": "resolved_on_review"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ban2020",
+          "src-csr2020"
+        ],
+        "note": "Ban periods from the sources; the share in a ban period assumes 5.5 months of winter ban a year plus 2020, author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Work an account that cannot be disconnected",
+      "description": "During a ban the representative sends reminder letters, calls customers with larger balances to offer an arrangement or assistance (from 2020 the COVID-19 Energy Assistance Program), and leaves the account to recycle on the worklist next month.",
+      "role": "collections-rep",
+      "kind": "communication",
+      "inputs": [
+        "collection decision"
+      ],
+      "outputs": [
+        "reminder or offer"
+      ],
+      "systems": [
+        "cis",
+        "telephony",
+        "email"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Offer not recorded, so the customer is called again.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.35,
+          "condition": "customer reached or calls back"
+        },
+        {
+          "to": "END",
+          "prob": 0.65,
+          "condition": "carried to next month's treatment",
+          "outcome": "deferred_to_next_cycle"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ban2020"
+        ],
+        "note": "CEAP and LEAP from src-ban2020; shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Issue the disconnection notice",
+      "description": "The CIS prints a disconnection notice in its own envelope (not with the bill) stating the overdue amount, payment methods, reconnection charges and assistance programs. From March 2020 the notice period is 14 days, with mailed notices deemed received on the fifth day; before then it was 10 days.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "collection decision"
+      ],
+      "outputs": [
+        "disconnection notice"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.4.2.2-4.2.3: content and delivery of disconnection notices and minimum notice period",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "notice issued"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-dsc",
+          "src-csr2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Try to reach the customer before disconnection",
+      "description": "Before the notice period ends the representative calls the customer, leaves messages or emails, and if no contact is made a notice is left at the premises. On contact the representative takes a payment, offers an arrears payment agreement, or refers the customer to assistance.",
+      "role": "collections-rep",
+      "kind": "communication",
+      "inputs": [
+        "disconnection notice"
+      ],
+      "outputs": [
+        "contact outcome"
+      ],
+      "systems": [
+        "cis",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 7200,
+        "high": 14400
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Customer not told of the arrangement option.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.4.2.2.4: reasonable efforts to contact the customer before disconnection",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.62,
+          "condition": "pays the overdue amount",
+          "outcome": "paid"
+        },
+        {
+          "to": "s08",
+          "prob": 0.19,
+          "condition": "asks to pay over time"
+        },
+        {
+          "to": "s12",
+          "prob": 0.07,
+          "condition": "needs emergency assistance"
+        },
+        {
+          "to": "s15",
+          "prob": 0.12,
+          "condition": "no payment or arrangement"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor's credit team using CIS collection treatment in 2019-2022."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Work out an arrears payment agreement",
+      "description": "The representative applies any security deposit to the arrears, calculates the average monthly bill, sets the down payment (at most 15%, or 10% for an eligible low-income customer) and the number of months the rules require, and agrees the schedule with the customer.",
+      "role": "collections-rep",
+      "kind": "judgment",
+      "inputs": [
+        "arrears balance",
+        "average monthly bill"
+      ],
+      "outputs": [
+        "agreed schedule"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Term shorter than the minimum or deposit not applied first.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.2.7: arrears payment agreement minimum terms",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "agreed"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": "Terms from src-dsc; time is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Record the agreement and send it in writing",
+      "description": "The representative enters the instalment schedule in the CIS, stops late charges on the covered amount, suspends the disconnection, and sends the customer the written agreement with the due dates and what happens if a payment is missed.",
+      "role": "collections-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "agreed schedule"
+      ],
+      "outputs": [
+        "arrears payment agreement"
+      ],
+      "systems": [
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 6,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Instalment dates keyed wrongly.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "recorded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-csr2020"
+        ],
+        "note": "No late charges on APA amounts from March 2020 (src-csr2020)."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Track the instalments",
+      "description": "The CIS checks each instalment against the schedule alongside the current bills over the five to sixteen months of the agreement and puts the account back on the worklist when a payment is missed.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "arrears payment agreement"
+      ],
+      "outputs": [
+        "completed or broken agreement"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 129600,
+        "mode": 216000,
+        "high": 489600
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.68,
+          "condition": "all instalments paid",
+          "outcome": "agreement_completed"
+        },
+        {
+          "to": "s11",
+          "prob": 0.32,
+          "condition": "missed payments"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Agreement length from DSC s.2.7 minimums; completion rate is the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Cancel a broken agreement",
+      "description": "When instalments are missed the representative calls the customer, and if the arrears are not brought up to date cancels the agreement, which allows the distributor to refuse a new one for a year, and restarts the notice process.",
+      "role": "collections-rep",
+      "kind": "review",
+      "inputs": [
+        "missed instalments"
+      ],
+      "outputs": [
+        "cancelled agreement"
+      ],
+      "systems": [
+        "cis",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Cancelled although a payment was in transit.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.2.7: conditions for cancelling an arrears payment agreement",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "agreement cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor's credit team using CIS collection treatment in 2019-2022."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Refer the customer to LEAP and pause disconnection",
+      "description": "The representative gives the customer the LEAP intake agency's contact, records the referral, and when the agency confirms it is assessing the customer suspends disconnection for 21 days.",
+      "role": "collections-rep",
+      "kind": "communication",
+      "inputs": [
+        "contact outcome"
+      ],
+      "outputs": [
+        "LEAP referral",
+        "disconnection hold"
+      ],
+      "systems": [
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Hold not set, so the disconnection goes ahead.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.4.2.2.6: 21-day suspension while a LEAP intake agency assesses eligibility",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "referred"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Wait for the agency's LEAP decision",
+      "description": "A social service agency interviews the customer, checks household income, and tells the distributor whether a one-time LEAP grant is approved and how much, usually within the 21-day hold.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "LEAP referral"
+      ],
+      "outputs": [
+        "LEAP decision"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 7200,
+        "mode": 20160,
+        "high": 30240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.7,
+          "condition": "grant approved"
+        },
+        {
+          "to": "s15",
+          "prob": 0.3,
+          "condition": "not eligible or no response"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": "21-day period from src-dsc; approval rate is the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Post the LEAP grant and settle the rest",
+      "description": "The representative posts the LEAP grant as a credit on the account, waives charges the rules require for an eligible low-income customer, and either confirms the balance is cleared or sets up an agreement for what is left.",
+      "role": "collections-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "LEAP decision"
+      ],
+      "outputs": [
+        "credited account"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Grant posted to the wrong period.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.5,
+          "condition": "balance cleared",
+          "outcome": "paid"
+        },
+        {
+          "to": "s08",
+          "prob": 0.5,
+          "condition": "balance remains"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor's credit team using CIS collection treatment in 2019-2022."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Confirm the account is due for disconnection",
+      "description": "After the notice period the representative rechecks payments, holds, the ban calendar and the next business day, since disconnection may not happen on a day the office is closed or the day before, and adds the account to the disconnection list.",
+      "role": "collections-rep",
+      "kind": "validation",
+      "inputs": [
+        "unpaid account"
+      ],
+      "outputs": [
+        "disconnection list entry"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Account added although a payment arrived the same day.",
+        "typically_caught_at": "s18"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB customer service rules from March 2020: disconnect within 14 days after the notice period and not on a day the utility is closed or the day before",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "listed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-csr2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Approve the daily disconnection list",
+      "description": "The credit and collections supervisor reviews the day's list, removes accounts with medical, vulnerability or dispute flags, checks the count against field capacity and releases the disconnect orders to field services.",
+      "role": "credit-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "disconnection list"
+      ],
+      "outputs": [
+        "released disconnect orders"
+      ],
+      "systems": [
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Vulnerable customer not removed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Credit policy: supervisor release of residential disconnections",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.85,
+          "condition": "order released"
+        },
+        {
+          "to": "END",
+          "prob": 0.15,
+          "condition": "paid before the visit",
+          "outcome": "paid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor's credit team using CIS collection treatment in 2019-2022."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Drive to the premises",
+      "description": "A field service representative picks up the day's disconnect orders on the tablet, plans the route and drives to the premises in a light vehicle; order is set by area and by meter access.",
+      "role": "field-service-rep",
+      "kind": "travel",
+      "inputs": [
+        "released disconnect orders"
+      ],
+      "outputs": [
+        "arrival at premises"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 12960
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "arrived"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for urban and rural Ottawa routes."
+      },
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 10,
+            "mode": 15,
+            "high": 35
+          }
+        }
+      ]
+    },
+    {
+      "id": "s18",
+      "name": "Collect payment or disconnect at the meter",
+      "description": "At the premises the representative knocks, accepts payment by credit card if offered, otherwise disconnects at the meter or installs a load limiter, leaves a notice saying how to get reconnected, and records the result on the tablet.",
+      "role": "field-service-rep",
+      "kind": "physical",
+      "inputs": [
+        "disconnect order"
+      ],
+      "outputs": [
+        "field result"
+      ],
+      "systems": [
+        "mwm",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 120
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong meter disconnected in a multi-unit building.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Employer electrical safe work practice for meter work: arc-flash PPE and meter base inspection",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.12,
+          "condition": "pays at the door",
+          "outcome": "paid_at_door"
+        },
+        {
+          "to": "s19",
+          "prob": 0.7,
+          "condition": "disconnected or limited, customer later pays or agrees"
+        },
+        {
+          "to": "s22",
+          "prob": 0.18,
+          "condition": "disconnected and stays off or premises vacant"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": "Card payment at the door and posted notice per src-dsc s.4.2.2.3; shares are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 8,
+            "mode": 15,
+            "high": 30
+          }
+        }
+      ]
+    },
+    {
+      "id": "s19",
+      "name": "Confirm payment and order reconnection",
+      "description": "When the customer pays the overdue amount or signs an arrears agreement, the representative confirms the payment, charges or waives the reconnection fee (waived for eligible low-income customers) and issues an urgent reconnect order.",
+      "role": "collections-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "payment or agreement"
+      ],
+      "outputs": [
+        "reconnect order"
+      ],
+      "systems": [
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Reconnect order not issued promptly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "order issued"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": "Fee waiver for eligible low-income customers per src-dsc."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Reconnect the service",
+      "description": "A field service representative drives back to the premises, inspects the meter base, restores supply or removes the load limiter, confirms the meter is reading, and closes the order on the tablet.",
+      "role": "field-service-rep",
+      "kind": "physical",
+      "inputs": [
+        "reconnect order"
+      ],
+      "outputs": [
+        "service restored"
+      ],
+      "systems": [
+        "mwm",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 25,
+        "mode": 35,
+        "high": 70
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Reconnected without confirming the meter reads.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.7.10: reconnect within 2 business days of payment or agreement, 85% of the time",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.3,
+          "condition": "poor payment history"
+        },
+        {
+          "to": "END",
+          "prob": 0.7,
+          "condition": "reconnected",
+          "outcome": "reconnected"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": "Standard from src-dsc; time includes travel, author's estimate."
+      },
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 25,
+            "mode": 35,
+            "high": 70
+          }
+        }
+      ]
+    },
+    {
+      "id": "s21",
+      "name": "Ask for a security deposit after disconnection",
+      "description": "Because the account now lacks a good payment history, the representative calculates a security deposit from the billing cycle factor and estimated bill and bills it in instalments over at least six months for a residential customer.",
+      "role": "collections-rep",
+      "kind": "drafting",
+      "inputs": [
+        "payment history"
+      ],
+      "outputs": [
+        "deposit request"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Deposit not spread over the minimum period.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.2.4.12 and 2.4.20A: maximum deposit and instalments",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "deposit billed",
+          "outcome": "reconnected"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Finalize the account and decide on recovery",
+      "description": "For an account that stays off or was vacated, the representative issues the final bill, applies the deposit, waits the final-bill due period and sends the remaining balance to the collection agency.",
+      "role": "collections-rep",
+      "kind": "analysis",
+      "inputs": [
+        "final bill",
+        "deposit"
+      ],
+      "outputs": [
+        "agency referral"
+      ],
+      "systems": [
+        "cis",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 20160,
+        "mode": 43200,
+        "high": 86400
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Deposit not applied before referral.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "referred"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor's credit team using CIS collection treatment in 2019-2022."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Wait for the collection agency",
+      "description": "An outside collection agency traces the former customer and tries to recover the balance on contingency, reporting recoveries monthly and returning the accounts it cannot collect.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "agency referral"
+      ],
+      "outputs": [
+        "agency result"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 86400,
+        "mode": 129600,
+        "high": 259200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "agency closes the file"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor's credit team using CIS collection treatment in 2019-2022."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Approve the bad debt write-off",
+      "description": "The credit and collections supervisor reviews the agency's returned accounts and the representative's notes, approves the write-off list within delegated limits, and the CIS posts the write-off journal for finance.",
+      "role": "credit-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "agency result"
+      ],
+      "outputs": [
+        "write-off journal"
+      ],
+      "systems": [
+        "cis",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 10080,
+        "mode": 20160,
+        "high": 43200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Delegation of authority: write-offs approved by someone other than the collector",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "written off",
+          "outcome": "written_off"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor's credit team using CIS collection treatment in 2019-2022."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Winter or pandemic ban",
+      "share_of_cases": 0.17,
+      "description": "A residential (and in 2020 small business) account cannot be disconnected, so it gets reminders and offers and recycles monthly.",
+      "path": [
+        "s04",
+        "s05"
+      ]
+    },
+    {
+      "name": "Broken arrears payment agreement",
+      "share_of_cases": 0.02,
+      "description": "The customer misses instalments; the agreement is cancelled and the disconnection notice process restarts.",
+      "path": [
+        "s10",
+        "s11",
+        "s06"
+      ]
+    },
+    {
+      "name": "LEAP assessment hold",
+      "share_of_cases": 0.02,
+      "description": "An agency assesses the customer for emergency assistance and disconnection is suspended for 21 days.",
+      "path": [
+        "s12",
+        "s13",
+        "s14"
+      ]
+    },
+    {
+      "name": "Disconnection and reconnection",
+      "share_of_cases": 0.027,
+      "description": "The account is disconnected in the field, the customer pays or agrees, and service is restored within two business days.",
+      "path": [
+        "s15",
+        "s16",
+        "s17",
+        "s18",
+        "s19",
+        "s20"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 10,
+        "p90": 30
+      },
+      "unit": "calendar days from overdue to resolution",
+      "population": "Accounts entering collection treatment",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: most accounts pay in the week after the reminder and most of the rest within the disconnection notice period; agreements of 5-16 months and agency referrals (under 10% of cases) form a tail beyond the 90th percentile."
+      }
+    },
+    {
+      "metric": "disconnection_notice_period",
+      "value": 14,
+      "unit": "calendar days (10 before March 2020)",
+      "population": "Ontario electricity distributors",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-csr2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "reconnection_within_2_business_days",
+      "value": 0.85,
+      "unit": "minimum share of reconnections",
+      "population": "Ontario electricity distributors",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "The winter ban and the 2020 extended ban stop disconnections for months, so arrears grow and the work arrives in a wave in spring and summer.",
+      "steps": [
+        "s04",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ban2020",
+          "src-csr2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Many customers cannot be reached by phone before disconnection, so field visits are made that end in payment at the door.",
+      "steps": [
+        "s07",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "About a third of arrears agreements break, restarting the notice process.",
+      "steps": [
+        "s10",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-csr2020",
+      "title": "New Ontario Energy Board customer service rules strengthen consumer protection (news release)",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/sites/default/files/news-release-csr-20200305.pdf",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "Rules in force March 1, 2020: minimum payment period raised from 16 to 20 calendar days; an account overdue notice 7 days before a disconnection notice; disconnection notice period raised from 10 to 14 days, mailed notice deemed received on the fifth calendar day, disconnection within 14 days after the notice period; no disconnection on a day the utility is closed or the day before; winter ban November 15 to April 30 with reconnection by December 1; residential deposits returned after one year of good payment, small business after three; deposits waived for new residential customers enrolling in equal or pre-authorized payment; APA offered to small business; no late charges on APA amounts."
+    },
+    {
+      "id": "src-dsc",
+      "title": "Distribution System Code (consolidated, revised March 27, 2024)",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/sites/default/files/Distribution-System-Code_March_20240327.pdf",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "s.2.4.11-2.4.20A security deposit waivers, maximum (billing cycle factor x estimated bill) and instalments over at least 6 months for residential customers; s.2.6.1A monthly billing of residential and GS<50 kW customers (in force December 31, 2016); s.2.6.6.2B payment allocation; s.2.7 arrears payment agreements (down payment up to 15%, 10% for eligible low-income; terms of at least 5 or 10 months, 8, 12 or 16 months for eligible low-income); s.4.2.2.1 disconnection notice not in the bill envelope; s.4.2.2.6 21-day suspension while a LEAP intake agency assesses the customer; s.4.2.3.1 mailed notice deemed received on the fifth day; s.7.6 65% of calls answered in 30 s; s.7.7 abandon rate 10% or less; s.7.8 written response in 10 business days 80% of the time; s.7.10 reconnection within 2 business days 85% of the time; s.7.11 billing accuracy 98% and what counts as an inaccurate bill. Amendment history shows these sections were in force through 2019-2022 apart from the March 2020 changes."
+    },
+    {
+      "id": "src-ban2020",
+      "title": "The OEB's extended Disconnection Ban will end on July 31, 2020",
+      "publisher": "Ontario Energy Board",
+      "url": "https://oeb.ca/node/2675",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "On March 19, 2020 the OEB extended the winter disconnection ban to July 31, 2020 and widened it to small business customers; after it ended, the account overdue notice, 14-day disconnection notice and LEAP rules applied; COVID-19 Energy Assistance Program (CEAP) one-time on-bill credit applied for through the utility; LEAP emergency assistance and OESP credits."
+    }
+  ],
+  "assumptions": [
+    "One case is one overdue bill episode on one account, from the day the bill is overdue until it is paid, settled under an agreement, deferred to the next month's treatment or written off. Accounts in a ban period that recycle each month count as a new case each month.",
+    "The organisation file's volume of 12,000 a month (about 3.5% of customers) is kept; with the shares used here it gives about 3,000 disconnection notices, about 450 field disconnection visits and about 300 reconnections a month, averaged over the year, which is plausible for a 350,000-customer utility but not checked against published RRR data.",
+    "Disconnection is done by field visit. Remote disconnection through smart meters is not assumed because the organisation file gives no evidence of remote-disconnect meters.",
+    "Field service representatives are added to this process although the organisation file lists only collections representatives and the supervisor; their visits could instead sit in ops-field-service-orders.",
+    "The 1.5% a month late payment charge is the usual Ontario rate, described from general knowledge.",
+    "The long p90 cycle time comes from arrears agreements that last five to sixteen months and from agency referrals; hands-on time is small.",
+    "Staffing: hands-on time times volume implies about 12 FTE, matching 12.1 stated (8 collections representatives, 0.6 supervisor, 3.5 field service representatives). The field share is about 450 disconnection and 300 reconnection visits a month; with 8 field service representatives in the organisation file also covering about 1,300 other field service orders a month, field capacity is tight in the May to November disconnection season.",
+    "Simulated p90 of about 21 days sits inside the estimated 30-day benchmark; agreements and agency referrals are under 10% of cases and lie beyond the 90th percentile.",
+    "Roles use the organisation file's ids and loaded costs (wage x 1.40)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

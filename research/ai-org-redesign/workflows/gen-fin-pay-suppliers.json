@@ -1,0 +1,1980 @@
+{
+  "schema_version": "0.3",
+  "id": "gen-fin-pay-suppliers",
+  "name": "Process supplier invoices and payments",
+  "org": "power-generation-co",
+  "process": "fin-pay-suppliers",
+  "sector": "electric power generation",
+  "function": "finance",
+  "summary": "Accounts payable turns supplier invoices into payments: contractors, parts suppliers, equipment makers, gas suppliers and landowners send invoices or payment requests, and the company pays them on their due date in a weekly run. Most invoices are matched automatically to a purchase order and a goods receipt, but about a quarter stop for a missing receipt, a price difference or a missing approval, and those wait days for buyers, plant supervisors and managers who are busy elsewhere. Contractor invoices during the spring and fall outage seasons are numerous and large, and their field tickets must be checked against crew time before they can be paid. Controls separate who sets up suppliers, who approves invoices and who releases money.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "An Alberta merchant power generator with about 1,300 employees, an ERP with purchasing and plant maintenance modules, an OCR invoice capture add-on and a central AP team in the Calgary head office.",
+    "org_size_employees": 1300,
+    "notes": "Describes common practice for a listed Canadian generator of this size in 2019-2022: email and paper invoices, OCR capture, ERP three-way match, email-based approval workflow and weekly EFT runs. No supplier portal or e-invoicing network is assumed."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one supplier invoice",
+  "trigger": "A supplier invoice, gas supply statement or land lease payment request arrives in the AP mailbox or mail tray.",
+  "end_state": "The invoice is paid into the supplier's account and cleared in the ERP, or rejected as a duplicate.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2500,
+      "mode": 3500,
+      "high": 5500
+    },
+    "seasonality": "Higher in April to June and September to November when planned thermal outages bring contractor invoices; December has a year-end push to invoice before budgets close.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Kept from the organisation file demand driver dd_invoices (about 300 million CAD of annual purchases). No public invoice count for an Alberta generator was found."
+    },
+    "surge": {
+      "cause": "spring and fall planned outage seasons",
+      "events_per_year": {
+        "low": 2,
+        "mode": 2,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 30,
+        "mode": 50,
+        "high": 75
+      },
+      "volume_multiplier": {
+        "low": 1.4,
+        "mode": 1.8,
+        "high": 2.5
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Taken from the organisation file process map: thermal outages are scheduled in spring and fall when Alberta demand and prices are lower."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "contractors",
+        "object": "supplier_invoice",
+        "share": 0.4
+      },
+      {
+        "from": "material_suppliers",
+        "object": "supplier_invoice",
+        "share": 0.4
+      },
+      {
+        "from": "oem_providers",
+        "object": "supplier_invoice",
+        "share": 0.14
+      },
+      {
+        "from": "lgl-manage-land-leases",
+        "object": "payment_request",
+        "share": 0.05
+      },
+      {
+        "from": "gas_suppliers",
+        "object": "supplier_invoice",
+        "share": 0.01
+      }
+    ],
+    "inputs": [
+      {
+        "from": "scm-purchase-materials",
+        "object": "purchase_order"
+      },
+      {
+        "from": "scm-manage-stores",
+        "object": "goods_receipt"
+      },
+      {
+        "from": "mkt-procure-gas",
+        "object": "gas_nomination"
+      },
+      {
+        "from": "scm-contractor-management",
+        "object": "contractor_agreement"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "paid",
+        "to": "contractors",
+        "object": "vendor_payment"
+      },
+      {
+        "outcome": "paid",
+        "to": "material_suppliers",
+        "object": "vendor_payment"
+      },
+      {
+        "outcome": "paid",
+        "to": "oem_providers",
+        "object": "vendor_payment"
+      },
+      {
+        "outcome": "paid",
+        "to": "gas_suppliers",
+        "object": "vendor_payment"
+      },
+      {
+        "outcome": "paid",
+        "to": "landowners",
+        "object": "lease_payment"
+      },
+      {
+        "outcome": "paid",
+        "to": "fin-treasury",
+        "object": "payment_proposal"
+      },
+      {
+        "outcome": "paid",
+        "to": "fin-close-month",
+        "object": "journal_entries"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "ap_clerk",
+      "title": "Accounts payable clerk",
+      "department": "Controllership and accounts payable",
+      "layer": "individual_contributor",
+      "fte_on_process": 8.5,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 12200",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file lists 9 AP clerks; about 8.5 FTE of their time goes to invoice entry, exceptions and payment runs, the rest to vendor statements, expense claims and year-end slips. Estimate."
+      }
+    },
+    {
+      "id": "accountant",
+      "title": "Accountant",
+      "department": "Controllership and accounts payable",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 68,
+        "high": 85
+      },
+      "occupation_code": "NOC 11100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Vendor master changes, payment proposal review and AP reconciliation by one or two controllership accountants. Estimate."
+      }
+    },
+    {
+      "id": "buyer",
+      "title": "Buyer",
+      "department": "Procurement",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 62,
+        "high": 78
+      },
+      "occupation_code": "NOC 12102",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Price and quantity variances on purchase-order invoices go back to the buyer who placed the order; about 470 variances a month at 20 minutes each plus follow-up. Estimate."
+      }
+    },
+    {
+      "id": "storekeeper",
+      "title": "Storekeeper",
+      "department": "Warehouses",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 46,
+        "high": 56
+      },
+      "occupation_code": "NOC 14401",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Storekeepers post missing goods receipts when AP chases them; about 130 a month. Estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "maintenance_supervisor",
+      "title": "Maintenance supervisor",
+      "department": "Wabamun-area converted units",
+      "layer": "supervisor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 80,
+        "mode": 95,
+        "high": 115
+      },
+      "occupation_code": "NOC 72010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Contract owners (mostly plant maintenance supervisors and outage leads) confirm contractor field tickets and enter service entry sheets; about 250 chases a month. Estimate."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "budget_holder",
+      "title": "Budget holder (manager with delegated signing authority)",
+      "department": "All divisions",
+      "layer": "manager",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 105,
+        "mode": 130,
+        "high": 170
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Non-PO invoices (utilities, professional fees, rents, land lease payment requests, IT subscriptions) are approved by the manager who owns the budget under the delegation of authority. The organisation file has no generic approver role; about 70 managers across divisions hold signing limits. Cost set between plant manager and asset manager rates in the organisation file."
+      }
+    },
+    {
+      "id": "exec_officer",
+      "title": "Executive vice-president (finance, operations, trading, legal, people, transition)",
+      "department": "Executive office",
+      "layer": "executive",
+      "fte_on_process": 0.05,
+      "loaded_cost_per_hour": {
+        "low": 200,
+        "mode": 260,
+        "high": 350
+      },
+      "occupation_code": "NOC 00012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Invoices above the senior manager limit (for example over 1 million CAD on outage contracts) need a vice-president or executive signature; a few a month. Estimate."
+      }
+    },
+    {
+      "id": "settlement_analyst",
+      "title": "Settlement analyst",
+      "department": "Settlement and contract administration",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 52,
+        "mode": 64,
+        "high": 80
+      },
+      "occupation_code": "NOC 11101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Gas supply statements are reconciled to nominations and pipeline allocations by the settlement group rather than AP; about 35 statements a month at about an hour each. Estimate."
+      }
+    },
+    {
+      "id": "settlement_manager",
+      "title": "Manager, settlement and contracts",
+      "department": "Settlement and contract administration",
+      "layer": "manager",
+      "fte_on_process": 0.02,
+      "loaded_cost_per_hour": {
+        "low": 100,
+        "mode": 120,
+        "high": 145
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves gas statements for payment. Estimate."
+      }
+    },
+    {
+      "id": "controller",
+      "title": "Corporate controller",
+      "department": "Finance",
+      "layer": "director",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 140,
+        "mode": 170,
+        "high": 210
+      },
+      "occupation_code": "NOC 00012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves the weekly payment run as the second signer. Estimate."
+      }
+    },
+    {
+      "id": "treasury_analyst",
+      "title": "Treasury analyst",
+      "department": "Treasury and tax",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 74,
+        "high": 92
+      },
+      "occupation_code": "NOC 11101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Releases the payment file in the bank portal after approval and funds the disbursement account. Estimate."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "erp",
+      "name": "ERP (finance, purchasing and plant maintenance modules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email",
+      "name": "Email, chat and video calls",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "etrm",
+      "name": "Energy trading and risk management system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "pipeline_portal",
+      "name": "Gas pipeline customer portal (nominations)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "contract_repo",
+      "name": "Contract repository",
+      "kind": "document_store"
+    },
+    {
+      "id": "ap_capture",
+      "name": "Invoice scanning, OCR capture and AP approval workflow (add-on to the ERP)",
+      "kind": "workflow"
+    },
+    {
+      "id": "bank_portal",
+      "name": "Bank cash management portal (EFT, wire and cheque files)",
+      "kind": "external_portal"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive and sort incoming invoice",
+      "description": "The AP clerk opens the shared AP mailbox, where most suppliers email PDF invoices, and the tray of paper invoices mailed to head office or forwarded by internal mail from the plants. The clerk removes statements and duplicates sent to several addresses, stamps paper invoices with the received date and sorts them into the scanning batch.",
+      "role": "ap_clerk",
+      "kind": "intake",
+      "inputs": [
+        "supplier invoice (PDF or paper)"
+      ],
+      "outputs": [
+        "invoice queued for scanning"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 4320
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "An invoice sent to a plant or a buyer instead of AP sits unopened for days, or a statement is treated as an invoice.",
+        "typically_caught_at": "s04"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Email and paper intake was the common mix for mid-sized Canadian companies in 2019-2022; paper from remote plant sites arrives days late by internal mail. Wait estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Scan and capture invoice data",
+      "description": "The capture tool reads the scanned image or PDF overnight and extracts the supplier, invoice number, date, purchase order number, GST and total. It creates a work item in the AP workflow queue with the image attached and flags fields it read with low confidence.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "invoice image"
+      ],
+      "outputs": [
+        "captured invoice record"
+      ],
+      "systems": [
+        "ap_capture"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Fields misread by OCR (amount, PO number, supplier match), especially on poor scans and handwritten field tickets.",
+        "typically_caught_at": "s03"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Template and OCR capture tied to the ERP was in common use at companies of this size by 2019; misread rates are an estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Verify captured fields and index invoice",
+      "description": "The AP clerk opens the work item, compares each captured field with the image, corrects misread values, keys line details where the tool could not read them and checks that the invoice shows the GST registration number and a valid purchase order or contract reference. Invoices without a PO or contract reference are tagged for coding.",
+      "role": "ap_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "captured invoice record",
+        "invoice image"
+      ],
+      "outputs": [
+        "indexed invoice"
+      ],
+      "systems": [
+        "ap_capture",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Keying error in amount, tax or PO number.",
+        "typically_caught_at": "s06"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Hands-on time per invoice set so that 9 clerks can handle about 3,500 invoices a month with exceptions, consistent with the organisation file headcount."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check vendor record and duplicates",
+      "description": "The AP clerk confirms the supplier exists in the ERP vendor master with the remit-to address on the invoice and runs the duplicate check on supplier, invoice number, date and amount. The clerk then routes the invoice by type: purchase-order invoice, non-PO invoice or land lease payment request, or gas supply statement.",
+      "role": "ap_clerk",
+      "kind": "lookup",
+      "inputs": [
+        "indexed invoice",
+        "vendor master"
+      ],
+      "outputs": [
+        "routed invoice"
+      ],
+      "systems": [
+        "erp",
+        "ap_capture"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "A duplicate with a changed invoice number or a typo passes the check.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: duplicate payment check before posting",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.01,
+          "condition": "duplicate of an invoice already entered",
+          "outcome": "duplicate_rejected"
+        },
+        {
+          "to": "s05",
+          "prob": 0.02,
+          "condition": "new supplier or changed remit-to or bank details"
+        },
+        {
+          "to": "s06",
+          "prob": 0.68,
+          "condition": "purchase-order invoice"
+        },
+        {
+          "to": "s13",
+          "prob": 0.28,
+          "condition": "non-PO invoice or land lease payment request"
+        },
+        {
+          "to": "s16",
+          "prob": 0.01,
+          "condition": "gas supply statement"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Routing shares are estimates: most material and contractor spend runs on purchase orders, while utilities, professional fees, rents, land lease payments and gas supply are paid against contracts without a PO."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Set up or change vendor record",
+      "description": "A controllership accountant who does not enter invoices or release payments reviews the supplier setup form, checks the GST number and business registration, and calls the supplier back on a number already on file or from a public source to confirm any bank account change before updating the vendor master.",
+      "role": "accountant",
+      "kind": "validation",
+      "inputs": [
+        "vendor setup or change form",
+        "void cheque or bank letter"
+      ],
+      "outputs": [
+        "updated vendor master"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "A fraudulent bank change request is accepted.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Vendor master maintained apart from invoice entry and payment release; bank changes verified by call-back",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "vendor record ready"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Waits include the supplier returning forms. Call-back verification of bank changes was standard advice against payment fraud in this period; estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Run three-way match",
+      "description": "The ERP matches each invoice line against the purchase order price and the quantity on the goods receipt or service entry sheet, within tolerance limits set by finance. Matched invoices are posted and released for payment on their due date; the rest are parked in the exception queue with a reason code.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "indexed invoice",
+        "purchase order",
+        "goods receipt"
+      ],
+      "outputs": [
+        "posted invoice or match exception"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Three-way match of invoice, purchase order and receipt before payment",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.7,
+          "condition": "matched within tolerance"
+        },
+        {
+          "to": "s07",
+          "prob": 0.14,
+          "condition": "price or quantity variance"
+        },
+        {
+          "to": "s09",
+          "prob": 0.16,
+          "condition": "no goods receipt or service entry yet"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ardent_ap_2021",
+          "ardent_bic_2021"
+        ],
+        "note": "Ardent Partners reports about 25 percent of invoices become exceptions on average and about 10 percent at best-in-class AP groups; 30 percent of PO invoices failing the first match plus non-PO returns gives about 25 percent overall here."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Investigate match exception",
+      "description": "The AP clerk opens the parked invoice, compares the invoice lines with the purchase order history and the receipts, works out whether the difference is price, quantity, freight or tax, and emails the buyer with the variance and a copy of the invoice.",
+      "role": "ap_clerk",
+      "kind": "analysis",
+      "inputs": [
+        "parked invoice",
+        "purchase order"
+      ],
+      "outputs": [
+        "variance note to buyer"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Variance assigned to the wrong cause or the wrong buyer.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Resolve price or quantity variance",
+      "description": "The buyer compares the invoice with the purchase order terms, the supplier quote and any agreed change, then either amends the purchase order, accepts the difference within the buyer's tolerance authority, or asks the supplier for a corrected invoice or credit note.",
+      "role": "buyer",
+      "kind": "judgment",
+      "inputs": [
+        "variance note",
+        "purchase order",
+        "supplier quote or contract"
+      ],
+      "outputs": [
+        "amended PO, acceptance or credit request"
+      ],
+      "systems": [
+        "erp",
+        "email",
+        "contract_repo"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "PO amended to the invoice price without checking the agreed rate.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Price changes approved by procurement, not by AP",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.55,
+          "condition": "PO amended, rematch"
+        },
+        {
+          "to": "s12",
+          "prob": 0.3,
+          "condition": "supplier must correct the invoice or issue a credit note"
+        },
+        {
+          "to": "s18",
+          "prob": 0.15,
+          "condition": "variance accepted within tolerance authority"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Buyers handle variances between their own purchasing work, so exceptions wait days. Estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Chase missing goods receipt or service entry",
+      "description": "The AP clerk looks up who requested the purchase order, then emails the warehouse for materials or the contract owner for contractor services, attaching the invoice and asking them to post the receipt or service entry sheet. The clerk diarises a follow-up and chases again if nothing happens within a week.",
+      "role": "ap_clerk",
+      "kind": "communication",
+      "inputs": [
+        "parked invoice",
+        "purchase order"
+      ],
+      "outputs": [
+        "receipt request"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.35,
+          "condition": "materials"
+        },
+        {
+          "to": "s11",
+          "prob": 0.65,
+          "condition": "contractor services"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Missing service entries are the most common hold at asset-heavy companies where contractors invoice before the field ticket is confirmed. Shares are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Post missing goods receipt",
+      "description": "The storekeeper finds the packing slip or delivery record for the order, checks the quantity received and its condition against the purchase order, and posts the goods receipt in the ERP so the invoice can match.",
+      "role": "storekeeper",
+      "kind": "data_entry",
+      "inputs": [
+        "receipt request",
+        "packing slip"
+      ],
+      "outputs": [
+        "goods receipt"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Receipt posted for the ordered quantity rather than the delivered quantity.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Receipt confirmed by stores, not by AP or the buyer",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.9,
+          "condition": "receipt posted"
+        },
+        {
+          "to": "s12",
+          "prob": 0.1,
+          "condition": "goods short or not received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Plant warehouses work extended hours; part of the wait is finding the delivery paperwork. Estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Confirm contractor service entry",
+      "description": "The contract owner, usually a plant maintenance supervisor or outage lead, compares the contractor's invoice and field tickets with crew timesheets and work order records, checks the rates against the service contract and enters a service entry sheet for the accepted amount.",
+      "role": "maintenance_supervisor",
+      "kind": "approval",
+      "inputs": [
+        "receipt request",
+        "contractor field tickets",
+        "work order"
+      ],
+      "outputs": [
+        "service entry sheet or dispute"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Hours or equipment charges accepted that were not worked.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Delegation of authority: receipt of services confirmed by the person who supervised the work",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.82,
+          "condition": "service entry posted"
+        },
+        {
+          "to": "s12",
+          "prob": 0.18,
+          "condition": "hours, rates or scope disputed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Supervisors are on the plant floor and often away during outages, so confirmations wait several days, longer in spring and fall outage seasons. Estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Wait for corrected invoice or credit note",
+      "description": "The supplier receives the dispute or variance note, reviews its own records and sends a corrected invoice or credit note. AP keeps the original parked and adds a note to the work item.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "dispute or variance note"
+      ],
+      "outputs": [
+        "corrected invoice or credit note"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 7200,
+        "high": 21600
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Prompt Payment and Construction Lien Act (Alberta): notice of dispute within 14 days of a proper invoice, for construction contracts made from August 29, 2022",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "corrected document received"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ab_prompt_payment"
+        ],
+        "note": "The 14-day dispute notice applies only to construction contracts from late 2022; earlier in the period disputes had no statutory clock. Supplier response time is an estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Code non-PO invoice",
+      "description": "The AP clerk looks up the contract or the last invoice from the same supplier, enters the general ledger account, cost centre or work order and GST code, and routes the invoice in the workflow to the budget holder named on the contract or cost centre.",
+      "role": "ap_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "indexed invoice",
+        "contract or prior coding"
+      ],
+      "outputs": [
+        "coded invoice"
+      ],
+      "systems": [
+        "erp",
+        "ap_capture",
+        "contract_repo"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Wrong account, cost centre or capital work order.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Approve non-PO invoice",
+      "description": "The budget holder gets a workflow email, opens the invoice image and coding, checks that the service was received and the amount agrees with the contract, and approves, rejects or sends it back for recoding. Approvals above the budget holder's signing limit route to the next level.",
+      "role": "budget_holder",
+      "kind": "approval",
+      "inputs": [
+        "coded invoice"
+      ],
+      "outputs": [
+        "approved invoice"
+      ],
+      "systems": [
+        "ap_capture",
+        "email"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 480,
+        "mode": 1440,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Approval given without checking the amount.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Delegation of authority: budget holder approval within signing limit",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.83,
+          "condition": "approved within limit"
+        },
+        {
+          "to": "s15",
+          "prob": 0.04,
+          "condition": "above signing limit"
+        },
+        {
+          "to": "s13",
+          "prob": 0.07,
+          "condition": "sent back for recoding"
+        },
+        {
+          "to": "s12",
+          "prob": 0.06,
+          "condition": "amount or service disputed with supplier"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Managers travel between sites and approve in batches; reminders go out after a few days. Estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Approve high-value invoice",
+      "description": "A vice-president or executive reviews invoices above the senior manager limit, such as major outage contractor progress claims or large legal and engineering fees, against the approved budget and contract value, and signs or asks questions.",
+      "role": "exec_officer",
+      "kind": "approval",
+      "inputs": [
+        "approved invoice",
+        "contract value and budget"
+      ],
+      "outputs": [
+        "executive approval"
+      ],
+      "systems": [
+        "ap_capture",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Board-approved delegation of financial authority",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.95,
+          "condition": "approved"
+        },
+        {
+          "to": "s13",
+          "prob": 0.05,
+          "condition": "questioned and returned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Reconcile gas supply statement",
+      "description": "The settlement analyst compares the supplier's monthly gas statement with the confirmed nominations, the pipeline's allocated volumes and the contract or index price recorded in the trading system, and resolves differences above a small tolerance with the supplier by email.",
+      "role": "settlement_analyst",
+      "kind": "validation",
+      "inputs": [
+        "gas supply statement",
+        "gas nominations",
+        "pipeline allocations"
+      ],
+      "outputs": [
+        "reconciled statement"
+      ],
+      "systems": [
+        "etrm",
+        "pipeline_portal",
+        "spreadsheets",
+        "email"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Volume or price difference missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Reconciliation of commodity purchases to confirmed volumes and contract prices",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.85,
+          "condition": "agrees within tolerance"
+        },
+        {
+          "to": "s12",
+          "prob": 0.15,
+          "condition": "volume or price difference with supplier"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Gas statements arrive early in the month after delivery and are due around the 25th under common Canadian gas contract terms; estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Approve gas payment",
+      "description": "The settlement manager reviews the reconciled gas statement and the variance note, checks it against the month's expected gas cost, and approves it for payment on the contractual due date.",
+      "role": "settlement_manager",
+      "kind": "approval",
+      "inputs": [
+        "reconciled statement"
+      ],
+      "outputs": [
+        "approved gas payment"
+      ],
+      "systems": [
+        "etrm",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Reconciler and approver are different people",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Hold invoice until due date",
+      "description": "The ERP holds the approved invoice and selects it for the payment run that falls before its due date, which is computed from the invoice date and the supplier's payment terms, commonly net 30 days.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved invoice",
+        "payment terms"
+      ],
+      "outputs": [
+        "invoice due for payment"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 18720,
+        "high": 27360
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.92,
+          "condition": "due in the next run"
+        },
+        {
+          "to": "s19",
+          "prob": 0.08,
+          "condition": "supplier asks about payment status"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ab_prompt_payment"
+        ],
+        "note": "Payment within 28 days of a proper invoice became law for new construction contracts in August 2022; before that, net 30 terms set by the company's standard purchase terms were the norm (estimate). The hold shrinks the longer processing took."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Answer supplier payment enquiry",
+      "description": "The AP clerk takes the supplier's call or email, looks up the invoice status in the ERP and workflow, explains when it will be paid or which approval or receipt it is waiting on, and escalates to the approver when the supplier threatens to stop work.",
+      "role": "ap_clerk",
+      "kind": "communication",
+      "inputs": [
+        "supplier enquiry"
+      ],
+      "outputs": [
+        "status reply"
+      ],
+      "systems": [
+        "erp",
+        "ap_capture",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Build weekly payment proposal",
+      "description": "On the weekly run day the AP clerk runs the payment proposal in the ERP for invoices due before the next run, removes items on hold, adds urgent manual payments, and exports the proposal with the cash total by currency for treasury.",
+      "role": "ap_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "invoices due"
+      ],
+      "outputs": [
+        "payment proposal"
+      ],
+      "systems": [
+        "erp",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3600,
+        "high": 10080
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "An invoice on hold included or an urgent payment missed.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly payment runs are named in the organisation file process description. Per-invoice time is the run's effort divided by its invoices."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Review payment proposal",
+      "description": "A controllership accountant reviews the proposal: large payments, first payments to new or changed bank accounts, duplicate-risk report and payments to suppliers with open credit notes, and pulls any item that needs a question answered.",
+      "role": "accountant",
+      "kind": "review",
+      "inputs": [
+        "payment proposal",
+        "duplicate and bank change reports"
+      ],
+      "outputs": [
+        "reviewed proposal"
+      ],
+      "systems": [
+        "erp",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.5,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Payment proposal reviewed by someone other than the preparer",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.98,
+          "condition": "accepted"
+        },
+        {
+          "to": "s07",
+          "prob": 0.02,
+          "condition": "item pulled for investigation"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Approve payment run",
+      "description": "The corporate controller reviews the payment run summary and the largest payments, compares the total with the cash forecast and approves the run in the ERP as the authorised signer.",
+      "role": "controller",
+      "kind": "approval",
+      "inputs": [
+        "reviewed proposal"
+      ],
+      "outputs": [
+        "approved payment run"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Bank signing authorities: two authorised signers for each payment run",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Release payment file in bank portal",
+      "description": "The treasury analyst transfers funds to the disbursement account, uploads the EFT and wire file generated by the ERP to the bank portal, checks that the file total and item count agree with the approved run, and releases it with a second authorisation in the portal.",
+      "role": "treasury_analyst",
+      "kind": "approval",
+      "inputs": [
+        "approved payment run",
+        "payment file"
+      ],
+      "outputs": [
+        "released payments"
+      ],
+      "systems": [
+        "bank_portal",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "File released twice or with a changed total.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Payments released by treasury, separate from AP entry and vendor master",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "released"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Bank settles payments",
+      "description": "The bank processes EFT payments through the clearing system and pays them into supplier accounts on the value date; the few remaining cheques are printed and mailed.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "released payments"
+      ],
+      "outputs": [
+        "funds in supplier account"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s25",
+          "prob": 1.0,
+          "condition": "settled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Next-business-day EFT; mailed cheques take up to about five days. Estimate."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Send remittance advice and clear invoice",
+      "description": "The ERP emails remittance advice to each supplier listing the invoices paid, clears the open items against the payment and posts the cash entries that feed bank reconciliation and the month-end close.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "settled payments"
+      ],
+      "outputs": [
+        "remittance advice",
+        "cleared invoices",
+        "journal entries"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 240
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "paid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Missing contractor service entry",
+      "share_of_cases": 0.07,
+      "description": "The contractor invoices before the contract owner has confirmed the field tickets; AP chases the supervisor, who may dispute hours.",
+      "path": [
+        "s06",
+        "s09",
+        "s11",
+        "s06"
+      ]
+    },
+    {
+      "name": "Price or quantity variance",
+      "share_of_cases": 0.1,
+      "description": "Invoice price or quantity differs from the purchase order; the buyer amends the order or asks for a credit note.",
+      "path": [
+        "s06",
+        "s07",
+        "s08",
+        "s06"
+      ]
+    },
+    {
+      "name": "Corrected invoice needed",
+      "share_of_cases": 0.06,
+      "description": "The supplier must reissue the invoice or send a credit note; the case starts again at indexing.",
+      "path": [
+        "s08",
+        "s12",
+        "s03"
+      ]
+    },
+    {
+      "name": "Vendor setup or bank change",
+      "share_of_cases": 0.02,
+      "description": "A new supplier or a changed bank account is verified by call-back before the invoice can proceed.",
+      "path": [
+        "s04",
+        "s05",
+        "s04"
+      ]
+    },
+    {
+      "name": "Duplicate invoice",
+      "share_of_cases": 0.01,
+      "description": "The same invoice was emailed and mailed, or sent to several people; it is rejected at the duplicate check.",
+      "path": [
+        "s04"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 25,
+        "p90": 42
+      },
+      "unit": "calendar days from invoice receipt to payment",
+      "population": "Supplier invoices at an Alberta generator paying on net 30 terms in weekly runs",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Rests on net 30 terms counted from the invoice date, a few days of mail and email delay before receipt, and weekly runs that pay just before the due date; exception invoices are paid late. The 28-day statutory limit for construction invoices (ab_prompt_payment) applies only from August 2022."
+      }
+    },
+    {
+      "metric": "invoice_processing_cycle_time",
+      "value": 10,
+      "unit": "days from receipt to approval for payment (average)",
+      "population": "Ardent Partners survey of AP organisations, 2020 data",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ardent_ap_2021"
+        ],
+        "note": "Simulated receipt-to-approval time in this file is reported in assumptions."
+      }
+    },
+    {
+      "metric": "invoice_exception_rate",
+      "value": 0.25,
+      "unit": "share of invoices",
+      "population": "Ardent Partners survey, 2020 data; best-in-class 10.1 percent",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ardent_ap_2021",
+          "ardent_bic_2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "cost_per_invoice",
+      "value": {
+        "ardent_average_usd": 10.89,
+        "apqc_median_usd": 3.17
+      },
+      "unit": "USD per invoice",
+      "population": "Ardent Partners average (2020 data, labour, overhead and technology); APQC median of 190 companies in the Americas (published 2016)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ardent_ap_2021",
+          "apqc_invoice_cost"
+        ],
+        "note": "The two surveys define cost differently, hence the spread."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Contractor invoices wait for plant supervisors to confirm field tickets and enter service entries, and this peaks during outage seasons when supervisors are busiest.",
+      "steps": [
+        "s09",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common in asset-heavy companies where contractors bill against blanket service orders; estimate."
+      }
+    },
+    {
+      "description": "About a quarter of invoices drop out of automatic matching and need manual investigation and buyer action.",
+      "steps": [
+        "s06",
+        "s07",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ardent_ap_2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Non-PO invoices depend on email approvals by managers who travel between sites; reminders and re-routing add days.",
+      "steps": [
+        "s13",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "description": "Paper invoices mailed to plant sites reach AP days late, which shortens the time left to pay on terms.",
+      "steps": [
+        "s01"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "ardent_ap_2021",
+      "title": "Latest A/P benchmarks to help measure your efficiency",
+      "publisher": "Resourceful Finance Pro (reporting Ardent Partners, Accounts Payable Metrics that Matter in 2021)",
+      "url": "https://www.resourcefulfinancepro.com/articles/ap-benchmarks-2021/",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Ardent Partners figures for 2020: average cost per invoice 10.89 USD (labour, overhead and technology), average invoice processing cycle time 10 days, about 25 percent of invoices are exceptions."
+    },
+    {
+      "id": "ardent_bic_2021",
+      "title": "Best-in-Class Accounts Payable Performance",
+      "publisher": "CPO Rising (Ardent Partners)",
+      "url": "https://cporising.com/2021/09/10/best-in-class-accounts-payable-performance/",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Best-in-class AP groups (top 20 percent on cost and cycle time) have 80 percent lower invoice processing cost, 73 percent faster processing and an average exception rate of 10.1 percent, 60 percent lower than other organisations."
+    },
+    {
+      "id": "apqc_invoice_cost",
+      "title": "Metric of the Month: The Cost of an Invoice",
+      "publisher": "CFO.com (APQC data)",
+      "url": "https://www.cfo.com/news/metric-of-the-month-the-cost-of-an-invoice/661701/",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "APQC total cost to process accounts payable per invoice for 190 companies in the Americas: top quartile 0.71 USD or less, median 3.17 USD, bottom quartile 11.50 USD or more."
+    },
+    {
+      "id": "ab_prompt_payment",
+      "title": "Prompt payment rules for the construction industry",
+      "publisher": "Government of Alberta",
+      "url": "https://www.alberta.ca/prompt-payment-rules-for-construction-industry",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Prompt Payment and Construction Lien Act: owners pay a proper invoice within 28 calendar days and give notice of dispute within 14 days; required content of a proper invoice; applies to new construction contracts from August 29, 2022, existing contracts must comply by August 29, 2024."
+    }
+  ],
+  "assumptions": [
+    "Loaded costs come from the organisation file (wage x 1.40). The budget holder role is added with not_in_org_file and a cost between the plant manager and asset manager rates.",
+    "Per-step touch times are per invoice. Batch steps (payment proposal, review, approval and release) show the run's effort divided by the invoices in it.",
+    "The hold-until-due-date wait is drawn independently of earlier delays; in practice it shrinks when processing runs long, so the simulated p90 overstates the tail somewhat.",
+    "Routing shares (68 percent PO, 28 percent non-PO and lease, 1 percent gas, 2 percent vendor setup, 1 percent duplicates) and exception rates are estimates chosen to give an overall exception rate near the 25 percent Ardent average.",
+    "The Alberta prompt payment rules (28 days to pay, 14 days to dispute) bind only construction contracts made after August 29, 2022, so for most of the reference period payment timing followed contract terms.",
+    "Gas supply statements are few but large; they are reconciled by the settlement group because AP cannot check volumes and index prices.",
+    "No physical resources, travel or shift work are involved; plant-based roles keep the shift patterns of the organisation file.",
+    "Validator check: simulated cycle time median 24 days and p90 34 days against the tier C benchmark of 25 and 42. Simulated receipt-to-approval time (to step s18) has a median of about 4.6 days and a mean of about 6.7 days, faster than the Ardent average of 10 days and slower than its best-in-class group (73 percent faster), which fits a company with OCR capture but email approvals.",
+    "Simulated labour cost is about 33 CAD per invoice, above the Ardent average of 10.89 USD, because it counts the time of buyers, supervisors, managers and executives outside AP who resolve exceptions and approve invoices, which AP cost surveys usually leave out.",
+    "Staffing check: roles state 14.5 FTE and hands-on time implies about 14.8 FTE at 130 productive hours a month; the AP clerk share (8.5 stated, about 8.8 implied) agrees with the 9 clerks in the organisation file."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

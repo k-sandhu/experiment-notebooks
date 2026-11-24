@@ -1,0 +1,1684 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-ltl-pd-dispatch",
+  "name": "Plan and dispatch city pickup and delivery routes",
+  "org": "freight-carrier-co",
+  "process": "ltl-pd-dispatch",
+  "sector": "trucking and freight transportation",
+  "function": "LTL terminal operations",
+  "summary": "Each terminal's city dispatcher plans the day's pickup and delivery routes: early in the morning they build delivery routes from freight staged overnight and booked appointments, then through the day they slot new pickups into the routes as shippers call them in. The dispatcher balances driver availability and hours, truck size and liftgates, appointment windows and traffic, and re-plans when a truck breaks down, a delivery is refused or a storm closes roads. The terminal operations supervisor approves overtime and cartage help and signs off driver hours, and the drivers themselves inspect their units and check in at the end of the day. Pickups that are unknown in the morning, late calls, driver shortages and winter weather make the work hard to plan.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with 38 terminals, 540 city drivers, a TMS with a route board and handhelds for drivers.",
+    "org_size_employees": 3000,
+    "notes": "One case is one terminal-day: about 38 terminals times 21.7 business days. An average terminal runs about 14 city routes a day, with hubs running 40 or more and small terminals 3 to 6."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one terminal-day of city routes",
+  "trigger": "The early dispatcher's shift starts with freight staged overnight, booked delivery appointments and pickups already on the board.",
+  "end_state": "All routes are closed in the TMS, rolled stops are carried to the next day, driver hours are approved and the day's results are posted.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 780,
+      "mode": 825,
+      "high": 870
+    },
+    "seasonality": "One case per terminal per business day all year; the work per case rises in the autumn peak and falls in late December and summer holiday weeks.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file process map: 38 terminals times about 21.7 business days a month."
+    },
+    "surge": {
+      "cause": "Winter storm or highway closure (snowstorms, freezing rain, mountain pass closures)",
+      "events_per_year": {
+        "low": 4,
+        "mode": 8,
+        "high": 14
+      },
+      "duration_days": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "volume_multiplier": {
+        "low": 1.2,
+        "mode": 1.4,
+        "high": 1.8
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Storms close Highway 401, the Trans-Canada through the Rockies and the Coquihalla several times each winter; backlog clears over the following days. Author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-dest-dock",
+        "object": "staged_freight",
+        "share": 0.5
+      },
+      {
+        "from": "ltl-pickup-request",
+        "object": "pickup_request",
+        "share": 0.4
+      },
+      {
+        "from": "ltl-appointment-scheduling",
+        "object": "delivery_appointment",
+        "share": 0.1
+      }
+    ],
+    "inputs": [
+      {
+        "from": "mnt-defect-repair",
+        "object": "equipment_availability"
+      },
+      {
+        "from": "saf-driver-onboarding",
+        "object": "driver_hire"
+      },
+      {
+        "from": "ltl-dock-labour-scheduling",
+        "object": "labour_schedule"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "routes_completed",
+        "to": "ltl-pickup-execution",
+        "object": "pd_route"
+      },
+      {
+        "outcome": "routes_completed",
+        "to": "ltl-delivery-execution",
+        "object": "pd_route"
+      },
+      {
+        "outcome": "routes_completed",
+        "to": "fin-driver-pay",
+        "object": "driver_timecard"
+      },
+      {
+        "outcome": "routes_completed",
+        "to": "mnt-defect-repair",
+        "object": "dvir"
+      },
+      {
+        "outcome": "routes_completed",
+        "to": "ltl-terminal-performance",
+        "object": "terminal_kpi_data"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "city-dispatcher",
+      "title": "City pickup and delivery dispatcher",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 62.0,
+      "loaded_cost_per_hour": {
+        "low": 33,
+        "mode": 39,
+        "high": 47
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 70 city dispatchers in the organisation file on staggered early and mid shifts; nearly all their time is on this process. Author's estimate of share."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "terminal-ops-supervisor",
+      "title": "Terminal operations supervisor",
+      "department": "LTL terminal network",
+      "layer": "supervisor",
+      "fte_on_process": 9.0,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 54,
+        "high": 64
+      },
+      "occupation_code": "NOC 72024",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 40 terminal operations supervisors; route approval, capacity calls and timecard review take roughly a fifth of their time. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "pd-driver",
+      "title": "Pickup and delivery driver",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 52.0,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 35,
+        "high": 42
+      },
+      "occupation_code": "NOC 73300",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "540 city drivers spend about 45 to 50 minutes a day on the inspection, departure and check-in steps counted here; their driving and stop time is in pickup and delivery execution. Author's estimate."
+      },
+      "shift_pattern": "office_hours",
+      "productive_hours_per_month": 195
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "route-planner",
+      "name": "City route planning and dispatch board",
+      "kind": "workflow"
+    },
+    {
+      "id": "dock-handheld",
+      "name": "Dock and driver handheld scanning",
+      "kind": "instrument"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "bi-reporting",
+      "name": "Business intelligence reporting",
+      "kind": "analytics"
+    }
+  ],
+  "resources": [
+    {
+      "id": "pd-truck",
+      "name": "Pickup and delivery truck (day-cab tractor or straight truck)",
+      "kind": "vehicle",
+      "count": 560,
+      "cost_per_hour": {
+        "low": 28,
+        "mode": 36,
+        "high": 46
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Open the overnight freight and pickup lists",
+      "description": "The early city dispatcher starts around 5 a.m., opens the TMS list of inbound freight unloaded and staged overnight by the destination dock, the delivery appointments booked for today, and the advance and standing pickups already on the board.",
+      "role": "city-dispatcher",
+      "kind": "lookup",
+      "inputs": [
+        "staged freight list",
+        "delivery appointments",
+        "pickup board"
+      ],
+      "outputs": [
+        "day's work list"
+      ],
+      "systems": [
+        "tms",
+        "route-planner"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-odfl21"
+        ],
+        "note": "Inbound freight that arrives in the evening is scheduled for next-business-day delivery (src-odfl21). Start time and duration are the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check the driver roster",
+      "description": "The dispatcher checks who is in today against the labour schedule: vacations, sick calls, drivers who need their off-duty reset, and the spare board. A shortage means calling in spare or casual drivers or asking a cartage agent to take a route.",
+      "role": "city-dispatcher",
+      "kind": "lookup",
+      "inputs": [
+        "labour schedule",
+        "sick calls"
+      ],
+      "outputs": [
+        "available drivers"
+      ],
+      "systems": [
+        "tms",
+        "spreadsheets",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.75,
+          "condition": "enough drivers"
+        },
+        {
+          "to": "s03",
+          "prob": 0.25,
+          "condition": "short of drivers"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Call in spare drivers or a cartage agent",
+      "description": "The dispatcher phones spare-board and casual drivers in seniority order, or a cartage agent for an outlying route, and waits for call-backs before committing routes.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "driver shortage"
+      ],
+      "outputs": [
+        "filled roster"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; calling spares by seniority is common where drivers are unionised."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check truck and trailer availability",
+      "description": "The dispatcher checks which straight trucks, day cabs, pup trailers and liftgate units are out of service in the maintenance system or still at the shop, and which units are needed for downtown, residential or liftgate stops.",
+      "role": "city-dispatcher",
+      "kind": "lookup",
+      "inputs": [
+        "equipment availability"
+      ],
+      "outputs": [
+        "available units"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Build delivery routes on the route board",
+      "description": "The dispatcher groups the day's deliveries by city zone into routes, sequences appointment and time-window stops, matches liftgate and residential stops to the right truck, and leaves each route ending in an area where afternoon pickups are expected. At most terminals this is done with the TMS route board, maps and experience rather than an optimiser.",
+      "role": "city-dispatcher",
+      "kind": "analysis",
+      "inputs": [
+        "day's work list",
+        "available drivers",
+        "available units"
+      ],
+      "outputs": [
+        "route plan"
+      ],
+      "systems": [
+        "route-planner",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 40,
+        "mode": 70,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Poor sequencing, overloaded route or wrong truck for a liftgate or downtown stop.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-optym",
+          "src-parcel-pd"
+        ],
+        "note": "Pickups are mostly unknown in the morning so routes end in pickup zones, and large carriers relied on in-house tools rather than optimisers (src-optym); appointments force re-sequencing (src-parcel-pd). Duration is the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Review the route plan with the supervisor",
+      "description": "The terminal operations supervisor compares the route count with drivers and freight, approves overtime or a cartage agent, and decides whether low-priority freight waits a day. About one plan in seven is sent back for changes.",
+      "role": "terminal-ops-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "route plan"
+      ],
+      "outputs": [
+        "approved route plan"
+      ],
+      "systems": [
+        "route-planner",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 40
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Terminal policy: supervisor approves overtime, cartage agent use and held freight",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.85,
+          "condition": "approved"
+        },
+        {
+          "to": "s05",
+          "prob": 0.15,
+          "condition": "plan changed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Release route manifests to the dock and drivers",
+      "description": "The dispatcher releases each route in the TMS so the destination dock can load the trucks in reverse stop order and the manifests appear on the drivers' handhelds or print for drivers still on paper.",
+      "role": "city-dispatcher",
+      "kind": "communication",
+      "inputs": [
+        "approved route plan"
+      ],
+      "outputs": [
+        "route manifests",
+        "load sequence"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Do the daily trip inspection",
+      "description": "Each driver walks around the assigned truck and trailer, checks brakes, lights, tires, coupling, liftgate and load securement equipment against Schedule 1, and completes the trip inspection report on the handheld or paper. Touch time is the elapsed time; about 14 drivers do this at once at an average terminal.",
+      "role": "pd-driver",
+      "kind": "physical",
+      "inputs": [
+        "assigned unit"
+      ],
+      "outputs": [
+        "trip inspection report"
+      ],
+      "systems": [
+        "eld-telematics",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 90
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "NSC Standard 13 daily trip inspection as adopted by provincial regulation (for example Alberta AR 121/2009, Ontario O. Reg. 199/07)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.94,
+          "condition": "no defect that stops the unit"
+        },
+        {
+          "to": "s09",
+          "prob": 0.06,
+          "condition": "defect found"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ab-nsc"
+        ],
+        "note": "Daily trip inspection to NSC Standard 13 Schedule 1 with a written report and no driving with a major defect (src-ab-nsc). Wait is the gap between dispatcher start and the drivers' start, about 6 to 7 a.m.; the defect share is the author's estimate."
+      },
+      "people": 14,
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 140,
+            "mode": 210,
+            "high": 350
+          }
+        }
+      ]
+    },
+    {
+      "id": "s09",
+      "name": "Report the defect and swap the unit",
+      "description": "A driver who finds a defect records it on the report, tells the dispatcher and the shop, and either waits for a quick fix or takes a spare unit. The dispatcher moves the route's freight if the spare is a different truck.",
+      "role": "pd-driver",
+      "kind": "communication",
+      "inputs": [
+        "trip inspection report with defect"
+      ],
+      "outputs": [
+        "defect report",
+        "replacement unit"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ab-nsc"
+        ],
+        "note": "Defects must be recorded and reported to the carrier; times are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 15,
+            "mode": 30,
+            "high": 90
+          }
+        }
+      ]
+    },
+    {
+      "id": "s10",
+      "name": "Collect manifests and leave the terminal",
+      "description": "Drivers check that the freight loaded on their truck matches the manifest, sign out, pick up any paper bills or dangerous goods documents and leave the yard. About 14 drivers do this in parallel.",
+      "role": "pd-driver",
+      "kind": "coordination",
+      "inputs": [
+        "route manifest",
+        "loaded truck"
+      ],
+      "outputs": [
+        "truck on the road"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 18,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      },
+      "people": 14,
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 140,
+            "mode": 250,
+            "high": 490
+          }
+        }
+      ]
+    },
+    {
+      "id": "s11",
+      "name": "Confirm departures and chase late trucks",
+      "description": "The dispatcher watches the yard and the telematics map, follows up trucks still waiting for freight from the dock or for a spare unit, and moves stops between routes when a truck leaves late.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "route plan",
+        "departure status"
+      ],
+      "outputs": [
+        "confirmed departures"
+      ],
+      "systems": [
+        "eld-telematics",
+        "route-planner",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      },
+      "concurrent_with": [
+        "s10"
+      ]
+    },
+    {
+      "id": "s12",
+      "name": "Insert pickups into routes through the day",
+      "description": "From mid-morning the dispatcher takes each new pickup from the board, picks the driver whose route is nearest with time and space left, and sends it to the handheld or by phone. Most pickups are not known in the morning and arrive steadily until the cutoff, so this is the dispatcher's main work for six hours.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "pickup board",
+        "driver positions"
+      ],
+      "outputs": [
+        "pickups assigned to drivers"
+      ],
+      "systems": [
+        "route-planner",
+        "tms",
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 240,
+        "mode": 330,
+        "high": 420
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Pickup sent to a driver who cannot reach it before the shipper closes.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-optym",
+          "src-parcel-pd"
+        ],
+        "note": "Pickups are generally not known in advance and are relayed to drivers during the route, which causes backtracking. Duration is the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Handle route exceptions",
+      "description": "Through the day the dispatcher deals with breakdowns, refused or closed deliveries, consignees asking for a different time and traffic delays, deciding whether to reassign stops, bring freight back or send another truck.",
+      "role": "city-dispatcher",
+      "kind": "judgment",
+      "inputs": [
+        "driver calls",
+        "exception messages"
+      ],
+      "outputs": [
+        "re-planned stops"
+      ],
+      "systems": [
+        "route-planner",
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 50,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.96,
+          "condition": "ordinary day"
+        },
+        {
+          "to": "s14",
+          "prob": 0.04,
+          "condition": "storm or road closure"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      },
+      "concurrent_with": [
+        "s12"
+      ]
+    },
+    {
+      "id": "s14",
+      "name": "Re-plan for a storm or road closure",
+      "description": "When snow, freezing rain or a highway closure hits, the supervisor decides which routes to pull back, which deliveries to cancel and which shippers to call, and tells customer service. The backlog becomes tomorrow's freight.",
+      "role": "terminal-ops-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "weather and road reports"
+      ],
+      "outputs": [
+        "revised plan",
+        "customer notices"
+      ],
+      "systems": [
+        "email-phone",
+        "route-planner"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Storm frequency follows the organisation file's surge estimate (4 to 14 events a year of 1 to 4 days); about 4% of terminal-days."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Notify customer service of storm cancellations",
+      "description": "The dispatcher sends customer service and the terminal clerks the list of deliveries and pickups that will not run so shippers and consignees can be called.",
+      "role": "city-dispatcher",
+      "kind": "communication",
+      "inputs": [
+        "revised plan"
+      ],
+      "outputs": [
+        "cancellation list"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Check afternoon pickup capacity",
+      "description": "Around 1 to 2 p.m. the dispatcher compares the pickups still open with the drivers' remaining time and truck space and decides whether the afternoon can be covered.",
+      "role": "city-dispatcher",
+      "kind": "analysis",
+      "inputs": [
+        "open pickups",
+        "driver hours"
+      ],
+      "outputs": [
+        "capacity decision"
+      ],
+      "systems": [
+        "route-planner",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.7,
+          "condition": "capacity enough"
+        },
+        {
+          "to": "s17",
+          "prob": 0.3,
+          "condition": "pickups exceed capacity"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Approve overtime or roll pickups",
+      "description": "The supervisor approves driver overtime, a second sweep by a spare driver or a cartage agent, or agrees that some pickups move to tomorrow.",
+      "role": "terminal-ops-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "capacity decision"
+      ],
+      "outputs": [
+        "overtime approval or roll list"
+      ],
+      "systems": [
+        "route-planner"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Terminal policy: overtime and purchased cartage need supervisor approval",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.5,
+          "condition": "covered with overtime or extra truck"
+        },
+        {
+          "to": "s18",
+          "prob": 0.5,
+          "condition": "some pickups rolled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Tell customer service which pickups move to tomorrow",
+      "description": "The dispatcher sends the clerks the list of rolled pickups so they can call the shippers and change the pickup date.",
+      "role": "city-dispatcher",
+      "kind": "communication",
+      "inputs": [
+        "roll list"
+      ],
+      "outputs": [
+        "rolled pickups"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Run the late-day sweep and sequence returns",
+      "description": "The dispatcher confirms every assigned pickup has been attempted, watches drivers' on-duty time against the 14-hour limit, and tells the dock supervisor which trucks will come back when and with how much freight so strip doors and dock workers are ready.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "route status",
+        "driver hours"
+      ],
+      "outputs": [
+        "return sequence"
+      ],
+      "systems": [
+        "eld-telematics",
+        "route-planner",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 40,
+        "mode": 60,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Commercial Vehicle Drivers Hours of Service Regulations SOR/2005-313 ss.12-13 and provincial equivalents",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hos"
+        ],
+        "note": "13 h driving and 14 h on-duty daily limits (SOR/2005-313 s.12); city drivers within 160 km of the terminal may skip the daily log if the carrier keeps records of on-duty time (s.81(2)). Duration is the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Check in at the end of the day",
+      "description": "Each driver backs into the assigned strip door, hands in signed delivery receipts and paper bills of lading, reports undelivered freight and any defects found during the day, and submits the day's hours. About 13 drivers check in over 90 minutes.",
+      "role": "pd-driver",
+      "kind": "communication",
+      "inputs": [
+        "delivery receipts",
+        "bills of lading",
+        "undelivered freight"
+      ],
+      "outputs": [
+        "driver timecard",
+        "returned paperwork",
+        "defect notes"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ab-nsc",
+          "src-hos"
+        ],
+        "note": "Defects seen while driving are recorded and reported (src-ab-nsc); carriers keep on-duty records for city drivers (src-hos). Times are the author's estimate."
+      },
+      "people": 13
+    },
+    {
+      "id": "s21",
+      "name": "Reconcile pickups and deliveries",
+      "description": "The dispatcher closes every stop in the TMS as done, attempted with a reason, or rolled, checks that undelivered freight is back on the dock with a reason code, and carries open pickups to tomorrow's board.",
+      "role": "city-dispatcher",
+      "kind": "validation",
+      "inputs": [
+        "route status",
+        "returned paperwork"
+      ],
+      "outputs": [
+        "closed routes",
+        "carried-over stops"
+      ],
+      "systems": [
+        "tms",
+        "route-planner"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 50
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Stop left open or closed with the wrong reason code.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Review daily results and approve driver hours",
+      "description": "The terminal operations supervisor reviews stops per hour, missed pickups, late deliveries and overtime for the day, follows up drivers with long or unexplained time, and approves the driver timecards in the TMS. This is often done first thing the next morning.",
+      "role": "terminal-ops-supervisor",
+      "kind": "review",
+      "inputs": [
+        "closed routes",
+        "driver timecards"
+      ],
+      "outputs": [
+        "approved timecards",
+        "daily KPI notes"
+      ],
+      "systems": [
+        "tms",
+        "bi-reporting"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 600
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Supervisor approval of hourly driver time before payroll",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-pd"
+        ],
+        "note": "Stops per hour, miles per stop and shipments per stop are the usual P&D metrics (src-parcel-pd). Time is the author's estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Post route results and hours to payroll and reporting",
+      "description": "The TMS sends approved driver hours to driver pay, route and stop data to the terminal performance reports, and defect reports to maintenance.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved timecards",
+        "closed routes",
+        "defect notes"
+      ],
+      "outputs": [
+        "driver timecards",
+        "terminal KPI data",
+        "DVIRs"
+      ],
+      "systems": [
+        "tms",
+        "bi-reporting",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "routes_completed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Driver shortage",
+      "share_of_cases": 0.25,
+      "description": "Sick calls or vacancies leave routes uncovered; the dispatcher calls spares or a cartage agent before building routes.",
+      "path": [
+        "s02",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Unit defect at the morning inspection",
+      "share_of_cases": 0.06,
+      "description": "A driver finds a defect that keeps the truck in the yard; a spare unit is found and freight may be moved.",
+      "path": [
+        "s08",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "Storm or road closure",
+      "share_of_cases": 0.04,
+      "description": "Snow, freezing rain or a highway closure stops some routes; deliveries and pickups are cancelled and become tomorrow's backlog.",
+      "path": [
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Afternoon pickups exceed capacity",
+      "share_of_cases": 0.3,
+      "description": "More pickups than drivers can reach before shippers close; overtime, a spare driver or a cartage agent is approved, or pickups roll.",
+      "path": [
+        "s16",
+        "s17",
+        "s18"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.72,
+        "p90": 1.0
+      },
+      "unit": "calendar days from the early dispatcher's start to routes posted",
+      "population": "Canadian LTL terminal-days, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: dispatcher starts about 5 a.m., drivers about 6:30 to 7 a.m., last drivers back about 6 to 7 p.m. and routes reconciled by about 8 p.m. (15 h, 0.62 days); the supervisor's review and timecard approval often slips to the next morning, which lifts the median to about 0.7 days and the 90th percentile to about a day."
+      }
+    },
+    {
+      "metric": "stops_per_route_per_day",
+      "value": {
+        "low": 15,
+        "high": 20
+      },
+      "unit": "pickup and delivery stops per driver-day",
+      "population": "North American LTL carriers",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-pd"
+        ],
+        "note": "Routes are built for up to 20 or more stops a day."
+      }
+    },
+    {
+      "metric": "pd_cost_share_of_revenue",
+      "value": {
+        "low": 12,
+        "high": 15
+      },
+      "unit": "percent of shipment revenue",
+      "population": "LTL carriers (US analyst estimate)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-pd"
+        ],
+        "note": "P&D typically absorbs 12-15% of a shipment's revenue."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Most pickups are unknown when routes are built, so afternoon routes backtrack and late calls overload the last hours of the day.",
+      "steps": [
+        "s05",
+        "s12",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-optym",
+          "src-parcel-pd"
+        ],
+        "note": "Unknown pickups and backtracking are described in both sources."
+      }
+    },
+    {
+      "description": "Route building depends on the dispatcher's knowledge of streets, docks and customers rather than an optimiser, so plans vary by dispatcher and are hard to cover when they are away.",
+      "steps": [
+        "s05",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-optym"
+        ],
+        "note": "Large LTL carriers relied on in-house or map-based tools rather than full optimisation."
+      }
+    },
+    {
+      "description": "Driver shortages and unit defects found at 7 a.m. force last-minute re-planning just as trucks should be leaving.",
+      "steps": [
+        "s02",
+        "s03",
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "description": "Winter storms and highway closures cancel routes and push a backlog into the following days.",
+      "steps": [
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Follows the organisation file's storm surge estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-optym",
+      "title": "Solving pickup & delivery planning",
+      "publisher": "Optym",
+      "url": "https://www.optym.com/blog/solving-pickup-and-delivery-planning",
+      "year": 2023,
+      "accessed": "2026-11-24",
+      "supports": "Pickups are not known in advance in most cases, so delivery routes are planned to end in pickup-heavy zones; freight becomes available in waves; none of the large North American LTL carriers fully used a commercial optimisation tool, most relying on in-house AS400 extensions or limited map-based tools."
+    },
+    {
+      "id": "src-parcel-pd",
+      "title": "Insights on LTL Carrier Pickup and Delivery Operations",
+      "publisher": "Parcel Industry (Joe Heilig)",
+      "url": "https://parcelindustry.com/article-3541-Insights-on-LTL-Carrier-Pickup-and-Delivery-Operations.html",
+      "year": 2013,
+      "accessed": "2026-11-24",
+      "supports": "Carriers build routes for up to 20 or more stops a day; urban routes 50-60 miles, metro 90-100, peddle 150-200 or more; deliveries are unloaded first and pickups follow, and pickups relayed to the driver during the route cause backtracking; delivery appointments force re-sequencing; carriers track drive time, time at stop and delays; drivers moved from paper manifests to handhelds; key metrics stops per hour, miles per stop, shipments per stop; a 30-minute stop (driving plus time at stop) example; P&D absorbs 12-15% of shipment revenue."
+    },
+    {
+      "id": "src-odfl21",
+      "title": "Old Dominion Freight Line, Inc. Form 10-K for the fiscal year ended December 31, 2021",
+      "publisher": "US Securities and Exchange Commission (EDGAR)",
+      "url": "https://www.sec.gov/Archives/edgar/data/878927/000156459022006303/odfl-10k_20211231.htm",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Service centres handle pickup and delivery in their local area; each night they load outbound freight for transport to other service centres; inbound freight arriving in the evening is generally scheduled for next-business-day delivery; LTL weight per shipment 1,571 lb (2021) and 1,614 lb (2020); 12,880 thousand LTL shipments in 2021; 23,663 employees including 11,802 drivers and 5,350 platform (dock) employees."
+    },
+    {
+      "id": "src-hos",
+      "title": "Commercial Vehicle Drivers Hours of Service Regulations (SOR/2005-313)",
+      "publisher": "Government of Canada, Justice Laws",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2005-313/FullText.html",
+      "year": 2005,
+      "accessed": "2026-11-24",
+      "supports": "s.12: no driving after 13 h driving or 14 h on duty in a day; s.13(3): no driving after 16 h elapsed since the last 8-hour off-duty period; s.81(2) and s.77(3): no daily log or ELD needed for a driver who stays within 160 km of the home terminal and returns there each day to start at least 8 consecutive hours off, if the carrier keeps records of daily on-duty times for 6 months."
+    },
+    {
+      "id": "src-ab-nsc",
+      "title": "Summary of Maintenance and Safety Program Requirements for Alberta-Based Commercial Trucks / Tractors / Trailers",
+      "publisher": "Government of Alberta, Transportation",
+      "url": "https://www.alberta.ca/system/files/custom_downloaded_images/tr-summary-of-safety-and-maintenance-program-requirements.pdf",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Daily trip inspection follows Schedule 1 of NSC Standard 13 Part 2; a trip inspection report records unit, odometer, carrier, location, each defect or no defect, date and time and the inspector's name and signature; a vehicle may not be driven with a major defect; reports kept 6 months; defects seen while driving must be recorded and reported; cargo must be contained, immobilised or secured so it cannot shift or fall (AR 121/2009 s.17(4), NSC Standard 10)."
+    }
+  ],
+  "assumptions": [
+    "One case is one terminal-day. Steps done by many drivers at once use people = 14 (540 drivers at about 95% attendance spread over 38 terminals); hubs have far more and small terminals fewer.",
+    "The daily trip inspection and the end-of-day check-in happen once per driver per day, so they are placed here rather than in pickup execution, whose unit is one pickup stop. The organisation file links dvir and driver_timecard from ltl-pickup-execution; this workflow produces them instead.",
+    "Truck occupation on the inspection and departure steps is the sum over all trucks on the terminal-day (about 14 trucks times the step time).",
+    "Labour on the through-day steps (inserting pickups, handling exceptions) is counted for one dispatcher on duty at a time; dispatchers work staggered shifts so the average terminal has about one on the board at any time and hubs have three or four.",
+    "Staffing check: roles state 123 FTE; the hands-on time per terminal-day (about 24 hours across dispatchers, drivers and the supervisor) times 825 terminal-days implies about 155 FTE at 130 hours a month. Drivers' and dispatchers' paid hours are longer than 130, so the true FTE is somewhat lower than the implied figure."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

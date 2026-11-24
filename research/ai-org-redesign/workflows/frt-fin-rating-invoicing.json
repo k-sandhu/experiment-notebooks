@@ -1,0 +1,1639 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-fin-rating-invoicing",
+  "name": "Rate freight bills and invoice customers",
+  "org": "freight-carrier-co",
+  "process": "fin-rating-invoicing",
+  "sector": "trucking and freight transportation",
+  "function": "finance (billing centre)",
+  "summary": "After a freight bill is entered or a truckload trip closes, the carrier has to price it and send the customer an invoice. A rating engine applies the customer's negotiated agreement, the weekly fuel surcharge and accessorial charges to most bills; billing clerks hand-rate the rest, chase missing pricing from the pricing desk and collect proof of delivery for customers who require it. Invoices go out after delivery by EDI, email, weekly statement or mail and post to receivables. Missing or out-of-date pricing agreements and missing paperwork are what hold invoices back and delay cash.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with a central billing centre, a rating engine in its transportation management system and a pricing desk in sales.",
+    "org_size_employees": 3000,
+    "notes": "The workflow starts when a freight bill is released or a truckload trip record closes and ends when the invoice is sent and posted to receivables. Corrections after invoicing are a separate process."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one freight bill rated and invoiced",
+  "trigger": "A freight bill is released by bill entry, or a truckload, brokerage or dedicated trip record closes, or a detention charge is added.",
+  "end_state": "The invoice is sent to the customer and posted to accounts receivable and revenue, or the bill is voided.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 140000,
+      "mode": 158000,
+      "high": 185000
+    },
+    "seasonality": "Follows LTL shipments: lowest in January and in spring 2020, highest from September to mid-December.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file's process volume: about 150,000 LTL bills plus about 8,000 truckload, brokerage and dedicated trips a month; author's estimate."
+    },
+    "surge": {
+      "cause": "Autumn shipping peak (September to mid-December retail and industrial restocking)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 50,
+        "mode": 70,
+        "high": 90
+      },
+      "volume_multiplier": {
+        "low": 1.1,
+        "mode": 1.18,
+        "high": 1.3
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Same autumn peak as bill entry, slightly damped because truckload trips peak less; author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "fin-freight-bill-entry",
+        "object": "freight_bill",
+        "share": 0.94
+      },
+      {
+        "from": "tl-trip-execution",
+        "object": "trip_record",
+        "share": 0.045
+      },
+      {
+        "from": "tl-brokerage",
+        "object": "trip_record",
+        "share": 0.006
+      },
+      {
+        "from": "tl-dedicated-ops",
+        "object": "trip_record",
+        "share": 0.004
+      },
+      {
+        "from": "tl-detention-accessorials",
+        "object": "accessorial_charge",
+        "share": 0.005
+      }
+    ],
+    "inputs": [
+      {
+        "from": "sls-pricing-quotes",
+        "object": "rate_agreement"
+      },
+      {
+        "from": "sls-contract-renewal",
+        "object": "rate_agreement"
+      },
+      {
+        "from": "sls-customer-onboarding",
+        "object": "customer_account"
+      },
+      {
+        "from": "ltl-pod-capture",
+        "object": "delivery_receipt"
+      },
+      {
+        "from": "fin-fuel-surcharge",
+        "object": "fuel_surcharge_table"
+      },
+      {
+        "from": "it-system-change",
+        "object": "system_release"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "invoiced",
+        "to": "shipper",
+        "object": "customer_invoice"
+      },
+      {
+        "outcome": "invoiced",
+        "to": "fin-collections",
+        "object": "customer_invoice"
+      },
+      {
+        "outcome": "invoiced",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "billing-clerk",
+      "title": "Billing clerk (bill entry and rating)",
+      "department": "Billing centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 12,
+      "loaded_cost_per_hour": {
+        "low": 25,
+        "mode": 29,
+        "high": 34
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-rateclerk"
+        ],
+        "note": "Duties from a US LTL rate clerk posting. FTE: hands-on time implies about 15; 12 of the organisation file's 45 billing clerks, the rest on bill entry; author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "billing-supervisor",
+      "title": "Billing supervisor",
+      "department": "Billing centre",
+      "layer": "supervisor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 42,
+        "mode": 49,
+        "high": 58
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Reviews flagged bills and runs the daily reconciliation; author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "pricing-analyst",
+      "title": "Pricing analyst",
+      "department": "Sales and customer service",
+      "layer": "senior_specialist",
+      "fte_on_process": 2,
+      "loaded_cost_per_hour": {
+        "low": 45,
+        "mode": 54,
+        "high": 66
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Pricing analysts fix missing or wrong agreements for about 1,300 bills a month; about 2 FTE of the 10 analysts. Not listed in the organisation file's process entry."
+      }
+    },
+    {
+      "id": "tl-customer-rep",
+      "title": "Truckload customer service representative",
+      "department": "Truckload customer service and brokerage",
+      "layer": "individual_contributor",
+      "fte_on_process": 1,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 36,
+        "high": 43
+      },
+      "occupation_code": "NOC 64409",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Chases truckload paperwork for about 1,000 trips a month; not listed in the organisation file's process entry."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "terminal-service-clerk",
+      "title": "Terminal service clerk",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Finds and rescans missing delivery receipts; not listed in the organisation file's process entry."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "rating-engine",
+      "name": "Rating engine and tariff tables",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "edi-gateway",
+      "name": "EDI gateway (204 tenders, 211 bills of lading, 214 status, 210 invoices)",
+      "kind": "workflow"
+    },
+    {
+      "id": "crm",
+      "name": "Customer relationship management system",
+      "kind": "workflow"
+    },
+    {
+      "id": "erp",
+      "name": "ERP general ledger, payables and receivables",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "customer-portal",
+      "name": "Customer web portal (pickup requests, tracing, documents)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "bi-reporting",
+      "name": "Business intelligence reporting",
+      "kind": "analytics"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Rate the freight bill automatically",
+      "description": "When a freight bill is released or a truckload trip record closes, the rating engine finds the bill-to customer's pricing agreement or the base tariff, applies the discount, minimum charge, the week's fuel surcharge percentage and coded accessorials, and writes the charges to the bill. Bills it cannot price go to an exception queue.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "released freight bill or trip record",
+        "pricing agreements",
+        "fuel surcharge table"
+      ],
+      "outputs": [
+        "rated bill or rating exception"
+      ],
+      "systems": [
+        "rating-engine",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Bill rated on a stale or wrong agreement because the agreement in the engine is out of date.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.892,
+          "condition": "LTL bill rated automatically"
+        },
+        {
+          "to": "s02",
+          "prob": 0.05,
+          "condition": "truckload, brokerage or dedicated trip"
+        },
+        {
+          "to": "s04",
+          "prob": 0.05,
+          "condition": "LTL bill fails auto-rating"
+        },
+        {
+          "to": "s06",
+          "prob": 0.008,
+          "condition": "no pricing found for the bill-to account"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-rateclerk"
+        ],
+        "note": "LTL carriers use a central auto-rating system and hand-rate what it cannot rate; the 89% automatic share is the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Audit truckload trip paperwork and rate the trip",
+      "description": "A billing clerk opens the closed truckload trip, checks the signed bill of lading and proof of delivery scanned by the driver, the stops, detention and lumper receipts against the customer's load confirmation, and enters the line-haul rate, stop-offs and accessorials from the rate confirmation.",
+      "role": "billing-clerk",
+      "kind": "validation",
+      "inputs": [
+        "trip record",
+        "driver-scanned paperwork",
+        "load confirmation"
+      ],
+      "outputs": [
+        "rated truckload invoice"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Detention or a stop-off charge left off, or the wrong rate confirmation used.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.88,
+          "condition": "paperwork complete"
+        },
+        {
+          "to": "s03",
+          "prob": 0.12,
+          "condition": "paperwork missing or illegible"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice at truckload carriers; times and the 12% missing-paperwork share are the author's estimates."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Chase missing truckload trip paperwork",
+      "description": "The truckload customer service representative asks the driver through the in-cab messaging or by phone to scan the missing proof of delivery or receipt, or asks the consignee for a copy, and attaches it to the trip when it arrives.",
+      "role": "tl-customer-rep",
+      "kind": "communication",
+      "inputs": [
+        "missing paperwork note"
+      ],
+      "outputs": [
+        "complete trip paperwork"
+      ],
+      "systems": [
+        "email-phone",
+        "eld-telematics",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "paperwork received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; drivers on the road scan paperwork at the next stop."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Hand-rate the bill from the pricing agreement",
+      "description": "A billing clerk opens the exception, reads the reason (lane not in the agreement, class or weight outside its breaks, an unusual accessorial or a cross-border leg with a partner carrier), finds the governing agreement or tariff item and calculates and enters the charges by hand.",
+      "role": "billing-clerk",
+      "kind": "judgment",
+      "inputs": [
+        "rating exception",
+        "pricing agreement"
+      ],
+      "outputs": [
+        "hand-rated bill"
+      ],
+      "systems": [
+        "rating-engine",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong agreement item or discount applied.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.88,
+          "condition": "rated"
+        },
+        {
+          "to": "s05",
+          "prob": 0.09,
+          "condition": "agreement unclear or quote referenced"
+        },
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "duplicate, no-charge or billed by the partner carrier",
+          "outcome": "voided"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-rateclerk"
+        ],
+        "note": "Rate clerks hand-rate bills by interpreting published pricing agreements and calculating accessorials; shares and times are the author's estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Look up the spot quote or agreement history",
+      "description": "The clerk searches the quote number on the bill of lading in the quote system, the customer's agreement history and the account executive's notes in the CRM to find which price the customer was promised.",
+      "role": "billing-clerk",
+      "kind": "lookup",
+      "inputs": [
+        "hand-rated bill",
+        "quote number"
+      ],
+      "outputs": [
+        "confirmed price or pricing request"
+      ],
+      "systems": [
+        "crm",
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.6,
+          "condition": "quote or agreement found and applied"
+        },
+        {
+          "to": "s06",
+          "prob": 0.4,
+          "condition": "no usable price found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Send a pricing request to the pricing desk",
+      "description": "The clerk puts the bill on rating hold and emails or logs a request to the pricing desk with the PRO number, bill-to account, lane and the reason no price applies, so pricing can load or correct the agreement.",
+      "role": "billing-clerk",
+      "kind": "communication",
+      "inputs": [
+        "bill on rating hold"
+      ],
+      "outputs": [
+        "pricing request"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Load or correct pricing in the rating engine",
+      "description": "A pricing analyst checks the agreement, quote or renewal that should apply, confirms with the account executive if needed, and loads or corrects the discount, lanes or accessorial terms in the rating engine. One fix often releases several held bills for the same account.",
+      "role": "pricing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "pricing request",
+        "rate agreement"
+      ],
+      "outputs": [
+        "updated pricing in rating engine"
+      ],
+      "systems": [
+        "rating-engine",
+        "crm",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Agreement loaded with a wrong lane or discount, affecting later bills.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "pricing loaded"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Pricing analysts work office hours; an evening request waits about a day. Author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Re-rate held bills with the updated pricing",
+      "description": "The rating engine re-runs every bill on rating hold for the account after the pricing change and writes the new charges.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "updated pricing in rating engine"
+      ],
+      "outputs": [
+        "rated bill"
+      ],
+      "systems": [
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; author's estimate of batch timing."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Check rated charges for unusual variance",
+      "description": "The TMS compares the charges with the customer's quote and recent bills on the same lane and flags bills that are far above or below them, have a very high value, or carry an unusual accessorial, for supervisor review before release.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "rated bill"
+      ],
+      "outputs": [
+        "released or flagged bill"
+      ],
+      "systems": [
+        "tms",
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.975,
+          "condition": "within tolerance"
+        },
+        {
+          "to": "s10",
+          "prob": 0.025,
+          "condition": "flagged for review"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of the flag rate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Review flagged bills before release",
+      "description": "The billing supervisor opens each flagged bill with its image and agreement, decides whether the charge is right, and either releases it or sends it back to a clerk to re-rate.",
+      "role": "billing-supervisor",
+      "kind": "review",
+      "inputs": [
+        "flagged bill",
+        "bill of lading image",
+        "pricing agreement"
+      ],
+      "outputs": [
+        "released bill or re-rate instruction"
+      ],
+      "systems": [
+        "tms",
+        "imaging",
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 2.5,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Billing department revenue assurance review of high-variance bills",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.85,
+          "condition": "charge confirmed"
+        },
+        {
+          "to": "s04",
+          "prob": 0.15,
+          "condition": "sent back to re-rate"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Hold the bill until delivery is confirmed",
+      "description": "The rated bill waits in the TMS until the destination terminal scans the delivery and the driver's delivery receipt is imaged. Invoicing on delivery lets delivery-time accessorials such as waiting time, appointments or redelivery be added before the invoice goes out.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "rated bill",
+        "delivery status"
+      ],
+      "outputs": [
+        "bill ready to invoice"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 2160,
+        "high": 5760
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.88,
+          "condition": "delivered, no proof of delivery required"
+        },
+        {
+          "to": "s12",
+          "prob": 0.12,
+          "condition": "customer requires proof of delivery with the invoice"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-x12-211"
+        ],
+        "note": "Accessorial charges usually cannot be determined until delivery; LTL transit of one to four days is from the organisation file; POD-required share is the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Attach and check proof of delivery",
+      "description": "For accounts that require proof of delivery with the invoice, a billing clerk checks that the imaged delivery receipt is attached, legible and signed, and notes any exceptions the consignee wrote on it, such as damage or a short piece.",
+      "role": "billing-clerk",
+      "kind": "validation",
+      "inputs": [
+        "bill ready to invoice",
+        "delivery receipt image"
+      ],
+      "outputs": [
+        "bill with proof of delivery"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.5,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Unsigned or wrong delivery receipt attached; customer short-pays.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.92,
+          "condition": "receipt attached and legible"
+        },
+        {
+          "to": "s13",
+          "prob": 0.08,
+          "condition": "receipt missing or illegible"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Ask the destination terminal for a missing delivery receipt",
+      "description": "The clerk messages the destination terminal with the PRO number and asks it to find the driver's signed delivery receipt and scan it again.",
+      "role": "billing-clerk",
+      "kind": "communication",
+      "inputs": [
+        "missing receipt list"
+      ],
+      "outputs": [
+        "receipt request"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Find and rescan the delivery receipt",
+      "description": "The terminal service clerk searches the driver's returned paperwork for the date, or asks the driver, and rescans the delivery receipt. If it cannot be found the consignee is asked to confirm delivery by email.",
+      "role": "terminal-service-clerk",
+      "kind": "lookup",
+      "inputs": [
+        "receipt request"
+      ],
+      "outputs": [
+        "delivery receipt image"
+      ],
+      "systems": [
+        "imaging",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "receipt found or delivery confirmed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      },
+      "concurrent_with": [
+        "s13"
+      ]
+    },
+    {
+      "id": "s15",
+      "name": "Generate invoices in the nightly run",
+      "description": "The TMS invoice run creates an invoice for every ready bill and routes it by each customer's billing preference: EDI 210, emailed PDF with document images, a weekly statement, or paper by mail.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "bill ready to invoice"
+      ],
+      "outputs": [
+        "customer invoice"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.35,
+          "condition": "EDI customer"
+        },
+        {
+          "to": "s18",
+          "prob": 0.4,
+          "condition": "email customer"
+        },
+        {
+          "to": "s19",
+          "prob": 0.15,
+          "condition": "weekly statement customer"
+        },
+        {
+          "to": "s20",
+          "prob": 0.1,
+          "condition": "paper invoice customer"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-x12-210"
+        ],
+        "note": "The 210 is the motor carrier invoice; delivery-method shares are the author's estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Transmit the invoice by EDI 210",
+      "description": "The EDI gateway sends the invoice to the customer or its freight payment provider and waits for the functional acknowledgement and any application rejection.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "customer invoice"
+      ],
+      "outputs": [
+        "EDI 210 sent",
+        "acknowledgement or rejection"
+      ],
+      "systems": [
+        "edi-gateway"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.95,
+          "condition": "accepted"
+        },
+        {
+          "to": "s17",
+          "prob": 0.05,
+          "condition": "rejected by the customer's system or payment provider"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-x12-210"
+        ],
+        "note": "Rejection share is the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Fix a rejected electronic invoice",
+      "description": "A billing clerk reads the rejection (missing purchase order or shipment reference, wrong bill-to code, charges that do not match the customer's own rating) and corrects and resends the invoice, or uploads it to the payment provider's portal.",
+      "role": "billing-clerk",
+      "kind": "validation",
+      "inputs": [
+        "rejection notice"
+      ],
+      "outputs": [
+        "resent invoice"
+      ],
+      "systems": [
+        "edi-gateway",
+        "tms",
+        "customer-portal"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "resent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Email the invoice with document images",
+      "description": "The TMS emails a PDF invoice with the bill of lading and delivery receipt images attached to the customer's accounts payable address.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "customer invoice"
+      ],
+      "outputs": [
+        "emailed invoice"
+      ],
+      "systems": [
+        "tms",
+        "imaging",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Add the invoice to the weekly statement",
+      "description": "For customers billed by statement, the invoice is held and listed on the weekly statement that the TMS produces and sends at the start of the next week.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "customer invoice"
+      ],
+      "outputs": [
+        "statement line"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3600,
+        "high": 10080
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "statement sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Print and mail paper invoices",
+      "description": "A billing clerk prints the night's paper invoices with copies of the bills of lading, folds and envelopes them for the morning mail.",
+      "role": "billing-clerk",
+      "kind": "physical",
+      "inputs": [
+        "customer invoice"
+      ],
+      "outputs": [
+        "mailed invoice"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.3,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "mailed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Post the invoice to receivables and revenue",
+      "description": "The nightly interface posts each invoice to accounts receivable and the revenue and fuel surcharge accounts in the ERP general ledger by terminal and business line.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "customer invoice"
+      ],
+      "outputs": [
+        "ledger postings",
+        "open receivable"
+      ],
+      "systems": [
+        "tms",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 720
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over revenue recognition and completeness of billing (parent company's financial reporting controls)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Reconcile bills entered, rated and invoiced",
+      "description": "Each morning the billing supervisor runs the reconciliation of freight bills entered against bills rated and invoiced, works the aged list of delivered but unbilled shipments and confirms the interface totals to the ERP.",
+      "role": "billing-supervisor",
+      "kind": "review",
+      "inputs": [
+        "billing reports",
+        "ERP interface totals"
+      ],
+      "outputs": [
+        "reconciled billing day"
+      ],
+      "systems": [
+        "bi-reporting",
+        "erp",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0.02,
+        "mode": 0.05,
+        "high": 0.1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Daily billing completeness reconciliation",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "reconciled",
+          "outcome": "invoiced"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily review of about 7,000 bills; minutes per bill are the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Hand-rated bill",
+      "share_of_cases": 0.05,
+      "description": "The lane, weight break or accessorial is not in the customer's agreement; a clerk prices it by hand.",
+      "path": [
+        "s01",
+        "s04",
+        "s09"
+      ]
+    },
+    {
+      "name": "Missing pricing",
+      "share_of_cases": 0.013,
+      "description": "No agreement or quote covers the bill; the bill waits on rating hold for the pricing desk, usually a day.",
+      "path": [
+        "s06",
+        "s07",
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Truckload paperwork missing",
+      "share_of_cases": 0.006,
+      "description": "The driver has not scanned the proof of delivery or detention receipt; the trip cannot be invoiced until it arrives.",
+      "path": [
+        "s02",
+        "s03",
+        "s09"
+      ]
+    },
+    {
+      "name": "Missing delivery receipt",
+      "share_of_cases": 0.01,
+      "description": "A customer that requires proof of delivery gets no invoice until the terminal finds and rescans the receipt.",
+      "path": [
+        "s12",
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Rejected EDI invoice",
+      "share_of_cases": 0.018,
+      "description": "The customer's freight payment provider rejects the 210 for a missing reference or a charge mismatch; a clerk fixes and resends it.",
+      "path": [
+        "s16",
+        "s17",
+        "s21"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 3,
+        "p90": 6
+      },
+      "unit": "calendar days from freight bill released to invoice sent and posted",
+      "population": "Canadian LTL carrier invoicing on delivery, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "LTL delivery in one to four days (organisation file) plus a nightly invoice run, with weekly statements and pricing holds in the tail; author's estimate."
+      }
+    },
+    {
+      "metric": "auto_rated_share",
+      "value": 0.89,
+      "unit": "share of LTL bills rated without a person",
+      "population": "Canadian LTL carrier with negotiated agreements loaded in a rating engine",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-rateclerk"
+        ],
+        "note": "Auto-rating with hand-rating of exceptions is documented; the share is the author's estimate."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Agreements and quotes that were never loaded, or loaded wrongly, stop bills from rating and create overcharges that come back as disputes.",
+      "steps": [
+        "s04",
+        "s05",
+        "s06",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-rateclerk"
+        ],
+        "note": "Rate clerks interpret pricing agreements by hand when the auto-rating system cannot rate a bill."
+      }
+    },
+    {
+      "description": "Customers that require proof of delivery or truckload paperwork are not invoiced until missing documents are found, which delays cash.",
+      "steps": [
+        "s03",
+        "s12",
+        "s13",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common carrier practice."
+      }
+    },
+    {
+      "description": "Freight payment providers reject electronic invoices whose charges or references do not match their own audit, adding days to payment.",
+      "steps": [
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-x12-211",
+          "src-transflo"
+        ],
+        "note": "Rates on a bill of lading are subject to audit; vendor claim that 30 to 40% of LTL invoices contain discrepancies."
+      }
+    }
+  ],
+  "assumptions": [
+    "The carrier invoices after delivery so delivery-time accessorials can be added; carriers that invoice prepaid bills at pickup would have a cycle about two days shorter.",
+    "About 89% of LTL bills rate automatically, 5% need hand-rating and under 1% have no pricing at all; these shares are the author's estimates.",
+    "Pricing analysts, truckload customer service representatives and terminal service clerks take part although the organisation file's process entry lists only billing clerks and the billing supervisor.",
+    "The morning reconciliation reviews the previous night's invoices after they are sent, so only a short wait is counted for it.",
+    "Hands-on time implies about 15 billing clerk FTE on rating and 33 on entry, about 48 in total against 45 in the organisation file; the difference is within the precision of the estimates and is covered by overtime in the autumn peak.",
+    "The truckload trip record arrives after delivery, so for truckload trips the delivery hold is shorter than the simulated LTL transit wait; truckload is 5% of cases and does not change the median.",
+    "Delivery-method shares (35% EDI, 40% email, 15% statement, 10% paper) are the author's estimates.",
+    "Loaded costs come from the organisation file."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  },
+  "sources": [
+    {
+      "id": "src-rateclerk",
+      "title": "Night Rate Clerk (Roadrunner Freight, Milwaukee) job posting",
+      "publisher": "Roadrunner Freight, listed on Simplify Jobs",
+      "url": "https://simplify.jobs/p/5dd0e25a-bd17-40b2-a9b7-93ada5a9b55e/Night-Rate-Clerk",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "LTL rate clerks use a central auto-rating system to calculate and verify rates on freight bills, hand-rate bills the system cannot rate by applying published pricing agreements and calculating accessorials, process reweighs and inspections from terminals, talk to terminal staff about problem freight bills, help billing staff classify commodities under the NMFC, and finish rating before a daily revenue cut-off of about 5 a.m.; requires experience with bills of lading, freight bills and tariffs and 40 words-per-minute typing and ten-key skills."
+    },
+    {
+      "id": "src-x12-211",
+      "title": "EDI 211 Motor Carrier Bill of Lading (X12 005010)",
+      "publisher": "Stedi (X12 reference)",
+      "url": "https://www.stedi.com/edi/x12-005010/211",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "The X12 211 transaction lets shippers give a motor carrier a legal bill of lading electronically, with line items for quantity, weight and commodity classification; rates and charges on the bill of lading are subject to audit, and accessorial charges usually cannot be determined until the shipment is delivered, so the 210 invoice is still needed."
+    },
+    {
+      "id": "src-x12-210",
+      "title": "EDI 210 Motor Carrier Freight Details and Invoice (X12 004040)",
+      "publisher": "Stedi (X12 reference)",
+      "url": "https://www.stedi.com/edi/x12-004040/210",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "The X12 210 transaction gives detail of charges for services rendered by a motor carrier and is used as the motor carrier invoice requesting payment."
+    },
+    {
+      "id": "src-transflo",
+      "title": "Common LTL Invoicing Challenges and How to Address Them",
+      "publisher": "Transflo (vendor blog)",
+      "url": "https://www.transflo.com/blog/common-ltl-invoicing-challenges-and-how-to-address-them/",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "Vendor claim, from industry veterans, that 30 to 40% of LTL invoices contain discrepancies, about half from location-related accessorial fees (residential, limited access) and half from reweigh and reclassification; manual data entry leads to inaccuracies, delays and disputes, and auditors may spend an hour on a $10 issue. Year of publication not shown on the page; 2024 is the author's estimate."
+    }
+  ]
+}

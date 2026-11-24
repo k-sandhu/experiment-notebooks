@@ -1,0 +1,1594 @@
+{
+  "schema_version": "0.2",
+  "id": "pam-distribution-processing",
+  "name": "Process distributions from private investments",
+  "org": "public-asset-manager",
+  "process": "distribution-processing",
+  "sector": "public-sector asset management",
+  "function": "investment operations",
+  "summary": "Private equity, credit, real estate and infrastructure funds return cash to the organisation when they sell holdings or earn income, and each payment comes with a distribution notice from the general partner. A private markets operations analyst checks the notice against the commitment record, splits it into return of capital, gains, income and any recallable amount, divides it across the client accounts that own the interest, records it and, once the cash reaches the custodian, matches the receipt and has the custodian book it. A manager checks each record. Notices that arrive after the cash, give only a total, or disagree with the record are the main sources of delay, because each needs a query to the general partner.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A provincial not-for-profit asset manager of about $79 billion with roughly 190 fund interests and direct holdings, held mainly in segregated client accounts at a single global custodian.",
+    "org_size_employees": 242,
+    "notes": "Notices handled from PDFs, emails and portals with a private markets system, a tracker spreadsheet and the custodian portal; no automated document extraction."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one distribution notice",
+  "trigger": "A general partner's distribution notice arrives by email or portal, or an unexplained receipt appears on the custodian's cash report.",
+  "end_state": "The distribution is matched to cash, booked by the custodian for each owning account, and the commitment balances and cash forecast are updated; or the item is closed as a duplicate.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 25,
+      "mode": 40,
+      "high": 65
+    },
+    "seasonality": "Clusters at quarter ends and in December, when funds distribute sale proceeds and income; 2021 was a heavy exit year and 2020 a light one.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Matches the organisation file process map (25 to 65, mode 40), which splits about 100 private cash notices a month between capital calls and distributions."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "general_partners",
+        "object": "distribution_notice",
+        "share": 1.0
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "settled",
+        "to": "fund-accounting-close",
+        "object": "ledger_postings"
+      },
+      {
+        "outcome": "settled",
+        "to": "liquidity-forecasting",
+        "object": "cash_forecast"
+      },
+      {
+        "outcome": "settled",
+        "to": "daily-cash-management",
+        "object": "cash_forecast"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "private_markets_ops_analyst",
+      "title": "Analyst, private markets operations",
+      "department": "Private markets operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.85,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 56,
+        "high": 95
+      },
+      "occupation_code": "NOC 11109",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jb_11101"
+        ],
+        "note": "Title, headcount and cost from the organisation file. About 2.8 hands-on hours per notice at 40 notices a month is about 0.85 FTE, within the 3.6 FTE of the five analysts not claimed by other workflows."
+      }
+    },
+    {
+      "id": "mgr_private_markets_ops",
+      "title": "Manager, private markets operations",
+      "department": "Private markets operations",
+      "layer": "manager",
+      "fte_on_process": 0.08,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 90,
+        "high": 135
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jb_10010"
+        ],
+        "note": "Cost from the organisation file. Independent checks and escalations take about 15 minutes per notice."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "gp_portals",
+      "name": "General partner investor portals",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, video calls and collaboration suite",
+      "kind": "communication"
+    },
+    {
+      "id": "document_mgmt",
+      "name": "Document management system and virtual data rooms",
+      "kind": "document_store"
+    },
+    {
+      "id": "private_markets_system",
+      "name": "Private markets investment accounting and monitoring system (commitments, calls, distributions, valuations)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Excel workbooks and models",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "custodian_portal",
+      "name": "Custodian portal (custody, accounting records, net asset value reports, cash and corporate action notices)",
+      "kind": "external_portal"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Retrieve notice or unidentified receipt",
+      "description": "The analyst checks the shared private markets mailbox and the general partner portals each morning, downloads new distribution notices and reads the custodian's report of unidentified incoming cash. Each item is matched by fund name and limited partner entity to an interest in the private markets system to see whether it is new.",
+      "role": "private_markets_ops_analyst",
+      "kind": "intake",
+      "inputs": [
+        "general partner portal notices and emails",
+        "custodian unidentified cash report"
+      ],
+      "outputs": [
+        "notice or unexplained receipt to process"
+      ],
+      "systems": [
+        "gp_portals",
+        "email_collab",
+        "custodian_portal",
+        "private_markets_system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A notice filed against the wrong fund or limited partner entity.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.86,
+          "condition": "notice in hand"
+        },
+        {
+          "to": "s02",
+          "prob": 0.11,
+          "condition": "cash arrived without a notice, or the notice omits the limited partner allocation"
+        },
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "copy of a notice already processed",
+          "outcome": "duplicate"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ilpa_cc",
+          "mgr_ar22"
+        ],
+        "note": "Notices arrive by email and portal in many formats; the duplicate and unannounced shares are author estimates."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Request notice and breakdown from general partner",
+      "description": "When cash has arrived with only a fund name on the wire, or the notice gives only a fund total, the analyst emails the general partner's investor relations or fund administrator contact asking for the investor-level notice and its breakdown. The receipt stays as unapplied cash at the custodian in the meantime.",
+      "role": "private_markets_ops_analyst",
+      "kind": "communication",
+      "inputs": [
+        "custodian receipt details",
+        "contact list"
+      ],
+      "outputs": [
+        "request to general partner"
+      ],
+      "systems": [
+        "email_collab",
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Unannounced or poorly described distributions are named as the main exception in the organisation file; contact practice is the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Wait for general partner to send the notice",
+      "description": "The general partner or its administrator prepares and sends the investor-level notice. Smaller and non-North American managers often take several days, and the analyst sends reminders if nothing arrives within a week.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "request to general partner"
+      ],
+      "outputs": [
+        "distribution notice"
+      ],
+      "systems": [
+        "email_collab",
+        "gp_portals"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "notice received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Two days typical and a week or two for slow administrators is the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Log notice in distribution tracker and file it",
+      "description": "The analyst saves the notice to the document management system under the fund's folder and adds a line to the capital activity tracker with fund, notice date, distribution date, currency and gross amount. The tracker is the team's working list of items in progress.",
+      "role": "private_markets_ops_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "distribution notice"
+      ],
+      "outputs": [
+        "tracker entry",
+        "filed notice"
+      ],
+      "systems": [
+        "document_mgmt",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Distribution date or currency typed wrongly in the tracker.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ilpa_cc"
+        ],
+        "note": "Fields follow the ILPA notice template; the tracker spreadsheet is the author's assumption."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Check notice against commitment record and prior balances",
+      "description": "The analyst compares the limited partner name, commitment, ownership share and the cumulative contributions, distributions and unfunded commitment the general partner reports before this notice with the private markets system. Any difference from the balances after the last notice has to be explained before the distribution is booked.",
+      "role": "private_markets_ops_analyst",
+      "kind": "validation",
+      "inputs": [
+        "distribution notice",
+        "commitment record"
+      ],
+      "outputs": [
+        "validated notice or list of differences"
+      ],
+      "systems": [
+        "private_markets_system",
+        "document_mgmt"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A balance difference is accepted without explanation.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Private markets operations procedure: each notice is checked against the commitment record and the general partner's reported cumulative balances (ILPA notice guidelines) before booking",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.93,
+          "condition": "balances agree"
+        },
+        {
+          "to": "s07",
+          "prob": 0.07,
+          "condition": "balances or ownership differ from the record"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ilpa_cc"
+        ],
+        "note": "ILPA asks general partners to show fund and LP balances before and after every notice and to explain variances; query rate is an estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Classify the distribution components",
+      "description": "The analyst splits the gross amount into return of capital, realised gain, income or dividends, carry withheld, escrow and any recallable portion, using the notice's description and template section, and maps each piece to the accounting and tax categories the custodian and fund accounting use. Notices that give only a total or a vague description cannot be classified.",
+      "role": "private_markets_ops_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "validated notice",
+        "limited partnership agreement terms"
+      ],
+      "outputs": [
+        "classified distribution"
+      ],
+      "systems": [
+        "private_markets_system",
+        "document_mgmt",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Income booked as return of capital, or a recallable amount not flagged.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.88,
+          "condition": "cash distribution with a clear breakdown"
+        },
+        {
+          "to": "s07",
+          "prob": 0.1,
+          "condition": "breakdown missing or unclear"
+        },
+        {
+          "to": "s09",
+          "prob": 0.02,
+          "condition": "distribution of shares in kind"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ilpa_cc",
+          "ilpa_p3"
+        ],
+        "note": "ILPA lists the distribution transaction types and the breakdown it expects; 10% unclear is an estimate for 2019 to 2022 when the template was voluntary."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Query general partner on discrepancy or missing breakdown",
+      "description": "The analyst writes to the general partner or administrator setting out the balance difference or the missing split, attaching the last notice and the record, and asks for a corrected or supplementary notice. The item is marked as pending in the tracker.",
+      "role": "private_markets_ops_analyst",
+      "kind": "communication",
+      "inputs": [
+        "list of differences",
+        "distribution notice"
+      ],
+      "outputs": [
+        "query to general partner"
+      ],
+      "systems": [
+        "email_collab",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Mirrors the capital call query step; content follows the ILPA variance explanation field."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Wait for general partner reply",
+      "description": "The general partner's finance team or administrator answers, often with a revised notice or a breakdown table. Answers that need the fund's auditors or a waterfall recalculation take a week or more.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "query to general partner"
+      ],
+      "outputs": [
+        "revised notice or explanation"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "answer received; recheck"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Three days typical, up to ten for waterfall questions, author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Arrange receipt of distributed shares",
+      "description": "For a distribution in kind the analyst checks the security name, identifier, share count, value per the partnership agreement and any lock-up, asks the investment data team to set up the security if needed, and instructs the custodian to receive the shares into each owning account. The asset class team is told so it can decide when to sell.",
+      "role": "private_markets_ops_analyst",
+      "kind": "coordination",
+      "inputs": [
+        "stock distribution notice"
+      ],
+      "outputs": [
+        "receive instruction",
+        "security set-up request"
+      ],
+      "systems": [
+        "custodian_portal",
+        "email_collab",
+        "private_markets_system"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Share count or cost basis recorded wrongly.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "shares delivered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ilpa_cc",
+          "ilpa_p3"
+        ],
+        "note": "ILPA lists the details a stock distribution notice should give, including lock-up and settlement location; frequency is an estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Split the distribution across owning client accounts",
+      "description": "Because most private interests in 2021 were held in segregated client accounts, one fund interest can belong to several client portfolios. The analyst applies the ownership percentages in the commitment record to each component, rounds to the cent so the parts add up to the wire, and notes which custody account each part will land in.",
+      "role": "private_markets_ops_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "classified distribution",
+        "ownership split"
+      ],
+      "outputs": [
+        "distribution by client account"
+      ],
+      "systems": [
+        "private_markets_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong ownership percentage used after a transfer between clients.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.9,
+          "condition": "no tax withheld"
+        },
+        {
+          "to": "s11",
+          "prob": 0.1,
+          "condition": "tax withheld at source by the fund"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "mgr_ar21"
+        ],
+        "note": "Account structure follows the organisation file assumption that private assets were held in client accounts in 2021."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Record withholding tax and refer to tax team",
+      "description": "Where the fund withheld foreign tax, for example on income from United States partnerships, the analyst records the gross amount, the tax withheld and the net cash, and sends the notice and any tax certificate to the tax team, which decides whether a reclaim or treaty exemption applies.",
+      "role": "private_markets_ops_analyst",
+      "kind": "communication",
+      "inputs": [
+        "distribution notice",
+        "tax statement"
+      ],
+      "outputs": [
+        "withholding record",
+        "referral to tax"
+      ],
+      "systems": [
+        "email_collab",
+        "private_markets_system"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Net cash booked as the gross distribution.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Foreign income tax withholding on partnership distributions (for example United States rules on foreign partners); withheld tax must be recorded for reclaim or exemption",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "ILPA notice guidance asks for itemised amounts but does not cover tax; 10% of notices with withholding is the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Enter pending distribution in private markets system",
+      "description": "The analyst keys the distribution into the private markets system for each owning account: components, currency, distribution date and the recallable amount, attaching the notice. The record stays pending until a second person has checked it and the cash has arrived.",
+      "role": "private_markets_ops_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "distribution by client account"
+      ],
+      "outputs": [
+        "pending distribution record"
+      ],
+      "systems": [
+        "private_markets_system",
+        "document_mgmt"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Keying error in an amount or component.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgr_ar22",
+          "ca2006"
+        ],
+        "note": "Investors record cash flows by partnership in a private markets system; the model manager ran interim administration software in 2022."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Independent check of distribution record",
+      "description": "The manager, or a second analyst when the manager is away, compares the system entry with the notice, the classification and the account split, and approves it or sends it back with comments. Distributions that change a commitment's recallable balance get extra attention.",
+      "role": "mgr_private_markets_ops",
+      "kind": "review",
+      "inputs": [
+        "pending distribution record",
+        "distribution notice"
+      ],
+      "outputs": [
+        "approved distribution record"
+      ],
+      "systems": [
+        "private_markets_system",
+        "document_mgmt"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Maker-checker on private markets transactions: the person who records a distribution does not approve it (internal control framework covered by the model manager's SOC 1 report)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.93,
+          "condition": "approved"
+        },
+        {
+          "to": "s10",
+          "prob": 0.07,
+          "condition": "returned for correction"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgr_ar21",
+          "mgr_ar22"
+        ],
+        "note": "SOC 1 reports cover controls supporting clients' financial reporting; the return rate is an estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Pre-advise the custodian of the expected receipt",
+      "description": "If the cash has not yet arrived, the analyst enters an expected receipt for each custody account in the custodian portal, which the custodian treats like a notice to receive, so that the incoming wire is credited to the right account rather than held as unidentified cash.",
+      "role": "private_markets_ops_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "approved distribution record"
+      ],
+      "outputs": [
+        "expected receipt advice"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Expected receipt entered to the wrong account.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mt210"
+        ],
+        "note": "A notice to receive tells the account servicing institution that funds are coming; use for distributions is the author's assumption."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Update the cash forecast and notify teams",
+      "description": "The analyst adds the expected inflow by account, currency and date to the cash forecast used by cash management and total portfolio management, and emails the asset class team a summary of the distribution and the remaining position, since realisations change pacing and liquidity plans.",
+      "role": "private_markets_ops_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "approved distribution record"
+      ],
+      "outputs": [
+        "cash forecast entry",
+        "notification to teams"
+      ],
+      "systems": [
+        "spreadsheets",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Forecast shows the wrong value date.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The organisation file sends cash forecasts to daily cash management and liquidity forecasting; mechanics are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Wait for the cash to reach the custodian",
+      "description": "The general partner wires the distribution on its distribution date, which is often a few days after the notice and sometimes before it. Foreign currency distributions arrive in the fund's currency and conversion is left to cash management.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "expected receipt advice"
+      ],
+      "outputs": [
+        "cash credited at custodian"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "cash credited or due date passed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Notice-to-cash gap is the author's estimate; many notices are issued on or after the payment date."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Match cash received to the notice",
+      "description": "The next morning the analyst reads the custodian's cash activity report and matches each credit to the expected receipt by account, currency, amount and value date. Small differences from wire fees and missing or late credits are flagged.",
+      "role": "private_markets_ops_analyst",
+      "kind": "validation",
+      "inputs": [
+        "custodian cash report",
+        "approved distribution record"
+      ],
+      "outputs": [
+        "matched receipt or cash break"
+      ],
+      "systems": [
+        "custodian_portal",
+        "private_markets_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A partial receipt matched as complete.",
+        "typically_caught_at": "s22"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Cash reconciliation control: every receipt is agreed to an approved expected receipt before the transaction is settled (client reporting controls under SOC 1)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.9,
+          "condition": "receipt matches"
+        },
+        {
+          "to": "s18",
+          "prob": 0.1,
+          "condition": "amount differs, wrong account, or not received"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgr_ar21"
+        ],
+        "note": "Reconciliation of cash is a standard user control; the 10% break rate is an estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Investigate the cash difference",
+      "description": "The analyst works out whether the difference is a bank fee, an exchange rate, a payment to the wrong client account or a wire that has not been sent, then asks the custodian to trace it or the general partner to confirm the payment details and amount.",
+      "role": "private_markets_ops_analyst",
+      "kind": "coordination",
+      "inputs": [
+        "cash break"
+      ],
+      "outputs": [
+        "trace request or general partner query"
+      ],
+      "systems": [
+        "custodian_portal",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate based on the capital call payment trace step."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Wait for trace or corrected wire",
+      "description": "The custodian traces the payment through correspondent banks or the general partner resends or tops up the wire. Cross-border traces commonly take two to five business days.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "trace request"
+      ],
+      "outputs": [
+        "traced or corrected receipt"
+      ],
+      "systems": [
+        "custodian_portal",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "answer received; rematch"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Instruct custodian accounting to book the distribution",
+      "description": "The analyst marks the distribution received in the private markets system and sends the custodian's accounting team the booking for each account: cash received, cost reduced by return of capital, realised gain and income. These entries are the ledger postings fund accounting relies on at month end.",
+      "role": "private_markets_ops_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "matched receipt",
+        "approved distribution record"
+      ],
+      "outputs": [
+        "booking instruction",
+        "ledger postings"
+      ],
+      "systems": [
+        "private_markets_system",
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Component booked to the wrong ledger category.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The custodian keeps the official accounting records under the organisation file assumption; booking route is the author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Update remaining commitment and recallable balance",
+      "description": "The analyst updates the interest's unfunded commitment, cumulative distributions and the recallable amount, which is added back to what the general partner can call. Recallable balances and their expiry dates are often kept in a side spreadsheet because the system does not track them well.",
+      "role": "private_markets_ops_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "approved distribution record"
+      ],
+      "outputs": [
+        "updated commitment balances"
+      ],
+      "systems": [
+        "private_markets_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Recallable amount not added back to the unfunded commitment.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ml_cc",
+          "ilpa_p3"
+        ],
+        "note": "Recallable distributions increase unpaid commitment and recycling should be capped and expire; the side spreadsheet is an assumption."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Check the custodian's booking",
+      "description": "Once the custodian has posted the entries, usually a day or two later, the analyst compares the custodian's transaction records with the private markets system for each account, closes the tracker line or sends a correction to be rebooked.",
+      "role": "private_markets_ops_analyst",
+      "kind": "validation",
+      "inputs": [
+        "custodian transaction report",
+        "private markets record"
+      ],
+      "outputs": [
+        "settled distribution"
+      ],
+      "systems": [
+        "custodian_portal",
+        "private_markets_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Review of custodian postings against the book of record before period close (user control relied on in the custodian's and the model manager's SOC 1 reports)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.93,
+          "condition": "booking agrees",
+          "outcome": "settled"
+        },
+        {
+          "to": "s20",
+          "prob": 0.07,
+          "condition": "booking wrong; rebook"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgr_ar22"
+        ],
+        "note": "Review of service organisation output is a standard complementary control; error rate is an estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Cash arrives before or without a notice",
+      "share_of_cases": 0.11,
+      "description": "An unexplained credit sits as unidentified cash until the general partner sends the investor-level notice.",
+      "path": [
+        "s01",
+        "s02",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Breakdown missing or unclear",
+      "share_of_cases": 0.1,
+      "description": "The notice gives only a total or a vague description, so the split between capital, gain and income has to be requested.",
+      "path": [
+        "s06",
+        "s07",
+        "s08",
+        "s05"
+      ]
+    },
+    {
+      "name": "Notice disagrees with the commitment record",
+      "share_of_cases": 0.07,
+      "description": "Cumulative balances, ownership or commitment on the notice differ from the record and the general partner must explain.",
+      "path": [
+        "s05",
+        "s07",
+        "s08",
+        "s05"
+      ]
+    },
+    {
+      "name": "Distribution in kind",
+      "share_of_cases": 0.02,
+      "description": "Shares are distributed instead of cash and must be received into each account and set up as a security.",
+      "path": [
+        "s06",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "Tax withheld at source",
+      "share_of_cases": 0.1,
+      "description": "The fund withheld foreign tax, which is recorded and referred to the tax team.",
+      "path": [
+        "s10",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Cash differs from the notice or does not arrive",
+      "share_of_cases": 0.1,
+      "description": "Bank fees, exchange rates, a wrong account or an unsent wire require a trace with the custodian or general partner.",
+      "path": [
+        "s17",
+        "s18",
+        "s19",
+        "s17"
+      ]
+    },
+    {
+      "name": "Record returned at independent check",
+      "share_of_cases": 0.07,
+      "description": "The checker finds a classification, split or keying error and sends the record back.",
+      "path": [
+        "s13",
+        "s10"
+      ]
+    },
+    {
+      "name": "Duplicate notice",
+      "share_of_cases": 0.03,
+      "description": "The same notice arrives through a second channel or contact and is closed without processing.",
+      "path": [
+        "s01"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 7,
+        "p90": 18
+      },
+      "unit": "calendar days from notice receipt to distribution settled and booked by the custodian",
+      "population": "Limited partner operations teams at Canadian public pension and asset managers, 2019 to 2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "No published benchmark found. Notices usually arrive a few days before to a few days after the cash; checking and booking take a few days, and items queried with the general partner take one to three weeks."
+      }
+    },
+    {
+      "metric": "share_of_notices_queried_with_general_partner",
+      "value": 0.27,
+      "unit": "share of notices",
+      "population": "This organisation, 2019 to 2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Sum of the unannounced (11%), unclear (10%) and disagreeing (7%) paths; ILPA's best practices aim to reduce such follow-up questions but adoption was voluntary."
+      }
+    },
+    {
+      "metric": "distribution_notices_per_month",
+      "value": 40,
+      "unit": "notices",
+      "population": "This organisation, 2021",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file process map; about 190 fund interests plus direct holdings."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Notices come in many layouts and the ILPA template was voluntary, so classification and balance checks are manual and depend on the analyst's reading of the notice.",
+      "steps": [
+        "s04",
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ilpa_cc",
+          "ilpa_tpl"
+        ],
+        "note": "ILPA states the template aims to reduce LP processing times and follow-up questions."
+      }
+    },
+    {
+      "description": "Cash that arrives before the notice sits as unidentified cash at the custodian and distorts daily cash positions until the general partner responds.",
+      "steps": [
+        "s01",
+        "s02",
+        "s03"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Named as the main exception in the organisation file; share is an estimate."
+      }
+    },
+    {
+      "description": "Recallable amounts and their expiry are tracked in side spreadsheets, so unfunded commitments used in liquidity forecasts can be understated.",
+      "steps": [
+        "s21"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ilpa_p3"
+        ],
+        "note": "ILPA notes recycling caps help LPs project cash requirements."
+      }
+    },
+    {
+      "description": "The private markets system was an interim solution and bookings go to the custodian by separate instruction, so each distribution is keyed twice and checked twice.",
+      "steps": [
+        "s12",
+        "s20",
+        "s22"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgr_ar22"
+        ],
+        "note": "The model manager's 2022 report describes interim private markets administration software."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "ilpa_cc",
+      "title": "Capital Call & Distribution Notice Best Practices, Version 1.1 (revised September 2016)",
+      "publisher": "Institutional Limited Partners Association (ILPA)",
+      "url": "https://ilpa.org/wp-content/uploads/2019/05/ILPA-Best-Practices-Capital-Calls-Distribution-Notices_Version-1.1.pdf",
+      "year": 2016,
+      "accessed": "2026-11-17",
+      "supports": "Content a distribution notice should carry: cover letter, description and template with fund and LP balances before and after the notice (unfunded commitment, cumulative contributions and distributions), the split of return of capital, gain and income, carry and escrow, stock distribution details, beginning balance variance; transaction type definitions for distributions; stated aim of reducing LP processing times and follow-up questions."
+    },
+    {
+      "id": "ilpa_tpl",
+      "title": "Capital Call & Distribution Template (web page)",
+      "publisher": "Institutional Limited Partners Association (ILPA)",
+      "url": "https://ilpa.org/capital-call-distribution-quarterly-reporting/",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "ILPA template provides the accounting details and transaction components of calls and distributions in a standard format; the 2011 template was replaced by version 2.0 released in 2025, so the 2011 version applied in the reference period."
+    },
+    {
+      "id": "ilpa_p3",
+      "title": "ILPA Principles 3.0: Fostering Transparency, Governance and Alignment of Interests for General and Limited Partners",
+      "publisher": "Institutional Limited Partners Association (ILPA)",
+      "url": "https://ilpa.org/wp-content/uploads/2019/06/ILPA-Principles-3.0_2019.pdf",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "Recycling of distributions should be capped or monitored so LPs can project cash needs; recallable distributions should expire at the end of the investment period; distributions can be cash or securities in kind; LPs reconcile GP cash flows to their ledgers using the notice template categories."
+    },
+    {
+      "id": "ml_cc",
+      "title": "Capital Calls (Venture Capital and Private Equity Funds Deskbook series)",
+      "publisher": "Morgan, Lewis & Bockius LLP",
+      "url": "https://www.morganlewis.com/-/media/files/special-topics/vcpefdeskbook/fundoperation/vcpefdeskbook_capitalcalls.pdf",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "Sample notice wording reporting amounts distributed to the investor that are subject to recall and so increase unpaid capital commitment."
+    },
+    {
+      "id": "mt210",
+      "title": "SWIFT ISO 15022 message type MT210 (Notice to Receive)",
+      "publisher": "IotaFinance",
+      "url": "https://www.iotafinance.com/en/SWIFT-ISO15022-Message-type-MT210.html",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "An MT210 is an advance notice sent by an account owner to its account servicing institution that funds will arrive for credit to its account, with value date, amount and ordering party."
+    },
+    {
+      "id": "ca2006",
+      "title": "Auditing Alternative Investments: An Endowment Investment Perspective",
+      "publisher": "Cambridge Associates",
+      "url": "https://publishedresearch.cambridgeassociates.com/wp-content/uploads/2006/09/Auditing-Alternative-Investments-Sept-2006.pdf",
+      "year": 2006,
+      "accessed": "2026-11-17",
+      "supports": "Investors' internal systems track cash invested and distributed in each limited partnership; auditors test valuations and cash flows reported by general partners."
+    },
+    {
+      "id": "mgr_ar21",
+      "title": "The model manager 2021 Annual Report",
+      "publisher": "The model manager",
+      "url": "",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Clean SOC 1 Type I report on the design of the model manager's controls at 30 September 2021 supporting clients' financial reporting; private assets largely outside pools in 2021."
+    },
+    {
+      "id": "mgr_ar22",
+      "title": "The model manager 2022 Annual Report",
+      "publisher": "The model manager",
+      "url": "",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "SOC 1 Type 2 report with clean opinion on controls operating from 1 October 2021 to 30 September 2022; in 2022 the model manager implemented software to administer private market assets as an interim solution while evaluating a long-term private markets portfolio management solution."
+    },
+    {
+      "id": "jb_11101",
+      "title": "Wages: Financial Analyst (NOC 11101), Toronto region",
+      "publisher": "Government of Canada, Job Bank",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/12417/22437",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Toronto hourly wages low 27.97, median 41.60, high 73.57 (2023-2024), the base of the organisation file's analyst costs."
+    },
+    {
+      "id": "jb_10010",
+      "title": "Wages: Finance Director (NOC 10010), Toronto region",
+      "publisher": "Government of Canada, Job Bank",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/1225/22437",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Toronto hourly wages low 41.21, median 62.37, high 96.15 (2023-2024), the base of the organisation file's manager costs."
+    }
+  ],
+  "assumptions": [
+    "One case is one distribution notice for one fund interest or direct holding; the analyst splits it across the client accounts that own the interest. Cash events from direct holdings and co-investments (dividends, sale proceeds) are handled the same way and are counted in the volume.",
+    "In 2021 most private interests sat in segregated client accounts rather than pools (organisation file), so most notices need an account split; this falls once private market pools exist.",
+    "Foreign exchange conversion of distributions and the sweep of cash into investments are done in daily cash management, which receives the cash forecast; they are not steps here.",
+    "The custodian keeps the official accounting records, so the distribution is booked by the custodian on the model manager's instruction and checked afterwards; fund accounting sees the result at month end.",
+    "Withholding tax reclaims are worked by the tax team in tax-compliance-reclaims; only the referral is modelled here.",
+    "Security set-up for in-kind distributions is requested from investment data management inside step s09 and not modelled as a separate role, because it happens in about 2% of cases.",
+    "Shares, times and probabilities are author estimates (tier C) unless a source is cited; no published time study of limited partner distribution processing was found.",
+    "Loaded costs per hour are taken unchanged from the organisation file (Job Bank Toronto wages deflated to 2021, plus variable pay, times a 1.35 loading)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

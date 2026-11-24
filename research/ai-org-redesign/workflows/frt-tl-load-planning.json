@@ -1,0 +1,1455 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-tl-load-planning",
+  "name": "Plan and assign truckload loads to drivers",
+  "org": "freight-carrier-co",
+  "process": "tl-load-planning",
+  "sector": "trucking and freight transportation",
+  "function": "truckload fleet operations",
+  "summary": "Each booked truckload load needs a driver, a tractor and a trailer that can reach the pickup on time and deliver within hours-of-service limits. Load planners look for trucks that will be empty nearby, check each driver's remaining hours, weigh home time, equipment, border credentials and empty kilometres, and pre-plan the load. Driver managers, who know their drivers, review the plan and send the assignment to the in-cab unit; owner-operators can refuse it. Late prior deliveries, breakdowns, refusals and shipper changes force re-planning, which after hours falls to a small night dispatch desk.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees whose truckload division runs about 400 company sleeper tractors and 380 owner-operators within Canada and across the US border, on a carrier TMS with EDI, ELDs and an eManifest service provider.",
+    "org_size_employees": 3000,
+    "notes": "Planning desk of 14 regional load planners and 36 driver managers on extended hours, with 8 after-hours dispatchers covering nights and weekends."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one load assignment",
+  "trigger": "A booked load is released to the planning board, or a border hold sends a load back for re-planning.",
+  "end_state": "A driver has accepted the assignment and the trip is dispatched, or the load is handed back to the brokerage desk.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 6800,
+      "mode": 7700,
+      "high": 8800
+    },
+    "seasonality": "Follows tender volume: lower in January and spring 2020, higher from September to mid-December and in 2021.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Taken from the org file's process map (tl-load-planning); includes loads re-planned after border holds."
+    },
+    "surge": {
+      "cause": "Autumn shipping peak (September to mid-December retail and industrial restocking)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 50,
+        "mode": 70,
+        "high": 90
+      },
+      "volume_multiplier": {
+        "low": 1.1,
+        "mode": 1.15,
+        "high": 1.25
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Follows the tender peak in the org file, slightly smaller because extra tenders are declined or brokered when the fleet is full; author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "tl-load-tender",
+        "object": "booked_load",
+        "share": 0.988
+      },
+      {
+        "from": "tl-border-holds",
+        "object": "border_hold",
+        "share": 0.012
+      }
+    ],
+    "inputs": [
+      {
+        "from": "tl-driver-management",
+        "object": "driver_availability"
+      },
+      {
+        "from": "tl-trailer-pools",
+        "object": "empty_trailer_move"
+      },
+      {
+        "from": "mnt-defect-repair",
+        "object": "equipment_availability"
+      },
+      {
+        "from": "mnt-collision-repair",
+        "object": "equipment_availability"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "assigned",
+        "to": "tl-trip-execution",
+        "object": "trip_assignment"
+      },
+      {
+        "outcome": "reassigned",
+        "to": "tl-trip-execution",
+        "object": "trip_assignment"
+      },
+      {
+        "outcome": "assigned",
+        "to": "tl-customs-emanifest",
+        "object": "trip_assignment"
+      },
+      {
+        "outcome": "reassigned",
+        "to": "tl-customs-emanifest",
+        "object": "trip_assignment"
+      },
+      {
+        "outcome": "returned_to_brokerage",
+        "to": "tl-brokerage",
+        "object": "booked_load"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "load-planner",
+      "title": "Truckload load planner",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 12.0,
+      "loaded_cost_per_hour": {
+        "low": 37,
+        "mode": 44,
+        "high": 53
+      },
+      "occupation_code": "NOC 14405",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Most of the 14 planners' time; the rest goes to tender capacity questions and trailer pools. Touch times imply more (see assumptions)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "driver-manager",
+      "title": "Driver manager (fleet manager)",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 12.0,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About a quarter of the 36 driver managers' time; the rest goes to driver hours, home time, pay issues and trip problems."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "after-hours-dispatcher",
+      "title": "After-hours dispatcher",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 35,
+        "mode": 41,
+        "high": 49
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Part of the 8 after-hours dispatchers' time; they also handle breakdowns and trip problems at night."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "tl-driver-longhaul",
+      "title": "Long-haul truckload driver (company)",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 37,
+        "high": 44
+      },
+      "occupation_code": "NOC 73300",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Company drivers' time reading and accepting assignments; regional drivers (tl-driver-regional) are folded in here."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "owner-operator",
+      "title": "Owner-operator, truckload (contracted, not an employee)",
+      "department": "Truckload fleet operations",
+      "layer": "external_party",
+      "fte_on_process": 0.0,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 65,
+        "high": 78
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Owner-operators are contractors and not counted in staffing; their acceptance step is shown because they can refuse loads."
+      },
+      "shift_pattern": "field_rotation"
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "edi-gateway",
+      "name": "EDI gateway (204 tenders, 211 bills of lading, 214 status, 210 invoices)",
+      "kind": "workflow"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Booked load appears on the planning board",
+      "description": "When customer service releases a booked load, the TMS adds it to the planning board for its pickup region and date, with the appointment times, equipment type, weight, border flag and customer notes that the planner needs.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "booked load"
+      ],
+      "outputs": [
+        "open load on planning board"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common TMS behaviour; author's description."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review open loads in the planning session",
+      "description": "The load planner for the region works through the open loads for the next one to two days in the morning and afternoon planning sessions, sorting them by pickup time and noting loads with tight appointments, reefer or flatdeck equipment, or a border crossing.",
+      "role": "load-planner",
+      "kind": "analysis",
+      "inputs": [
+        "open loads"
+      ],
+      "outputs": [
+        "loads to cover today"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 360,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A load is overlooked until close to its pickup time.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Loads are tendered one to three days ahead and planned in sessions the day before pickup; author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Find trucks that will be empty near the pickup",
+      "description": "The planner filters the power list for drivers whose current load delivers near the origin before the pickup time, using the GPS position and ETA from the telematics platform, and lists two or three candidates with the empty kilometres each would run.",
+      "role": "load-planner",
+      "kind": "lookup",
+      "inputs": [
+        "loads to cover",
+        "power list"
+      ],
+      "outputs": [
+        "candidate drivers"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "ETA on the current load is optimistic, so the driver cannot make the pickup.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common truckload planning practice; job postings for Canadian load planners name hours-of-service planning, empty-mile reduction and driver assignment as core duties."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check each candidate's remaining hours of service",
+      "description": "The planner opens each candidate's log to see remaining driving and on-duty time for the day and the cycle, and checks whether the driver can reach the pickup, load and make the delivery appointment without breaking the 13-hour driving and 14-hour on-duty limits, or the 11-hour and 14-hour US limits on a US leg. Before ELDs were required in June 2021, drivers on paper logs were often phoned for their hours.",
+      "role": "load-planner",
+      "kind": "validation",
+      "inputs": [
+        "candidate drivers",
+        "driver logs"
+      ],
+      "outputs": [
+        "drivers who can legally cover the load"
+      ],
+      "systems": [
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Hours miscounted, leaving the driver short of hours before delivery.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Commercial Vehicle Drivers Hours of Service Regulations SOR/2005-313 s.12-14 and 26-27; for US legs 49 CFR 395.3",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-hos",
+          "src-cfr-395",
+          "src-eld"
+        ],
+        "note": "Limits from the Canadian and US regulations; ELDs required from 12 June 2021. Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Choose the driver",
+      "description": "The planner weighs home-time dates and requests, equipment type, border credentials (passport or FAST card and admissibility to the US), dangerous goods training, customer-specific requirements and empty kilometres, and picks the driver who covers the load at the lowest cost without breaking a home-time promise.",
+      "role": "load-planner",
+      "kind": "judgment",
+      "inputs": [
+        "drivers who can legally cover the load",
+        "driver availability"
+      ],
+      "outputs": [
+        "chosen driver"
+      ],
+      "systems": [
+        "tms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Driver without border credentials or with a home-time promise is chosen.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.8,
+          "condition": "a suitable driver is found"
+        },
+        {
+          "to": "s06",
+          "prob": 0.2,
+          "condition": "no suitable driver"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of loads without a direct match is the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Rework the plan to cover the load",
+      "description": "When no driver fits, the planner tries swapping loads between two drivers, setting up a relay at a terminal, offering the load to an owner-operator, or moving a home-time date with the driver manager. If nothing works, the planner hands the load back to the brokerage desk.",
+      "role": "load-planner",
+      "kind": "judgment",
+      "inputs": [
+        "uncovered load"
+      ],
+      "outputs": [
+        "revised plan or load for brokerage"
+      ],
+      "systems": [
+        "tms",
+        "email-phone",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Swap leaves another load at risk.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.9,
+          "condition": "covered by a swap, relay or owner-operator"
+        },
+        {
+          "to": "END",
+          "prob": 0.1,
+          "condition": "cannot be covered",
+          "outcome": "returned_to_brokerage"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; about 2.5% of loads go back to brokerage from planning."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Pre-plan the driver, tractor and trailer",
+      "description": "The planner assigns the driver, tractor and trailer number to the load in the TMS, which marks the load as pre-planned on the board and shows it to the driver manager.",
+      "role": "load-planner",
+      "kind": "data_entry",
+      "inputs": [
+        "chosen driver"
+      ],
+      "outputs": [
+        "pre-planned load"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong tractor or trailer number entered.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Check that a suitable empty trailer is at the origin",
+      "description": "The planner checks the trailer pool at the shipper or the nearest drop yard for an empty trailer of the right type, clean and, for reefer loads, with a working unit.",
+      "role": "load-planner",
+      "kind": "lookup",
+      "inputs": [
+        "pre-planned load",
+        "trailer status"
+      ],
+      "outputs": [
+        "trailer plan"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Trailer shown as empty is loaded or out of service.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.78,
+          "condition": "trailer available"
+        },
+        {
+          "to": "s09",
+          "prob": 0.22,
+          "condition": "trailer must be moved in"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of loads needing an empty trailer moved is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Arrange an empty trailer move",
+      "description": "The planner tells the driver to pick up an empty at a yard on the way, or asks for a shunt or another driver's empty to be repositioned to the shipper, and records the move in the TMS.",
+      "role": "load-planner",
+      "kind": "coordination",
+      "inputs": [
+        "trailer plan"
+      ],
+      "outputs": [
+        "empty trailer move request"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Move booked to the wrong yard.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Driver manager reviews the pre-plan",
+      "description": "The driver manager responsible for the driver checks the pre-plan against what the planner may not know: the driver's real home-time needs, a medical appointment, pay fairness between drivers, or a customer the driver should not go back to. The manager agrees or pushes back.",
+      "role": "driver-manager",
+      "kind": "review",
+      "inputs": [
+        "pre-planned load"
+      ],
+      "outputs": [
+        "agreed plan"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Conflict with home time missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.88,
+          "condition": "agreed"
+        },
+        {
+          "to": "s11",
+          "prob": 0.12,
+          "condition": "driver manager pushes back"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Planner and driver manager split is common at North American truckload carriers; shares and waits are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Agree an alternative with the planner",
+      "description": "The driver manager calls or messages the planner, explains why the driver should not take this load, and suggests a better match or a later load; the planner then chooses again.",
+      "role": "driver-manager",
+      "kind": "coordination",
+      "inputs": [
+        "rejected pre-plan"
+      ],
+      "outputs": [
+        "alternative proposal"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Send the load assignment to the driver",
+      "description": "When the driver's current load is close to delivery, the driver manager sends the assignment as a macro on the in-cab unit or by phone: pickup number, address, appointment, trailer to use, delivery appointment and special instructions such as temperature or border documents.",
+      "role": "driver-manager",
+      "kind": "communication",
+      "inputs": [
+        "agreed plan"
+      ],
+      "outputs": [
+        "trip assignment message"
+      ],
+      "systems": [
+        "eld-telematics",
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 720
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong appointment or instruction in the message.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.56,
+          "condition": "company driver"
+        },
+        {
+          "to": "s14",
+          "prob": 0.44,
+          "condition": "owner-operator"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait is for the truck to finish its current load; 56% company and 44% owner-operator follows the org file's 400 company tractors and 380 owner-operators."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Company driver accepts the assignment",
+      "description": "The company driver reads the message at the next stop, checks the trip against remaining hours and home time, and accepts on the in-cab unit; drivers cannot read messages while driving.",
+      "role": "tl-driver-longhaul",
+      "kind": "communication",
+      "inputs": [
+        "trip assignment message"
+      ],
+      "outputs": [
+        "accepted assignment"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 240
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.96,
+          "condition": "accepted"
+        },
+        {
+          "to": "s11",
+          "prob": 0.04,
+          "condition": "driver cannot take it (illness, hours, family)"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; regional company drivers follow the same step."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Owner-operator accepts or refuses the load",
+      "description": "The owner-operator, a contractor who may refuse loads, looks at the revenue, empty kilometres and where the load leaves the truck, and accepts or turns it down by message or phone.",
+      "role": "owner-operator",
+      "kind": "communication",
+      "inputs": [
+        "trip assignment message"
+      ],
+      "outputs": [
+        "accepted assignment"
+      ],
+      "systems": [
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 240
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.9,
+          "condition": "accepted"
+        },
+        {
+          "to": "s11",
+          "prob": 0.1,
+          "condition": "refused"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; owner-operators refuse more often than company drivers because they are paid by the load."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Check whether the trip crosses the border",
+      "description": "The planner checks the border flag on the accepted load. Cross-border trips need the customs desk to build the eManifest from the driver, tractor and trailer details now assigned.",
+      "role": "load-planner",
+      "kind": "validation",
+      "inputs": [
+        "accepted assignment"
+      ],
+      "outputs": [
+        "border check"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Cross-border flag missing.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.35,
+          "condition": "cross-border trip"
+        },
+        {
+          "to": "s17",
+          "prob": 0.65,
+          "condition": "domestic trip"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "35% cross-border share from the org file's border-crossings demand driver."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Pass trip details to the customs desk",
+      "description": "The planner flags the trip for the customs desk in the TMS and emails the driver name, FAST card status, tractor and trailer plates, planned port of entry and ETA, so the eManifest can be sent at least an hour before arrival.",
+      "role": "load-planner",
+      "kind": "communication",
+      "inputs": [
+        "accepted assignment"
+      ],
+      "outputs": [
+        "trip assignment for customs"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong trailer plate or port passed on.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cbsa-aci"
+        ],
+        "note": "Timing rule from the CBSA; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Dispatch the trip in the TMS",
+      "description": "The TMS marks the load dispatched, starts tracking against the appointments and sends EDI 214 status messages to shippers on EDI. Most trips need no further planning; some are disrupted before pickup.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "accepted assignment"
+      ],
+      "outputs": [
+        "trip assignment"
+      ],
+      "systems": [
+        "tms",
+        "edi-gateway"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.82,
+          "condition": "no disruption before pickup",
+          "outcome": "assigned"
+        },
+        {
+          "to": "s18",
+          "prob": 0.07,
+          "condition": "disruption at night or on a weekend"
+        },
+        {
+          "to": "s19",
+          "prob": 0.11,
+          "condition": "disruption during the day"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Disruption share (breakdown, late prior delivery, driver out of hours, shipper not ready) is the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "After-hours dispatcher re-plans the trip",
+      "description": "At night or on a weekend the after-hours dispatcher takes the driver's call or the late alert, finds another driver who has the hours or moves the pickup with the shipper's night contact, and sends the new assignment to the driver directly.",
+      "role": "after-hours-dispatcher",
+      "kind": "judgment",
+      "inputs": [
+        "disruption alert"
+      ],
+      "outputs": [
+        "revised trip assignment"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Replacement driver short of hours or without border credentials.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Commercial Vehicle Drivers Hours of Service Regulations SOR/2005-313 s.12-14 and 26-27; for US legs 49 CFR 395.3",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "re-planned overnight",
+          "outcome": "reassigned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; after-hours desks run with one or two dispatchers per shift."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Planner re-plans after a daytime disruption",
+      "description": "The planner sees the late alert or gets the driver manager's call, decides whether the same driver can still make it with a new pickup time or whether another driver must take the load, and starts the plan again where needed.",
+      "role": "load-planner",
+      "kind": "judgment",
+      "inputs": [
+        "disruption alert"
+      ],
+      "outputs": [
+        "re-plan decision"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Re-plan leaves the customer uninformed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.55,
+          "condition": "another driver needed"
+        },
+        {
+          "to": "s20",
+          "prob": 0.45,
+          "condition": "same driver, new time"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Ask customer service to move the appointment",
+      "description": "The planner sends the customer service representative the new pickup or delivery time to agree with the dock, then the driver manager re-sends the assignment with the new time.",
+      "role": "load-planner",
+      "kind": "communication",
+      "inputs": [
+        "re-plan decision"
+      ],
+      "outputs": [
+        "appointment change request"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "New time not passed to the consignee.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "No driver fits the load",
+      "share_of_cases": 0.2,
+      "description": "The planner reworks the plan with swaps, relays or an owner-operator; about one in ten of these loads goes back to brokerage.",
+      "path": [
+        "s05",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Driver manager pushes back",
+      "share_of_cases": 0.12,
+      "description": "The driver manager knows of a home-time need or other reason the driver should not take the load, and the planner picks again.",
+      "path": [
+        "s10",
+        "s11",
+        "s05"
+      ]
+    },
+    {
+      "name": "Owner-operator refuses",
+      "share_of_cases": 0.044,
+      "description": "The owner-operator turns the load down because of its revenue or where it leaves the truck.",
+      "path": [
+        "s14",
+        "s11",
+        "s05"
+      ]
+    },
+    {
+      "name": "Disruption before pickup",
+      "share_of_cases": 0.18,
+      "description": "A late prior delivery, breakdown, driver out of hours or shipper not ready forces a new time or a new driver; at night the after-hours dispatcher handles it.",
+      "path": [
+        "s17",
+        "s19",
+        "s05"
+      ]
+    },
+    {
+      "name": "Paper logs before the ELD mandate",
+      "share_of_cases": 0.3,
+      "description": "Before June 2021 drivers without electronic logs were phoned for their remaining hours, which made the hours check slower and less reliable.",
+      "path": [
+        "s04"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.0,
+        "p90": 2.2
+      },
+      "unit": "calendar days from release to the planning board to driver acceptance",
+      "population": "Canadian truckload carriers, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: loads are tendered one to three days ahead and planned the day before pickup; the assignment goes to the driver when the current load is nearly done."
+      }
+    },
+    {
+      "metric": "hos_out_of_service_rate",
+      "value": 0.0281,
+      "unit": "share of roadside inspections ending in an hours-of-service out-of-service order",
+      "population": "Canadian provincial and territorial inspections, 2009-10 to 2013-14 average",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-eld"
+        ],
+        "note": "Regulatory impact analysis for the ELD regulations; average detention of 34 hours per order."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Planners and driver managers work from different information, so a share of plans is undone by home-time or driver issues only the driver manager knows.",
+      "steps": [
+        "s10",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common practice."
+      }
+    },
+    {
+      "description": "Hours-of-service checks were slow before ELDs because drivers had to be phoned; afterwards the ELD shows hours but ETAs on the current load are still often optimistic.",
+      "steps": [
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-eld",
+          "src-ccmta-eld"
+        ],
+        "note": "ELDs in force from June 2021 with penalties held back until June 2022; delay effects are the author's estimate."
+      }
+    },
+    {
+      "description": "Disruptions overnight land on a small after-hours desk with less context, and decisions are revisited in the morning.",
+      "steps": [
+        "s18"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "assumptions": [
+    "The split between load planners (who match loads to trucks) and driver managers (who own the relationship with about 20 drivers each and send the assignment) follows common North American truckload practice; some carriers combine the two jobs.",
+    "Company long-haul and regional drivers are shown as one role (tl-driver-longhaul) on the acceptance step; owner-operators have their own step because they can refuse loads.",
+    "Staffing check: planner touch time averages about 21 minutes per assignment, which at 7,700 assignments implies about 21 FTE at 130 productive hours a month against 14 planners in the org file, who also help on tenders and trailer pools. Either the org file understates the planning desk or planners plan faster than estimated here; driver manager time (about 13 minutes per assignment, about 12 FTE) fits the 36 driver managers.",
+    "Cases that are re-planned after the assignment is made (s18) end as 'reassigned'; the simulation does not send them through driver acceptance again.",
+    "Before June 2021 a share of drivers kept paper logs; the hours check (s04) is slower for them, which is folded into its high touch time.",
+    "Loaded costs come from the org file."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  },
+  "sources": [
+    {
+      "id": "src-hos",
+      "accessed": "2026-11-24",
+      "title": "Commercial Vehicle Drivers Hours of Service Regulations (SOR/2005-313)",
+      "publisher": "Government of Canada, Justice Laws Website",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2005-313/FullText.html",
+      "year": 2005,
+      "supports": "South of 60 degrees: 13 h driving and 14 h on duty per day (s.12), 8 consecutive hours off before driving again (s.13), 10 h off duty per day (s.14); cycle 1 of 70 h in 7 days and cycle 2 of 120 h in 14 days (s.26-27); cycle reset after 36 or 72 h off (s.28); daily record of duty status (s.77, 81, 82)."
+    },
+    {
+      "id": "src-cfr-395",
+      "accessed": "2026-11-24",
+      "title": "49 CFR 395.3 Maximum driving time for property-carrying vehicles",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/395.3",
+      "year": null,
+      "supports": "US limits for property-carrying drivers: 11 h driving within a 14 h window after 10 h off, 30-minute break after 8 h of driving, 60 h in 7 days or 70 h in 8 days, 34 h restart."
+    },
+    {
+      "id": "src-eld",
+      "accessed": "2026-11-24",
+      "title": "Regulations Amending the Commercial Vehicle Drivers Hours of Service Regulations (Electronic Logging Devices and Other Amendments), SOR/2019-165",
+      "publisher": "Canada Gazette, Part II",
+      "url": "https://gazette.gc.ca/rp-pr/p2/2019/2019-06-12/html/sor-dors165-eng.html",
+      "year": 2019,
+      "supports": "ELD provisions in force on 12 June 2021; 160 km radius exemption; 157,424 CMVs keep daily logs and 87,849 run into the US; 2.81% of inspections end in an HOS out-of-service order with average detention of 34 hours; clerks take about 3.5 minutes to file each paper log; drivers forward records within 20 days."
+    },
+    {
+      "id": "src-cbsa-aci",
+      "accessed": "2026-11-24",
+      "title": "Highway mode: Transmit electronic commercial data (Advance Commercial Information / eManifest)",
+      "publisher": "Canada Border Services Agency",
+      "url": "https://www.cbsa-asfc.gc.ca/prog/aci-manif-ipec/hcc-ctr-eng.html",
+      "year": null,
+      "supports": "Highway carriers transmit cargo and conveyance data at least 1 hour before arrival at the port of entry; corrections must be sent as soon as known, including a change of port; tractor and trailer plates must be valid and cargo descriptions clear; late, incorrect or incomplete data can draw AMPS monetary penalties; contingency plan for system outages."
+    },
+    {
+      "id": "src-ccmta-eld",
+      "accessed": "2026-11-24",
+      "title": "No ELD penalties until June 2022, jurisdictions confirm",
+      "publisher": "Trucknews.com",
+      "url": "https://www.trucknews.com/road-today/no-eld-penalties-until-june-2022-jurisdictions-confirm/",
+      "year": 2021,
+      "supports": "CCMTA statement of 7 May 2021: provinces would enforce the ELD mandate progressively, without penalties, until 12 June 2022."
+    }
+  ]
+}

@@ -1,0 +1,1454 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-cs-pharmacy-order-verification",
+  "name": "Verify and dispense medication orders",
+  "org": "community-hospital-corp",
+  "process": "cs-pharmacy-order-verification",
+  "sector": "hospital care",
+  "function": "pharmacy",
+  "summary": "This process takes one medication order from the moment it reaches the hospital pharmacy to the point where the nurse can give the drug. Technicians enter most orders from scanned or faxed images, pharmacists check each one for allergies, interactions and dose, and the drug is then released from the unit's dispensing cabinet or filled, checked and delivered by pharmacy technicians, with IV bags compounded in a clean room. Queues build after morning rounds and admission surges, pharmacy is closed overnight at the smaller sites, and unclear orders wait for the prescriber to call back.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital pharmacy with central unit-dose distribution, automated dispensing cabinets on units, scanned paper orders and a pharmacy information system linked to the medication record.",
+    "org_size_employees": 5790,
+    "notes": "Orders from the ED, inpatient units, ICU and clinics all pass through the same queue; chemotherapy orders follow a separate preparation path not modelled here."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one medication order",
+  "trigger": "A prescriber writes or changes a medication order and the order reaches the pharmacy queue.",
+  "end_state": "The verified order is on the medication record and the drug is available on the unit (cabinet, patient drawer or IV fridge), or the change is applied to the profile.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 50000,
+      "mode": 60000,
+      "high": 70000
+    },
+    "seasonality": "Follows inpatient census; daily peak after morning rounds (10:00-13:00) and in the evening with admissions.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file estimate of about three new orders per patient day plus ED and clinic orders. Cross-check: src2 recorded 82-114 order entries or verifications per hour in a single central pharmacy of a 240-275 bed hospital."
+    },
+    "surge": {
+      "cause": "Winter respiratory season and COVID-19 waves",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 60,
+        "mode": 90,
+        "high": 120
+      },
+      "volume_multiplier": {
+        "low": 1.03,
+        "mode": 1.07,
+        "high": 1.15
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate following inpatient census surges in the organisation file."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "med-inpatient-medical-care",
+        "object": "medication_order",
+        "share": 0.42
+      },
+      {
+        "from": "sx-surgical-inpatient-care",
+        "object": "medication_order",
+        "share": 0.18
+      },
+      {
+        "from": "med-icu-critical-care",
+        "object": "medication_order",
+        "share": 0.12
+      },
+      {
+        "from": "ed-physician-assessment",
+        "object": "medication_order",
+        "share": 0.15
+      },
+      {
+        "from": "mh-inpatient-psychiatry",
+        "object": "medication_order",
+        "share": 0.08
+      },
+      {
+        "from": "amb-systemic-therapy",
+        "object": "medication_order",
+        "share": 0.05
+      }
+    ],
+    "inputs": [
+      {
+        "from": "cs-drug-inventory",
+        "object": "dispensed_medication"
+      },
+      {
+        "from": "dh-system-change",
+        "object": "system_release"
+      },
+      {
+        "from": "dx-lab-testing",
+        "object": "lab_result"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "available_in_cabinet",
+        "to": "med-medication-administration",
+        "object": "dispensed_medication"
+      },
+      {
+        "outcome": "delivered_to_unit",
+        "to": "med-medication-administration",
+        "object": "dispensed_medication"
+      },
+      {
+        "outcome": "delivered_to_unit",
+        "to": "amb-systemic-therapy",
+        "object": "dispensed_medication"
+      },
+      {
+        "outcome": "profile_updated",
+        "to": "med-medication-administration",
+        "object": "mar_record"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "pharmacist",
+      "title": "Hospital pharmacist",
+      "department": "Pharmacy",
+      "layer": "senior_specialist",
+      "fte_on_process": 20.0,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 81,
+        "high": 89
+      },
+      "occupation_code": "NOC 2016 3131",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src2"
+        ],
+        "note": "Central pharmacists spend 72-81% of their time on distributive work, mostly order entry and verification (src2). About 20 of the 35 pharmacists' FTE go to order verification and product checks; the rest is clinical ward work, oncology and ED (author's estimate)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "pharm_tech",
+      "title": "Pharmacy technician",
+      "department": "Pharmacy",
+      "layer": "individual_contributor",
+      "fte_on_process": 24.0,
+      "loaded_cost_per_hour": {
+        "low": 34,
+        "mode": 38,
+        "high": 42
+      },
+      "occupation_code": "NOC 2016 3219",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About half of the 50 technicians work on order entry, unit-dose fill, IV compounding, checking and delivery; the rest on cabinet replenishment, inventory, oncology and medication histories (author's estimate)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "pharmacy_manager",
+      "title": "Pharmacy manager",
+      "department": "Pharmacy",
+      "layer": "manager",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 81,
+        "mode": 89,
+        "high": 100
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Queue escalations, shortages and non-formulary approvals."
+      }
+    },
+    {
+      "id": "hospitalist",
+      "title": "Hospitalist physician",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 130,
+        "mode": 160,
+        "high": 200
+      },
+      "occupation_code": "NOC 2016 3112",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Prescriber time answering pharmacist clarification calls, standing in for all prescribers; not listed for this process in the organisation file."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "pharmacy_system",
+      "name": "Pharmacy information system and automated dispensing cabinets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "document_scanning",
+      "name": "Document imaging and scanning of paper chart forms",
+      "kind": "document_store"
+    },
+    {
+      "id": "fax",
+      "name": "Fax (referrals, requisitions and reports to community physicians)",
+      "kind": "communication"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    },
+    {
+      "id": "lis",
+      "name": "Laboratory information system",
+      "kind": "system_of_record"
+    }
+  ],
+  "resources": [
+    {
+      "id": "sterile_hood",
+      "name": "Sterile compounding hoods (laminar airflow workbenches and biological safety cabinets in pharmacy clean rooms)",
+      "kind": "equipment",
+      "count": 5
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Order arrives in the pharmacy queue",
+      "description": "After the prescriber writes or enters the order, the unit clerk scans or faxes it and the image lands in the pharmacy order queue with the patient, unit and time; orders marked stat print on a separate fax or flag in red.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "medication order"
+      ],
+      "outputs": [
+        "queued order image"
+      ],
+      "systems": [
+        "document_scanning",
+        "fax",
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Page of a multi-page order not scanned.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.88,
+          "condition": "pharmacy open"
+        },
+        {
+          "to": "s02",
+          "prob": 0.12,
+          "condition": "pharmacy closed overnight"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src3",
+          "src4"
+        ],
+        "note": "Orders reach pharmacy by fax or scanned image (src4, src3); the wait is from writing the order to its arrival in the queue and is the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Hold the order until pharmacy reopens",
+      "description": "Overnight the order waits in the queue; for urgent first doses the nurse takes the drug from the cabinet on override and the pharmacist reviews the override in the morning.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "queued order image"
+      ],
+      "outputs": [
+        "order held for morning review"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 360,
+        "high": 600
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Dose given on override is wrong and not caught until morning review.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "pharmacy opens"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "Canadian hospital pharmacies are open an average 86 hours a week (89-96 for hospitals of this size) and only 2-3% review routine orders before after-hours access (src1). The share of orders written overnight is the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Triage the order queue",
+      "description": "A technician or pharmacist scans the incoming queue, moves stat orders, first doses and antibiotics to the front, and routes simple orders to technician entry and complex or urgent ones straight to a pharmacist.",
+      "role": "pharm_tech",
+      "kind": "intake",
+      "inputs": [
+        "queued order image"
+      ],
+      "outputs": [
+        "prioritised queue"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Urgent order left in the routine queue.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.65,
+          "condition": "routine order for technician entry"
+        },
+        {
+          "to": "s05",
+          "prob": 0.35,
+          "condition": "urgent, complex or discontinue order for pharmacist entry"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; stat and urgent orders were 1.1-2.6% of prescriptions at one community hospital (src4)."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Enter the order in the pharmacy system",
+      "description": "The technician reads the order image, selects the patient profile, picks the drug, dose, route and frequency from the formulary, sets the administration times and links the order so it will appear on the medication record after verification.",
+      "role": "pharm_tech",
+      "kind": "data_entry",
+      "inputs": [
+        "order image"
+      ],
+      "outputs": [
+        "unverified pharmacy order"
+      ],
+      "systems": [
+        "pharmacy_system",
+        "document_scanning"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.8,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong strength or frequency picked, or illegible order misread.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1",
+          "src2"
+        ],
+        "note": "Pharmacists verify orders entered by technicians in most Canadian hospitals (src1); entry and verification together averaged under half a minute per order in a time-motion study (src2)."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Screen the order for safety",
+      "description": "The pharmacist compares the entered order with the image, checks allergies, duplicate therapy, interactions and dose range alerts from the pharmacy system, and checks the indication against the patient's other medications.",
+      "role": "pharmacist",
+      "kind": "validation",
+      "inputs": [
+        "unverified pharmacy order",
+        "order image",
+        "patient profile"
+      ],
+      "outputs": [
+        "screened order"
+      ],
+      "systems": [
+        "pharmacy_system",
+        "his"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.7,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Interaction or allergy alert overridden in error.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada / HSO medication management standard: pharmacist review of medication orders before administration",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.2,
+          "condition": "dose depends on kidney function, weight or levels"
+        },
+        {
+          "to": "s07",
+          "prob": 0.8,
+          "condition": "standard dose"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1",
+          "src3"
+        ],
+        "note": "Median time from order to pharmacist verification was 93-143 minutes at two Canadian sites (src3), most of it queue time. Touch minutes are the author's estimate scaled to src2."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Check the dose against labs and weight",
+      "description": "For antibiotics, anticoagulants and drugs cleared by the kidney, the pharmacist looks up creatinine, weight and drug levels in the laboratory system and calculates whether the ordered dose fits.",
+      "role": "pharmacist",
+      "kind": "analysis",
+      "inputs": [
+        "screened order",
+        "lab results"
+      ],
+      "outputs": [
+        "dose assessment"
+      ],
+      "systems": [
+        "lis",
+        "his",
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Dose adjustment miscalculated.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Verify the order and choose the supply route",
+      "description": "The pharmacist verifies the order, which releases it to the medication record, and decides how the drug reaches the patient: from cabinet stock on the unit, as a patient-specific unit dose, as a compounded IV, or after a call to the prescriber when there is a problem.",
+      "role": "pharmacist",
+      "kind": "approval",
+      "inputs": [
+        "screened order"
+      ],
+      "outputs": [
+        "verified order",
+        "supply route"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Order verified with an unresolved problem.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "licensed_signoff",
+        "basis": "Ontario Drug and Pharmacies Regulation Act and Pharmacy Act: a pharmacist is responsible for the therapeutic check of each order",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.07,
+          "condition": "problem needs the prescriber"
+        },
+        {
+          "to": "END",
+          "prob": 0.2,
+          "condition": "discontinue, hold or change to an existing order: profile updated",
+          "outcome": "profile_updated"
+        },
+        {
+          "to": "s10",
+          "prob": 0.43,
+          "condition": "drug is cabinet stock on the unit"
+        },
+        {
+          "to": "s13",
+          "prob": 0.2,
+          "condition": "patient-specific unit dose"
+        },
+        {
+          "to": "s15",
+          "prob": 0.08,
+          "condition": "IV admixture to compound"
+        },
+        {
+          "to": "s12",
+          "prob": 0.02,
+          "condition": "non-formulary or short-supply drug"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "Most Canadian hospitals use centralized unit dose (77%) and automated dispensing cabinets (89%) (src1). Route shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Contact the prescriber about a problem",
+      "description": "The pharmacist pages the prescriber with the problem (allergy, wrong dose for kidney function, duplicate, missing information or illegible order), suggests a change and documents the intervention.",
+      "role": "pharmacist",
+      "kind": "communication",
+      "inputs": [
+        "screened order",
+        "problem"
+      ],
+      "outputs": [
+        "page to prescriber",
+        "intervention note"
+      ],
+      "systems": [
+        "email_phone",
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Clarification on about 7% of orders is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Prescriber answers and changes the order",
+      "description": "The prescriber calls back between patients, agrees or disagrees with the suggestion and gives a new order, which the pharmacist records as a verbal order for countersignature.",
+      "role": "hospitalist",
+      "kind": "judgment",
+      "inputs": [
+        "page"
+      ],
+      "outputs": [
+        "changed order"
+      ],
+      "systems": [
+        "email_phone",
+        "his"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Verbal order misheard.",
+        "typically_caught_at": "s05"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Public Hospitals Act, Regulation 965: orders by an authorized practitioner",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "re-screen the changed order"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the wait is the prescriber's response time."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Release the order to the cabinet and medication record",
+      "description": "The pharmacy system sends the verified order to the unit's dispensing cabinet profile and the medication record, so the nurse can withdraw the dose for that patient.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "verified order"
+      ],
+      "outputs": [
+        "cabinet profile entry",
+        "eMAR entry"
+      ],
+      "systems": [
+        "pharmacy_system",
+        "his"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.85,
+          "condition": "drug already stocked in the cabinet",
+          "outcome": "available_in_cabinet"
+        },
+        {
+          "to": "s11",
+          "prob": 0.15,
+          "condition": "drug not stocked in that cabinet"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Load a new item into the cabinet",
+      "description": "A technician picks the drug, takes it to the unit and loads a pocket in the cabinet for that patient, scanning the barcode so the cabinet knows what it holds.",
+      "role": "pharm_tech",
+      "kind": "physical",
+      "inputs": [
+        "cabinet profile entry"
+      ],
+      "outputs": [
+        "stocked pocket"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 20,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong drug loaded into the pocket.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "stocked",
+          "outcome": "available_in_cabinet"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "Technical staff check cabinet replenishment in 97% of Canadian hospitals (src1). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Source a non-formulary or short-supply drug",
+      "description": "The pharmacist checks the formulary for an alternative and suggests it to the prescriber, or asks the patient to use their own supply, or orders the drug from the wholesaler.",
+      "role": "pharmacist",
+      "kind": "coordination",
+      "inputs": [
+        "verified order"
+      ],
+      "outputs": [
+        "alternative agreed or special order"
+      ],
+      "systems": [
+        "pharmacy_system",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.6,
+          "condition": "formulary alternative or patient's own supply"
+        },
+        {
+          "to": "s18",
+          "prob": 0.4,
+          "condition": "special order from the wholesaler"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Fill patient-specific unit doses",
+      "description": "The technician picks the unit-dose packages for the patient, prints labels, bags them by administration time and adds them to the next cart or delivery run.",
+      "role": "pharm_tech",
+      "kind": "physical",
+      "inputs": [
+        "verified order",
+        "label"
+      ],
+      "outputs": [
+        "filled unit doses"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong strength or quantity picked.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "Technicians fill unit-dose trays in 95% of Ontario respondent hospitals (src1). The wait is for the next fill batch; author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Final check of the filled doses",
+      "description": "A regulated pharmacy technician or pharmacist checks each filled dose against the verified order and label (drug, strength, quantity, patient) before it leaves the pharmacy.",
+      "role": "pharm_tech",
+      "kind": "validation",
+      "inputs": [
+        "filled unit doses",
+        "verified order"
+      ],
+      "outputs": [
+        "checked doses"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.6,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Fill error missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "licensed_signoff",
+        "basis": "Ontario Pharmacy Act and Drug and Pharmacies Regulation Act: product release checked by a pharmacist or registered pharmacy technician",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "Checking by regulated pharmacy technicians has risen since regulation (src1). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Compound the IV admixture",
+      "description": "The technician gathers vials, diluent and bags, works in the clean room hood with aseptic technique, adds the drug to the bag, labels it with the concentration and beyond-use date, and records lot numbers.",
+      "role": "pharm_tech",
+      "kind": "physical",
+      "inputs": [
+        "verified order",
+        "worksheet"
+      ],
+      "outputs": [
+        "compounded IV bag"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong volume or diluent.",
+        "typically_caught_at": "s16"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "NAPRA Model Standards for Pharmacy Compounding of Non-hazardous Sterile Preparations, as adopted by the Ontario College of Pharmacists",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "sterile_hood",
+          "occupied_min": {
+            "low": 5,
+            "mode": 12,
+            "high": 30
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1",
+          "src5"
+        ],
+        "note": "Technicians prepare patient-specific IV admixtures in most hospitals and the shift followed NAPRA compounding standards (src1, src5). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Check the compounded IV",
+      "description": "The pharmacist checks the used vials and syringes pulled back to the marked volume, the worksheet calculation and the label against the order, then releases the bag.",
+      "role": "pharmacist",
+      "kind": "validation",
+      "inputs": [
+        "compounded IV bag",
+        "worksheet"
+      ],
+      "outputs": [
+        "released IV bag"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Compounding error missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "licensed_signoff",
+        "basis": "NAPRA sterile compounding standards: verification of each compounded preparation before release",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1",
+          "src5"
+        ],
+        "note": "Technical staff check IV admixtures in 72% of Canadian hospitals (src1); pharmacist check assumed here. Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Deliver the doses to the unit",
+      "description": "The technician sends the doses by pneumatic tube or takes them on the scheduled delivery round, places them in the patient's drawer or the unit medication fridge, and signs the delivery log.",
+      "role": "pharm_tech",
+      "kind": "travel",
+      "inputs": [
+        "checked doses"
+      ],
+      "outputs": [
+        "delivered doses"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Dose placed in the wrong patient's drawer.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "delivered",
+          "outcome": "delivered_to_unit"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src4"
+        ],
+        "note": "Orders leave the dispensary on scheduled ward deliveries (src4). Per-order minutes share the delivery round across many orders; author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Wait for the wholesaler delivery",
+      "description": "The special-order drug arrives on the next wholesaler delivery, usually the next business day, and is received into pharmacy stock.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "purchase order"
+      ],
+      "outputs": [
+        "received drug"
+      ],
+      "systems": [
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "drug received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; drug purchasing is in cs-drug-inventory."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Overnight hold",
+      "share_of_cases": 0.12,
+      "description": "The order arrives when the pharmacy is closed and waits until morning; urgent doses are taken from the cabinet on override and reviewed afterwards.",
+      "path": [
+        "s01",
+        "s02",
+        "s03"
+      ]
+    },
+    {
+      "name": "Prescriber clarification",
+      "share_of_cases": 0.07,
+      "description": "The pharmacist finds a problem and pages the prescriber; the order waits for the call back and is screened again.",
+      "path": [
+        "s07",
+        "s08",
+        "s09",
+        "s05"
+      ]
+    },
+    {
+      "name": "Non-formulary or short-supply drug",
+      "share_of_cases": 0.02,
+      "description": "The drug is not stocked; the pharmacist suggests an alternative or orders it from the wholesaler.",
+      "path": [
+        "s07",
+        "s12",
+        "s18",
+        "s13"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.09,
+        "p90": 0.45
+      },
+      "unit": "days from order written to drug available on the unit",
+      "population": "Canadian hospital pharmacies",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src3"
+        ],
+        "note": "p50 lies between the medians of 93 and 143 minutes from order to pharmacist verification at two Canadian sites (src3), with dispensing added for the quarter of orders that need it; p90 is the author's estimate including overnight holds."
+      }
+    },
+    {
+      "metric": "order_to_verification_minutes",
+      "value": {
+        "p50": 93
+      },
+      "unit": "minutes, median, after scanned orders were introduced (143 before)",
+      "population": "Two Canadian hospital sites, 2011",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src3"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "stat_dispensary_turnaround_minutes",
+      "value": {
+        "p50": 10
+      },
+      "unit": "minutes from prescribing to leaving the dispensary, stat and urgent orders",
+      "population": "231-bed Canadian community hospital, 2009",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src4"
+        ],
+        "note": "90% met the 15-minute target."
+      }
+    },
+    {
+      "metric": "pharmacy_hours_open_per_week",
+      "value": 89,
+      "unit": "hours per week, hospitals with 201-500 beds (96 for more than 500 beds)",
+      "population": "CSHP survey 2020/21",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src1"
+        ],
+        "note": "Only 9% of Canadian hospital pharmacies were open 24/7."
+      }
+    },
+    {
+      "metric": "order_entry_and_verification_minutes_per_hour",
+      "value": 36.6,
+      "unit": "minutes per pharmacist hour without CPOE (28.3 with CPOE)",
+      "population": "Two US community hospital central pharmacies, 2011",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src2"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Orders written on morning rounds arrive together, so the verification queue reaches one to two hours before noon and first doses are late.",
+      "steps": [
+        "s04",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src3"
+        ],
+        "note": "Median 93-143 minutes from order to verification (src3)."
+      }
+    },
+    {
+      "description": "Overnight, orders cannot be reviewed before nurses take doses from the cabinet, so checks happen after the dose is given.",
+      "steps": [
+        "s02"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src1"
+        ],
+        "note": "Only 2-3% of Canadian hospitals review routine orders before after-hours cabinet access."
+      }
+    },
+    {
+      "description": "Re-keying handwritten orders into the pharmacy system takes technician and pharmacist time and introduces transcription errors.",
+      "steps": [
+        "s04",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1",
+          "src2"
+        ],
+        "note": "Only 19% of Canadian hospitals had operational CPOE in 2020/21 (src1); order entry fell from 36 to 27 minutes per pharmacist hour with CPOE (src2)."
+      }
+    },
+    {
+      "description": "Clarification calls wait for prescribers who are in clinics or procedures.",
+      "steps": [
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's observation of common practice."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src1",
+      "title": "Hospital Pharmacy in Canada Survey 2020/21 Report",
+      "publisher": "Canadian Society of Hospital Pharmacists",
+      "url": "https://www.cshp.ca/common/Uploaded%20files/PDFs/HPCS-2020-21-Report-ENG-rev.Jan.14.2026.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "142 hospital pharmacy departments (hospitals of 50+ acute beds): pharmacies open an average 86 hours a week (96 for hospitals over 500 beds, 89 for 201-500 beds); only 9% open 24/7 (7 of 13 in Ontario); pharmacists review orders before the first dose in most (50-99%) areas in 76% of hospitals; only 2-3% review routine orders before after-hours night cupboard, ADC or ward stock access, 17% before the order reaches the MAR; 89% use automated dispensing cabinets; 77% use centralized unit dose; 19% had operational CPOE; 61% print MARs from the pharmacy system and 25% use eMAR (54% in Ontario); technical staff check patient-specific IV admixtures in 72% and ADC replenishment in 97% of hospitals."
+    },
+    {
+      "id": "src2",
+      "title": "Impact of Computerized Provider Order Entry on Pharmacist Productivity",
+      "publisher": "Hospital Pharmacy (Hatfield MD, Cox R, Mhatre SK, Flowers WP, Sansgiry SS)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4062721/",
+      "year": 2014,
+      "accessed": "2026-11-24",
+      "supports": "Time-motion study of central inpatient pharmacists at two community hospitals (274 and 238 beds): distributive work 72-81% of pharmacist time; order entry and verification 28.3 minutes per hour (CPOE site) vs 36.6 (non-CPOE); 114 vs 82 order entries or verifications per hour."
+    },
+    {
+      "id": "src3",
+      "title": "Decreasing Medication Turnaround Time with Digital Scanning Technology in a Canadian Health Region",
+      "publisher": "Canadian Journal of Hospital Pharmacy (Neville H, Nodwell L, Alsharif S)",
+      "url": "https://www.cjhp-online.ca/index.php/cjhp/article/view/1402",
+      "year": 2014,
+      "accessed": "2026-11-24",
+      "supports": "Two hospital sites, 548 orders audited in 2011: median time from prescriber writing the order to pharmacy verification fell from 143 to 93 minutes after scanned orders replaced the previous transmission; median time from order to nurse administration 315 and 300 minutes (not significant)."
+    },
+    {
+      "id": "src4",
+      "title": "Retrospective Audit of Medication Order Turnaround Time after Implementation of Standardized Definitions",
+      "publisher": "Canadian Journal of Hospital Pharmacy (Naylor H, Woloschuk DMM, Fitch P, Miller S)",
+      "url": "https://www.cjhp-online.ca/index.php/cjhp/article/download/1070/1350?inline=1",
+      "year": 2011,
+      "accessed": "2026-11-24",
+      "supports": "231-bed community hospital: stat and urgent orders were 1.1-2.6% of prescriptions; median dispensary turnaround 9-12 minutes against a 15-minute target met by 90%; median order-to-administration time 30-45 minutes; orders arrive by fax, a pharmacist enters, a technician fills and a pharmacist checks, then scheduled delivery to the ward."
+    },
+    {
+      "id": "src5",
+      "title": "Model Standards for Pharmacy Compounding of Non-hazardous Sterile Preparations",
+      "publisher": "National Association of Pharmacy Regulatory Authorities",
+      "url": "https://www.napra.ca/general-practice-resources/model-standards-for-pharmacy-compounding-of-non-hazardous-sterile-preparations/",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "NAPRA model standards for non-hazardous sterile compounding replace the 2006 compounding guidelines and are implemented by each provincial pharmacy regulator."
+    }
+  ],
+  "assumptions": [
+    "Loaded costs come from the organisation file. The hospitalist role stands for all prescribers who answer pharmacist calls.",
+    "The main site pharmacy is open about 07:30 to 23:00 and the two smaller sites for shorter day hours; about 12% of orders arrive when the site pharmacy is closed (author's estimate, consistent with src1's 86-96 opening hours a week).",
+    "Route shares (43% cabinet stock, 20% unit dose, 8% IV admixture, 20% profile change only, 7% clarification, 2% non-formulary) are the author's estimates for a hospital using cabinets on most units.",
+    "Touch times are short because most orders are simple; src2 measured order entry plus verification at under half a minute per order on average. Complex orders carry the dose-check step (s06).",
+    "Chemotherapy preparation in a hazardous drug clean room is part of the systemic therapy service and is not modelled.",
+    "The simulated median (about 3 hours) runs above the benchmark p50 because a third of orders also wait for a fill batch, check and delivery round after verification; the verification portion alone is close to the 93-143 minute medians in src3.",
+    "The organisation file lists no sterile compounding equipment; a resource for clean room hoods is added (not_in_org_file) with a count of five across three sites (author's estimate)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

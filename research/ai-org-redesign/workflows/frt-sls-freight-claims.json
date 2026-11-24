@@ -1,0 +1,1802 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-sls-freight-claims",
+  "name": "Process freight claims",
+  "org": "freight-carrier-co",
+  "process": "sls-freight-claims",
+  "sector": "trucking (less-than-truckload and truckload freight)",
+  "function": "customer service (claims)",
+  "summary": "When freight is lost, short or damaged, the shipper or consignee files a written claim with the carrier. A claims analyst registers it, checks it was filed in time with the invoice and photos, gathers the bill of lading, delivery receipt and OS&D report, and for some claims has the network searched or the goods inspected. The analyst decides whether the carrier is liable under the conditions of carriage, calculates the amount within the per-kilogram limit, and pays, declines or negotiates within authority limits, sending large losses to the insurer. Claims slow down when documents are missing, when inspections wait for the consignee, and in the autumn peak when backlogs build.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL carrier of about 3,000 employees with a freight claims team of ten analysts and a manager inside customer service.",
+    "org_size_employees": 3000,
+    "notes": "Describes cargo loss and damage claims on LTL shipments; collisions and liability claims are handled by safety. Claims were kept in a claims module of the TMS with scanned documents and emailed letters, as was common in 2019-2022."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one freight claim",
+  "trigger": "A shipper or consignee files a written claim for loss, shortage, damage or delay of a shipment.",
+  "end_state": "The claim is paid through accounts payable, declined with reasons, withdrawn because the freight was found, closed for lack of documents, or referred to the insurer.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 700,
+      "mode": 900,
+      "high": 1200
+    },
+    "seasonality": "Rises from September to mid-December with peak volumes and dock congestion, with claims lagging deliveries by two to six weeks; lowest in summer.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "src-saia-q2-21"
+      ],
+      "note": "Organisation file volume: about 0.6% of 150,000 LTL shipments a month. Saia's 2021 cargo claims ratio of 0.54% of revenue suggests claims at this scale are plausible, though the ratio is in dollars, not claim counts."
+    },
+    "surge": {
+      "cause": "Autumn shipping peak (September to mid-December retail and industrial restocking)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 50,
+        "mode": 70,
+        "high": 90
+      },
+      "volume_multiplier": {
+        "low": 1.15,
+        "mode": 1.3,
+        "high": 1.5
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "LTL volumes in Canada rise from September to early December; author's estimate of size."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "shipper",
+        "object": "freight_claim",
+        "share": 0.9
+      },
+      {
+        "from": "consignee",
+        "object": "freight_claim",
+        "share": 0.1
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ltl-osd-exceptions",
+        "object": "osd_report"
+      },
+      {
+        "from": "ltl-pod-capture",
+        "object": "delivery_receipt"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "paid",
+        "to": "fin-accounts-payable",
+        "object": "claim_payment_request"
+      },
+      {
+        "outcome": "paid_recovery_filed",
+        "to": "fin-accounts-payable",
+        "object": "claim_payment_request"
+      },
+      {
+        "outcome": "paid_recovery_filed",
+        "to": "interline-partner",
+        "object": "freight_claim"
+      },
+      {
+        "outcome": "referred_to_insurer",
+        "to": "saf-liability-claims",
+        "object": "insurance_claim"
+      },
+      {
+        "outcome": "withdrawn_freight_found",
+        "to": "ltl-osd-exceptions",
+        "object": "recovered_freight"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "claims-analyst",
+      "title": "Freight claims analyst",
+      "department": "Customer service centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 8.5,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 36,
+        "high": 43
+      },
+      "occupation_code": "NOC 12201",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Most of the ten analysts' time; the rest is interline recoveries, reporting and phone queries. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      }
+    },
+    {
+      "id": "claims-manager",
+      "title": "Freight claims manager",
+      "department": "Customer service centre",
+      "layer": "manager",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 70,
+        "high": 84
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approvals above analyst limits and appeals. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      }
+    },
+    {
+      "id": "osd-clerk",
+      "title": "OS&D clerk",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 33,
+        "high": 39
+      },
+      "occupation_code": "NOC 14400",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Exception reports, network searches and salvage for claims; not listed on this process in the organisation file. Loaded cost from the organisation file (wage x 1.30 for hourly staff)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "terminal-ops-supervisor",
+      "title": "Terminal operations supervisor",
+      "department": "LTL terminal network",
+      "layer": "supervisor",
+      "fte_on_process": 0.7,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 54,
+        "high": 64
+      },
+      "occupation_code": "NOC 72024",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Inspections of damaged goods at consignees; not listed on this process in the organisation file. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "claims-specialist",
+      "title": "Insurance and liability claims specialist",
+      "department": "Safety, compliance and driver services",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 45,
+        "mode": 54,
+        "high": 66
+      },
+      "occupation_code": "NOC 12201",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Large losses referred to the cargo insurer; not listed on this process in the organisation file. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "claims-module",
+      "name": "Freight claims module in the TMS",
+      "kind": "workflow"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "erp",
+      "name": "ERP general ledger, payables and receivables",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "customer-portal",
+      "name": "Customer web portal (pickup requests, tracing, documents)",
+      "kind": "external_portal"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive and register the claim",
+      "description": "A claims analyst takes the next claim from the claims inbox, portal or mail, creates a claim record in the claims module linked to the PRO number, and scans or attaches the claim form, invoice and photos. Paper claims arriving by mail or fax are keyed by hand.",
+      "role": "claims-analyst",
+      "kind": "intake",
+      "inputs": [
+        "freight claim"
+      ],
+      "outputs": [
+        "registered claim"
+      ],
+      "systems": [
+        "claims-module",
+        "email-phone",
+        "customer-portal",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Claim linked to the wrong PRO number or claimant.",
+        "typically_caught_at": "s06"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Registration backlog of up to five days in the autumn peak is the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check the claim meets filing requirements",
+      "description": "The analyst checks that the claim is in writing, names the claimant and the shipment, states a specific amount, was filed within the time limits, and comes with the commercial invoice, photos and a paid freight bill. Claims filed late or that are not claims, such as a general complaint, are declined.",
+      "role": "claims-analyst",
+      "kind": "validation",
+      "inputs": [
+        "registered claim"
+      ],
+      "outputs": [
+        "filing check result"
+      ],
+      "systems": [
+        "claims-module",
+        "tms",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A claim accepted without the paid freight bill or invoice, found missing later.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Uniform conditions of carriage under provincial regulation (Ontario O. Reg. 643/05 Schedule 1 and equivalents): written notice of claim within 60 days of delivery or nine months of shipment; 49 CFR 370.3 minimum filing requirements on US interstate legs",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.65,
+          "condition": "complete and in time"
+        },
+        {
+          "to": "s03",
+          "prob": 0.28,
+          "condition": "documents missing"
+        },
+        {
+          "to": "s17",
+          "prob": 0.07,
+          "condition": "out of time or not a valid claim"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-freightcom",
+          "src-cfr370"
+        ],
+        "note": "Freightcom lists the invoice, photos, description and claim value as required documents and says freight charges must be paid; the 60-day window is its stated norm for Canadian LTL carriers; shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Acknowledge and request missing documents",
+      "description": "The analyst sends an acknowledgment letter from the claims module template that lists what is missing: the commercial invoice, photos, packing list, inspection report or proof that freight charges are paid. The claim is set to pending.",
+      "role": "claims-analyst",
+      "kind": "communication",
+      "inputs": [
+        "filing check result"
+      ],
+      "outputs": [
+        "acknowledgment and document request"
+      ],
+      "systems": [
+        "claims-module",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "49 CFR 370.5: written acknowledgment within 30 days stating any further documents needed (US interstate legs; applied to all claims as company practice)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr370-5"
+        ],
+        "note": "49 CFR 370.5 requires acknowledgment within 30 days stating what further documents are needed; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Await the claimant's documents",
+      "description": "The claimant gathers the missing invoice or photos, which often means asking its own supplier or customer. Some claimants never reply and the claim is closed after a reminder.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "document request"
+      ],
+      "outputs": [
+        "supporting documents"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 14400,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.82,
+          "condition": "documents received"
+        },
+        {
+          "to": "END",
+          "prob": 0.18,
+          "condition": "no reply after reminder",
+          "outcome": "closed_incomplete"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Reply time of two days to a month and the 18% abandonment rate are the author's estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Send the acknowledgment letter",
+      "description": "For complete claims the claims module generates the acknowledgment letter with the claim number and expected handling time in the nightly letter run, and emails or mails it to the claimant.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "registered claim"
+      ],
+      "outputs": [
+        "acknowledgment letter"
+      ],
+      "systems": [
+        "claims-module",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "49 CFR 370.5: written acknowledgment within 30 days stating any further documents needed (US interstate legs; applied to all claims as company practice)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr370-5"
+        ],
+        "note": "Acknowledgment within 30 days is the US rule; the nightly batch is the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Gather the shipment records",
+      "description": "The analyst pulls the bill of lading, the delivery receipt with any exceptions the consignee wrote on it, the scan history, weights and piece counts from the TMS, and the freight bill from billing. A clear delivery receipt with no exception noted makes a damage claim much harder to accept.",
+      "role": "claims-analyst",
+      "kind": "lookup",
+      "inputs": [
+        "registered claim"
+      ],
+      "outputs": [
+        "claim file"
+      ],
+      "systems": [
+        "tms",
+        "imaging",
+        "claims-module"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 5760,
+        "high": 20160
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Delivery receipt exception notes missed or misread.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Queue of one to fourteen days before an analyst works the file is the author's estimate, longest in the autumn peak."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "OS&D clerk sends the exception report and photos",
+      "description": "On request the OS&D clerk at the terminal that recorded the shortage or damage attaches the OS&D report, dock photos and notes on how the freight was packaged and loaded. The clerk usually answers while the analyst is still pulling the other records.",
+      "role": "osd-clerk",
+      "kind": "lookup",
+      "inputs": [
+        "claim file request"
+      ],
+      "outputs": [
+        "OS&D report",
+        "dock photos"
+      ],
+      "systems": [
+        "tms",
+        "imaging",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate; osd-clerk is not listed on this process in the organisation file."
+      },
+      "concurrent_with": [
+        "s06"
+      ]
+    },
+    {
+      "id": "s08",
+      "name": "Classify the claim and decide the investigation",
+      "description": "The analyst classifies the claim as shortage or loss, visible damage noted at delivery, or concealed damage or high-value damage that needs an inspection. The class decides whether to search the network, inspect the goods or go straight to a liability decision.",
+      "role": "claims-analyst",
+      "kind": "judgment",
+      "inputs": [
+        "claim file",
+        "OS&D report"
+      ],
+      "outputs": [
+        "claim class"
+      ],
+      "systems": [
+        "claims-module"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Damage claim sent to decision without an inspection that would have shown poor packaging.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.35,
+          "condition": "shortage or loss"
+        },
+        {
+          "to": "s13",
+          "prob": 0.53,
+          "condition": "visible damage noted at delivery"
+        },
+        {
+          "to": "s10",
+          "prob": 0.12,
+          "condition": "concealed or high-value damage"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Class shares are the author's estimates."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Search the network for missing pieces",
+      "description": "The OS&D clerk compares the missing pieces with unmatched overages reported across the terminals and hubs and asks the last terminals that handled the shipment to search. Found freight is delivered and the claim is withdrawn.",
+      "role": "osd-clerk",
+      "kind": "lookup",
+      "inputs": [
+        "claim file",
+        "overage reports"
+      ],
+      "outputs": [
+        "search result"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s25",
+          "prob": 0.22,
+          "condition": "freight found"
+        },
+        {
+          "to": "s13",
+          "prob": 0.78,
+          "condition": "not found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Find rate and times are the author's estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Arrange an inspection of the damaged goods",
+      "description": "The analyst asks the destination terminal to inspect the goods at the consignee, or books an independent inspector for high-value claims, and asks the consignee to hold the goods and packaging until then.",
+      "role": "claims-analyst",
+      "kind": "coordination",
+      "inputs": [
+        "claim class"
+      ],
+      "outputs": [
+        "inspection request"
+      ],
+      "systems": [
+        "email-phone",
+        "claims-module"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Travel to the consignee",
+      "description": "A terminal operations supervisor drives to the consignee's premises when the consignee can make the goods available, usually fitting the visit around dock duties.",
+      "role": "terminal-ops-supervisor",
+      "kind": "travel",
+      "inputs": [
+        "inspection request"
+      ],
+      "outputs": [
+        "supervisor on site"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 40,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The wait is for the consignee to give access and for the supervisor to be free; author's estimate. terminal-ops-supervisor is not listed on this process in the organisation file."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Inspect the damaged freight",
+      "description": "The supervisor examines and photographs the goods and packaging, notes whether the damage fits carrier handling or poor packing, estimates salvage value and writes an inspection report. Damaged dangerous goods are only handled after checking the safety data and with trained staff.",
+      "role": "terminal-ops-supervisor",
+      "kind": "physical",
+      "inputs": [
+        "damaged goods"
+      ],
+      "outputs": [
+        "inspection report"
+      ],
+      "systems": [
+        "imaging",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Report does not record packaging, so liability is argued later.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Transportation of Dangerous Goods Regulations training requirement and company hazard assessment before handling damaged dangerous goods",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Decide carrier liability",
+      "description": "The analyst reads the file against the bill of lading terms and the uniform conditions of carriage: whether an exception was noted at delivery, whether concealed damage was reported within the carrier's window, whether packaging was adequate, and whether an exclusion such as an act of God applies. The analyst decides liable, partly liable or not liable.",
+      "role": "claims-analyst",
+      "kind": "judgment",
+      "inputs": [
+        "claim file",
+        "inspection report or search result"
+      ],
+      "outputs": [
+        "liability decision"
+      ],
+      "systems": [
+        "claims-module",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Liability accepted or declined against the bill of lading terms.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.73,
+          "condition": "liable or partly liable"
+        },
+        {
+          "to": "s17",
+          "prob": 0.27,
+          "condition": "not liable"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-freightcom",
+          "src-mccague"
+        ],
+        "note": "Freightcom describes concealed damage windows of 24 hours to five days and carriers that refuse concealed damage claims; McCague Borlack describes the uniform conditions of carriage; shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Calculate the settlement amount",
+      "description": "The analyst works out the payable amount: invoice cost of the lost or damaged goods, less any salvage allowance, plus freight charges on lost goods, capped at $4.41 per kilogram of the affected weight unless the shipper declared a higher value on the bill of lading. Partial liability claims get a compromise figure.",
+      "role": "claims-analyst",
+      "kind": "analysis",
+      "inputs": [
+        "liability decision",
+        "commercial invoice"
+      ],
+      "outputs": [
+        "settlement amount"
+      ],
+      "systems": [
+        "claims-module",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 240
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Weight cap or declared value applied wrongly.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mccague",
+          "src-freightcom"
+        ],
+        "note": "McCague Borlack states the $4.41 per kilogram limit unless a value is declared; Freightcom gives $2 per pound for new goods as the usual limit; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Check settlement authority",
+      "description": "The analyst compares the settlement with the authority limits: small claims within the analyst's limit go straight to the offer, larger ones to the claims manager, and losses above the cargo insurance deductible to the insurance claims specialist.",
+      "role": "claims-analyst",
+      "kind": "validation",
+      "inputs": [
+        "settlement amount",
+        "authority limits"
+      ],
+      "outputs": [
+        "authority route"
+      ],
+      "systems": [
+        "claims-module"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Claims settlement authority limits by amount",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.8,
+          "condition": "within analyst authority"
+        },
+        {
+          "to": "s16",
+          "prob": 0.17,
+          "condition": "above analyst limit"
+        },
+        {
+          "to": "s23",
+          "prob": 0.03,
+          "condition": "above insurance deductible"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shares and the authority structure are the author's estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Claims manager approves the settlement",
+      "description": "The claims manager reviews the file, the liability reasoning and the amount, and approves, changes the amount or sends the file back for more investigation. Appeals of declined claims also come to the manager.",
+      "role": "claims-manager",
+      "kind": "approval",
+      "inputs": [
+        "claim file",
+        "settlement amount or appeal"
+      ],
+      "outputs": [
+        "approved settlement"
+      ],
+      "systems": [
+        "claims-module"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Claims settlement authority limits: payments above the analyst limit approved by the claims manager",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.78,
+          "condition": "approved"
+        },
+        {
+          "to": "s13",
+          "prob": 0.22,
+          "condition": "re-investigate or uphold decline"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approval shares and wait are the author's estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Draft and send the declination letter",
+      "description": "The analyst writes a declination letter that gives the reason, such as a clear delivery receipt, late notice, inadequate packaging or an exclusion in the conditions of carriage, and closes the claim as declined pending any appeal.",
+      "role": "claims-analyst",
+      "kind": "drafting",
+      "inputs": [
+        "liability decision"
+      ],
+      "outputs": [
+        "declination letter"
+      ],
+      "systems": [
+        "claims-module",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 2880
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Send the settlement offer",
+      "description": "The analyst sends the claimant the settlement letter with the amount and how it was calculated, and a release to sign for compromise settlements. Full payments of small claims are usually paid without a release.",
+      "role": "claims-analyst",
+      "kind": "communication",
+      "inputs": [
+        "approved settlement"
+      ],
+      "outputs": [
+        "settlement offer"
+      ],
+      "systems": [
+        "claims-module",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr370-9"
+        ],
+        "note": "49 CFR 370.9 requires paying, declining or making a firm compromise offer in writing within 120 days; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Await the claimant's response to the declination",
+      "description": "Most claimants accept the declination or do not reply. Some send new evidence or ask for a review, which goes to the claims manager.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "declination letter"
+      ],
+      "outputs": [
+        "claimant response"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.85,
+          "condition": "accepted or no reply",
+          "outcome": "declined"
+        },
+        {
+          "to": "s16",
+          "prob": 0.15,
+          "condition": "appeal"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Appeal rate is the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Await acceptance of the offer",
+      "description": "The claimant reviews the offer against its own loss, then accepts it, signs and returns the release, or counters with a higher amount and more evidence of value such as replacement invoices. Accepted damage claims paid in full leave the salvage with the carrier.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "settlement offer"
+      ],
+      "outputs": [
+        "acceptance or counter"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.63,
+          "condition": "accepted, no salvage"
+        },
+        {
+          "to": "s21",
+          "prob": 0.25,
+          "condition": "accepted, carrier takes salvage"
+        },
+        {
+          "to": "s14",
+          "prob": 0.12,
+          "condition": "counter-offer"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shares and response time are the author's estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Dispose of the salvage",
+      "description": "For damaged goods paid in full, the OS&D clerk arranges to collect the goods from the consignee or terminal and sells them to a salvage buyer or disposes of them, and records the salvage proceeds against the claim.",
+      "role": "osd-clerk",
+      "kind": "coordination",
+      "inputs": [
+        "accepted settlement",
+        "inspection report"
+      ],
+      "outputs": [
+        "salvage record"
+      ],
+      "systems": [
+        "tms",
+        "claims-module",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cfr370"
+        ],
+        "note": "Part 370 includes a section on processing salvage (370.11); shares and times are the author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Request payment through accounts payable",
+      "description": "The analyst enters the payment request in the claims module with the payee, amount and general ledger code, which flows to accounts payable for the next cheque or EFT run, or applies the amount as a credit against the claimant's open freight bills. The claim is closed as paid.",
+      "role": "claims-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "accepted settlement"
+      ],
+      "outputs": [
+        "claim payment request"
+      ],
+      "systems": [
+        "claims-module",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Payee or amount keyed wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Accounts payable releases the payment; claims cannot pay directly",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.94,
+          "condition": "payment requested",
+          "outcome": "paid"
+        },
+        {
+          "to": "s24",
+          "prob": 0.06,
+          "condition": "an interline partner handled the shipment"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Refer a large loss to the insurance claims specialist",
+      "description": "Losses above the cargo insurance deductible go to the insurance and liability claims specialist, who notifies the insurer, sends the file and takes over the settlement.",
+      "role": "claims-specialist",
+      "kind": "communication",
+      "inputs": [
+        "claim file",
+        "settlement amount"
+      ],
+      "outputs": [
+        "insurance claim"
+      ],
+      "systems": [
+        "claims-module",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Cargo insurance policy notification terms for losses above the deductible",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "referred to insurer",
+          "outcome": "referred_to_insurer"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of 3% above the deductible is the author's estimate."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "File a recovery claim against the interline partner",
+      "description": "When a partner carrier had the freight when it was lost or damaged, the analyst files a claim against the partner under the interline agreement with the paid claim file attached, and tracks it until the partner pays.",
+      "role": "claims-analyst",
+      "kind": "communication",
+      "inputs": [
+        "paid claim file"
+      ],
+      "outputs": [
+        "interline recovery claim"
+      ],
+      "systems": [
+        "claims-module",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "recovery claim filed",
+          "outcome": "paid_recovery_filed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice for interline shipments; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Tell the claimant the freight was found and close the claim",
+      "description": "The analyst tells the claimant the missing freight has been found and when it will be delivered, asks for the claim to be withdrawn, and closes the file once delivery is confirmed.",
+      "role": "claims-analyst",
+      "kind": "communication",
+      "inputs": [
+        "search result"
+      ],
+      "outputs": [
+        "withdrawn claim"
+      ],
+      "systems": [
+        "claims-module",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "claim withdrawn",
+          "outcome": "withdrawn_freight_found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Missing documents",
+      "share_of_cases": 0.28,
+      "description": "The claim arrives without the invoice, photos or proof of paid charges; the analyst asks for them and the claim waits, and about one in five is never completed.",
+      "path": [
+        "s02",
+        "s03",
+        "s04",
+        "s02"
+      ]
+    },
+    {
+      "name": "Network search finds the freight",
+      "share_of_cases": 0.08,
+      "description": "Missing pieces turn up as an overage at another terminal; they are delivered and the claim is withdrawn.",
+      "path": [
+        "s09",
+        "s25"
+      ]
+    },
+    {
+      "name": "Inspection needed",
+      "share_of_cases": 0.12,
+      "description": "Concealed or high-value damage is inspected at the consignee, which waits for access and a supervisor's time.",
+      "path": [
+        "s10",
+        "s11",
+        "s12",
+        "s13"
+      ]
+    },
+    {
+      "name": "Appeal of a declination",
+      "share_of_cases": 0.04,
+      "description": "The claimant sends new evidence and the manager reviews the decision.",
+      "path": [
+        "s19",
+        "s16",
+        "s13"
+      ]
+    },
+    {
+      "name": "Large loss to insurer",
+      "share_of_cases": 0.02,
+      "description": "A loss above the deductible is handed to the insurance claims specialist.",
+      "path": [
+        "s15",
+        "s23"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 30,
+        "p90": 90
+      },
+      "unit": "calendar days from claim received to paid, declined, withdrawn or closed",
+      "population": "Canadian LTL and courier carriers, cargo claims",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-freightcom",
+          "src-cfr370-9"
+        ],
+        "note": "Freightcom says carriers need 30 to 90 days to settle claims (stated for couriers); 49 CFR 370.9 sets 120 days as the outer limit for a written disposition on US interstate claims. The p50 and p90 are the author's reading of that range."
+      }
+    },
+    {
+      "metric": "cargo_claims_ratio",
+      "value": 0.54,
+      "unit": "percent of revenue",
+      "population": "Saia, US LTL carrier, Q2 2021 (a company record)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-saia-q2-21"
+        ],
+        "note": "Stated in Saia's quarterly results."
+      }
+    },
+    {
+      "metric": "claim_acknowledgment_deadline",
+      "value": 30,
+      "unit": "days from receipt",
+      "population": "Motor carriers on US interstate shipments",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-cfr370-5"
+        ],
+        "note": "49 CFR 370.5."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "About a quarter of claims arrive incomplete and wait weeks for the claimant's invoice or photos.",
+      "steps": [
+        "s02",
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-freightcom"
+        ],
+        "note": "Freightcom lists the documents claimants must supply; the share is the author's estimate."
+      }
+    },
+    {
+      "description": "Files wait days in the analyst queue before records are gathered, longest in the autumn peak, which frustrates customers.",
+      "steps": [
+        "s01",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file notes slow decisions frustrate customers; backlog sizes are the author's estimate."
+      }
+    },
+    {
+      "description": "Inspections depend on the consignee holding the goods and a terminal supervisor finding time, so damage claims stall.",
+      "steps": [
+        "s10",
+        "s11",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice."
+      }
+    },
+    {
+      "description": "Liability decisions on clear delivery receipts and concealed damage lead to disputes and appeals.",
+      "steps": [
+        "s13",
+        "s17",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-freightcom",
+          "src-mccague"
+        ],
+        "note": "Freightcom shows concealed damage windows vary by carrier; McCague Borlack describes court disputes over declared value."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-freightcom",
+      "title": "LTL claims",
+      "publisher": "Freightcom",
+      "url": "https://www.freightcom.com/ltl-claims",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "Canadian LTL carriers mostly require concealed damage to be reported within 24 hours and claims for noted loss or damage within 60 days of delivery; documents: invoice, photos, description and claim value; freight charges must be paid; liability from 10 cents per pound for used goods to $2 per pound for new goods; some carriers set minimum claim amounts of $50 to $100; carriers take 30 to 90 days to settle courier claims."
+    },
+    {
+      "id": "src-cfr370",
+      "title": "49 CFR Part 370 - Principles and practices for the investigation and voluntary disposition of loss and damage claims and processing salvage",
+      "publisher": "Legal Information Institute, Cornell Law School (text of the US Code of Federal Regulations)",
+      "url": "https://www.law.cornell.edu/cfr/text/49/part-370",
+      "year": 1997,
+      "accessed": "2026-11-24",
+      "supports": "Part 370 has sections on filing of claims (370.3), acknowledgment (370.5), investigation (370.7), disposition (370.9) and processing of salvage (370.11); source 62 FR 32042, June 12, 1997."
+    },
+    {
+      "id": "src-cfr370-5",
+      "title": "49 CFR 370.5 - Acknowledgment of claims",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/370.5",
+      "year": 1997,
+      "accessed": "2026-11-24",
+      "supports": "The carrier must acknowledge a claim in writing within 30 days of receipt, unless paid or declined in that time, and say whether it needs further documents."
+    },
+    {
+      "id": "src-cfr370-9",
+      "title": "49 CFR 370.9 - Disposition of claims",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/370.9",
+      "year": 1997,
+      "accessed": "2026-11-24",
+      "supports": "Within 120 days of receipt the carrier must pay, decline or make a firm compromise offer in writing; if it cannot, it must send a written status report every 60 days until disposed."
+    },
+    {
+      "id": "src-mccague",
+      "title": "Contract of carriage: limitation of liability under Ontario's uniform conditions of carriage",
+      "publisher": "McCague Borlack LLP",
+      "url": "https://mccagueborlack.com/emails/articles/contract-carriage.html",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Under section 9 of Schedule 1 of O. Reg. 643/05 a carrier's liability is limited to $4.41 per kilogram unless a value is declared on the contract of carriage; courts disagree on whether an attached invoice declares value."
+    },
+    {
+      "id": "src-saia-q2-21",
+      "title": "Saia Reports Record Second Quarter Results",
+      "publisher": "Saia, Inc. (via Yahoo Finance)",
+      "url": "https://ca.finance.yahoo.com/news/saia-reports-record-second-quarter-113000783.html",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Saia's cargo claims ratio in Q2 2021 was 0.54%, a company record; LTL shipments per workday about 31,440; revenue per shipment $277.24."
+    }
+  ],
+  "assumptions": [
+    "Claims rules: the Ontario uniform conditions of carriage (O. Reg. 643/05 Schedule 1) could not be opened (the government site refused the request); the 60-day notice window comes from Freightcom and the $4.41 per kilogram limit from McCague Borlack. The nine-month limit for non-delivery is the author's understanding of the uniform conditions and is not sourced.",
+    "US 49 CFR Part 370 timelines (30-day acknowledgment, 120-day disposition) bind only US interstate legs; the carrier is assumed to apply them to all claims as company practice.",
+    "OS&D clerks, terminal operations supervisors and the insurance claims specialist take part although the organisation file lists only claims analysts and the claims manager on this process.",
+    "Payment itself is made by accounts payable (fin-accounts-payable) and is outside this workflow, so the cycle time ends at the payment request. The simulated median of about 24 days and 90th percentile of about 43 days sit at the low end of the 30 to 90 day benchmark range; adding one to two weeks for the payment run and the slower claims that wait for status reports under the 120-day rule brings the time to the claimant's receipt of money closer to the benchmark.",
+    "Shares: 35% shortage or loss, 53% visible damage, 12% inspected; 73% of investigated claims are paid in full or part.",
+    "Inspection travel uses the supervisor's own or a pool car, which the organisation file does not list as a resource, so no resource is attached; no step is done by several people of one role together."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

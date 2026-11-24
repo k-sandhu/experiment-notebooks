@@ -1,0 +1,1484 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-amb-clinic-referral-booking",
+  "name": "Receive referrals and book outpatient clinics",
+  "org": "community-hospital-corp",
+  "process": "amb-clinic-referral-booking",
+  "sector": "health care (public hospital)",
+  "function": "ambulatory care",
+  "summary": "Family physicians, community specialists and the hospital's own emergency departments send about 6,000 referrals a month to the corporation's outpatient specialty clinics, almost all by fax. Clinic clerks sort and log each fax, check it against the clinic's referral criteria and chase the referring office for anything missing; the specialist triages it by urgency, and the clerk puts the patient on the wait list, books an appointment when the clinic templates open, and tells the patient and the referring office. The process is slow because referrals wait in fax piles and triage folders, incomplete referrals bounce back and forth, and routine patients wait weeks on the list for a new-patient slot. Lost or duplicated faxes and patients who cannot be reached are the main errors.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital corporation with about 60 outpatient specialty clinic rooms run by clinic clerks and nurses, where specialists bill OHIP and triage their own referrals.",
+    "org_size_employees": 5790,
+    "notes": "Referral to visit waits come from two Ontario studies of faxed referrals; step times and shares are the author's estimates. Electronic referral (Ocean eReferral) was spreading in Ontario from 2018 but most hospital clinics still received faxes."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one clinic referral",
+  "trigger": "A referral for an outpatient specialty clinic arrives by fax or on paper from a family physician, community specialist or the hospital's emergency department.",
+  "end_state": "The patient has a confirmed appointment and has been reminded, and the referring office has been told; or the referral has been declined, returned incomplete or discarded as a duplicate.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 4500,
+      "mode": 6000,
+      "high": 7500
+    },
+    "seasonality": "Fewer referrals in July, August and late December. Referrals dropped sharply in spring 2020 when non-urgent clinics were paused, and backlogs were worked down through 2021.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "The organisation file's estimate, about 30% of 15,000-25,000 monthly clinic visits being new referrals; no published referral count was found."
+    },
+    "surge": {
+      "cause": "Deferred referrals return after a COVID-19 wave when non-urgent clinics reopen",
+      "events_per_year": {
+        "low": 0,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "volume_multiplier": {
+        "low": 1.15,
+        "mode": 1.3,
+        "high": 1.6
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for 2020-2022; no surge in 2019."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "primary_care",
+        "object": "clinic_referral",
+        "share": 0.62
+      },
+      {
+        "from": "referring_office",
+        "object": "clinic_referral",
+        "share": 0.15
+      },
+      {
+        "from": "ed-discharge-home",
+        "object": "clinic_referral",
+        "share": 0.18
+      },
+      {
+        "from": "cs-discharge-planning",
+        "object": "clinic_referral",
+        "share": 0.05
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "booked_confirmed",
+        "to": "amb-clinic-visit",
+        "object": "clinic_appointment"
+      },
+      {
+        "outcome": "booked_confirmed",
+        "to": "patient",
+        "object": "clinic_appointment"
+      },
+      {
+        "outcome": "booked_confirmed",
+        "to": "dh-patient-registration",
+        "object": "clinic_appointment"
+      },
+      {
+        "outcome": "declined_returned",
+        "to": "primary_care",
+        "object": "clinic_referral"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "clinic_clerk",
+      "title": "Clinic booking clerk / medical secretary",
+      "department": "Outpatient clinics",
+      "layer": "individual_contributor",
+      "fte_on_process": 20,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 35,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "45 clinic clerks and medical secretaries in the organisation file; about 20 FTE of referral handling from the simulated touch time, the rest on check-in, dictation typing and visit paperwork."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "consultant_specialist",
+      "title": "Consultant specialist (internal medicine, cardiology, nephrology, oncology and others)",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 160,
+        "mode": 200,
+        "high": 260
+      },
+      "occupation_code": "NOC 2016 3111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Triage time spread over about 120 specialists."
+      },
+      "shift_pattern": "on_call"
+    },
+    {
+      "id": "amb_rn",
+      "title": "Ambulatory clinic nurse",
+      "department": "Outpatient clinics",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 61,
+        "high": 68
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Pre-visit test coordination; not listed for this process in the organisation file."
+      },
+      "shift_pattern": "office_hours"
+    },
+    {
+      "id": "amb_manager",
+      "title": "Manager, ambulatory clinics",
+      "department": "Ambulatory and community care",
+      "layer": "manager",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 78,
+        "high": 89
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Overbook and extra session approvals."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "fax",
+      "name": "Fax (referrals, requisitions and reports to community physicians)",
+      "kind": "communication"
+    },
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets and shared drives",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "olis",
+      "name": "Ontario Laboratories Information System and ConnectingOntario viewer",
+      "kind": "external_portal"
+    },
+    {
+      "id": "document_scanning",
+      "name": "Document imaging and scanning of paper chart forms",
+      "kind": "document_store"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    },
+    {
+      "id": "ivr_reminder",
+      "name": "Automated appointment reminder dialler linked to the scheduling module",
+      "kind": "communication"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Referral fax arrives",
+      "description": "The referring physician's office faxes a referral letter or the clinic's referral form, often with lab results and imaging reports attached, to the clinic's fax machine or fax-to-email inbox; emergency department referrals arrive as a printed form or a fax from the emergency unit.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "referral letter",
+        "attachments"
+      ],
+      "outputs": [
+        "received fax"
+      ],
+      "systems": [
+        "fax"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Fax pages missing, unreadable or sent to the wrong clinic number.",
+        "typically_caught_at": "s04"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mohammed2020"
+        ],
+        "note": "mohammed2020: 13,780 of 15,503 Ontario orthopedic referrals in 2018-2020 were faxed or paper."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Collect, date-stamp and sort incoming faxes",
+      "description": "Several times a day the clinic clerk collects the faxes, stamps the date received, sorts them by clinic and specialist, and checks whether the same referral was already received and logged so that resent faxes are not entered twice.",
+      "role": "clinic_clerk",
+      "kind": "intake",
+      "inputs": [
+        "received fax"
+      ],
+      "outputs": [
+        "sorted referral"
+      ],
+      "systems": [
+        "fax",
+        "his"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Referral misfiled or lost in a pile and never logged.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.04,
+          "condition": "duplicate of a referral already logged",
+          "outcome": "duplicate_discarded"
+        },
+        {
+          "to": "s03",
+          "prob": 0.96,
+          "condition": "new referral"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; resent duplicate faxes are common when offices hear nothing back (liddy2018 found specialist offices corresponded after the referral in only 22% of cases)."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Find the patient and log the referral",
+      "description": "The clerk searches the hospital patient index by health card number, name and date of birth, notes the medical record number or flags a new patient, and logs the referral with date received, referring physician and reason in the clinic's referral tracking list.",
+      "role": "clinic_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "sorted referral"
+      ],
+      "outputs": [
+        "logged referral"
+      ],
+      "systems": [
+        "his",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong patient selected or referral date keyed wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mohammed2020"
+        ],
+        "note": "mohammed2020 describes intake staff manually transcribing faxed referrals into a tracking system before review; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check the referral is complete",
+      "description": "The clerk compares the referral against the clinic's checklist: reason for referral and question, health card number and version, referring physician's billing number, medication list and the tests the specialist requires before a visit, such as recent blood work or an ultrasound.",
+      "role": "clinic_clerk",
+      "kind": "validation",
+      "inputs": [
+        "logged referral",
+        "clinic referral criteria"
+      ],
+      "outputs": [
+        "complete or incomplete referral"
+      ],
+      "systems": [
+        "his",
+        "olis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Incomplete referral passed to the specialist.",
+        "typically_caught_at": "s09"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Clinic referral acceptance criteria set by the medical lead",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.18,
+          "condition": "information missing"
+        },
+        {
+          "to": "s08",
+          "prob": 0.82,
+          "condition": "complete"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share incomplete (18%) is the author's estimate; mohammed2020 cites a figure of about 20% from another province's study, which the author did not open."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Fax a request for the missing information",
+      "description": "The clerk fills in a standard 'referral incomplete' form listing what is missing, faxes it to the referring office and marks the referral pending in the tracking list.",
+      "role": "clinic_clerk",
+      "kind": "communication",
+      "inputs": [
+        "incomplete referral"
+      ],
+      "outputs": [
+        "information request"
+      ],
+      "systems": [
+        "fax",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Referring office sends the missing information",
+      "description": "The family physician's or specialist's office finds the results or completes the form and faxes it back, often after the patient has had a test done.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "information request"
+      ],
+      "outputs": [
+        "additional information"
+      ],
+      "systems": [
+        "fax"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.8,
+          "condition": "information returned"
+        },
+        {
+          "to": "s07",
+          "prob": 0.2,
+          "condition": "no reply"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Phone the referring office to chase",
+      "description": "After about a week with no reply the clerk phones the referring office, explains what is still needed and notes the call; if nothing arrives after the second chase the referral is closed and returned.",
+      "role": "clinic_clerk",
+      "kind": "communication",
+      "inputs": [
+        "pending referral"
+      ],
+      "outputs": [
+        "chase note"
+      ],
+      "systems": [
+        "email_phone",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 10080,
+        "high": 14400
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.6,
+          "condition": "office promises to send"
+        },
+        {
+          "to": "s12",
+          "prob": 0.4,
+          "condition": "no response: close and return"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Prepare the referral for specialist triage",
+      "description": "The clerk prints or scans the referral with any prior hospital results pulled from the hospital record and the provincial lab viewer, and puts it in the specialist's paper or electronic triage folder.",
+      "role": "clinic_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "complete referral"
+      ],
+      "outputs": [
+        "triage package"
+      ],
+      "systems": [
+        "his",
+        "olis",
+        "document_scanning"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Specialist triages the referral",
+      "description": "Between clinics the specialist reads each referral and attached results, assigns urgency (urgent, semi-urgent, routine), decides whether tests are needed before the visit, and may decline or redirect a referral that another service or primary care should handle.",
+      "role": "consultant_specialist",
+      "kind": "judgment",
+      "inputs": [
+        "triage package"
+      ],
+      "outputs": [
+        "triage decision"
+      ],
+      "systems": [
+        "his",
+        "document_scanning"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Urgency under-called from a thin referral.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Specialist triage of referrals by urgency (clinic referral policy)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.12,
+          "condition": "urgent"
+        },
+        {
+          "to": "s10",
+          "prob": 0.1,
+          "condition": "tests needed before the visit"
+        },
+        {
+          "to": "s11",
+          "prob": 0.7,
+          "condition": "accepted, routine or semi-urgent"
+        },
+        {
+          "to": "s12",
+          "prob": 0.08,
+          "condition": "declined or redirected"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "liddy2018"
+        ],
+        "note": "liddy2018 reports separate waits for urgent, non-urgent and unclear-urgency referrals, showing triage by urgency; shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Arrange tests before the visit",
+      "description": "Following the specialist's triage note, the clinic nurse fills in the lab or imaging requisition, sends it to the patient or the referring office and notes in the tracking list that results must be back before the appointment.",
+      "role": "amb_rn",
+      "kind": "coordination",
+      "inputs": [
+        "triage decision"
+      ],
+      "outputs": [
+        "test requisitions"
+      ],
+      "systems": [
+        "his",
+        "fax",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Requisition sent to the wrong address or test missing.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the clinic nurse is not listed for this process in the organisation file."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Add the patient to the wait list",
+      "description": "The clerk enters the accepted referral on the specialist's wait list in the scheduling module or the clinic's wait list spreadsheet, with urgency, date received and any pre-visit tests.",
+      "role": "clinic_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "triage decision"
+      ],
+      "outputs": [
+        "wait list entry"
+      ],
+      "systems": [
+        "his",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Entry missed or wrong urgency keyed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Send a decline or return letter",
+      "description": "The clerk types a letter or completes a form explaining why the referral was declined, redirected or closed incomplete, with the specialist's advice where given, faxes it to the referring office and closes the entry.",
+      "role": "clinic_clerk",
+      "kind": "drafting",
+      "inputs": [
+        "triage decision or closed referral"
+      ],
+      "outputs": [
+        "return letter"
+      ],
+      "systems": [
+        "fax",
+        "his"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "returned to referrer",
+          "outcome": "declined_returned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Book an urgent appointment",
+      "description": "The clerk looks for the first open urgent slot in the specialist's clinic templates over the next days or weeks and books it; if none is free the clerk asks the clinic manager to approve an overbook or an extra session.",
+      "role": "clinic_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "urgent triage decision"
+      ],
+      "outputs": [
+        "urgent booking or overbook request"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.75,
+          "condition": "slot found"
+        },
+        {
+          "to": "s20",
+          "prob": 0.25,
+          "condition": "no urgent slot"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Book a routine appointment when the template opens",
+      "description": "When the specialist's clinic templates for the coming weeks are released, the clerk works down the wait list in order of urgency and date received, and books each patient into a new-patient slot.",
+      "role": "clinic_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "wait list entry"
+      ],
+      "outputs": [
+        "booked appointment"
+      ],
+      "systems": [
+        "his",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 7200,
+        "mode": 30240,
+        "high": 216000
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "booked"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "liddy2018",
+          "mohammed2020"
+        ],
+        "note": "Wait on the list of 5, 21 and 150 days is set so that, with the wait from booking to the visit (s18), the total wait from referral to visit matches the published Ontario medians and means (liddy2018 median 79 days non-urgent; mohammed2020 mean 71.7 days for faxed referrals)."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Phone the patient with the appointment",
+      "description": "The clerk calls the patient with the date, time, location and preparation instructions, confirms the phone number and address, and leaves a message or retries when the patient does not answer.",
+      "role": "clinic_clerk",
+      "kind": "communication",
+      "inputs": [
+        "booked appointment"
+      ],
+      "outputs": [
+        "patient informed"
+      ],
+      "systems": [
+        "email_phone",
+        "his"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong date or location given.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.85,
+          "condition": "patient reached"
+        },
+        {
+          "to": "s16",
+          "prob": 0.15,
+          "condition": "not reached after retries"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2018"
+        ],
+        "note": "oag2018 found phone reminders reached and confirmed only 25-36% of imaging patients before the day; the share reached here after retries is the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Mail an appointment letter",
+      "description": "When the patient cannot be reached by phone the clerk prints and mails an appointment letter with the clinic's number to call if the date does not work.",
+      "role": "clinic_clerk",
+      "kind": "communication",
+      "inputs": [
+        "booked appointment"
+      ],
+      "outputs": [
+        "appointment letter"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Fax the appointment confirmation to the referrer",
+      "description": "The clerk faxes the referring office a notice with the appointment date, so the family physician knows the referral was received and can tell the patient.",
+      "role": "clinic_clerk",
+      "kind": "communication",
+      "inputs": [
+        "booked appointment"
+      ],
+      "outputs": [
+        "confirmation to referrer"
+      ],
+      "systems": [
+        "fax",
+        "his"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      },
+      "concurrent_with": [
+        "s15",
+        "s16"
+      ]
+    },
+    {
+      "id": "s18",
+      "name": "Automated reminder call before the appointment",
+      "description": "One to three days before the visit the scheduling system's automated dialler or a clerk calls the patient to remind them of the appointment and asks them to press a key to confirm or to call to rebook.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "booked appointment"
+      ],
+      "outputs": [
+        "reminder result"
+      ],
+      "systems": [
+        "his",
+        "ivr_reminder"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 10080,
+        "mode": 20160,
+        "high": 64800
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.88,
+          "condition": "patient confirms or does not respond",
+          "outcome": "booked_confirmed"
+        },
+        {
+          "to": "s19",
+          "prob": 0.12,
+          "condition": "patient asks to rebook"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait from booking to the visit of 7, 14 and 45 days is the author's estimate of how far ahead clinic templates are booked."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Rebook at the patient's request",
+      "description": "The clerk finds another slot, moves the booking, offers the freed slot to the next urgent patient on the wait list and sends a new notice to the patient and the referring office.",
+      "role": "clinic_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "rebook request"
+      ],
+      "outputs": [
+        "new appointment"
+      ],
+      "systems": [
+        "his",
+        "email_phone",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "rebooked",
+          "outcome": "booked_confirmed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Manager approves an overbook or extra session",
+      "description": "The ambulatory clinic manager checks room and nurse availability for the clinic day, approves overbooking an urgent patient or opening an extra half-day session with the specialist, and tells the clerk which slot to use.",
+      "role": "amb_manager",
+      "kind": "approval",
+      "inputs": [
+        "overbook request"
+      ],
+      "outputs": [
+        "approved slot"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Ambulatory clinic scheduling rules: overbooking and extra sessions approved by the manager",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "slot approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Incomplete referral",
+      "share_of_cases": 0.17,
+      "description": "The clinic faxes back a request for missing results or details; a fifth of these need a phone chase and some are closed and returned.",
+      "path": [
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s06",
+        "s04"
+      ]
+    },
+    {
+      "name": "Duplicate fax",
+      "share_of_cases": 0.04,
+      "description": "The referring office resends a referral it has heard nothing about; the clerk discards it if the first copy was logged.",
+      "path": [
+        "s02"
+      ]
+    },
+    {
+      "name": "Urgent referral without a slot",
+      "share_of_cases": 0.03,
+      "description": "No urgent slot is free and the manager approves an overbook or extra session.",
+      "path": [
+        "s13",
+        "s20",
+        "s15"
+      ]
+    },
+    {
+      "name": "Declined or redirected",
+      "share_of_cases": 0.08,
+      "description": "The specialist decides another service or primary care should manage the patient.",
+      "path": [
+        "s09",
+        "s12"
+      ]
+    },
+    {
+      "name": "Patient not reachable",
+      "share_of_cases": 0.14,
+      "description": "The patient does not answer calls and is sent a letter, which risks a no-show.",
+      "path": [
+        "s15",
+        "s16"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 70,
+        "p90": 190
+      },
+      "unit": "calendar days from referral received to the reminder before the visit (about the wait from referral to visit)",
+      "population": "Ontario specialty referrals sent by fax, 2014-2020",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "liddy2018",
+          "mohammed2020"
+        ],
+        "note": "Derived: liddy2018 medians of 79 days (non-urgent, IQR 35-173) and 49 days (urgent); mohammed2020 mean 71.7 days for faxed orthopedic referrals. The p90 of 190 days extends the liddy2018 upper quartile of 173 days."
+      }
+    },
+    {
+      "metric": "referral_to_visit_median_days_nonurgent",
+      "value": 79,
+      "unit": "days",
+      "population": "461 referrals from five Ontario primary care clinics, 2014-2015",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "liddy2018"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "referral_to_visit_median_days_urgent",
+      "value": 49,
+      "unit": "days",
+      "population": "461 referrals from five Ontario primary care clinics, 2014-2015",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "liddy2018"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "referral_to_appointment_mean_days_fax",
+      "value": 71.72,
+      "unit": "days",
+      "population": "13,780 faxed hip and knee referrals to Ontario central intakes, 2018-2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "mohammed2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "share_seen_within_four_weeks_fax",
+      "value": 0.56,
+      "unit": "share of faxed referrals",
+      "population": "Ontario hip and knee central intakes, 2018-2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "mohammed2020"
+        ],
+        "note": "74% for eReferrals."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Referrals sit in fax piles and triage folders before anyone looks at them, and faxed referrals take weeks longer than electronic ones to process.",
+      "steps": [
+        "s02",
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "mohammed2020"
+        ],
+        "note": "Paper referrals took 21.76 days longer to process at central intake and waited 21.42 days longer on average for an appointment than eReferrals."
+      }
+    },
+    {
+      "description": "Referring offices hear nothing after sending a referral, so they resend faxes and phone the clinic, creating duplicates and calls.",
+      "steps": [
+        "s02",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "liddy2018"
+        ],
+        "note": "The specialist office corresponded after the initial referral in only 22% of cases."
+      }
+    },
+    {
+      "description": "Incomplete referrals bounce between clinic and referring office by fax for one to three weeks.",
+      "steps": [
+        "s04",
+        "s05",
+        "s06",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the organisation file description names incomplete referrals bouncing back."
+      }
+    },
+    {
+      "description": "Routine patients wait weeks to months on the list for a new-patient slot, set by specialist clinic time rather than clerical work.",
+      "steps": [
+        "s14"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "liddy2018"
+        ],
+        "note": "Median 79 days from referral to visit for non-urgent referrals; 11% had no visit recorded a year later."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "mohammed2020",
+      "title": "The impact of integrating electronic referral within a musculoskeletal model of care on wait time to receive orthopedic care in Ontario",
+      "publisher": "PLOS ONE 15(11): e0241624 (Mohammed HT, Payson L-A, Alarakhia M)",
+      "url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0241624",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "15,503 hip and knee referrals to central intakes in four Ontario subregions, January 2018 to January 2020, 13,780 of them faxed or paper: mean wait from referral to rapid access clinic appointment 71.72 days for paper referrals and 50.30 days for eReferrals; 56% of paper referrals and 74% of eReferrals seen within the four-week target; paper referrals took 21.76 days longer to process at central intake; faxed referrals were manually transcribed by intake staff and reviewed for missing information before triage"
+    },
+    {
+      "id": "liddy2018",
+      "title": "Understanding Patient Referral Wait Times for Specialty Care in Ontario: A Retrospective Chart Audit",
+      "publisher": "Healthcare Policy 13(3) (Liddy C, Nawar N, Moroz I, et al.)",
+      "url": "https://www.longwoods.com/content/25397/understanding-patient-referral-wait-times-for-specialty-care-in-ontario-a-retrospective-chart-audi",
+      "year": 2018,
+      "accessed": "2026-11-24",
+      "supports": "461 referrals from five Ontario primary care clinics, 2014-2015: wait from referral to specialist visit median 79 days (IQR 35-173) for non-urgent, 49 days (IQR 18.75-77.75) for urgent and 57 days where urgency was unclear; 11% had no visit recorded after a year; the specialist office corresponded after the referral in 22% of cases; the date a referral was made could not always be told from the date it was faxed"
+    },
+    {
+      "id": "oag2018",
+      "title": "2018 Annual Report, Volume 1, Chapter 3, Section 3.08: MRI and CT Scanning Services",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en18/v1_308en18.pdf",
+      "year": 2018,
+      "accessed": "2026-11-24",
+      "supports": "Ministry priority levels for MRI and CT: emergency (P1, within 24 hours), urgent (P2, within 2 days), semi-urgent (P3, within 10 days), non-urgent (P4, within 28 days), targets set at the 90th percentile; before booking, radiologists assess the requisition, determine the type of scan and assign a priority, then a scheduler books a predefined slot; an MRI scan with contrast takes on average 40 minutes and needs at least two technologists on site, other MRI scans about 20 minutes with one; emergency scans were more than 30% of CT scans in 2017/18; MRI no-show rates 0.1% to 13.4% and CT 0.6% to 13% of scheduled appointments in 2017/18 (48,320 missed MRI and 57,916 missed CT appointments); 25-36% of patients confirmed after phone reminders versus 50% after text messages; studies found 6% to 12% of scans inappropriate under CAR referral guidelines; peer review of radiologist reports was not mandatory and three of four audited hospitals had a regular program; 69% of MRI machines ran below 16 hours a day, seven days a week; 65% of semi-urgent and non-urgent MRI patients and 33% of CT patients waited longer than target in 2017/18"
+    }
+  ],
+  "assumptions": [
+    "The case runs from the fax arriving to the reminder call before the visit, so the cycle time approximates the published wait from referral to visit; the visit itself is amb-clinic-visit.",
+    "Triggers add cs-discharge-planning (follow-up clinic referrals at inpatient discharge, 5%), which the organisation file does not link to this process; referrals for the fracture, mental health, oncology and dialysis clinics go to their own processes.",
+    "The step graph is memoryless: urgent bookings share the reminder step and its 7-45 day wait with routine bookings, which overstates the wait for the 12% of urgent referrals.",
+    "Simulated median cycle time is 68 days against the 70-day benchmark; the simulated 90th percentile of 133 days is shorter than the benchmark's 190 because triangular waits cannot reproduce the long tail in liddy2018, where 11% of referrals had no visit within a year. Referrals that are never booked are not modelled.",
+    "Simulated hands-on time implies about 29 FTE against 23.7 stated, inside the validator's range; clerks also absorb some of the referral work in time otherwise counted as visit-day paperwork.",
+    "The clinic nurse (amb_rn) is added for pre-visit test coordination; the organisation file lists only clerks, specialists and the manager.",
+    "Clinic clerks are set to office hours, so faxes arriving on Friday evening wait until Monday.",
+    "Specialist cost is the organisation file's estimate of OHIP earnings per hour; triage is unpaid administrative time for the specialist."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

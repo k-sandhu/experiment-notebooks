@@ -1,0 +1,1298 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-mnt-parts-inventory",
+  "name": "Buy and stock parts",
+  "org": "freight-carrier-co",
+  "process": "mnt-parts-inventory",
+  "sector": "trucking and freight transportation",
+  "function": "fleet maintenance",
+  "summary": "Partspersons in each shop keep filters, brake parts, lamps, hoses and other common parts on the shelf and buy special parts for repair work orders from truck dealers and heavy-duty distributors. Each purchase order is reviewed, priced, placed, chased if backordered, received against the packing slip, put away and matched to the supplier's invoice before payables pays it. Backorders and price changes made this slow in 2021 and 2022, when sensors, aftertreatment parts, water pumps and tires were short and a unit could wait weeks for one part.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with twelve company maintenance shops at its hubs and larger terminals, about 1,190 company power units and 4,120 trailers.",
+    "org_size_employees": 3000,
+    "notes": "Twelve shops each with a parts room run by partspersons; purchasing within agreements negotiated by corporate procurement. Issuing parts to work orders at the counter is covered inside the repair and PM workflows; tires are bought under the tire program."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one purchase order for parts",
+  "trigger": "Stock falls below its minimum, or a technician's work order needs a part not on the shelf.",
+  "end_state": "The parts are received and in stock or issued to the work order, and the supplier's invoice is matched, approved and in payables; or the order is cancelled.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 1000,
+      "mode": 1200,
+      "high": 1450
+    },
+    "seasonality": "Higher in winter, with more repairs, and before the autumn peak when shops stock up; 2021-2022 order counts rose as fleets split orders across suppliers to find parts.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file volume: about 100 purchase orders a month per shop, or five a working day."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "mnt-defect-repair",
+        "object": "parts_requisition",
+        "share": 0.6
+      },
+      {
+        "from": "mnt-preventive-maintenance",
+        "object": "parts_requisition",
+        "share": 0.3
+      },
+      {
+        "from": "mnt-collision-repair",
+        "object": "parts_requisition",
+        "share": 0.05
+      },
+      {
+        "from": "mnt-yard-equipment",
+        "object": "parts_requisition",
+        "share": 0.05
+      }
+    ],
+    "inputs": [
+      {
+        "from": "exe-procurement",
+        "object": "supplier_contract"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "parts-supplier",
+        "object": "purchase_order"
+      },
+      {
+        "outcome": "any",
+        "to": "equipment-dealer",
+        "object": "purchase_order"
+      },
+      {
+        "outcome": "received and invoiced",
+        "to": "mnt-defect-repair",
+        "object": "parts_issue"
+      },
+      {
+        "outcome": "received and invoiced",
+        "to": "mnt-preventive-maintenance",
+        "object": "parts_issue"
+      },
+      {
+        "outcome": "received and invoiced",
+        "to": "fin-accounts-payable",
+        "object": "vendor_invoice"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "parts-person",
+      "title": "Partsperson",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 13.0,
+      "loaded_cost_per_hour": {
+        "low": 29,
+        "mode": 34,
+        "high": 40
+      },
+      "occupation_code": "NOC 14401",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 22); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Partspersons buy, receive and match invoices; about 60% of the 22 partspersons' time goes to purchasing and receiving, the rest to issuing parts at the counter inside the repair workflows."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "shop-manager",
+      "title": "Shop manager",
+      "department": "Fleet maintenance",
+      "layer": "manager",
+      "fte_on_process": 0.8,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 70,
+        "high": 84
+      },
+      "occupation_code": "NOC 72010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 12); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Shop managers approve purchase orders and invoice batches above the partsperson's limit."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "erp",
+      "name": "ERP general ledger, payables and receivables",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "supplier-portals",
+      "name": "Dealer and distributor online parts ordering portals",
+      "kind": "external_portal"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Generate reorder suggestions and requisitions",
+      "description": "Each night the fleet maintenance system lists stock items that have fallen below their minimum and adds open requisitions for non-stock parts raised on repair and PM work orders during the day.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "stock levels",
+        "min and max settings",
+        "requisitions"
+      ],
+      "outputs": [
+        "reorder list"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Stock record wrong because issues were not booked to work orders, so the reorder is too early, too late or missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Min/max replenishment in fleet maintenance software was common in the period; author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review what to order",
+      "description": "The partsperson works through the reorder list and requisitions, checks recent usage and open work orders, removes items that are already on order, adjusts quantities, and cross-references OEM part numbers to approved aftermarket equivalents.",
+      "role": "parts-person",
+      "kind": "analysis",
+      "inputs": [
+        "reorder list",
+        "usage history"
+      ],
+      "outputs": [
+        "order list"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 960
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong part number or quantity chosen.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Check price and availability",
+      "description": "The partsperson checks contract prices and stock at one to three suppliers by dealer portal, distributor portal or phone, and picks the supplier that has the part at the agreed price and can deliver in time.",
+      "role": "parts-person",
+      "kind": "lookup",
+      "inputs": [
+        "order list",
+        "supplier price agreements"
+      ],
+      "outputs": [
+        "chosen supplier and price"
+      ],
+      "systems": [
+        "supplier-portals",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hdt-parts21"
+        ],
+        "note": "Calling several suppliers became routine during the 2021 shortages; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Create the purchase order",
+      "description": "The partsperson creates the purchase order in the fleet maintenance system with supplier, part numbers, quantities, prices and the work order for special orders; where the system does not pass orders to the ERP, the order is keyed again there.",
+      "role": "parts-person",
+      "kind": "data_entry",
+      "inputs": [
+        "chosen supplier and price"
+      ],
+      "outputs": [
+        "purchase order"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 7,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Price or quantity keyed wrongly.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.82,
+          "condition": "within the partsperson's limit"
+        },
+        {
+          "to": "s05",
+          "prob": 0.18,
+          "condition": "above the limit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approval share is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Approve the purchase order",
+      "description": "The shop manager reviews larger orders (engines, transmissions, bulk stock buys, tire lots) against the budget and the need, and approves or cuts them.",
+      "role": "shop-manager",
+      "kind": "approval",
+      "inputs": [
+        "purchase order"
+      ],
+      "outputs": [
+        "approved purchase order"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company purchasing authority limits",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.95,
+          "condition": "approved"
+        },
+        {
+          "to": "END",
+          "prob": 0.05,
+          "condition": "rejected or cancelled",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Send the order to the supplier",
+      "description": "The partsperson sends the order by portal, email or phone, asks for confirmation of stock and ship date, and notes the promised date on the purchase order.",
+      "role": "parts-person",
+      "kind": "communication",
+      "inputs": [
+        "approved purchase order"
+      ],
+      "outputs": [
+        "order sent"
+      ],
+      "systems": [
+        "supplier-portals",
+        "email-phone",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Supplier confirms stock and ship date",
+      "description": "The supplier confirms the order and either ships from stock on the next delivery run or reports a backorder with an estimated date.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "order sent"
+      ],
+      "outputs": [
+        "order confirmation"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.68,
+          "condition": "in stock: ships on the next run"
+        },
+        {
+          "to": "s19",
+          "prob": 0.12,
+          "condition": "urgent part: partsperson collects it"
+        },
+        {
+          "to": "s08",
+          "prob": 0.2,
+          "condition": "backordered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hdt-parts21"
+        ],
+        "note": "Backorders were common in 2021-2022; the 20% backorder share averages calmer 2019 and short-supply 2021-2022 and is the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Chase the backorder",
+      "description": "The partsperson phones the supplier for updated dates, looks for the part at other dealers and distributors, tells the foreman when a unit is waiting, and cancels and re-orders elsewhere when another source is faster.",
+      "role": "parts-person",
+      "kind": "coordination",
+      "inputs": [
+        "order confirmation"
+      ],
+      "outputs": [
+        "updated delivery date or new source"
+      ],
+      "systems": [
+        "email-phone",
+        "supplier-portals",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.65,
+          "condition": "supplier delivers"
+        },
+        {
+          "to": "s03",
+          "prob": 0.3,
+          "condition": "re-source from another supplier"
+        },
+        {
+          "to": "END",
+          "prob": 0.05,
+          "condition": "need cancelled",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hdt-parts21"
+        ],
+        "note": "More than half of fleets affected by the 2021 shortage reported delays beyond two weeks; chase effort and shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Collect an urgent part",
+      "description": "For an out-of-service unit the partsperson drives the parts van to the dealer or distributor counter, collects the part and signs the counter slip.",
+      "role": "parts-person",
+      "kind": "travel",
+      "inputs": [
+        "order confirmation"
+      ],
+      "outputs": [
+        "part in hand",
+        "counter slip"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 25,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Supplier delivers",
+      "description": "The supplier's route truck, a courier or a hot shot brings the parts to the shop with a packing slip.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "order confirmation"
+      ],
+      "outputs": [
+        "delivered parts",
+        "packing slip"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily dealer and distributor delivery runs to large fleet shops are common; author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Check the delivery",
+      "description": "The partsperson counts the parts against the packing slip and the purchase order, checks part numbers and looks for damage, and notes any shortage or wrong part.",
+      "role": "parts-person",
+      "kind": "validation",
+      "inputs": [
+        "delivered parts",
+        "packing slip",
+        "purchase order"
+      ],
+      "outputs": [
+        "checked delivery"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong part accepted.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Receiving evidence for three-way match of order, receipt and invoice",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.9,
+          "condition": "delivery correct"
+        },
+        {
+          "to": "s12",
+          "prob": 0.07,
+          "condition": "wrong or damaged part"
+        },
+        {
+          "to": "s08",
+          "prob": 0.03,
+          "condition": "short shipped"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Return the wrong part",
+      "description": "The partsperson asks the supplier for a return authorisation, packs and labels the wrong or damaged part for pickup, and records the expected credit and the replacement order.",
+      "role": "parts-person",
+      "kind": "coordination",
+      "inputs": [
+        "checked delivery"
+      ],
+      "outputs": [
+        "return authorisation",
+        "replacement order"
+      ],
+      "systems": [
+        "email-phone",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "replacement shipped"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Receive and put away",
+      "description": "The partsperson posts the receipt against the purchase order in the fleet maintenance system, labels the parts, and puts stock items in their bins or stages special-order parts with the work order number.",
+      "role": "parts-person",
+      "kind": "data_entry",
+      "inputs": [
+        "checked delivery"
+      ],
+      "outputs": [
+        "receipt posted",
+        "parts in stock"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 120
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Receipt posted to the wrong line or bin, so stock counts drift.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.5,
+          "condition": "special order for a work order"
+        },
+        {
+          "to": "s14",
+          "prob": 0.5,
+          "condition": "stock replenishment"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Tell the shop the part is here",
+      "description": "For special orders the partsperson tells the foreman or technician that the part for their work order has arrived, and issues it to the work order.",
+      "role": "parts-person",
+      "kind": "communication",
+      "inputs": [
+        "parts in stock"
+      ],
+      "outputs": [
+        "parts issue"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Match the supplier invoice",
+      "description": "When the invoice arrives by email, portal or mail, the partsperson matches it to the purchase order and the receipt in the fleet maintenance system, checking quantities, unit prices against the agreed price, core charges and freight.",
+      "role": "parts-person",
+      "kind": "validation",
+      "inputs": [
+        "supplier invoice",
+        "purchase order",
+        "receipt"
+      ],
+      "outputs": [
+        "matched invoice or variance"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Three-way match of purchase order, receipt and invoice before payment",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.84,
+          "condition": "matches"
+        },
+        {
+          "to": "s15",
+          "prob": 0.16,
+          "condition": "price, quantity or freight variance"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; price variances were frequent in 2021-2022 as suppliers raised prices between quote and invoice."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Resolve the invoice variance",
+      "description": "The partsperson phones or emails the supplier about the difference, asks for a credit memo or a corrected invoice, or accepts the new price when the agreement allows it and records why.",
+      "role": "parts-person",
+      "kind": "coordination",
+      "inputs": [
+        "variance"
+      ],
+      "outputs": [
+        "credit memo or accepted variance"
+      ],
+      "systems": [
+        "email-phone",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "back to matching"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Approve the invoice batch",
+      "description": "Once a week the shop manager reviews the matched invoices for the shop, looks at any accepted variances, and approves the batch for payment so the person who ordered is not the only approver.",
+      "role": "shop-manager",
+      "kind": "approval",
+      "inputs": [
+        "matched invoices"
+      ],
+      "outputs": [
+        "approved invoices"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Invoice approval by a manager other than the buyer (internal control over payables)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Send approved invoices to payables",
+      "description": "The fleet maintenance system exports approved invoices with their general ledger and unit coding to the ERP payables module overnight for the next payment run.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved invoices"
+      ],
+      "outputs": [
+        "vendor invoice in payables"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Check exported invoices",
+      "description": "The next morning the partsperson checks the export log for invoices the ERP rejected (closed purchase order, unknown supplier number, coding error), fixes them and resends, and files the supplier documents.",
+      "role": "parts-person",
+      "kind": "review",
+      "inputs": [
+        "export log"
+      ],
+      "outputs": [
+        "confirmed export"
+      ],
+      "systems": [
+        "erp",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "invoice accepted by payables",
+          "outcome": "received and invoiced"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Backorder",
+      "share_of_cases": 0.2,
+      "description": "The supplier cannot ship; the partsperson chases and often re-sources from another supplier. In 2021-2022 waits of two weeks or more were common.",
+      "path": [
+        "s07",
+        "s08",
+        "s03"
+      ]
+    },
+    {
+      "name": "Urgent pickup",
+      "share_of_cases": 0.12,
+      "description": "For an out-of-service unit the partsperson drives to the dealer counter to collect the part.",
+      "path": [
+        "s07",
+        "s19",
+        "s10"
+      ]
+    },
+    {
+      "name": "Wrong or damaged part",
+      "share_of_cases": 0.07,
+      "description": "The part is returned for credit and a replacement shipped.",
+      "path": [
+        "s10",
+        "s12",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "Invoice variance",
+      "share_of_cases": 0.16,
+      "description": "Invoice price, quantity or freight differs from the order and receipt and has to be resolved with the supplier.",
+      "path": [
+        "s14",
+        "s15",
+        "s14"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 7,
+        "p90": 20
+      },
+      "unit": "calendar days from reorder suggestion to invoice accepted by payables",
+      "population": "Fleet shop parts purchasing at a Canadian carrier, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: stock parts arrive next day, invoices arrive a few days later and are approved in a weekly batch; backorders form the tail, longer in 2021-2022."
+      }
+    },
+    {
+      "metric": "share_of_fleets_with_parts_shortage_affecting_maintenance",
+      "value": 0.43,
+      "unit": "share of TMC members surveyed",
+      "population": "US fleets, April 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-hdt-parts21"
+        ],
+        "note": "'More than 43%'."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Backorders in 2021-2022 meant calling several suppliers, re-ordering elsewhere and holding units in the shop for weeks.",
+      "steps": [
+        "s07",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hdt-parts21"
+        ],
+        "note": "TMC member survey and fleet accounts, 2021."
+      }
+    },
+    {
+      "description": "Issues not booked to work orders at the counter make stock records wrong, so automatic reorders are early, late or missed.",
+      "steps": [
+        "s01",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Invoice prices often differ from the order price, so matching takes rework with suppliers.",
+      "steps": [
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Purchase orders keyed into both the fleet maintenance system and the ERP where the two are not linked.",
+      "steps": [
+        "s04"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "assumptions": [
+    "Trigger shares split purchase orders by the work that drew the stock down or requested the part; stock replenishment orders are counted against the work that consumed the stock.",
+    "The organisation file lists parts-supplier parts deliveries as a trigger of this process; here a delivery is a step inside each purchase order, not a new case.",
+    "The workflow adds collision repair and yard equipment maintenance as sources of parts requisitions, equipment dealers as receivers of purchase orders for OEM parts, and fin-accounts-payable as the receiver of matched invoices; the organisation file has none of these links and routes parts invoices straight from the supplier to payables.",
+    "Counter issues of parts to work orders, cycle counts and annual stocktakes are not per purchase order and are left out; they take most of the other half of partsperson time.",
+    "Staffing: stated FTE (about 14) is close to hands-on time times volume."
+  ],
+  "sources": [
+    {
+      "id": "src-hdt-parts21",
+      "title": "Parts shortage hobbles new truck deliveries, worsens downtime",
+      "publisher": "Heavy Duty Trucking (truckinginfo.com)",
+      "url": "https://www.truckinginfo.com/10141744/parts-shortage-hobbles-new-truck-deliveries-worsens-downtime",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "April 2021: more than 43% of TMC members surveyed said parts shortages were affecting maintenance and repair, and more than half of those affected said downtime-related delays stretched beyond two weeks; fleets pre-stocked turbo actuators, water pumps, aftertreatment components and sensors to avoid downtime; tires, rubber parts and semiconductors were short."
+    }
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

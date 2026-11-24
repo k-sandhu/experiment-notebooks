@@ -1,0 +1,1683 @@
+{
+  "schema_version": "0.3",
+  "id": "mine-mine-shift-control",
+  "name": "Shift line-up and short-interval control",
+  "org": "mining-operator-co",
+  "process": "mine-shift-control",
+  "sector": "gold mining",
+  "function": "underground mine operations",
+  "summary": "Every 12-hour shift at the underground mine starts with a line-up: the shift supervisor reads the last shift's report, checks which machines are working, assigns each miner to a heading, stope or machine and holds a short safety meeting. During the shift the supervisor must examine every drilling and blasting place, takes radio progress calls and moves crews when a machine breaks down or a heading is unsafe. At the end of the shift the supervisor clears the mine for the blast and writes a paper report that the captain and superintendent review the next morning. Work is slowed by equipment that turns out to be down, absences, and information that reaches surface only at the end of the shift.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A single-mine Canadian gold producer running a 500-650 tpd narrow-vein underground mine in northern Ontario on 12-hour shifts and 14-on/14-off rotations, with its own mill.",
+    "org_size_employees": 300,
+    "notes": "Two 12-hour shifts a day every day (day and night), four crews on 14-on/14-off rotation. Shift reports are paper forms and spreadsheets; there is no real-time fleet tracking system."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one underground shift (about 12 hours, one crew)",
+  "trigger": "The scheduled start of a day or night shift, working to the weekly mine schedule from technical services.",
+  "end_state": "The shift report, logbook and timesheets are complete, the shift has been reviewed at the morning meeting and its tallies are in the production spreadsheet.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 56,
+      "mode": 60,
+      "high": 62
+    },
+    "seasonality": "None; two shifts every day of the year. Statutory holidays are worked.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Two shifts a day for 28-31 days; matches the organisation file entry."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ts-short-range-plan",
+        "object": "mine_plan",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ts-grade-control",
+        "object": "grade_control_model"
+      },
+      {
+        "from": "mnt-mobile-pm",
+        "object": "repaired_equipment"
+      },
+      {
+        "from": "mnt-breakdown-repair",
+        "object": "repaired_equipment"
+      },
+      {
+        "from": "hse-training",
+        "object": "training_record"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "shift_closed",
+        "to": "mine-dev-drill-blast",
+        "object": "shift_lineup"
+      },
+      {
+        "outcome": "shift_closed",
+        "to": "mine-stope-drilling",
+        "object": "shift_lineup"
+      },
+      {
+        "outcome": "shift_closed",
+        "to": "mine-mucking-haulage",
+        "object": "shift_lineup"
+      },
+      {
+        "outcome": "shift_closed",
+        "to": "mine-ground-support",
+        "object": "shift_lineup"
+      },
+      {
+        "outcome": "shift_closed",
+        "to": "ts-reconciliation",
+        "object": "shift_report"
+      },
+      {
+        "outcome": "shift_closed",
+        "to": "site-payroll",
+        "object": "timesheet"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-breakdown-repair",
+        "object": "work_request"
+      },
+      {
+        "outcome": "any",
+        "to": "hse-incident-mgmt",
+        "object": "incident_report"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "ug-shift-supervisor",
+      "title": "Underground shift supervisor",
+      "department": "Underground production and development",
+      "layer": "supervisor",
+      "fte_on_process": 2.8,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 82,
+        "high": 98
+      },
+      "occupation_code": "NOC 8221",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "8 supervisors (two per crew-shift); line-up, examinations, radio control and reporting take about a third of their shift, the rest is covered in the drilling, support and mucking processes. 12-hour day and night shifts on a 14-on/14-off rotation with four crews, as in the organisation file."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "mine-captain",
+      "title": "Mine captain (general foreman)",
+      "department": "Underground production and development",
+      "layer": "supervisor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 80,
+        "mode": 95,
+        "high": 115
+      },
+      "occupation_code": "NOC 8221",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Two captains, one per rotation, on day shift; planning meeting and daily summary."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "mine-superintendent",
+      "title": "Mine superintendent",
+      "department": "Mine operations",
+      "layer": "manager",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 95,
+        "mode": 115,
+        "high": 140
+      },
+      "occupation_code": "NOC 0811",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Morning meeting and priority changes only."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "mine-clerk",
+      "title": "Mine production clerk",
+      "department": "Underground production and development",
+      "layer": "individual_contributor",
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 38,
+        "high": 45
+      },
+      "occupation_code": "NOC 1411",
+      "shift_pattern": "field_rotation",
+      "fte_on_process": 0.4,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Not in the organisation file. A production clerk typing shift reports and checking timesheets is common at mid-sized mines; cost set like the site administrator role, loaded 1.35."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "shift-sheets",
+      "name": "Shift reports, line-up boards and production tallies (paper and spreadsheets)",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "radio",
+      "name": "Leaky feeder radio and surface radio network",
+      "kind": "communication"
+    },
+    {
+      "id": "email",
+      "name": "Email and calendar (Microsoft Outlook/Exchange)",
+      "kind": "communication"
+    },
+    {
+      "id": "docs",
+      "name": "Shared drives and document library (procedures, permits, drawings)",
+      "kind": "document_store"
+    },
+    {
+      "id": "cmms",
+      "name": "Maintenance management system (ERP maintenance module or standalone)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "hse-system",
+      "name": "Incident, inspection and training records system",
+      "kind": "workflow"
+    },
+    {
+      "id": "payroll",
+      "name": "Payroll and timekeeping service (outsourced payroll with site time entry)",
+      "kind": "system_of_record"
+    }
+  ],
+  "resources": [
+    {
+      "id": "dev-crew",
+      "name": "Development crew (jumbo, bolter and mucking on one heading set)",
+      "kind": "crew",
+      "count": 4
+    },
+    {
+      "id": "ug-utility",
+      "name": "Underground utility fleet (scissor lifts and light vehicles)",
+      "kind": "vehicle",
+      "count": 14,
+      "cost_per_hour": {
+        "low": 30,
+        "mode": 45,
+        "high": 65
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Read outgoing shift report and logbook",
+      "description": "The incoming underground shift supervisor arrives about an hour before the shift, reads the outgoing supervisor's paper shift report and the logbook, and notes headings that were blasted, drilled but not loaded, waiting for bolting, or flagged with a hazard that was not fixed.",
+      "role": "ug-shift-supervisor",
+      "kind": "lookup",
+      "inputs": [
+        "previous shift report",
+        "supervisor logbook"
+      ],
+      "outputs": [
+        "list of heading status"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "noc-82020",
+          "mltsd-postblast"
+        ],
+        "note": "Supervisors prepare production reports (NOC 82020) and must record dangerous conditions left at the end of a shift (s. 64); reading them at shift start is the author's description of common practice."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check equipment availability with maintenance",
+      "description": "The supervisor checks the equipment status board in the shop office and phones or radios the maintenance supervisor to confirm which jumbos, bolters, longhole drills, scooptrams and trucks are down, on scheduled service or returned to service since the last shift.",
+      "role": "ug-shift-supervisor",
+      "kind": "lookup",
+      "inputs": [
+        "equipment status board",
+        "maintenance down list"
+      ],
+      "outputs": [
+        "available equipment list"
+      ],
+      "systems": [
+        "shift-sheets",
+        "radio"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "A unit shown as available is still down or is pulled for service during the shift, so a crew is lined up to a machine it cannot use.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.5,
+          "condition": "day shift: mine captain on site"
+        },
+        {
+          "to": "s04",
+          "prob": 0.5,
+          "condition": "night shift: supervisor works from the captain's written priorities"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice at mechanised underground mines; the organisation file's process description names equipment availability as the first constraint."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Hold pre-shift planning meeting with supervisors",
+      "description": "On day shift the mine captain meets the development and production supervisors, walks through the weekly schedule from technical services, sets the priority headings, stopes and mucking draw points for the shift, and agrees how to work around equipment that is down.",
+      "role": "mine-captain",
+      "kind": "coordination",
+      "inputs": [
+        "weekly mine schedule",
+        "available equipment list",
+        "list of heading status"
+      ],
+      "outputs": [
+        "shift priorities"
+      ],
+      "systems": [
+        "shift-sheets",
+        "docs"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "noc-82020"
+        ],
+        "note": "Mine captains and shift bosses schedule and coordinate miners' work (NOC 82020); meeting length is the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Assign crews to headings and equipment on the line-up board",
+      "description": "The supervisor writes each miner's name against a heading, stope or machine on the line-up board, matching people to equipment they are trained on and keeping the priority headings covered, and notes headings that cannot be worked this shift.",
+      "role": "ug-shift-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "shift priorities",
+        "crew roster",
+        "training records"
+      ],
+      "outputs": [
+        "shift line-up"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "A miner is assigned to equipment or a task for which their training or task ticket is not current.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Line-up board practice described in the organisation file process entry and common at Ontario mines; durations are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Hold line-up meeting with the crew",
+      "description": "The supervisor runs the line-up: attendance, a short safety talk, hazards carried over from the previous shift, each crew's assignment and what to report by radio. Miners sign the line-up sheet before going to the cage or ramp.",
+      "role": "ug-shift-supervisor",
+      "kind": "communication",
+      "inputs": [
+        "shift line-up",
+        "list of heading status"
+      ],
+      "outputs": [
+        "signed line-up sheet"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Company pre-shift safety meeting and work assignment procedure under the mine's health and safety program (OHSA duty of the supervisor to advise workers of hazards)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "dev-crew",
+          "occupied_min": {
+            "low": 15,
+            "mode": 25,
+            "high": 35
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.78,
+          "condition": "full crew present and assignments stand"
+        },
+        {
+          "to": "s06",
+          "prob": 0.18,
+          "condition": "absences or task training gaps found"
+        },
+        {
+          "to": "s07",
+          "prob": 0.04,
+          "condition": "crew-change day and part of the crew delayed in transit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Pre-shift line-ups are standard at Ontario underground mines; share of shifts with reassignments is the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Reassign crews for absences and training gaps",
+      "description": "The supervisor moves miners between headings and machines to cover absences or an expired task ticket, usually leaving the lowest-priority heading or a support task unmanned, and corrects the line-up board.",
+      "role": "ug-shift-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "signed line-up sheet",
+        "crew roster"
+      ],
+      "outputs": [
+        "revised shift line-up"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate based on absence rates in rotational mining crews."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Wait for late crew-change arrivals",
+      "description": "On a crew-change day the bus or charter bringing the incoming rotation is held up by a winter storm or a closure on the highway, so the supervisor starts the shift with the miners on site and adds the late arrivals when they reach the dry.",
+      "role": "ug-shift-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "travel status from site administration"
+      ],
+      "outputs": [
+        "revised start plan"
+      ],
+      "systems": [
+        "radio",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always: crews reassigned around the late arrivals"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The site is about an hour's drive from town on a northern Ontario highway (organisation file); delay length is the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Travel underground with the crews",
+      "description": "The supervisor and crews ride the cage to the working levels and take personnel carriers down the ramp to their headings and stopes; the supervisor checks in at the refuge station and confirms tag-board numbers by radio.",
+      "role": "ug-shift-supervisor",
+      "kind": "travel",
+      "inputs": [
+        "revised shift line-up"
+      ],
+      "outputs": [
+        "crews at work places"
+      ],
+      "systems": [
+        "radio"
+      ],
+      "touch_min": {
+        "low": 25,
+        "mode": 40,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "dev-crew",
+          "occupied_min": {
+            "low": 25,
+            "mode": 40,
+            "high": 60
+          }
+        },
+        {
+          "id": "ug-utility",
+          "occupied_min": {
+            "low": 20,
+            "mode": 30,
+            "high": 45
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Travel from line-up to the face at a shaft-and-ramp mine about 580 m deep (shaft depth in the organisation file); time is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Examine each drilling and blasting place",
+      "description": "The supervisor visits every heading and stope where drilling or blasting will happen, looks at the back and walls, the ventilation and the services, checks the miners' workplace inspection cards and confirms each crew can start.",
+      "role": "ug-shift-supervisor",
+      "kind": "validation",
+      "inputs": [
+        "crews at work places"
+      ],
+      "outputs": [
+        "supervisor examination record"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 75,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Regulation 854, s. 63(1): supervisor examines every place where drilling and blasting is carried out at least once each work shift",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.86,
+          "condition": "all places can be worked"
+        },
+        {
+          "to": "s10",
+          "prob": 0.14,
+          "condition": "a heading is unsafe, blocked or not ready"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mltsd-exam"
+        ],
+        "note": "Per-shift examination is required by s. 63(1); share of shifts with an unworkable heading is the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Barricade an unsafe heading and move its crew",
+      "description": "When a heading has loose ground, poor air, a blocked ramp or a misfire, the supervisor posts a barricade, tells the crew where to go instead, and records the hazard for follow-up or raises a hazard report in the incident system.",
+      "role": "ug-shift-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "supervisor examination record"
+      ],
+      "outputs": [
+        "barricade",
+        "hazard report",
+        "revised shift line-up"
+      ],
+      "systems": [
+        "radio",
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Ontario Regulation 854, s. 68: a dangerous area is closed off by barricades or other means",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mltsd-postblast"
+        ],
+        "note": "Barricade duty from the guideline's summary of s. 68; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Take radio progress calls from the crews",
+      "description": "Through the shift the supervisor calls or is called by each crew on the leaky-feeder radio every hour or two for progress (holes drilled, buckets mucked, bolts installed) and problems, and writes the numbers on a pocket tally.",
+      "role": "ug-shift-supervisor",
+      "kind": "communication",
+      "inputs": [
+        "shift line-up"
+      ],
+      "outputs": [
+        "progress tally"
+      ],
+      "systems": [
+        "radio"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 35,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 180
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.35,
+          "condition": "a key machine breaks down"
+        },
+        {
+          "to": "s14",
+          "prob": 0.65,
+          "condition": "no major breakdown"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cim-sic"
+        ],
+        "note": "Radio calls every hour or two are the basic form of short-interval control (CIM Magazine); breakdown share is the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Report a breakdown and raise a work request",
+      "description": "When a jumbo, bolter, scooptram or truck breaks down, the supervisor radios the shop with the unit number, location and fault, and fills in a work request so a mechanic is sent underground or the unit is trammed to the shop.",
+      "role": "ug-shift-supervisor",
+      "kind": "communication",
+      "inputs": [
+        "operator fault report"
+      ],
+      "outputs": [
+        "maintenance work request"
+      ],
+      "systems": [
+        "radio",
+        "cmms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Fault described too vaguely for the mechanic to bring the right parts.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; the organisation file links shift control to breakdown repair through work requests."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Reassign crews and equipment around the breakdown",
+      "description": "The supervisor decides whether the crew waits for the repair, takes a spare machine from another heading or moves to support work such as scaling, services or cleanup, and tells the other crews of any equipment swap.",
+      "role": "ug-shift-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "maintenance work request",
+        "progress tally"
+      ],
+      "outputs": [
+        "revised assignments"
+      ],
+      "systems": [
+        "radio"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cim-sic"
+        ],
+        "note": "A Canadian mine found tasks running twice as long as planned because a jumbo blocked access (CIM Magazine); reassignment time is the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Make second round of workplace visits",
+      "description": "In the second half of the shift the supervisor revisits the headings and stopes, signs the miners' workplace inspection cards, checks drilled rounds and bolting quality, and confirms which headings will be loaded for the end-of-shift blast.",
+      "role": "ug-shift-supervisor",
+      "kind": "review",
+      "inputs": [
+        "progress tally",
+        "workplace inspection cards"
+      ],
+      "outputs": [
+        "blast list draft"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 70,
+        "high": 110
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 180,
+        "high": 240
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.06,
+          "condition": "an injury, near miss or equipment damage occurred"
+        },
+        {
+          "to": "s16",
+          "prob": 0.94,
+          "condition": "no incident"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Second visits are common supervisory practice; incident share is the author's estimate for a mine of about 300 people."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Report an incident",
+      "description": "The supervisor makes the area safe, arranges first aid if needed, notifies the mine captain and the safety coordinator, and enters a first incident report with names, location and what happened in the incident system before the end of the shift.",
+      "role": "ug-shift-supervisor",
+      "kind": "drafting",
+      "inputs": [
+        "witness accounts"
+      ],
+      "outputs": [
+        "incident report"
+      ],
+      "systems": [
+        "hse-system",
+        "radio"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Report missing facts needed by the investigator.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Occupational Health and Safety Act (Ontario), ss. 51-53 notice of critical injuries, accidents and occurrences, and the company incident reporting procedure",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Notice duties under OHSA ss. 51-53 are stated from general knowledge because the Ontario statute site could not be opened."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Confirm the blast list and clear the mine for the central blast",
+      "description": "Before the end-of-shift blast the supervisor confirms with the other supervisor which headings and stopes are loaded, has the crews leave the blasting areas, places guards at entrances, and confirms by radio that everyone is accounted for.",
+      "role": "ug-shift-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "blast list draft"
+      ],
+      "outputs": [
+        "blast list",
+        "all-clear"
+      ],
+      "systems": [
+        "radio",
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 180
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Regulation 854, s. 141: blasting times set, and all workers other than those blasting and guarding leave the vicinity before a blast",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mltsd-postblast"
+        ],
+        "note": "Duties from the guideline's summary of s. 141; timing is the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Travel out to surface with the crews",
+      "description": "Crews take the personnel carriers up the ramp and ride the cage to surface while the blast is fired; the supervisor checks the tag board to confirm everyone is out of the blasting areas.",
+      "role": "ug-shift-supervisor",
+      "kind": "travel",
+      "inputs": [
+        "all-clear"
+      ],
+      "outputs": [
+        "crews on surface"
+      ],
+      "systems": [
+        "radio"
+      ],
+      "touch_min": {
+        "low": 25,
+        "mode": 40,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "dev-crew",
+          "occupied_min": {
+            "low": 25,
+            "mode": 40,
+            "high": 60
+          }
+        },
+        {
+          "id": "ug-utility",
+          "occupied_min": {
+            "low": 20,
+            "mode": 30,
+            "high": 45
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Mirror of the inbound travel time; author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Write the shift report, logbook and timesheets",
+      "description": "On surface the supervisor fills in the paper shift report (metres drilled, rounds blasted, tonnes mucked, bolts installed, delays and their causes), writes unresolved hazards in the logbook and completes the crew timesheets with hours and bonus codes.",
+      "role": "ug-shift-supervisor",
+      "kind": "drafting",
+      "inputs": [
+        "progress tally",
+        "blast list"
+      ],
+      "outputs": [
+        "shift report",
+        "logbook entry",
+        "crew timesheets"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 50
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Tallies, delay causes or hours written wrongly or left out, for example tonnes estimated from bucket counts.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Regulation 854, s. 64: the supervisor makes a written record of a dangerous condition not remedied by the end of the shift",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mltsd-postblast",
+          "noc-82020"
+        ],
+        "note": "Production reports are a supervisor duty (NOC 82020); the s. 64 record is summarised in the post-blast guideline. Time is the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Hand over to the incoming supervisor",
+      "description": "The outgoing supervisor talks the incoming supervisor through the state of each heading, what was blasted, equipment down and any hazard left, usually face to face in the shift office during the next line-up preparation.",
+      "role": "ug-shift-supervisor",
+      "kind": "communication",
+      "inputs": [
+        "shift report",
+        "logbook entry"
+      ],
+      "outputs": [
+        "handover notes"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "A condition is not passed on and the next crew finds it at the face.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Compile the 24-hour production summary",
+      "description": "Early next morning the mine captain reads the night and day shift reports, adds up metres, tonnes and bolts against the weekly plan in a spreadsheet, and lists the main delays to discuss at the morning meeting.",
+      "role": "mine-captain",
+      "kind": "analysis",
+      "inputs": [
+        "shift report"
+      ],
+      "outputs": [
+        "24-hour production summary"
+      ],
+      "systems": [
+        "shift-sheets",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 360,
+        "high": 780
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cim-sic"
+        ],
+        "note": "Information can take 12 hours to reach surface at many mines (CIM Magazine); the wait spans the gap until the next morning for a day shift and about an hour for a night shift."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Review the shift at the morning production meeting",
+      "description": "The mine superintendent, mine captain, maintenance and technical services leads review the past 24 hours against plan, discuss the delays and equipment status, and decide whether the week's priorities still stand.",
+      "role": "mine-superintendent",
+      "kind": "review",
+      "inputs": [
+        "24-hour production summary"
+      ],
+      "outputs": [
+        "meeting actions"
+      ],
+      "systems": [
+        "shift-sheets",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.25,
+          "condition": "plan deviations need a change in priorities"
+        },
+        {
+          "to": "s23",
+          "prob": 0.75,
+          "condition": "plan stands"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily morning meetings are common at Canadian mines; minutes per shift are half of a roughly 30-minute meeting covering two shifts."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Revise the week's priorities",
+      "description": "The superintendent agrees changes with technical services, for example swapping a delayed stope for a ready one or moving a jumbo to a heading that is ahead, and the captain updates the written priorities for the next shifts.",
+      "role": "mine-superintendent",
+      "kind": "approval",
+      "inputs": [
+        "meeting actions",
+        "weekly mine schedule"
+      ],
+      "outputs": [
+        "revised priorities"
+      ],
+      "systems": [
+        "email",
+        "docs"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Key shift tallies into the production spreadsheet",
+      "description": "The mine clerk types the shift report figures into the production tally workbook used for reconciliation and checks the timesheets against the line-up before sending them to payroll.",
+      "role": "mine-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "shift report",
+        "crew timesheets"
+      ],
+      "outputs": [
+        "production tally entry",
+        "checked timesheets"
+      ],
+      "systems": [
+        "shift-sheets",
+        "payroll"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 180,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Keying error in tonnes, metres or hours.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "shift_closed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "A mine or production clerk keying paper reports is common at mid-sized mines in 2019-2022; the organisation file has no such role, so it is added here."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Unsafe or blocked heading",
+      "share_of_cases": 0.14,
+      "description": "Loose ground, poor ventilation, a blocked ramp or a misfire stops a heading; it is barricaded and the crew moved.",
+      "path": [
+        "s09",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Major equipment breakdown",
+      "share_of_cases": 0.35,
+      "description": "A jumbo, bolter, LHD or truck fails during the shift; a work request is raised and crews are reassigned.",
+      "path": [
+        "s11",
+        "s12",
+        "s13",
+        "s14"
+      ]
+    },
+    {
+      "name": "Absences or training gaps at line-up",
+      "share_of_cases": 0.18,
+      "description": "Missing miners or expired task training force the line-up to be redone.",
+      "path": [
+        "s05",
+        "s06",
+        "s08"
+      ]
+    },
+    {
+      "name": "Late crew change in bad weather",
+      "share_of_cases": 0.04,
+      "description": "Storms or highway closures delay part of the incoming rotation.",
+      "path": [
+        "s05",
+        "s07",
+        "s06",
+        "s08"
+      ]
+    },
+    {
+      "name": "Incident during the shift",
+      "share_of_cases": 0.06,
+      "description": "An injury, near miss or equipment damage is reported before the end of the shift.",
+      "path": [
+        "s14",
+        "s15",
+        "s16"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.0,
+        "p90": 1.4
+      },
+      "unit": "calendar days from the supervisor arriving for the shift to the shift's tallies being keyed",
+      "population": "Mid-sized Canadian underground mine with paper shift reporting",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "A 12-hour shift plus 1-2 hours of preparation and travel, and review at the next morning meeting; information reaching surface up to 12 hours late (CIM Magazine) supports a next-day close."
+      }
+    },
+    {
+      "metric": "equipment_moving_hours_per_12h_shift",
+      "value": 6,
+      "unit": "hours",
+      "population": "Conventional underground mines without real-time short-interval control (Canadian example quoted in CIM Magazine)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cim-sic"
+        ],
+        "note": "Quoted by a North American Palladium manager comparing Lac des Iles (10 or more hours) with conventional mines (about six)."
+      }
+    },
+    {
+      "metric": "information_lag_hours",
+      "value": 12,
+      "unit": "hours for face information to reach surface",
+      "population": "Many underground mines (CIM Magazine, 2017)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cim-sic"
+        ],
+        "note": "Stated as a general observation in the article."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Equipment status at line-up is often out of date, so crews are assigned to machines that are down and must be reassigned underground.",
+      "steps": [
+        "s02",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice."
+      }
+    },
+    {
+      "description": "Progress is known only from radio calls and a pocket tally, and reaches management in the next morning's meeting, too late to correct the shift.",
+      "steps": [
+        "s11",
+        "s20",
+        "s21"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cim-sic"
+        ],
+        "note": "CIM Magazine: information can take 12 hours to reach surface."
+      }
+    },
+    {
+      "description": "Travel, line-up and blast clearance take two to three hours of each 12-hour shift, leaving about six hours of equipment working time.",
+      "steps": [
+        "s05",
+        "s08",
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cim-sic"
+        ],
+        "note": "Six moving hours per 12-hour shift at conventional mines."
+      }
+    },
+    {
+      "description": "Paper shift reports are re-typed into spreadsheets, so tallies and delay codes are entered twice and errors are found only at month-end reconciliation.",
+      "steps": [
+        "s18",
+        "s23"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common 2019-2022 practice."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "mltsd-exam",
+      "title": "Workplace examinations by supervisors (guideline on section 63 of Regulation 854)",
+      "publisher": "Ontario Ministry of Labour, Immigration, Training and Skills Development (archived copy in the Library and Archives Canada web archive)",
+      "url": "https://bac-lac.wayback.archive-it.org/web/2022/https://www.ontario.ca/page/workplace-examinations-supervisors",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "Regulation 854 s. 63(1): a supervisor examines every place where drilling and blasting is being carried out at least once each work shift; s. 63(3): every other place where workers work, in person, at least once each work week; the examination is to identify potential or actual hazards and assess general conditions. The guideline page is dated February 2024; the archive returned a June 2024 capture."
+    },
+    {
+      "id": "mltsd-postblast",
+      "title": "Post-blast examinations in mines",
+      "publisher": "Ontario Ministry of Labour, Immigration, Training and Skills Development (archived copy in the Library and Archives Canada web archive)",
+      "url": "https://bac-lac.wayback.archive-it.org/web/2022/https://www.ontario.ca/page/post-blast-examinations-mines",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Regulation 854 s. 141: blasting times set (jointly where several employers), all workers except those assisting in blasting and guarding leave the vicinity before a blast; s. 253(1)(a): work areas free of blasting contaminants before re-entry; s. 260: post-blast examination by competent workers; s. 64: supervisor makes a written record of a dangerous condition not remedied by the end of the shift; ss. 68 and 74: barricades. Page published August 2022."
+    },
+    {
+      "id": "noc-82020",
+      "title": "NOC 2021 unit group 82020: Supervisors, mining and quarrying",
+      "publisher": "Employment and Social Development Canada, National Occupational Classification",
+      "url": "https://noc.esdc.gc.ca/Structure/NOCProfile?GocTemplateCulture=en-CA&code=82020&version=2021.0",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Mine supervisors (shift boss, mine captain) supervise, coordinate and schedule the work of miners, oversee safety, resolve work problems, requisition materials, train workers and prepare production and other reports."
+    },
+    {
+      "id": "cim-sic",
+      "title": "A short solution for the long haul: transitioning from information overload to efficient operation with short interval control",
+      "publisher": "CIM Magazine (Canadian Institute of Mining, Metallurgy and Petroleum), Peter Braul",
+      "url": "https://magazine.cim.org/en/technology/a-short-solution-for-the-long-haul",
+      "year": 2017,
+      "accessed": "2026-11-24",
+      "supports": "Short interval control can be as simple as a radio call every hour or two; in many mines it can take 12 hours for information to reach surface; equipment at a conventional underground mine moves about six hours of a 12-hour shift (against 10 or more at Lac des Iles, Ontario); a Canadian mine found tasks running 100% longer than planned because a jumbo blocked access; a 25-30% productivity gain is thought available at most mines."
+    }
+  ],
+  "assumptions": [
+    "The organisation file gives this process no trigger; the shift calendar starts each case, so the weekly mine plan from ts-short-range-plan is recorded as the trigger.",
+    "One case is one crew-shift. Wait times inside the shift (s11, s14, s16) stand for the hours crews spend working between the supervisor's actions, so the simulated cycle covers the whole shift plus next-morning review.",
+    "Shift timings follow two 12-hour shifts with blasting at shift end; the reference mine's exact shift times were not found.",
+    "The mine captain works day shift only, so half of the cases skip the pre-shift planning meeting.",
+    "A mine production clerk role is added (not in the organisation file) to key shift reports; at mines without one the supervisor or captain keys the data.",
+    "This file adds shift_lineup to mine-ground-support, which the organisation file omits: bolter operators are lined up like other crews.",
+    "Loaded costs come from the organisation file (base pay x 1.35 for hourly site roles, 1.30 for staff).",
+    "fte_on_process is a share of headcount on a 14/14 rotation; each person works about 182 hours a month on average, more than the 130 productive hours the validator assumes, so stated FTE is somewhat above touch-time FTE.",
+    "Organisation file corrected on 2026-11-24 to match this workflow's sources: ids were renamed (mill-elution-refining to mill-gold-room-refining, loaded_carbon to gold_concentrate, tailings_slurry to filtered_tailings, elution-circuit to refinery), and roles and resources this workflow added are now in the organisation file. Notes above that describe a mismatch refer to the file before the correction."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

@@ -1,0 +1,1399 @@
+{
+  "schema_version": "0.3",
+  "id": "gen-wnd-monitor-fleet",
+  "name": "Monitor the wind fleet and reset faults",
+  "org": "power-generation-co",
+  "process": "wnd-monitor-fleet",
+  "sector": "electric power generation (wind)",
+  "function": "wind operations and maintenance",
+  "summary": "Operators in the renewables operations centre watch alarms from about 450 wind turbines in SCADA around the clock. When a turbine stops on a fault, the operator looks up the fault code, checks that nobody is working on the turbine, and resets it remotely when the reset rules allow; weather stops such as icing, extreme cold and high-wind cut-out are watched until conditions clear. Turbines that cannot be reset are blocked, the lost capability is passed to the real-time trading desk, and a work order goes to the site technicians. Bursts of icing and cold-snap faults in winter, repeat faults on older turbines and judging which faults are safe to reset make the work uneven and error-prone.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "An Alberta-centred listed generator whose wind division runs a central renewables operations centre with one 24x7 operator desk over twelve southern Alberta wind farms.",
+    "org_size_employees": 1300,
+    "notes": "Wind division of about 70 people running roughly 450 turbines on 11 to 12 southern Alberta wind farms commissioned between 1997 and 2021, most of them older 0.66 to 3 MW machines without tower elevators."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one turbine fault stop",
+  "trigger": "A turbine controller stops a turbine on a fault or a weather limit and SCADA raises an alarm at the operations centre.",
+  "end_state": "The turbine is running again after a remote reset or after the weather condition cleared, or it is blocked, its lost capability has been passed on and a corrective work order has been handed to the site technicians.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 250,
+      "mode": 450,
+      "high": 900
+    },
+    "seasonality": "Higher from November to March: icing, temperatures below the turbines' operating limits and stronger winter winds cause more stops; lowest in summer.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "walgern2026"
+      ],
+      "note": "Organisation file estimate of about 450 turbines with one to two fault stops per turbine per month. Walgern et al. report 3.3 non-resettable failures per onshore turbine per year; resettable stops are several times more frequent, so 0.5 to 2 stops per turbine per month is plausible for older machines. Not checked against an operator's own alarm log."
+    },
+    "surge": {
+      "cause": "winter icing and cold snaps",
+      "events_per_year": {
+        "low": 2,
+        "mode": 3,
+        "high": 5
+      },
+      "duration_days": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "volume_multiplier": {
+        "low": 2,
+        "mode": 3,
+        "high": 4
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "iea19"
+        ],
+        "note": "Cold-climate stops (icing, temperatures below standard turbine limits) come in multi-day events; counts and multiplier are the organisation file's estimates."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "wnd-monitor-fleet",
+        "object": "unit_trip",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "weather_provider",
+        "object": "weather_forecast"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "dispatched to technicians",
+        "to": "wnd-troubleshoot-turbines",
+        "object": "turbine_fault"
+      },
+      {
+        "outcome": "dispatched to technicians",
+        "to": "mkt-restate-offers",
+        "object": "availability_change"
+      },
+      {
+        "outcome": "returned to service remotely",
+        "to": "aeso",
+        "object": "delivered_energy"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "roc_operator",
+      "title": "Renewables operations centre operator",
+      "department": "Wind and storage: renewables operations centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.5,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 62,
+        "high": 78
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (8 people covering one 24x7 desk). Loaded = wage x 1.40 (benefits about 25 percent, overhead about 15 percent), as in the organisation file. Monitoring is the main duty of the desk, but one seat must be covered every hour (about 5.5 FTE per seat), so stated FTE exceeds hands-on time; the rest goes to battery dispatch, restatements and quiet-period checks."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "performance_analyst",
+      "title": "Renewables performance analyst",
+      "department": "Wind and storage: renewables operations centre",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 65,
+        "mode": 80,
+        "high": 100
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (3 people, office hours). Loaded = wage x 1.40 (benefits about 25 percent, overhead about 15 percent), as in the organisation file. Daily review of repeat resets and downtime classification."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "scada",
+      "name": "Hydro, wind and battery SCADA and remote control",
+      "kind": "instrument"
+    },
+    {
+      "id": "historian",
+      "name": "Plant data historian",
+      "kind": "analytics"
+    },
+    {
+      "id": "erp",
+      "name": "ERP (finance, purchasing and plant maintenance modules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "ets",
+      "name": "AESO Energy Trading System (offers, declarations and dispatch)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "forecast_tools",
+      "name": "Load, price, wind and inflow forecasting models",
+      "kind": "analytics"
+    },
+    {
+      "id": "permit_system",
+      "name": "Permit-to-work and lockout system",
+      "kind": "workflow"
+    },
+    {
+      "id": "email",
+      "name": "Email, chat and video calls",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "resources": [
+    {
+      "id": "wind_farm",
+      "name": "Wind farm",
+      "kind": "plant",
+      "count": 12
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Stop turbine and raise SCADA alarm",
+      "description": "The turbine controller detects a fault or a weather limit (ice on the blades, temperature below the operating limit, wind above cut-out, grid event), brings the rotor to a stop and sends an alarm with a fault code to the SCADA alarm list at the operations centre.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "turbine status signals"
+      ],
+      "outputs": [
+        "SCADA alarm with fault code"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice of wind fleet operations centres in 2019-2022; author's estimate."
+      },
+      "resources": [
+        {
+          "id": "wind_farm",
+          "occupied_min": {
+            "low": 0,
+            "mode": 0,
+            "high": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "s02",
+      "name": "Acknowledge the alarm",
+      "description": "The operator sees the new alarm in the SCADA alarm list among alarms from other farms, acknowledges it and opens the turbine's status page to read the fault code, the time of the stop and the current wind, temperature and power readings.",
+      "role": "roc_operator",
+      "kind": "intake",
+      "inputs": [
+        "SCADA alarm with fault code"
+      ],
+      "outputs": [
+        "acknowledged alarm"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 1,
+        "mode": 6,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "An alarm is acknowledged during an alarm flood and then overlooked.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pe2013"
+        ],
+        "note": "A remote monitoring centre reports a 10 minute average response and 99 percent of alarms answered within an hour; the queue range reflects one desk that also handles alarm floods during icing."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Look up the fault code in the reset rules",
+      "description": "The operator looks up the fault code in the manufacturer's fault list and the company's reset matrix, checks how many times this turbine has been reset for the same code in the last 24 hours in the SCADA event log, and looks at the weather data to decide whether the stop is a weather stop, a resettable fault or one that needs a technician.",
+      "role": "roc_operator",
+      "kind": "lookup",
+      "inputs": [
+        "acknowledged alarm",
+        "reset matrix",
+        "SCADA event log",
+        "weather data"
+      ],
+      "outputs": [
+        "fault classification"
+      ],
+      "systems": [
+        "scada",
+        "forecast_tools",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A fault that needs inspection is classed as resettable, so the turbine is restarted and trips again or runs with damage.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.22,
+          "condition": "weather or grid stop: icing, cold below the operating limit, high-wind cut-out or curtailment"
+        },
+        {
+          "to": "s06",
+          "prob": 0.53,
+          "condition": "resettable fault within reset limits"
+        },
+        {
+          "to": "s11",
+          "prob": 0.25,
+          "condition": "fault needs a site visit: safety-chain, hardware or repeated fault"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pe2013",
+          "iea19"
+        ],
+        "note": "Siemens reports 80 percent of alarm cases resolved remotely; the author lowers that to about 70 percent remote (weather plus reset) for an older, mixed fleet with fewer remote functions. Branch shares are estimates."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Log the weather stop and set a watch",
+      "description": "The operator records the weather or grid stop in the electronic shift log with the turbine, cause and start time, and sets a watch so the turbine is restarted, or restarts itself, once ice, cold or high wind clears.",
+      "role": "roc_operator",
+      "kind": "data_entry",
+      "inputs": [
+        "fault classification"
+      ],
+      "outputs": [
+        "shift log entry"
+      ],
+      "systems": [
+        "scada",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "The stop is logged against the wrong cause, which skews availability reporting.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice of wind fleet operations centres in 2019-2022; author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Wait for icing, cold or wind to clear",
+      "description": "The turbine stays stopped while the operator watches temperature, wind speed and the ice detector or power curve; icing stops in southern Alberta can last from an hour to several days, and chinook warming often clears them suddenly.",
+      "role": "system",
+      "kind": "external_wait",
+      "inputs": [
+        "weather data",
+        "turbine status"
+      ],
+      "outputs": [
+        "condition cleared or not"
+      ],
+      "systems": [
+        "scada",
+        "forecast_tools"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 360,
+        "high": 4320
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.85,
+          "condition": "condition clears and turbine can be restarted"
+        },
+        {
+          "to": "s11",
+          "prob": 0.15,
+          "condition": "turbine will not restart or blades need an ice inspection"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "iea19"
+        ],
+        "note": "Cold-climate stops from icing and low temperature are described by IEA Wind Task 19; durations are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "wind_farm",
+          "occupied_min": {
+            "low": 0,
+            "mode": 0,
+            "high": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "s06",
+      "name": "Confirm nobody is working on the turbine",
+      "description": "Before any remote command the operator checks the permit and lockout board and the technician check-in list for the farm, and confirms that no technician is in the tower or nacelle and that the turbine is not under a work permit.",
+      "role": "roc_operator",
+      "kind": "validation",
+      "inputs": [
+        "permit and lockout board",
+        "technician check-in list"
+      ],
+      "outputs": [
+        "clearance to reset"
+      ],
+      "systems": [
+        "permit_system",
+        "scada"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 3
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "A turbine under a permit is reset remotely, endangering technicians.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Company lockout and permit-to-work standard under the Alberta OHS Code Part 15 (energy isolation): no remote start of equipment under a permit or with workers on it",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.97,
+          "condition": "clear to reset"
+        },
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "technicians are working on the turbine; the stop belongs to their job",
+          "outcome": "held for site work"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "ii2025"
+        ],
+        "note": "Work inside turbines only under a written order or permit (source); the check itself is the author's description of common practice."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Send the remote reset",
+      "description": "The operator sends the reset command for the turbine from SCADA, choosing the reset type the reset matrix allows for the fault code, and notes the reset count so the limit on repeated resets is respected.",
+      "role": "roc_operator",
+      "kind": "data_entry",
+      "inputs": [
+        "clearance to reset",
+        "reset matrix"
+      ],
+      "outputs": [
+        "reset command"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Reset sent to the wrong turbine on a farm with similar names.",
+        "typically_caught_at": "s08"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Manufacturer fault-reset rules and the company reset matrix: limited remote resets of the same fault in 24 hours before a technician must inspect",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pe2013"
+        ],
+        "note": "Remote resets are a standard function of remote monitoring centres (source); reset limits are common practice, values not sourced."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Watch the turbine through restart",
+      "description": "The operator watches the turbine status page while it yaws into the wind, releases the brake and ramps up, comparing power with the power curve for the measured wind, and decides whether the restart held.",
+      "role": "roc_operator",
+      "kind": "validation",
+      "inputs": [
+        "turbine status"
+      ],
+      "outputs": [
+        "restart confirmed or repeat fault"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.86,
+          "condition": "turbine runs normally"
+        },
+        {
+          "to": "s03",
+          "prob": 0.14,
+          "condition": "turbine faults again"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice of wind fleet operations centres in 2019-2022; author's estimate. Repeat-fault share estimated."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Record the reset in the shift log",
+      "description": "The operator writes the turbine, fault code, reset time and outcome into the shift log so the next shift and the analysts can see repeat offenders; SCADA also keeps the event in its own log.",
+      "role": "roc_operator",
+      "kind": "data_entry",
+      "inputs": [
+        "restart confirmed"
+      ],
+      "outputs": [
+        "shift log entry"
+      ],
+      "systems": [
+        "scada",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Reset not logged or logged without the fault code.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.12,
+          "condition": "turbine has had repeated resets"
+        },
+        {
+          "to": "END",
+          "prob": 0.88,
+          "condition": "no repeat pattern",
+          "outcome": "returned to service remotely"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice of wind fleet operations centres in 2019-2022; author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Review repeat resets in the daily report",
+      "description": "On the next weekday morning the performance analyst runs the daily stop report from SCADA and the historian, lists turbines with repeated resets of the same code and decides whether the pattern points to a fault that a technician should inspect.",
+      "role": "performance_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "daily stop report",
+        "shift log"
+      ],
+      "outputs": [
+        "inspection recommendation or no action"
+      ],
+      "systems": [
+        "scada",
+        "historian",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 900,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "A developing fault is dismissed as nuisance trips.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.8,
+          "condition": "pattern judged harmless",
+          "outcome": "returned to service remotely"
+        },
+        {
+          "to": "s16",
+          "prob": 0.2,
+          "condition": "inspection needed: raise a work order"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily review by an office-hours analyst is common practice; the batch wait covers nights and weekends."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Pull condition data and work history",
+      "description": "For a fault that cannot be reset the operator opens the historian trends for the turbine (gearbox and bearing temperatures, vibration, pitch and converter signals) and the open and recent work orders in the ERP to judge how serious the fault is.",
+      "role": "roc_operator",
+      "kind": "analysis",
+      "inputs": [
+        "historian trends",
+        "work order history"
+      ],
+      "outputs": [
+        "fault assessment"
+      ],
+      "systems": [
+        "historian",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "A major component symptom is missed and the fault is treated as minor.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.12,
+          "condition": "symptoms suggest a main component problem"
+        },
+        {
+          "to": "s13",
+          "prob": 0.88,
+          "condition": "ordinary fault"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pe2013",
+          "walgern2026"
+        ],
+        "note": "Condition data are used for early detection (pe2013); pitch, control and converter systems fail most often (walgern2026). Shares estimated."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Analyst reviews condition trends",
+      "description": "The performance analyst compares the turbine's temperature and vibration trends with its neighbours and with earlier failures, and writes a short note on whether the problem looks like a gearbox, bearing or generator failure that should be inspected urgently.",
+      "role": "performance_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "fault assessment",
+        "historian trends"
+      ],
+      "outputs": [
+        "condition note"
+      ],
+      "systems": [
+        "historian",
+        "spreadsheets",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "res2023"
+        ],
+        "note": "Condition monitoring and oil readings give early warning of main component failure (source); timing estimated, office hours only."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Block the turbine from restarting",
+      "description": "The operator puts the turbine into a stopped or service state in SCADA so it will not try to restart on its own, which protects a damaged drivetrain and keeps the alarm from repeating.",
+      "role": "roc_operator",
+      "kind": "data_entry",
+      "inputs": [
+        "fault assessment"
+      ],
+      "outputs": [
+        "turbine blocked"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Turbine left in auto and restarts repeatedly on a damaged component.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice of wind fleet operations centres in 2019-2022; author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Work out the lost capability",
+      "description": "The operator adds up the turbines now unavailable at the farm, compares the lost megawatts with the threshold the real-time desk uses for restating the farm's available capability, and checks the wind forecast for the next hours.",
+      "role": "roc_operator",
+      "kind": "analysis",
+      "inputs": [
+        "turbine availability by farm",
+        "wind forecast"
+      ],
+      "outputs": [
+        "lost capability estimate"
+      ],
+      "systems": [
+        "scada",
+        "forecast_tools"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Lost megawatts added up wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.35,
+          "condition": "loss reaches the restatement threshold"
+        },
+        {
+          "to": "s16",
+          "prob": 0.65,
+          "condition": "loss below the threshold"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Restatement thresholds and shares are the author's estimate; one stopped turbine of 0.66 to 4.5 MW often stays below a farm-level threshold."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Tell the real-time desk and update availability",
+      "description": "The operator calls or messages the real-time trader with the farm, the megawatts lost and the expected duration, and updates the turbine availability data the farm sends to the AESO so that the offer and the wind forecast reflect the stopped turbines.",
+      "role": "roc_operator",
+      "kind": "communication",
+      "inputs": [
+        "lost capability estimate"
+      ],
+      "outputs": [
+        "availability change"
+      ],
+      "systems": [
+        "scada",
+        "ets",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Availability not restated or restated with the wrong value.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "AESO ISO rules requiring pool participants to keep available capability and wind facility data submitted to the AESO accurate (ISO rules Section 203 series and Section 304.9 wind forecasting data)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "AESO rule names from general knowledge; the rule texts were not opened (PDF). Timing estimated."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Create a corrective work order",
+      "description": "The operator creates a corrective work order in the ERP maintenance module against the turbine's equipment number, typing the fault code, symptoms, the reset attempts made and the condition note, and sets the priority code.",
+      "role": "roc_operator",
+      "kind": "data_entry",
+      "inputs": [
+        "fault assessment",
+        "condition note"
+      ],
+      "outputs": [
+        "corrective work order"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Vague symptoms or wrong fault code on the work order.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice of wind fleet operations centres in 2019-2022; author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Set the dispatch priority",
+      "description": "The operator ranks the job against other stopped turbines by megawatts lost, pool price, the wind forecast and any safety concern, and decides whether it needs the on-call technician tonight or can wait for the day crew.",
+      "role": "roc_operator",
+      "kind": "judgment",
+      "inputs": [
+        "corrective work order",
+        "pool price",
+        "wind forecast"
+      ],
+      "outputs": [
+        "dispatch priority"
+      ],
+      "systems": [
+        "erp",
+        "forecast_tools"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Low-value turbine called out at night while a larger loss waits.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice of wind fleet operations centres in 2019-2022; author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Hand the fault to the site supervisor",
+      "description": "The operator phones the site supervisor during the day, or the on-call technician after hours, explains the fault and priority, and sends the work order number; the call may need a callback if the person is on a tower.",
+      "role": "roc_operator",
+      "kind": "communication",
+      "inputs": [
+        "corrective work order",
+        "dispatch priority"
+      ],
+      "outputs": [
+        "turbine fault handed over"
+      ],
+      "systems": [
+        "email",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Key detail lost in the verbal handover.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.25,
+          "condition": "long or unclear stop needs classification"
+        },
+        {
+          "to": "END",
+          "prob": 0.75,
+          "condition": "handed over",
+          "outcome": "dispatched to technicians"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice of wind fleet operations centres in 2019-2022; author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Classify the stop in the availability record",
+      "description": "The performance analyst checks the stop in the availability tracker the next weekday, assigns the downtime category used in manufacturer warranty and internal availability reports (forced, weather, grid, owner) and corrects categories that SCADA set automatically.",
+      "role": "performance_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "SCADA availability counters",
+        "shift log"
+      ],
+      "outputs": [
+        "classified downtime record"
+      ],
+      "systems": [
+        "scada",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 900,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Downtime put in the wrong category, affecting warranty availability claims.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "classified",
+          "outcome": "dispatched to technicians"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Manual review of long or ambiguous stops is common practice; most short stops are classified automatically by SCADA counters."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Icing event alarm flood",
+      "share_of_cases": 0.15,
+      "description": "During an icing or cold-snap event dozens of turbines stop within hours; the single desk acknowledges alarms late and turbines wait for conditions to clear before restart.",
+      "path": [
+        "s02",
+        "s03",
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s08"
+      ]
+    },
+    {
+      "name": "Repeat fault after reset",
+      "share_of_cases": 0.07,
+      "description": "The turbine trips again on restart, the operator goes back to the reset rules and eventually raises a work order once the reset limit is reached.",
+      "path": [
+        "s08",
+        "s03",
+        "s11",
+        "s13",
+        "s16"
+      ]
+    },
+    {
+      "name": "Suspected main component failure",
+      "share_of_cases": 0.03,
+      "description": "Condition trends point to a gearbox, bearing or generator problem; the analyst is asked for a view before the job is handed to the site.",
+      "path": [
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15",
+        "s16"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "alarm_response_minutes",
+      "value": {
+        "mean": 10
+      },
+      "unit": "minutes from alarm to operator response",
+      "population": "Siemens wind remote monitoring centres, about 2013",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "pe2013"
+        ],
+        "note": "Stated in the source; also 99 percent of alarms answered within an hour."
+      }
+    },
+    {
+      "metric": "share_of_alarms_resolved_remotely",
+      "value": 0.8,
+      "unit": "share of alarm cases",
+      "population": "Siemens wind remote monitoring centres, about 2013",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "pe2013"
+        ],
+        "note": "Stated in the source for a manufacturer's centre; an owner's centre over older mixed turbines is likely lower."
+      }
+    },
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.05,
+        "p90": 1.5
+      },
+      "unit": "calendar days from alarm to turbine running again or handed to technicians",
+      "population": "Author's estimate for an owner-operated centre over about 450 turbines",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "pe2013"
+        ],
+        "note": "Built from the 10 minute average response in pe2013 plus checks, restart and work order entry (about an hour in total for most stops); the p90 reflects weather stops that last hours to days. Not measured."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "One operator desk handles alarm floods during icing and cold snaps, so acknowledgement and restart are delayed exactly when many turbines stop at once.",
+      "steps": [
+        "s02",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "iea19"
+        ],
+        "note": "Icing and cold stops come in events (source); queueing effect is the author's judgement."
+      }
+    },
+    {
+      "description": "Deciding whether a fault is safe to reset depends on the operator's experience with each turbine model; mistakes either waste a technician trip or restart a damaged turbine.",
+      "steps": [
+        "s03",
+        "s08",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's judgement from common practice with mixed-vintage fleets."
+      }
+    },
+    {
+      "description": "Work orders and shift logs are typed by hand from SCADA, and vague fault descriptions slow the technicians' diagnosis and the reliability analysis later.",
+      "steps": [
+        "s09",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's judgement."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "pe2013",
+      "title": "Using Technology to Monitor & Maintain Wind Turbines (J. Martino)",
+      "publisher": "Power Engineering (Clarion Events)",
+      "url": "https://www.power-eng.com/renewables/wind-energy/using-technology-to-monitor-maintain-wind-turbines/",
+      "year": 2013,
+      "accessed": "2026-11-24",
+      "supports": "Siemens remote monitoring centres resolve 80 percent of registered alarm cases remotely without a site visit; average response time 10 minutes and 99 percent of alarms answered within an hour; 24/7 remote monitoring centres; vibration-based condition monitoring for early detection."
+    },
+    {
+      "id": "walgern2026",
+      "title": "Reliability and O&M key performance indicators of onshore and offshore wind turbines based on field-data analysis (Walgern et al.)",
+      "publisher": "Wind Energy Science, vol. 11, pp. 1553-1568 (Copernicus)",
+      "url": "https://wes.copernicus.org/articles/11/1553/2026/",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Onshore failure rate 3.3 non-resettable failures per turbine per year (1.729 per MW per year); WMEP onshore 2.4 failures per turbine per year for smaller turbines; average technician time on site 2.7 h for component replacements, about 1.5 h for other corrective maintenance and 3.8 h for preventive maintenance, excluding travel and spare-part lead times; pitch, control and converter systems have the highest onshore failure rates per MW."
+    },
+    {
+      "id": "iea19",
+      "title": "IEA Wind TCP Task 19: Wind energy in cold climates",
+      "publisher": "IEA Wind Technology Collaboration Programme",
+      "url": "https://iea-wind.org/task19/",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Cold climate sites are those with icing events or periods with temperatures below the operational limits of standard wind turbines; these conditions affect production, economics and safety (ice throw); work programme 2019-2021."
+    },
+    {
+      "id": "ii2025",
+      "title": "Working as a wind turbine technician: how to minimise risks",
+      "publisher": "Industry Insider",
+      "url": "https://industryinsider.eu/energy-utilities/working-as-a-wind-turbine-technician/",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "Wind speed limits set by regulations and manufacturers: access to the lower platform up to 25 m/s and to the nacelle up to 20 m/s, hoists below 10 m/s; all work by teams of at least two people; work inside turbines only under a written order or permit; work stops and the team evacuates if gusts threaten stability."
+    },
+    {
+      "id": "res2023",
+      "title": "How can we prepare for main component failure? (B. McDaid)",
+      "publisher": "RES",
+      "url": "https://www.res-group.com/resources/how-can-we-prepare-for-main-component-failure/",
+      "year": 2023,
+      "accessed": "2026-11-24",
+      "supports": "Main component failures (gearboxes, bearings, generators, main shafts, blades) are an expected part of O&M; lead times for some components average three to six months (nine months for one main shaft); a crane exchange needs a three-to-four-day weather window that is hard to find at windy sites; crane mobilisation decisions are made 24 to 72 hours ahead; condition monitoring, oil readings and inspection give early warning."
+    }
+  ],
+  "assumptions": [
+    "The organisation file lists no trigger for this process. A fault stop starts inside the fleet being monitored, so triggered_by points to the process itself with the business object unit_trip (turbine alarm); weather forecasts are a standing input.",
+    "About 70 percent of fault stops end without a site visit (weather stops plus remote resets) and about 30 percent are dispatched, against 80 percent remote resolution reported by a manufacturer's centre (pe2013) and the organisation file's note of about 40 percent needing a visit. The lower remote share reflects older turbines with fewer remote functions.",
+    "The roc_operator FTE (3.5) is far above hands-on time because a 24x7 desk must be staffed whether or not alarms arrive; hands-on time alone implies about 2 FTE at the mode volume, and more during icing surges.",
+    "Availability restatement is shown for about a third of dispatched faults; smaller losses are left to the AESO wind forecast and the next scheduled offer update.",
+    "The cycle time ends at handover to technicians; travel and repair time are in the troubleshoot workflow.",
+    "Loaded costs are the organisation file's (wage x 1.40)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

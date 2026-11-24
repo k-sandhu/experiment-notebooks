@@ -1,0 +1,2190 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-wp-collection",
+  "name": "Collect chain of custody specimens for workplace drug and alcohol tests",
+  "org": "diagnostic-lab-services-co",
+  "process": "wp-collection",
+  "sector": "medical laboratory services (workplace drug and alcohol testing)",
+  "function": "workplace testing collections",
+  "summary": "An employer orders a drug test for an applicant or employee and the company's staff collect the specimen under chain of custody, either at a company collection centre or on the employer's site. The collector checks identity, has the donor provide urine or oral fluid, checks temperature and volume, splits and seals the specimen in front of the donor, completes the multi-part custody form and ships the specimen to the toxicology laboratory, adding a breath alcohol test when ordered. Most elapsed time is the donor deciding when to attend and the collector's travel to sites; shy bladders, out-of-range temperatures, refusals and form errors are the usual problems, each governed by set rules.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "The workplace testing line of a large Canadian laboratory company with about 300,000 drug tests a year, 70+ company collection centres, a team of certified on-site collectors and SAMHSA-certified toxicology laboratories.",
+    "org_size_employees": 3300,
+    "notes": "Covers the roughly 60 per cent of tests collected by company staff; third-party clinics send their specimens directly to the laboratory and are outside this workflow. Starts when the authorization reaches the collection channel and ends when the sealed specimen is ready for the courier, or the collection is stopped."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one chain of custody collection",
+  "trigger": "A donor authorization from the test ordering process reaches a company collection centre or an on-site collector.",
+  "end_state": "The sealed split specimen with copy 1 of the custody form is in the courier pickup and the other copies have gone to the MRO and employer, with any breath alcohol result reported; or the collection is stopped as a refusal, an insufficient specimen, a no-show or an unresolved identity problem.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 13000,
+      "mode": 15000,
+      "high": 17000
+    },
+    "seasonality": "Pre-employment and site access tests rise in spring and early summer with construction and energy hiring and before plant turnarounds; post-incident callouts are spread evenly and arrive at any hour.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "dyn_dts"
+      ],
+      "note": "More than 300,000 tests a year (dyn_dts) is about 25,000 a month; the organisation file assumes 60 per cent are collected by company staff."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "wp-test-ordering",
+        "object": "donor_authorization",
+        "share": 1.0
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "collected",
+        "to": "lg-interlab-transfer",
+        "object": "ccf_specimen"
+      },
+      {
+        "outcome": "collected",
+        "to": "wp-result-reporting",
+        "object": "breath_alcohol_result"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "lab_assistant_psc_on",
+      "title": "Laboratory assistant, collection centre (Ontario)",
+      "department": "Ontario collection centres",
+      "layer": "individual_contributor",
+      "fte_on_process": 51.0,
+      "loaded_cost_per_hour": {
+        "low": 24,
+        "mode": 31,
+        "high": 41
+      },
+      "occupation_code": "NOC 33101",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_dts",
+          "jobbank_33101",
+          "cfr4033"
+        ],
+        "note": "Collections at the 70+ company-owned centres (dyn_dts) are assumed to be done by centre laboratory assistants qualified as collectors under 49 CFR 40.33. FTE is about 12,500 centre collections a month at about 32 minutes of hands-on time, out of 400 assistants. Loaded cost from the organisation file: Job Bank 33101 wages (jobbank_33101) times 1.35."
+      }
+    },
+    {
+      "id": "occupational_collector",
+      "title": "Occupational testing collector",
+      "department": "Chain of custody collections",
+      "layer": "individual_contributor",
+      "fte_on_process": 27.5,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 31,
+        "high": 40
+      },
+      "occupation_code": "NOC 33101",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_dts",
+          "cfr4033",
+          "jobbank_33101"
+        ],
+        "note": "Certified chain of custody collectors working on employer sites and on callouts (dyn_dts). FTE is about 2,550 on-site collections a month at about 75 to 105 minutes each including amortised travel, within the organisation file's 35 collectors, who also do other occupational tests. Loaded cost from the organisation file (wage times 1.35)."
+      }
+    },
+    {
+      "id": "workplace_program_coordinator",
+      "title": "Workplace testing program coordinator",
+      "department": "Workplace program management",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 36,
+        "high": 45
+      },
+      "occupation_code": "NOC 13110",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Coordinators resolve missing or expired authorizations and identity problems with the employer's designated representative; about 5 per cent of centre collections at about 10 minutes. Loaded cost from the organisation file (wage times 1.35)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "dt_system",
+      "name": "Drug testing case management (chain of custody, MRO review, employer web reports)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "fax",
+      "name": "Fax server",
+      "kind": "communication"
+    },
+    {
+      "id": "logistics_tracking",
+      "name": "Courier routing, dispatch and web-based order and tracking system",
+      "kind": "workflow"
+    },
+    {
+      "id": "ccf_paper",
+      "name": "Federal or non-regulated custody and control form (multi-part paper form)",
+      "kind": "document_store"
+    },
+    {
+      "id": "breath_device",
+      "name": "Evidential breath testing device and alcohol screening devices",
+      "kind": "instrument"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Post the donor authorization to the collection worklist",
+      "description": "The drug testing case system publishes the authorization issued by the program coordinator: donor name, employer, reason for test, panel, specimen type, whether a breath alcohol test is added, and the expiry time. It is emailed or texted to the donor with the site address, or placed on the on-site collector's job list.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "donor authorization"
+      ],
+      "outputs": [
+        "collection job on worklist"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.83,
+          "condition": "donor directed to a company collection centre"
+        },
+        {
+          "to": "s14",
+          "prob": 0.12,
+          "condition": "scheduled on-site or mobile collection (random, site access, group pre-employment)"
+        },
+        {
+          "to": "s15",
+          "prob": 0.05,
+          "condition": "urgent post-incident or reasonable cause callout"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Channel shares are estimates. The organisation file assumes 60 per cent of tests are collected by company staff; this split of those collections between centres and on-site collectors is set so that on-site work fits the 35 occupational collectors."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Donor travels to the centre within the authorization window",
+      "description": "The donor (an applicant or employee) decides when to attend within the window the employer set, usually the same or next day for pre-employment and immediately for random selections. Applicants who do not attend before the authorization expires are dropped and the employer is told by the ordering process.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "donor authorization"
+      ],
+      "outputs": [
+        "donor at centre"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 900,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.96,
+          "condition": "donor attends before expiry"
+        },
+        {
+          "to": "END",
+          "prob": 0.04,
+          "condition": "authorization expires unused",
+          "outcome": "donor_did_not_attend"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "doi_sched"
+        ],
+        "note": "doi_sched gives a 48-hour reporting window for pre-employment tests and immediate reporting for randoms. The 4 per cent no-show share and the wait distribution are estimates."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Check in the donor and verify identity",
+      "description": "The laboratory assistant calls the donor from the centre queue, asks for government photo identification, looks up the authorization in the drug testing case system and compares name, employer, reason and panel. Workplace donors share the queue with community patients, so the wait depends on the centre's load.",
+      "role": "lab_assistant_psc_on",
+      "kind": "validation",
+      "inputs": [
+        "photo ID",
+        "donor authorization"
+      ],
+      "outputs": [
+        "verified donor"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 25,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.004,
+        "defect_description": "Wrong authorization or panel selected for the donor.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Donor identity check before collection: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.95,
+          "condition": "identity and authorization match"
+        },
+        {
+          "to": "s04",
+          "prob": 0.05,
+          "condition": "no photo ID, authorization not found, expired or wrong panel"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "teamsters",
+          "cfr4063"
+        ],
+        "note": "Photo ID check described in teamsters; queue time is an estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Resolve the authorization or identity problem with the employer",
+      "description": "The assistant phones the workplace coordinator line, and the coordinator checks the order, reissues or extends the authorization, or calls the employer's designated representative to approve an alternative identification. If nobody can be reached the donor is sent away and the test is re-ordered later.",
+      "role": "workplace_program_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "donor details",
+        "order history"
+      ],
+      "outputs": [
+        "corrected authorization or decision to stop"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Authorization reissued with the wrong panel or reason.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.7,
+          "condition": "authorization corrected, donor rechecked"
+        },
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "donor sent away for a new order",
+          "outcome": "not_collected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice for third-party administrators; share resolved on the spot is an estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Prepare the donor and open the custody form",
+      "description": "The assistant explains the procedure, has the donor leave outer clothing and bags outside and empty pockets, has the donor wash and dry hands, and completes the collector part of Step 1 of the custody and control form with the donor's ID number and reason. The donor picks a sealed collection cup or oral fluid device.",
+      "role": "lab_assistant_psc_on",
+      "kind": "physical",
+      "inputs": [
+        "verified donor",
+        "blank CCF"
+      ],
+      "outputs": [
+        "prepared donor",
+        "CCF Step 1"
+      ],
+      "systems": [
+        "ccf_paper",
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "CCF Step 1 incomplete (missing ID number or reason).",
+        "typically_caught_at": "s11"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Pre-collection steps in 49 CFR 40.63: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.82,
+          "condition": "urine collection"
+        },
+        {
+          "to": "s09",
+          "prob": 0.18,
+          "condition": "oral fluid collection ordered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4063",
+          "teamsters"
+        ],
+        "note": "Steps described in cfr4063. Oral fluid share is an estimate: urine is the only DOT specimen in the period, while Canadian Model programs allow lab-based oral fluid (coaa_2011)."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Receive the urine specimen and check temperature and volume",
+      "description": "The donor voids alone without flushing while the assistant waits outside with water sources blocked. Within four minutes the assistant reads the temperature strip, checks there are at least 45 mL and looks for unusual colour, odour or foreign matter, then ticks the temperature box on the form.",
+      "role": "lab_assistant_psc_on",
+      "kind": "physical",
+      "inputs": [
+        "prepared donor",
+        "collection cup"
+      ],
+      "outputs": [
+        "checked specimen"
+      ],
+      "systems": [
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 6,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.004,
+        "defect_description": "Temperature read late or not recorded.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Temperature, volume and tampering checks in 49 CFR 40.65: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.945,
+          "condition": "45 mL or more, in range, no signs of tampering"
+        },
+        {
+          "to": "s07",
+          "prob": 0.03,
+          "condition": "less than 45 mL (shy bladder)"
+        },
+        {
+          "to": "s08",
+          "prob": 0.015,
+          "condition": "temperature out of range or signs of tampering"
+        },
+        {
+          "to": "s13",
+          "prob": 0.01,
+          "condition": "donor refuses, leaves or is seen tampering"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4065",
+          "cfr4063"
+        ],
+        "note": "Checks are set by cfr4065. Shares of shy bladder, out-of-range and refusal outcomes are estimates; no opened source gives rates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Run the shy bladder procedure",
+      "description": "The assistant discards the short specimen, offers up to 40 ounces of fluid spread over up to three hours, records the start and end times in Remarks and asks the donor to wait in the centre. When the donor is ready a new collection is attempted with fresh supplies.",
+      "role": "lab_assistant_psc_on",
+      "kind": "physical",
+      "inputs": [
+        "insufficient specimen"
+      ],
+      "outputs": [
+        "second void or stop decision"
+      ],
+      "systems": [
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 75,
+        "high": 180
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Three-hour window not fully offered or times not recorded.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Insufficient specimen procedure in 49 CFR 40.193: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.8,
+          "condition": "sufficient specimen within three hours"
+        },
+        {
+          "to": "s13",
+          "prob": 0.2,
+          "condition": "still insufficient after three hours or donor leaves"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr40193",
+          "teamsters"
+        ],
+        "note": "Procedure from cfr40193; wait distribution and success share are estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Conduct a directly observed recollection",
+      "description": "Because the first specimen was out of temperature range or showed tampering, the assistant arranges an immediate second collection watched by an observer of the same gender, which may mean waiting for a colleague, or collects oral fluid instead. Both specimens are kept and the reason is written in Remarks.",
+      "role": "lab_assistant_psc_on",
+      "kind": "physical",
+      "inputs": [
+        "suspect first specimen"
+      ],
+      "outputs": [
+        "observed specimen"
+      ],
+      "systems": [
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Second CCF not cross-referenced to the first.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Directly observed collection after temperature or tampering findings, 49 CFR 40.65: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.95,
+          "condition": "observed specimen obtained"
+        },
+        {
+          "to": "s13",
+          "prob": 0.05,
+          "condition": "donor declines observation (refusal)"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4065"
+        ],
+        "note": "Rule from cfr4065; wait for a same-gender observer is an estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Collect the oral fluid specimen under observation",
+      "description": "The assistant watches the donor for the device maker's waiting period with nothing in the mouth, has the donor place the collection pad until the volume indicator changes, then splits or seals the A and B tubes. If the volume is short one more attempt is made, then the insufficient specimen rule applies.",
+      "role": "lab_assistant_psc_on",
+      "kind": "physical",
+      "inputs": [
+        "prepared donor",
+        "oral fluid device"
+      ],
+      "outputs": [
+        "oral fluid specimen"
+      ],
+      "systems": [
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 12,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Device past expiry used.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Observed oral fluid collection with a certified laboratory's device (Canadian Model oral fluid procedure; 49 CFR 40.73 for comparison)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.97,
+          "condition": "sufficient oral fluid"
+        },
+        {
+          "to": "s13",
+          "prob": 0.03,
+          "condition": "cannot provide within the time allowed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4073",
+          "coaa_2011",
+          "cfr40193"
+        ],
+        "note": "Observation and volume indicator steps from cfr4073; timing is an estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Split, seal and label the specimen with the donor",
+      "description": "In front of the donor the assistant pours at least 30 mL into bottle A and 15 mL into bottle B, caps them, applies the tamper-evident seals from the form, dates them and has the donor initial them. The donor reads and signs the certification on the form and may list medications on the donor copy.",
+      "role": "lab_assistant_psc_on",
+      "kind": "physical",
+      "inputs": [
+        "checked specimen",
+        "CCF"
+      ],
+      "outputs": [
+        "sealed bottles A and B",
+        "signed CCF"
+      ],
+      "systems": [
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 9
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Specimen ID label on the bottle does not match the CCF, or seal damaged (fatal flaw).",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Split specimen preparation in 49 CFR 40.71: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4071",
+          "teamsters",
+          "hri_policy",
+          "cfr40199"
+        ],
+        "note": "Steps from cfr4071; an ID mismatch or broken seal is a fatal flaw that cancels the test (cfr40199). Time and error rate are estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Check the form, key the collection and distribute copies",
+      "description": "The assistant checks the form for missing signatures, times and IDs, keys the specimen ID, collection time and observations into the drug testing case system, faxes or scans the MRO and employer copies, gives the donor copy 5 and files the collector copy.",
+      "role": "lab_assistant_psc_on",
+      "kind": "data_entry",
+      "inputs": [
+        "signed CCF"
+      ],
+      "outputs": [
+        "collection record",
+        "CCF copies sent"
+      ],
+      "systems": [
+        "dt_system",
+        "fax",
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Correctable flaw left on the form (missing collector signature or printed name, missing time or Remarks), needing a corrective statement later.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Completion and distribution of CCF copies within 24 hours, 49 CFR 40.79: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4079",
+          "dyn_mroa"
+        ],
+        "note": "Copy distribution from cfr4079; dyn_mroa shows that fatal and correctable errors are chased with collection sites. The 3 per cent flaw rate is an estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Bag the specimen and place it for courier pickup",
+      "description": "The assistant puts the bottles and copy 1 in the two-pouch bag, seals it, adds it to the workplace specimen box and the courier manifest, and locks it in the pickup area for the next scheduled route.",
+      "role": "lab_assistant_psc_on",
+      "kind": "physical",
+      "inputs": [
+        "sealed bottles",
+        "CCF copy 1"
+      ],
+      "outputs": [
+        "specimen ready for transport"
+      ],
+      "systems": [
+        "logistics_tracking",
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.001,
+        "defect_description": "Specimen placed in the clinical tote instead of the workplace box.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Packaging and shipment within 24 hours or the next business day, 49 CFR 40.79: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "specimen awaits courier",
+          "outcome": "collected"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4079",
+          "dyn_dts"
+        ],
+        "note": "Packaging rule from cfr4079; transport service in dyn_dts; times are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Document the refusal or incomplete collection and notify the employer",
+      "description": "The assistant stops the collection, writes the facts in Remarks (shy bladder after three hours, refusal to be observed, leaving the site, adulterant seen), discards or keeps specimens as the rules require and calls the coordinator line so the employer's designated representative is told at once. The employer decides whether it is a refusal; a shy bladder goes to a medical evaluation.",
+      "role": "lab_assistant_psc_on",
+      "kind": "communication",
+      "inputs": [
+        "CCF",
+        "observations"
+      ],
+      "outputs": [
+        "problem collection record"
+      ],
+      "systems": [
+        "ccf_paper",
+        "dt_system",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Remarks too vague for the MRO or employer to decide.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Refusal and insufficient specimen documentation, 49 CFR 40.193: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "collection stopped",
+          "outcome": "refusal_or_cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr40193",
+          "hri_policy"
+        ],
+        "note": "Steps from cfr40193; time is an estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Book the on-site or mobile collection with the employer contact",
+      "description": "The collector or booking desk phones the employer's site contact to agree a date, time, washroom and the list of donors, for example a batch of random selections or a crew needing site access tests, and loads supplies and forms for the visit.",
+      "role": "occupational_collector",
+      "kind": "coordination",
+      "inputs": [
+        "collection job"
+      ],
+      "outputs": [
+        "booked visit"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 180,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong number of forms or missing breath alcohol supplies for the visit.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "visit booked"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Booking by collectors is common in occupational testing; times are estimates."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Respond to the urgent callout and travel to the incident site",
+      "description": "An on-call collector takes the callout for a post-incident or reasonable cause test, often outside business hours, and drives to the employer site with a kit and breath alcohol device. Post-incident tests are wanted as soon as possible after the event so the result reflects the time of the incident.",
+      "role": "occupational_collector",
+      "kind": "physical",
+      "inputs": [
+        "callout details"
+      ],
+      "outputs": [
+        "collector on site"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 40,
+        "high": 120
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "collector arrives"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hri_postinc",
+          "dyn_dts"
+        ],
+        "note": "Post-incident referral described in hri_postinc; on-site collection in dyn_dts. Response and travel times are estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Travel to the scheduled site with supplies",
+      "description": "On the booked day the collector drives the mobile unit or a car to the employer's site. Travel is shared by all donors collected on the visit, so the time per collection is lower for large random batches.",
+      "role": "occupational_collector",
+      "kind": "physical",
+      "inputs": [
+        "booked visit"
+      ],
+      "outputs": [
+        "collector on site"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "collector arrives"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Travel per collection assumes three to eight donors per visit; waiting for the booked day is an estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Set up and secure the collection area",
+      "description": "The collector inspects the washroom, adds bluing agent to the toilet, tapes or turns off water sources and removes soap and cleaners, and sets out the forms and devices. The set-up is shared across the visit's donors.",
+      "role": "occupational_collector",
+      "kind": "physical",
+      "inputs": [
+        "site washroom"
+      ],
+      "outputs": [
+        "secured collection area"
+      ],
+      "systems": [
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Water source left accessible.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "No access to water or adulterants during collection, 49 CFR 40.63: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "area ready"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4063"
+        ],
+        "note": "Requirement to deny water and adulterant access in cfr4063; time is an estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Verify identity and prepare the donor on site",
+      "description": "The supervisor releases each donor from work; the collector checks photo ID or identification by the employer representative, explains the procedure, has the donor empty pockets and wash hands, and completes Step 1 of the custody form.",
+      "role": "occupational_collector",
+      "kind": "validation",
+      "inputs": [
+        "donor",
+        "photo ID",
+        "CCF"
+      ],
+      "outputs": [
+        "prepared donor"
+      ],
+      "systems": [
+        "ccf_paper",
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 6,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Donor identity recorded wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Donor identity and pre-collection steps, 49 CFR 40.63: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.96,
+          "condition": "identity confirmed"
+        },
+        {
+          "to": "s19",
+          "prob": 0.04,
+          "condition": "no ID or donor not on the list"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4063",
+          "teamsters"
+        ],
+        "note": "Steps from cfr4063; wait for donors to be released is an estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Resolve the identity or list problem with the employer representative",
+      "description": "The collector asks the employer's representative on site to identify the donor or confirm a change to the selection list, and phones the coordinator line when an authorization has to be added.",
+      "role": "occupational_collector",
+      "kind": "coordination",
+      "inputs": [
+        "donor details"
+      ],
+      "outputs": [
+        "confirmed donor or stop"
+      ],
+      "systems": [
+        "dt_system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong donor substituted on a random list.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.75,
+          "condition": "resolved"
+        },
+        {
+          "to": "END",
+          "prob": 0.25,
+          "condition": "donor not collected",
+          "outcome": "not_collected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Collect the specimen and check temperature and volume",
+      "description": "The donor provides urine alone in the secured washroom or oral fluid under observation. The collector reads the temperature within four minutes, checks volume and looks for signs of tampering.",
+      "role": "occupational_collector",
+      "kind": "physical",
+      "inputs": [
+        "prepared donor"
+      ],
+      "outputs": [
+        "checked specimen"
+      ],
+      "systems": [
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.004,
+        "defect_description": "Temperature read late or not recorded.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Specimen checks in 49 CFR 40.65 and observed oral fluid collection in 40.73: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.935,
+          "condition": "acceptable specimen"
+        },
+        {
+          "to": "s21",
+          "prob": 0.045,
+          "condition": "shy bladder, temperature out of range or tampering"
+        },
+        {
+          "to": "s24",
+          "prob": 0.02,
+          "condition": "refusal or leaves the collection"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4065",
+          "cfr4073"
+        ],
+        "note": "Checks from cfr4065 and cfr4073; refusal share is higher than at centres because post-incident and reasonable cause tests are included; shares are estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Run the shy bladder or observed recollection procedure on site",
+      "description": "For a short specimen the collector offers fluids for up to three hours; for a temperature or tampering finding the collector arranges an immediate observed collection, which on a remote site may need a same-gender observer from the employer. Times and reasons go in Remarks.",
+      "role": "occupational_collector",
+      "kind": "physical",
+      "inputs": [
+        "first specimen"
+      ],
+      "outputs": [
+        "acceptable specimen or stop"
+      ],
+      "systems": [
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Procedure not fully followed or poorly documented.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "49 CFR 40.193 and 40.65: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.82,
+          "condition": "acceptable specimen obtained"
+        },
+        {
+          "to": "s24",
+          "prob": 0.18,
+          "condition": "insufficient after three hours or refusal"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr40193",
+          "cfr4065"
+        ],
+        "note": "Rules from the cited sections; times are estimates."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Split, seal and complete the custody form with the donor",
+      "description": "The collector pours the A and B bottles, seals, dates and has the donor initial them, and both sign the custody and control form.",
+      "role": "occupational_collector",
+      "kind": "physical",
+      "inputs": [
+        "checked specimen",
+        "CCF"
+      ],
+      "outputs": [
+        "sealed bottles",
+        "signed CCF"
+      ],
+      "systems": [
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 9
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Specimen ID mismatch or damaged seal (fatal flaw).",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Split specimen preparation, 49 CFR 40.71: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4071",
+          "cfr40199"
+        ],
+        "note": "Steps from cfr4071; fatal flaws listed in cfr40199. Time is an estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Check the form, key the collection and send copies",
+      "description": "The collector reviews the form for missing entries and, on a laptop at the site or back at the office at the end of the visit, keys the specimen ID and details into the case system and faxes or scans the MRO and employer copies.",
+      "role": "occupational_collector",
+      "kind": "data_entry",
+      "inputs": [
+        "signed CCF"
+      ],
+      "outputs": [
+        "collection record",
+        "CCF copies sent"
+      ],
+      "systems": [
+        "dt_system",
+        "fax",
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Correctable flaw on the form or keying error in the case system.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CCF copy distribution within 24 hours, 49 CFR 40.79: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s25",
+          "prob": 0.4,
+          "condition": "breath alcohol test also ordered"
+        },
+        {
+          "to": "s28",
+          "prob": 0.6,
+          "condition": "drug test only"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4079",
+          "dyn_mroa"
+        ],
+        "note": "Distribution rule from cfr4079; share with breath alcohol is an estimate (post-incident, reasonable cause and many site access tests include alcohol)."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Document the refusal or incomplete collection and notify the employer",
+      "description": "The collector stops, records what happened in Remarks, tells the employer representative on site and calls the coordinator line, and sends the form copies so the employer can decide whether a refusal occurred.",
+      "role": "occupational_collector",
+      "kind": "communication",
+      "inputs": [
+        "CCF",
+        "observations"
+      ],
+      "outputs": [
+        "problem collection record"
+      ],
+      "systems": [
+        "ccf_paper",
+        "dt_system",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Remarks incomplete.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Refusal and insufficient specimen documentation, 49 CFR 40.193: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "collection stopped",
+          "outcome": "refusal_or_cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr40193",
+          "hri_policy"
+        ],
+        "note": "Steps from the cited sources; time is an estimate."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Run the breath alcohol screening test",
+      "description": "As a certified breath alcohol technician the collector completes the alcohol testing form with the donor, opens a new mouthpiece and has the donor blow into a screening or evidential device. A result below 0.02 ends the alcohol test.",
+      "role": "occupational_collector",
+      "kind": "physical",
+      "inputs": [
+        "alcohol testing form"
+      ],
+      "outputs": [
+        "screening result"
+      ],
+      "systems": [
+        "breath_device",
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 7,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Device not checked or form step missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Breath alcohol screening, 49 CFR 40.247: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s27",
+          "prob": 0.975,
+          "condition": "below 0.02"
+        },
+        {
+          "to": "s26",
+          "prob": 0.025,
+          "condition": "0.02 or higher, confirmation needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr40247"
+        ],
+        "note": "Thresholds from cfr40247; positive screen share is an estimate."
+      }
+    },
+    {
+      "id": "s26",
+      "name": "Wait 15 minutes and run the confirmation breath test",
+      "description": "The collector observes the donor for at least 15 minutes with no eating, drinking or belching, runs an air blank on the evidential device and takes the confirmation breath sample within 30 minutes of the screen. The confirmation result is the one reported.",
+      "role": "occupational_collector",
+      "kind": "physical",
+      "inputs": [
+        "screening result"
+      ],
+      "outputs": [
+        "confirmation result"
+      ],
+      "systems": [
+        "breath_device",
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 16,
+        "high": 30
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Confirmation started after 30 minutes without a note.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Confirmation test waiting period, 49 CFR 40.251: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s27",
+          "prob": 1.0,
+          "condition": "confirmation done"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr40251"
+        ],
+        "note": "The 15-minute minimum and 30-minute limit are stated in cfr40251; touch time is an estimate."
+      }
+    },
+    {
+      "id": "s27",
+      "name": "Report the alcohol result to the employer and record it",
+      "description": "The collector gives the result to the employer's designated representative in person or by phone at once when it is 0.02 or higher, so the worker can be removed from duty, and records the result in the case system for reporting.",
+      "role": "occupational_collector",
+      "kind": "communication",
+      "inputs": [
+        "alcohol result"
+      ],
+      "outputs": [
+        "breath alcohol result reported"
+      ],
+      "systems": [
+        "dt_system",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Result keyed against the wrong donor.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Confidential reporting of alcohol results to the designated employer representative, 49 CFR 40.247: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s28",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr40247"
+        ],
+        "note": "Reporting to the DER in cfr40247; time is an estimate."
+      }
+    },
+    {
+      "id": "s28",
+      "name": "Package the specimens and drop them for courier pickup",
+      "description": "The collector bags each specimen with copy 1, packs the visit's specimens in a shipping box and drops them at the nearest centre or depot for the courier route, or hands them to the courier, logging them on the manifest.",
+      "role": "occupational_collector",
+      "kind": "physical",
+      "inputs": [
+        "sealed bottles",
+        "CCF copy 1"
+      ],
+      "outputs": [
+        "specimens ready for transport"
+      ],
+      "systems": [
+        "logistics_tracking",
+        "ccf_paper"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Specimen held overnight in a vehicle beyond the shipping window.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Packaging and shipment within 24 hours or the next business day, 49 CFR 40.79: US DOT 49 CFR Part 40 collection procedures, required by law for cross-border carriers and adopted by the Canadian Model and by employer contracts for non-regulated tests",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "specimens await courier",
+          "outcome": "collected"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr4079"
+        ],
+        "note": "Packaging rule from cfr4079; drop-off time is an estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Shy bladder at a centre",
+      "share_of_cases": 0.019,
+      "description": "Less than 45 mL; up to three hours with fluids, then a second attempt or a stop and a medical evaluation referral.",
+      "path": [
+        "s06",
+        "s07",
+        "s10"
+      ]
+    },
+    {
+      "name": "Temperature out of range or tampering",
+      "share_of_cases": 0.009,
+      "description": "Immediate directly observed recollection or oral fluid collection; both specimens go to the laboratory.",
+      "path": [
+        "s06",
+        "s08",
+        "s10"
+      ]
+    },
+    {
+      "name": "Refusal or incomplete collection",
+      "share_of_cases": 0.02,
+      "description": "Donor refuses, leaves, tampers or cannot provide a specimen; documented and reported to the employer, who decides whether it is a refusal.",
+      "path": [
+        "s06",
+        "s13"
+      ]
+    },
+    {
+      "name": "Authorization or identity problem",
+      "share_of_cases": 0.04,
+      "description": "No photo ID, expired or missing authorization or wrong panel; the coordinator or employer representative fixes it or the donor is sent away.",
+      "path": [
+        "s03",
+        "s04",
+        "s03"
+      ]
+    },
+    {
+      "name": "Donor does not attend",
+      "share_of_cases": 0.033,
+      "description": "The authorization expires unused and the order is closed by the ordering process.",
+      "path": [
+        "s02"
+      ]
+    },
+    {
+      "name": "Breath alcohol screen at or above 0.02",
+      "share_of_cases": 0.0017,
+      "description": "Fifteen-minute observed wait and an evidential confirmation test; immediate report to the employer.",
+      "path": [
+        "s25",
+        "s26",
+        "s27"
+      ]
+    },
+    {
+      "name": "Urgent post-incident callout",
+      "share_of_cases": 0.05,
+      "description": "On-call collector travels to the incident site, often out of hours, and usually adds a breath alcohol test.",
+      "path": [
+        "s15",
+        "s17",
+        "s18",
+        "s20"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.0,
+        "p90": 2.5
+      },
+      "unit": "calendar days from authorization to specimen ready for courier",
+      "population": "Workplace collections by company staff, Canada",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "doi_sched"
+        ],
+        "note": "Pre-employment donors are given about 48 hours to report and random donors report immediately (doi_sched); scheduled on-site visits add a day or two. Estimate."
+      }
+    },
+    {
+      "metric": "temperature_check_deadline",
+      "value": 4,
+      "unit": "minutes after the donor hands over the specimen",
+      "population": "DOT-procedure urine collections",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr4065"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "minimum_urine_volume",
+      "value": 45,
+      "unit": "mL (30 mL bottle A and 15 mL bottle B)",
+      "population": "DOT-procedure urine collections",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr4065",
+          "cfr4071"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "shy_bladder_maximum_wait",
+      "value": 3,
+      "unit": "hours, with up to 40 ounces of fluid",
+      "population": "DOT-procedure urine collections",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr40193"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "shipping_deadline",
+      "value": 24,
+      "unit": "hours or the next business day after collection",
+      "population": "DOT-procedure collections",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr4079"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "alcohol_confirmation_wait",
+      "value": {
+        "min": 15,
+        "max": 30
+      },
+      "unit": "minutes after the screening test",
+      "population": "DOT-procedure breath alcohol tests",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr40251"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "collector_initial_proficiency",
+      "value": 5,
+      "unit": "consecutive error-free mock collections, refresher every 5 years",
+      "population": "DOT-qualified urine collectors",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr4033"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "pre_employment_reporting_window",
+      "value": 48,
+      "unit": "hours from notification",
+      "population": "US federal agency pre-employment testing program",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "doi_sched"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "workplace_drug_tests_per_year",
+      "value": 300000,
+      "unit": "tests (company total, all channels)",
+      "population": "The modelled company",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dyn_dts"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Donors choose when to attend within the window, so collection timing and centre workload are unpredictable and some authorizations expire unused.",
+      "steps": [
+        "s02",
+        "s03"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "doi_sched"
+        ],
+        "note": "Reporting window from doi_sched; no-show share is an estimate."
+      }
+    },
+    {
+      "description": "A shy bladder or observed recollection can tie up a collector and a washroom for up to three hours for one donor.",
+      "steps": [
+        "s07",
+        "s08",
+        "s21"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr40193",
+          "cfr4065"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Paper custody forms are completed by hand and then keyed into the case system; missing signatures or times have to be fixed later with corrective statements, and collectors with repeated errors need retraining.",
+      "steps": [
+        "s11",
+        "s23"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_mroa",
+          "cfr4033"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Urgent post-incident tests depend on an on-call collector driving to the site, often at night, and the delay weakens what the result says about the time of the incident.",
+      "steps": [
+        "s15"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "hri_postinc"
+        ],
+        "note": "Estimate of response times."
+      }
+    },
+    {
+      "description": "Workplace donors share the queue with community patients at general collection centres.",
+      "steps": [
+        "s03"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Centres serve both lines in the organisation file."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "cfr4063",
+      "title": "49 CFR 40.63 What steps does the collector take in the collection process before the employee provides a urine specimen?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.63",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Collector completes Step 1 of the CCF, has the employee wash and dry hands, denies access to water or adulterants, lets the employee pick a sealed collection container, asks for at least 45 mL and no flushing, and requires an immediate observed collection when tampering is seen."
+    },
+    {
+      "id": "cfr4065",
+      "title": "49 CFR 40.65 What does the collector check for when the employee presents a specimen?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.65",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "At least 45 mL; temperature read within four minutes, acceptable range 32 to 38 C; out-of-range temperature or signs of tampering require an immediate new collection under direct observation or as an oral fluid collection, with both specimens sent to the laboratory and the DER told."
+    },
+    {
+      "id": "cfr4071",
+      "title": "49 CFR 40.71 How does the collector prepare the urine specimens?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.71",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "All DOT collections are split: collector pours at least 30 mL into bottle A and 15 mL into bottle B in the employee's presence, caps, applies tamper-evident seals, dates them and has the employee initial them; a refusal to initial is noted in Remarks."
+    },
+    {
+      "id": "cfr4073",
+      "title": "49 CFR 40.73 How is an oral fluid collection performed?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.73",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Collector keeps visual contact throughout, the employee positions the device under observation per the manufacturer's instructions, the collector checks the volume indicator, makes one more attempt if the specimen is insufficient and then follows the insufficient specimen rules."
+    },
+    {
+      "id": "cfr4079",
+      "title": "49 CFR 40.79 How is the collection process completed?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.79",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Copy 5 to the employee, Copy 2 to the MRO and Copy 4 to the DER within 24 hours or the next business day, Copy 3 kept at least 30 days, Copy 1 packed with the bottles in a two-pouch bag inside a shipping container; specimens shipped to the laboratory within 24 hours or during the next business day."
+    },
+    {
+      "id": "cfr40193",
+      "title": "49 CFR 40.193 What happens when an employee does not provide a sufficient amount of specimen for a drug test?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.193",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Shy bladder: up to 40 ounces of fluid over up to three hours; if still insufficient the collector stops, discards earlier specimens, notifies the DER and sends CCF copies within 24 hours; the employee is referred for a medical evaluation within five days. Oral fluid: up to 8 ounces and up to one hour."
+    },
+    {
+      "id": "cfr4033",
+      "title": "49 CFR 40.33 What training requirements must a collector meet for urine collection?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.33",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Qualification training, five consecutive error-free mock collections before collecting, refresher at least every five years, and error correction training within 30 days after a collector error cancels a test."
+    },
+    {
+      "id": "cfr40199",
+      "title": "49 CFR 40.199 What problems always cause a drug test to be cancelled?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.199",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Fatal flaws: no CCF, no specimen with the CCF, no collector name and signature, two collections on one CCF, specimen ID mismatch, broken or tampered seal, insufficient specimen; the lab reports the specimen as rejected for testing and the test is cancelled."
+    },
+    {
+      "id": "cfr40247",
+      "title": "49 CFR 40.247 What procedures does the BAT or STT follow after a screening test result?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.247",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Below 0.02 the BAT or STT signs Step 3 of the alcohol testing form and reports to the DER; 0.02 or higher requires a confirmation test."
+    },
+    {
+      "id": "cfr40251",
+      "title": "49 CFR 40.251 What are the first steps in an alcohol confirmation test?",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/49/40.251",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Waiting period of at least 15 minutes after the screening test, confirmation started no later than 30 minutes after it, employee observed and told not to eat, drink or belch; refusal to sign is a refusal."
+    },
+    {
+      "id": "dyn_dts",
+      "title": "Drug testing services",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "More than 300,000 drug tests a year on-site or at collection facilities; more than 2,000 collection sites including 70+ company-owned centres; collectors trained and certified for chain of custody; urine is the only DOT-approved specimen, oral fluid offered; negatives usually released within 24 hours, non-negatives 48 to 72 hours more; pre-employment, random, post-accident and reasonable suspicion testing."
+    },
+    {
+      "id": "hri_policy",
+      "title": "Model drug and alcohol testing policy",
+      "publisher": "HR Insider",
+      "url": "https://hrinsider.ca/model-drug-alcohol-testing-policy/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Pre-employment, for cause, post-incident, random, post-rehabilitation and periodic testing; collection in sufficient quantity to split into two samples; strict written chain of custody; refusal to consent or submit is a policy violation."
+    },
+    {
+      "id": "hri_postinc",
+      "title": "Model post-incident drug or alcohol testing procedures",
+      "publisher": "HR Insider",
+      "url": "https://hrinsider.ca/model-post-incident-drug-or-alcohol-testing-procedures/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Supervisor decides on referral after investigating a significant incident, with a second level of management agreeing; only workers directly involved are referred."
+    },
+    {
+      "id": "teamsters",
+      "title": "What to expect when you go for your DOT drug test",
+      "publisher": "International Brotherhood of Teamsters",
+      "url": "https://teamster.org/what-expect-when-you-go-your-dot-drug-test/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Donor view of a collection: photo ID, outer garments left outside, private void unless observation is justified, 45 mL, temperature check within four minutes, 30 and 15 mL split, seven-copy CCF signed and bottles initialled, donor keeps Copy 5; up to three hours and 40 ounces for a shy bladder."
+    },
+    {
+      "id": "doi_sched",
+      "title": "Scheduling drug test",
+      "publisher": "US Department of the Interior, Interior Business Center",
+      "url": "https://ibc.doi.gov/node/15",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Applicants should report for a pre-employment test within 48 hours of notification; random selectees report immediately; the scheduler sets an expiration date on the electronic donor pass."
+    },
+    {
+      "id": "coaa_2011",
+      "title": "COAA Best Practices Conference XIX: Canadian Model best practice (presentation transcript)",
+      "publisher": "Construction Owners Association of Alberta, via Sambuz",
+      "url": "https://sambuz.com/doc/coaa-best-practices-conference-xix-canadian-model-best-ppt-presentation-50475",
+      "year": 2011,
+      "accessed": "2026-11-17",
+      "supports": "The Canadian Model mandates US DOT 49 CFR Part 40 standards for defensible testing; oral fluid tests by a certified laboratory may be used for post-incident, reasonable cause and random testing; industry trend toward oral fluid; point-of-collection tests are not consistent with the Model."
+    },
+    {
+      "id": "jobbank_33101",
+      "title": "Wages: Medical laboratory technical assistant in Ontario (NOC 33101)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/4210/ON",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low 17.95, median 26.25, high 36.00 CAD (2023-2024); national median 27.00."
+    },
+    {
+      "id": "dyn_mroa",
+      "title": "Medical review officer assistant (job posting)",
+      "publisher": "The model laboratory via Jobillico",
+      "url": "",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Reviews negative results against the custody and control form, reviews documentation for fatal or correctable errors, obtains corrective documentation from service providers and notifies providers when error correction training is needed."
+    }
+  ],
+  "assumptions": [
+    "Collection procedures follow US DOT 49 CFR Part 40 for all tests: required by law for the minority of donors who drive across the border, and adopted by the Canadian Model and employer contracts for the rest. Controls are therefore marked needs_policy_change rather than fixed_by_law; for DOT donors they are fixed by law.",
+    "Centre collections (83 per cent of company collections) are done by centre laboratory assistants; at the few dedicated workplace collection sites occupational collectors do the same steps at the same cost. General centres are assumed not to perform breath alcohol tests; donors needing them are sent to a workplace site or an on-site collector.",
+    "Oral fluid is about 18 per cent of centre collections and is folded into the on-site collection step; urine was the only DOT specimen in the period.",
+    "Shares of shy bladder (3 per cent), out-of-range temperature or tampering (1.5 per cent), refusal (1 to 2 per cent) and positive breath alcohol screens (2.5 per cent of alcohol tests) are estimates; no opened source gave rates.",
+    "Travel and site set-up are amortised over three to eight donors per scheduled visit; urgent callouts carry the full travel time.",
+    "The workflow ends when the specimen is ready for the courier; courier pickup and transport belong to the inter-laboratory transfer process.",
+    "Loaded costs come from the organisation file (wage times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

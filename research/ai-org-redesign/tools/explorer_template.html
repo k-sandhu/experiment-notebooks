@@ -1,0 +1,402 @@
+<title>Process Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: one working column. Pick an organisation and a process, read the headline numbers,
+   follow the swimlane flow left to right, then see where the elapsed time goes. */
+:root {
+  --plane: #f9f9f7; --surface: #fcfcfb; --raised: #ffffff;
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --hair: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --do: #2a78d6; --check: #eb6834; --auto: #1baf7a; --ext: #eda100;
+  --lane-a: #f4f3ef; --lane-b: #fcfcfb; --hot: #0b0b0b; --wash: rgba(42,120,214,0.10);
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --text: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --plane: #0d0d0d; --surface: #1a1a19; --raised: #222220;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --hair: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+    --do: #3987e5; --check: #d95926; --auto: #199e70; --ext: #c98500;
+    --lane-a: #161615; --lane-b: #1a1a19; --hot: #f0efec; --wash: rgba(57,135,229,0.16);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --plane: #0d0d0d; --surface: #1a1a19; --raised: #222220;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --hair: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10);
+  --do: #3987e5; --check: #d95926; --auto: #199e70; --ext: #c98500;
+  --lane-a: #161615; --lane-b: #1a1a19; --hot: #f0efec; --wash: rgba(57,135,229,0.16);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--plane); color: var(--ink); font-family: var(--text); font-size: 14px; line-height: 1.5;
+  padding-block: 20px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+h1 { font-family: var(--display); font-weight: 600; font-size: 26px; line-height: 1.15; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 18px; line-height: 1.25; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--display); font-weight: 500; font-size: 14px; margin: 0; }
+p { margin: 0; }
+.lede { color: var(--ink-2); max-width: 68ch; }
+.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.field label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+select, button { font: inherit; color: var(--ink); }
+select { width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--axis); background: var(--raised); }
+.nav { display: flex; gap: 8px; }
+.btn { padding: 9px 12px; border-radius: 8px; border: 1px solid var(--axis); background: var(--raised); cursor: pointer; }
+.btn:hover { border-color: var(--ink-2); }
+:focus-visible { outline: 2px solid var(--do); outline-offset: 2px; }
+.panel { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.head { display: flex; flex-direction: column; gap: 4px; }
+.sub { color: var(--ink-2); max-width: 78ch; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border-top: 1px solid var(--hair); }
+.fact { padding: 12px 14px 12px 0; border-bottom: 1px solid var(--hair); display: flex; flex-direction: column; gap: 2px; }
+.fact b { font-family: var(--display); font-weight: 600; font-size: 22px; line-height: 1.15; }
+.fact span { color: var(--ink-2); font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.legend .line { width: 18px; height: 0; border-top: 2px solid var(--muted); border-radius: 0; vertical-align: 3px; }
+.legend .dash { border-top-style: dashed; border-color: var(--ink-2); }
+.legend .lock { width: 9px; height: 9px; border-radius: 0; background: var(--ink); transform: rotate(45deg); }
+.flow { display: flex; border: 1px solid var(--hair); border-radius: 10px; overflow: hidden; background: var(--lane-b); }
+.lanes { flex: 0 0 132px; border-right: 1px solid var(--hair); background: var(--surface); }
+.lanes div { display: flex; align-items: center; padding: 0 10px; font-size: 12px; line-height: 1.25; color: var(--ink-2); border-bottom: 1px solid var(--hair); overflow: hidden; }
+.lanes div:last-child { border-bottom: 0; }
+.scroll { overflow-x: auto; flex: 1 1 auto; min-width: 0; }
+svg { display: block; }
+svg text { font-family: var(--text); fill: var(--ink); }
+.node rect.box { fill: var(--raised); stroke: var(--axis); stroke-width: 1; }
+.node { cursor: pointer; }
+.node:hover rect.box { stroke: var(--ink-2); }
+.node.sel rect.box { stroke: var(--hot); stroke-width: 2; }
+.node .sid { font-size: 10px; fill: var(--muted); }
+.node .nm { font-size: 11.5px; font-weight: 500; }
+.node .tm { font-size: 10px; fill: var(--ink-2); }
+.edge { fill: none; stroke: var(--muted); stroke-linejoin: round; stroke-linecap: round; opacity: 0.75; }
+.edge.back { stroke: var(--ink-2); stroke-dasharray: 5 4; }
+.edge.hot { stroke: var(--hot); opacity: 1; }
+.pill rect { fill: var(--surface); stroke: var(--axis); }
+.pill text { font-size: 10.5px; fill: var(--ink-2); }
+.detail { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; border-top: 1px solid var(--hair); padding-top: 14px; }
+.detail dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 13px; }
+.detail dt { color: var(--muted); }
+.detail dd { margin: 0; }
+.detail ul { margin: 6px 0 0; padding-left: 18px; }
+.bars { display: flex; flex-direction: column; gap: 5px; }
+.row { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 10px; align-items: center; font-size: 12px; }
+.row .lab { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track { display: flex; align-items: center; gap: 2px; min-width: 0; height: 16px; cursor: default; }
+.seg { height: 12px; flex: 0 0 auto; }
+.seg.w { background: var(--check); }
+.seg.t { background: var(--do); }
+.seg.e { border-radius: 0 4px 4px 0; }
+.track .val { margin-left: 6px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tip { position: fixed; z-index: 20; pointer-events: none; background: var(--raised); color: var(--ink); border: 1px solid var(--axis); border-radius: 8px; padding: 8px 10px; font-size: 12px; max-width: 280px; box-shadow: 0 6px 20px rgba(0,0,0,0.14); }
+.tip b { display: block; margin-bottom: 2px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { text-align: left; padding: 7px 10px 7px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
+td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+.map { display: flex; flex-direction: column; gap: 14px; }
+.unit { display: flex; flex-direction: column; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: 12px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--hair); color: var(--muted); background: transparent; }
+button.chip { color: var(--ink); border-color: var(--axis); background: var(--raised); cursor: pointer; }
+button.chip:hover { border-color: var(--ink-2); }
+button.chip.on { background: var(--wash); border-color: var(--do); }
+.note { color: var(--ink-2); font-size: 12.5px; max-width: 86ch; }
+details summary { cursor: pointer; color: var(--ink-2); }
+@media (max-width: 720px) {
+  .detail { grid-template-columns: minmax(0, 1fr); }
+  .lanes { flex-basis: 96px; }
+  .row { grid-template-columns: minmax(0, 120px) minmax(0, 1fr); }
+  h1 { font-size: 22px; }
+}
+@media (prefers-reduced-motion: no-preference) { .node rect.box, .edge { transition: stroke 120ms ease; } }
+</style>
+
+<div class="wrap">
+  <header class="section">
+    <span class="eyebrow">Baseline process library, 2019 to 2022 practice</span>
+    <h1>Process Explorer</h1>
+    <p class="lede">Each process is drawn as it ran before any redesign: who does each step, where work waits, where it loops back and which checks are mandatory. Pick an organisation, then a process.</p>
+  </header>
+
+  <div class="controls">
+    <div class="field"><label for="org">Organisation</label><select id="org"></select></div>
+    <div class="field"><label for="wf">Process</label><select id="wf"></select></div>
+    <div class="nav"><button class="btn" id="prev" type="button" aria-label="Previous process">Previous</button><button class="btn" id="next" type="button" aria-label="Next process">Next</button></div>
+  </div>
+
+  <section class="panel">
+    <div class="head"><h2 id="wfname"></h2><p class="sub" id="wfsum"></p></div>
+    <div class="facts" id="facts"></div>
+  </section>
+
+  <section class="panel">
+    <div class="head"><h2>How the work flows</h2>
+      <p class="sub">Read left to right. Each row is one role, each box one step, with its hands-on time and the wait before it. Thicker lines carry more cases. Select a step to see what the person does.</p></div>
+    <div class="legend" id="legend"></div>
+    <div class="flow"><div class="lanes" id="lanes"></div><div class="scroll" id="scroll" tabindex="0" aria-label="Flow diagram, scrolls sideways"></div></div>
+    <div class="detail" id="detail"></div>
+  </section>
+
+  <section class="panel">
+    <div class="head"><h2 id="timehead"></h2>
+      <p class="sub">One bar per step, using the most common values: the wait before the step, then the hands-on time. A case does not visit every step, so the bars do not add up to the cycle time above.</p></div>
+    <div class="legend"><span><i style="background:var(--check)"></i>Waiting before the step</span><span><i style="background:var(--do)"></i>Hands-on time</span></div>
+    <div class="bars" id="bars"></div>
+    <details><summary>Show the steps as a table</summary><div class="tablewrap"><table id="table"></table></div></details>
+  </section>
+
+  <section class="panel">
+    <div class="head"><h2 id="maphead"></h2><p class="sub" id="mapsub"></p></div>
+    <div class="map" id="map"></div>
+  </section>
+
+  <p class="note" id="foot"></p>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const DATA = /*DATA*/;
+const GROUP = {intake:'do',data_entry:'do',lookup:'do',analysis:'do',drafting:'do',communication:'do',coordination:'do',physical:'do',travel:'do',
+  judgment:'check',validation:'check',review:'check',approval:'check',system_auto:'auto',external_wait:'ext'};
+const GLABEL = {do:'Hands-on work', check:'Check, review or approve', auto:'Automated', ext:'Waiting on an outside party'};
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const NS = 'http://www.w3.org/2000/svg';
+function dur(min) {
+  if (min >= 1440) return (min / 1440).toFixed(min >= 14400 ? 0 : 1) + ' d';
+  if (min >= 60) return (min / 60).toFixed(1) + ' h';
+  return (min >= 10 ? Math.round(min) : Math.round(min * 10) / 10) + ' min';
+}
+function days(d) { return d >= 1 ? (d >= 10 ? Math.round(d) : d.toFixed(1)) + ' days' : dur(d * 1440); }
+function hours(h) { return h >= 1 ? (h >= 10 ? Math.round(h) : h.toFixed(1)) + ' h' : Math.round(h * 60) + ' min'; }
+function num(n) { return Number(n).toLocaleString('en-CA', {maximumFractionDigits: n < 10 ? 1 : 0}); }
+function wrapText(s, max, lines) {
+  const words = String(s).split(/\s+/), out = [];
+  let cur = '';
+  for (const w of words) {
+    if ((cur + ' ' + w).trim().length <= max) cur = (cur + ' ' + w).trim();
+    else { out.push(cur); cur = w; }
+  }
+  if (cur) out.push(cur);
+  if (out.length > lines) { out.length = lines; out[lines - 1] = out[lines - 1].slice(0, max - 1).replace(/\s+\S*$/, '') + '…'; }
+  return out;
+}
+function el(tag, attrs, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+let org = null, wf = null, selected = null;
+
+function roleName(w, r) {
+  if (r === 'system') return 'Automated';
+  if (r === 'external') return 'Outside party';
+  return w.roles[r] || r;
+}
+
+function drawFlow(w) {
+  const CW = 152, NW = 134, NH = 60, LH = 106, PAD = 14;
+  const laneIds = [];
+  w.steps.forEach(s => { if (!laneIds.includes(s.role)) laneIds.push(s.role); });
+  const idx = {};
+  w.steps.forEach((s, i) => idx[s.id] = i);
+  const nodes = w.steps.map((s, i) => {
+    const lane = laneIds.indexOf(s.role);
+    return {s, i, lane, x: PAD + i * CW, y: lane * LH + (LH - NH) / 2, cy: lane * LH + LH / 2, laneTop: lane * LH};
+  });
+  const endRows = Math.max(1, ...w.steps.map(s => s.next.filter(n => n[0] === 'END').length));
+  const outTop = laneIds.length * LH, outH = endRows * 30 + 22;
+  const W = PAD * 2 + w.steps.length * CW, H = outTop + outH;
+  const svg = el('svg', {width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Swimlane flow of ' + w.name});
+  const defs = el('defs', {});
+  for (const [id, cssVar] of [['ah', '--muted'], ['ahb', '--ink-2'], ['ahh', '--hot']]) {
+    const m = el('marker', {id, viewBox: '0 0 7 7', refX: 6, refY: 3.5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse'});
+    m.appendChild(el('path', {d: 'M0,0.6 L6.4,3.5 L0,6.4 z', style: `fill: var(${cssVar})`}));
+    defs.appendChild(m);
+  }
+  svg.appendChild(defs);
+  laneIds.forEach((_, l) => svg.appendChild(el('rect', {x: 0, y: l * LH, width: W, height: LH, style: `fill: var(${l % 2 ? '--lane-a' : '--lane-b'})`})));
+  svg.appendChild(el('rect', {x: 0, y: outTop, width: W, height: outH, style: 'fill: var(--surface)'}));
+  svg.appendChild(el('line', {x1: 0, x2: W, y1: outTop, y2: outTop, style: 'stroke: var(--hair)'}));
+  const gEdges = el('g', {}), gNodes = el('g', {}), gPills = el('g', {});
+  nodes.forEach(a => {
+    const fwd = a.s.next.filter(n => n[0] !== 'END' && idx[n[0]] > a.i);
+    const back = a.s.next.filter(n => n[0] !== 'END' && idx[n[0]] < a.i);
+    const ends = a.s.next.filter(n => n[0] === 'END');
+    const add = (d, prob, cls, label) => {
+      const p = el('path', {d, class: 'edge ' + cls, 'stroke-width': (1 + 2.6 * prob).toFixed(2), 'marker-end': `url(#${cls.includes('back') ? 'ahb' : 'ah'})`, 'data-from': a.s.id});
+      p.appendChild(el('title', {}, label));
+      gEdges.appendChild(p);
+    };
+    fwd.forEach((n, k) => {
+      const b = nodes[idx[n[0]]], y0 = a.cy + (k - (fwd.length - 1) / 2) * 9, gx = a.x + NW + 9, bx = b.x - 9;
+      const d = b.i === a.i + 1 ? `M${a.x + NW},${y0} H${gx} V${b.cy} H${b.x - 2}`
+        : `M${a.x + NW},${y0} H${gx} V${b.laneTop + 9 + (k % 3) * 4} H${bx} V${b.cy} H${b.x - 2}`;
+      add(d, n[1], '', `${Math.round(n[1] * 100)}% of cases go from ${a.s.id} to ${b.s.id}`);
+    });
+    back.forEach((n, k) => {
+      const b = nodes[idx[n[0]]], ex = a.x + NW / 2 - 16 - k * 9, ch = a.laneTop + LH - 9 - (k % 3) * 4, tx = b.x + NW / 2 + 16 + (k % 3) * 6;
+      const d = b.lane > a.lane ? `M${ex},${a.y + NH} V${ch} H${tx} V${b.y - 2}` : `M${ex},${a.y + NH} V${ch} H${tx} V${b.y + NH + 2}`;
+      add(d, n[1], 'back', `${Math.round(n[1] * 100)}% of cases loop back from ${a.s.id} to ${b.s.id}`);
+    });
+    ends.forEach((n, k) => {
+      const ex = a.x + NW - 20 - k * 16, py = outTop + 12 + k * 30;
+      add(`M${ex},${a.y + NH} V${py - 2}`, n[1], '', `${Math.round(n[1] * 100)}% of cases end here: ${n[2]}`);
+      const g = el('g', {class: 'pill'});
+      const label = String(n[2]).replace(/_/g, ' ');
+      const text = (label.length > 19 ? label.slice(0, 18) + '…' : label) + '  ' + Math.round(n[1] * 100) + '%';
+      g.appendChild(el('rect', {x: a.x + 2, y: py, width: NW - 4, height: 22, rx: 11}));
+      g.appendChild(el('text', {x: a.x + NW / 2, y: py + 15, 'text-anchor': 'middle'}, text));
+      g.appendChild(el('title', {}, `Ends as "${label}" for ${Math.round(n[1] * 100)}% of the cases that reach ${a.s.id}`));
+      gPills.appendChild(g);
+    });
+    const g = el('g', {class: 'node', tabindex: 0, role: 'button', 'data-id': a.s.id, 'aria-label': `${a.s.id} ${a.s.name}`});
+    g.appendChild(el('rect', {class: 'box', x: a.x, y: a.y, width: NW, height: NH, rx: 8}));
+    g.appendChild(el('rect', {x: a.x + 0.5, y: a.y + 6, width: 4, height: NH - 12, rx: 2, style: `fill: var(--${GROUP[a.s.kind] || 'do'})`}));
+    g.appendChild(el('text', {class: 'sid', x: a.x + 11, y: a.y + 13}, a.s.id));
+    if (a.s.control) {
+      const d = el('rect', {x: a.x + NW - 15, y: a.y + 6, width: 7, height: 7, transform: `rotate(45 ${a.x + NW - 11.5} ${a.y + 9.5})`, style: 'fill: var(--ink)'});
+      d.appendChild(el('title', {}, 'Mandatory control: ' + a.s.control[1]));
+      g.appendChild(d);
+    }
+    wrapText(a.s.name, 22, 2).forEach((line, li) => g.appendChild(el('text', {class: 'nm', x: a.x + 11, y: a.y + 27 + li * 13}, line)));
+    g.appendChild(el('text', {class: 'tm', x: a.x + 11, y: a.y + NH - 6}, `${dur(a.s.touch[1])} · wait ${dur(a.s.wait[1])}`));
+    g.addEventListener('click', () => select(a.s.id));
+    g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(a.s.id); } });
+    gNodes.appendChild(g);
+  });
+  svg.appendChild(gEdges); svg.appendChild(gPills); svg.appendChild(gNodes);
+  $('scroll').replaceChildren(svg);
+  $('scroll').scrollLeft = 0;
+  const lanes = laneIds.map(r => `<div style="height:${LH}px">${esc(roleName(w, r))}</div>`).join('') + `<div style="height:${outH}px">How cases end</div>`;
+  $('lanes').innerHTML = lanes;
+}
+
+function select(id) {
+  selected = id;
+  const s = wf.steps.find(x => x.id === id);
+  document.querySelectorAll('.node').forEach(n => n.classList.toggle('sel', n.dataset.id === id));
+  document.querySelectorAll('.edge').forEach(e => {
+    const hot = e.dataset.from === id;
+    e.classList.toggle('hot', hot);
+    e.setAttribute('marker-end', `url(#${hot ? 'ahh' : e.classList.contains('back') ? 'ahb' : 'ah'})`);
+  });
+  const names = Object.fromEntries(wf.steps.map(x => [x.id, x.name]));
+  const next = s.next.map(n => `<li>${Math.round(n[1] * 100)}%: ${n[0] === 'END' ? 'the case ends (' + esc(String(n[2]).replace(/_/g, ' ')) + ')' : 'on to ' + esc(n[0]) + ', ' + esc(names[n[0]])}</li>`).join('');
+  const tier = {A: 'a sourced number', B: 'a sourced description of the practice', C: "the author's estimate"}[s.tier];
+  $('detail').innerHTML = `<div><span class="eyebrow">${esc(s.id)} · ${esc(roleName(wf, s.role))}</span><h3 style="font-size:16px;margin:2px 0 6px">${esc(s.name)}</h3><p>${esc(s.desc)}</p>
+    <p style="margin-top:10px;color:var(--ink-2)">What happens next</p><ul>${next}</ul></div>
+    <dl><dt>Kind</dt><dd>${esc(s.kind.replace(/_/g, ' '))} (${GLABEL[GROUP[s.kind] || 'do'].toLowerCase()})</dd>
+    <dt>Hands-on</dt><dd>${dur(s.touch[1])} most often (${dur(s.touch[0])} to ${dur(s.touch[2])})</dd>
+    <dt>Wait before</dt><dd>${dur(s.wait[1])} most often (${dur(s.wait[0])} to ${dur(s.wait[2])})${s.cause && s.cause !== 'none' ? ', ' + esc(s.cause.replace(/_/g, ' ')) : ''}</dd>
+    <dt>Control</dt><dd>${s.control ? esc(s.control[1]) + ' (' + esc(s.control[0].replace(/_/g, ' ')) + '; ' + esc(s.control[2].replace(/_/g, ' ')) + ')' : 'None'}</dd>
+    <dt>Evidence</dt><dd>Step rests on ${tier}. Times are usually estimates.</dd></dl>`;
+}
+
+function drawBars(w) {
+  const max = Math.max(...w.steps.map(s => s.touch[1] + s.wait[1]), 1);
+  $('bars').innerHTML = w.steps.map(s => {
+    const ww = s.wait[1] / max * 100, tw = s.touch[1] / max * 100;
+    return `<div class="row"><span class="lab" title="${esc(s.name)}">${esc(s.id)} ${esc(s.name)}</span>
+      <div class="track" data-id="${esc(s.id)}">${ww > 0.15 ? `<span class="seg w${tw > 0.15 ? '' : ' e'}" style="width:calc(${ww.toFixed(2)}% * 0.78)"></span>` : ''}${tw > 0.15 ? `<span class="seg t e" style="width:calc(${tw.toFixed(2)}% * 0.78)"></span>` : ''}<span class="val">${dur(s.touch[1] + s.wait[1])}</span></div></div>`;
+  }).join('');
+  $('table').innerHTML = '<thead><tr><th>Step</th><th>Who</th><th>Kind</th><th>Hands-on</th><th>Wait before</th><th>Control</th><th>Evidence</th></tr></thead><tbody>' +
+    w.steps.map(s => `<tr><td>${esc(s.id)} ${esc(s.name)}</td><td>${esc(roleName(w, s.role))}</td><td>${esc(s.kind.replace(/_/g, ' '))}</td><td class="n">${dur(s.touch[1])}</td><td class="n">${dur(s.wait[1])}</td><td>${s.control ? esc(s.control[1]) : ''}</td><td>${esc(s.tier)}</td></tr>`).join('') + '</tbody>';
+}
+
+function drawFacts(w) {
+  const st = w.stats || {};
+  const cur = w.currency || '';
+  const facts = [
+    [st.cycle50 != null ? days(st.cycle50) : 'n/a', 'median elapsed time for one case'],
+    [st.touch50 != null ? hours(st.touch50) : 'n/a', 'median hands-on time'],
+    [st.share != null ? (st.share * 100 < 1 ? (st.share * 100).toFixed(1) : Math.round(st.share * 100)) + '%' : 'n/a', 'of elapsed time is hands-on'],
+    [st.handoffs != null ? st.handoffs : 'n/a', 'handoffs between roles (median)'],
+    [st.rework != null ? Math.round(st.rework * 100) + '%' : 'n/a', 'of cases repeat at least one step'],
+    [w.steps.length + ' / ' + w.steps.filter(s => s.control).length, 'steps / mandatory controls'],
+    [num(w.cases), 'cases a month'],
+    [st.cost != null ? num(st.cost) + ' ' + cur : 'n/a', 'labour cost per case'],
+  ];
+  $('facts').innerHTML = facts.map(f => `<div class="fact"><b>${esc(f[0])}</b><span>${esc(f[1])}</span></div>`).join('');
+  const share = st.share != null ? st.share * 100 : null;
+  $('timehead').textContent = share == null ? 'Where the time goes'
+    : share < 50 ? `Waiting takes ${share > 99 ? 'almost none' : (100 - share >= 99 ? 'over 99' : Math.round(100 - share))}% of the elapsed time`
+    : `Hands-on work fills ${Math.round(share)}% of the elapsed time`;
+}
+
+function drawMap(o) {
+  const done = o.processes.filter(p => p.wf).length;
+  $('maphead').textContent = o.id === 'general' ? 'General processes' : `Every process at this organisation`;
+  $('mapsub').textContent = o.id === 'general'
+    ? `${done} processes that most organisations run in some form, grouped by sector. Select one to open it.`
+    : `${o.processes.length} processes grouped by unit, with cases a month. The ${done} with a solid outline have a step-by-step workflow; select one to open it. The rest are mapped but not yet written up.`;
+  $('map').innerHTML = o.units.map(u => {
+    const ps = o.processes.filter(p => p.unit === u.id);
+    if (!ps.length) return '';
+    return `<div class="unit"><h3>${esc(u.name)}</h3><div class="chips">` + ps.map(p => p.wf
+      ? `<button type="button" class="chip${wf && p.wf === wf.id ? ' on' : ''}" data-wf="${esc(p.wf)}">${esc(p.name)} · ${num(p.vol)}</button>`
+      : `<span class="chip">${esc(p.name)} · ${num(p.vol)}</span>`).join('') + '</div></div>';
+  }).join('');
+  $('map').querySelectorAll('button.chip').forEach(b => b.addEventListener('click', () => { show(b.dataset.wf, true); window.scrollTo({top: 0, behavior: 'smooth'}); }));
+}
+
+function fillWf(o) {
+  const ps = o.processes.filter(p => p.wf);
+  $('wf').innerHTML = o.units.map(u => {
+    const items = ps.filter(p => p.unit === u.id);
+    return items.length ? `<optgroup label="${esc(u.name)}">` + items.map(p => `<option value="${esc(p.wf)}">${esc(p.name)}</option>`).join('') + '</optgroup>' : '';
+  }).join('');
+}
+
+function show(id, setHash) {
+  const w = DATA.wfs[id];
+  if (!w) return;
+  const o = DATA.orgs.find(x => x.id === (w.org || 'general'));
+  if (org !== o) { org = o; $('org').value = o.id; fillWf(o); }
+  wf = w;
+  $('wf').value = id;
+  $('wfname').textContent = w.name;
+  $('wfsum').textContent = w.summary;
+  drawFacts(w); drawFlow(w); drawBars(w); drawMap(o);
+  select(w.steps[0].id);
+  const t = w.stats || {};
+  $('foot').textContent = `Written by an AI model from public sources for this process. Of its ${w.steps.length} steps, ${w.steps.filter(s => s.tier === 'A').length} rest on a sourced number, ${w.steps.filter(s => s.tier === 'B').length} on a sourced description and ${w.steps.filter(s => s.tier === 'C').length} on the author's estimate. Hands-on minutes, waits and branch shares are mostly estimates even where the step itself is sourced. Elapsed time, handoffs and rework come from walking 5,000 simulated cases through the steps.`;
+  if (setHash) { try { history.replaceState(null, '', '#' + id); } catch (e) { location.hash = id; } }
+}
+
+function ids() { return org.processes.filter(p => p.wf).map(p => p.wf); }
+$('org').innerHTML = DATA.orgs.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('');
+$('org').addEventListener('change', e => { const o = DATA.orgs.find(x => x.id === e.target.value); const first = o.processes.find(p => p.wf); if (first) show(first.wf, true); });
+$('wf').addEventListener('change', e => show(e.target.value, true));
+$('prev').addEventListener('click', () => { const l = ids(); show(l[(l.indexOf(wf.id) - 1 + l.length) % l.length], true); });
+$('next').addEventListener('click', () => { const l = ids(); show(l[(l.indexOf(wf.id) + 1) % l.length], true); });
+$('legend').innerHTML = Object.keys(GLABEL).map(k => `<span><i style="background:var(--${k})"></i>${GLABEL[k]}</span>`).join('') +
+  '<span><i class="lock"></i>Mandatory control</span><span><i class="line"></i>Next step</span><span><i class="line dash"></i>Loops back for rework</span>';
+const tip = $('tip');
+$('bars').addEventListener('mousemove', e => {
+  const t = e.target.closest('.track');
+  if (!t) { tip.hidden = true; return; }
+  const s = wf.steps.find(x => x.id === t.dataset.id);
+  tip.innerHTML = `<b>${esc(s.id)} ${esc(s.name)}</b>${esc(roleName(wf, s.role))}<br>Wait before: ${dur(s.wait[1])}<br>Hands-on: ${dur(s.touch[1])}`;
+  tip.hidden = false;
+  const x = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8), y = Math.min(e.clientY + 14, window.innerHeight - tip.offsetHeight - 8);
+  tip.style.left = x + 'px'; tip.style.top = y + 'px';
+});
+$('bars').addEventListener('mouseleave', () => { tip.hidden = true; });
+$('bars').addEventListener('click', e => { const t = e.target.closest('.track'); if (t) select(t.dataset.id); });
+function fromHash() { const h = location.hash.replace('#', ''); if (DATA.wfs[h]) { show(h, false); return true; } return false; }
+window.addEventListener('hashchange', fromHash);
+if (!fromHash()) show(DATA.start, false);
+</script>

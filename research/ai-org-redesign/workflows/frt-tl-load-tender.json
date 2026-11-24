@@ -1,0 +1,1514 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-tl-load-tender",
+  "name": "Accept truckload tenders and book loads",
+  "org": "freight-carrier-co",
+  "process": "tl-load-tender",
+  "sector": "trucking and freight transportation",
+  "function": "truckload customer service",
+  "summary": "Shippers offer full-truckload shipments to the carrier as tenders, mostly by EDI 204 from their own routing-guide systems and the rest through web portals, email or phone. A truckload customer service representative reviews each tender, checks the contract rate and whether a truck will be free near the pickup, asks a load planner when capacity is unclear, and accepts or declines before the shipper's deadline. Accepted loads are completed in the TMS, appointments are booked with the docks, and the load goes to the planning board or, if the fleet cannot cover it, to the brokerage desk. Re-keying portal and email tenders, waiting for dock appointment replies, and late shipper changes are the main sources of delay and error.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees whose truckload division runs about 400 company sleeper tractors and 380 owner-operators within Canada and across the US border, on a carrier TMS with EDI, ELDs and an eManifest service provider.",
+    "org_size_employees": 3000,
+    "notes": "Truckload customer service desk of 22 representatives working extended weekday hours with Saturday cover; tenders arrive around the clock by EDI."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one load tender",
+  "trigger": "A shipper sends a load tender by EDI 204, web portal, email or phone.",
+  "end_state": "The tender is declined, expires or is cancelled, or the load is booked with appointments and released to the planning board or the brokerage desk.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 8000,
+      "mode": 9500,
+      "high": 11000
+    },
+    "seasonality": "Lower in January and in the second quarter of 2020 during COVID-19 lockdowns; higher from September to mid-December and through the tight market of 2021.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Taken from the org file's process map (tl-load-tender), which derives it from about 7,500 truckload loads a month plus declined, cancelled and brokered tenders."
+    },
+    "surge": {
+      "cause": "Autumn shipping peak (September to mid-December retail and industrial restocking)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 50,
+        "mode": 70,
+        "high": 90
+      },
+      "volume_multiplier": {
+        "low": 1.1,
+        "mode": 1.2,
+        "high": 1.3
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Copied from the org file's process map entry; author's estimate of the peak size."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "shipper",
+        "object": "load_tender",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "sls-pricing-quotes",
+        "object": "rate_agreement"
+      },
+      {
+        "from": "it-edi-integration",
+        "object": "edi_connection"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "booked_fleet",
+        "to": "shipper",
+        "object": "load_confirmation"
+      },
+      {
+        "outcome": "booked_brokerage",
+        "to": "shipper",
+        "object": "load_confirmation"
+      },
+      {
+        "outcome": "booked_fleet",
+        "to": "tl-load-planning",
+        "object": "booked_load"
+      },
+      {
+        "outcome": "booked_brokerage",
+        "to": "tl-brokerage",
+        "object": "booked_load"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "tl-customer-rep",
+      "title": "Truckload customer service representative",
+      "department": "Truckload customer service and brokerage",
+      "layer": "individual_contributor",
+      "fte_on_process": 19.0,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 36,
+        "high": 43
+      },
+      "occupation_code": "NOC 64409",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The org file has 22 representatives; about 19 FTE go to tenders and booking, the rest to detention and accessorial tracking and customer calls. The touch times in this file imply more (see assumptions)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "load-planner",
+      "title": "Truckload load planner",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 37,
+        "mode": 44,
+        "high": 53
+      },
+      "occupation_code": "NOC 14405",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of the 14 load planners' time spent answering capacity questions on tenders; author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "pricing-analyst",
+      "title": "Pricing analyst",
+      "department": "Sales and customer service",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 45,
+        "mode": 54,
+        "high": 66
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Pricing analysts answer lane-rate questions on about 7% of tenders; not listed in the process map roles. Author's estimate."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "edi-gateway",
+      "name": "EDI gateway (204 tenders, 211 bills of lading, 214 status, 210 invoices)",
+      "kind": "workflow"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "shipper-portals",
+      "name": "Shippers' TMS tendering and dock-scheduling web portals",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "rating-engine",
+      "name": "Rating engine and tariff tables",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Shipper sends a load tender",
+      "description": "The shipper's transportation team, usually through its own TMS routing guide, offers one full-truckload shipment to the carrier with origin, destination, pickup window, delivery date, equipment type, weight and the contract rate. The tender carries a response deadline, after which the shipper's system moves it to the next carrier in the routing guide.",
+      "role": "external",
+      "kind": "intake",
+      "inputs": [
+        "shipment order"
+      ],
+      "outputs": [
+        "load tender"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Tender sent with a wrong date, address or equipment type.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.55,
+          "condition": "EDI 204 tender from a shipper on EDI"
+        },
+        {
+          "to": "s03",
+          "prob": 0.2,
+          "condition": "tender posted on the shipper's web portal"
+        },
+        {
+          "to": "s04",
+          "prob": 0.25,
+          "condition": "tender by email, spreadsheet or phone"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Channel mix is the author's estimate for a Canadian carrier in 2019-2022: large shippers and their TMS used EDI 204 or portals; many mid-sized Canadian shippers still emailed or phoned loads. Shipper effort is not counted as touch time."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Load the EDI tender into the TMS queue",
+      "description": "The EDI gateway polls the value-added network, maps the 204 transaction into a pending tender in the TMS with the shipper's reference numbers and stops, and places it in the truckload customer service queue with its response deadline. No one touches it unless the mapping fails.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "EDI 204 transaction"
+      ],
+      "outputs": [
+        "pending tender in TMS"
+      ],
+      "systems": [
+        "edi-gateway",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Mapping error drops a stop or a reference number.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-sps-tender"
+        ],
+        "note": "EDI 204 tendering is described by SPS Commerce; polling interval is the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Copy a portal tender into the TMS",
+      "description": "The customer service representative logs into the shipper's tendering portal, opens the offered load, and re-keys the shipper, stops, dates, equipment, weight and reference numbers into a new order in the carrier's TMS. Portals are checked between other work, so tenders wait until the next check.",
+      "role": "tl-customer-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "portal tender"
+      ],
+      "outputs": [
+        "draft order in TMS"
+      ],
+      "systems": [
+        "shipper-portals",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 40,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Re-keying error in a date, reference or address.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-sps-tender"
+        ],
+        "note": "Manual portal checking and re-keying described by SPS Commerce; minutes and waits are the author's estimate. Overnight tenders wait for the morning shift."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Key an email or phone tender into the TMS",
+      "description": "The representative reads the shipper's email or spreadsheet, or takes the call, and types a new order into the TMS with the stops, dates, equipment, commodity, weight and references, asking on the spot for anything obviously missing. Email tenders sit in a shared inbox until someone picks them up.",
+      "role": "tl-customer-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "email or phone tender"
+      ],
+      "outputs": [
+        "draft order in TMS"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 30,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Typing error or missed instruction from a free-text email.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of keying time for a one-pickup, one-drop load; inbox waits stretch overnight because the desk works extended weekday hours."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Review the tender and the customer account",
+      "description": "The representative checks that the pickup and delivery windows are workable, the equipment type exists in the fleet, the weight is legal, any dangerous goods are declared, and whether the load crosses the border. The TMS shows whether the customer account is active and not on credit hold.",
+      "role": "tl-customer-rep",
+      "kind": "validation",
+      "inputs": [
+        "pending tender",
+        "customer account"
+      ],
+      "outputs": [
+        "reviewed tender"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A wrong date, missing dangerous goods flag or wrong equipment passes review.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Credit policy: no new loads for accounts on credit hold",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.92,
+          "condition": "details complete"
+        },
+        {
+          "to": "s06",
+          "prob": 0.08,
+          "condition": "details missing or unclear"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common carrier practice; EDI tenders that arrive outside desk hours wait in the queue."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Ask the shipper for missing details",
+      "description": "The representative emails or calls the shipper's logistics contact to fill gaps such as a missing pickup number, a delivery appointment requirement, the commodity for a cross-border load or a temperature setting for a reefer load.",
+      "role": "tl-customer-rep",
+      "kind": "communication",
+      "inputs": [
+        "reviewed tender"
+      ],
+      "outputs": [
+        "query to shipper"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Shipper answers the query",
+      "description": "The shipper's contact replies by email or phone with the missing information. The tender clock keeps running, so a slow answer can let the response deadline pass.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "query to shipper"
+      ],
+      "outputs": [
+        "missing details"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 360
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of shipper response times during business hours."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Look up the contract rate and fuel surcharge",
+      "description": "The representative checks the rate on file for the lane in the rating tables and compares it with the rate on the tender, together with this week's fuel surcharge and any agreed accessorials such as stop-offs or border fees.",
+      "role": "tl-customer-rep",
+      "kind": "lookup",
+      "inputs": [
+        "reviewed tender",
+        "rate agreement"
+      ],
+      "outputs": [
+        "rate check"
+      ],
+      "systems": [
+        "rating-engine",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong lane rate or old fuel table applied.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.93,
+          "condition": "tender rate matches the rate on file"
+        },
+        {
+          "to": "s09",
+          "prob": 0.07,
+          "condition": "no rate for the lane or rate mismatch"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of tenders without a matching lane rate is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Pricing analyst confirms or sets the rate",
+      "description": "The pricing analyst reviews the lane, the customer's contract and current market conditions, then either confirms the shipper's rate, sets a one-time spot rate, or asks the account executive to talk to the customer. The answer goes back to the representative by email or a TMS note.",
+      "role": "pricing-analyst",
+      "kind": "judgment",
+      "inputs": [
+        "rate query"
+      ],
+      "outputs": [
+        "approved rate"
+      ],
+      "systems": [
+        "rating-engine",
+        "email-phone",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 960
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Rate set below cost for a backhaul-poor lane.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Pricing authority matrix: rates outside the agreement need pricing approval",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; pricing analysts work office hours, so evening queries wait until the next morning."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Check truck capacity for the pickup",
+      "description": "The representative opens the planning board and the regional capacity sheet to see whether the fleet has committed capacity on this lane and day. Routine loads within the weekly lane commitment are accepted directly; others go to the load planner.",
+      "role": "tl-customer-rep",
+      "kind": "lookup",
+      "inputs": [
+        "reviewed tender",
+        "planning board"
+      ],
+      "outputs": [
+        "capacity check"
+      ],
+      "systems": [
+        "tms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Load accepted where no truck will be free, causing a late pickup.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.66,
+          "condition": "within the lane commitment"
+        },
+        {
+          "to": "s11",
+          "prob": 0.34,
+          "condition": "outside the plan or a tight day"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share referred to planners is the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Load planner decides whether to take the load",
+      "description": "The load planner looks at drivers expected to be empty near the origin, their remaining hours and home-time dates, the freight balance in the destination region and the empty kilometres involved. The planner tells the representative to accept, to accept for the brokerage desk, or to decline.",
+      "role": "load-planner",
+      "kind": "judgment",
+      "inputs": [
+        "capacity check",
+        "driver availability"
+      ],
+      "outputs": [
+        "capacity decision"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Optimistic call leaves the load uncovered later.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.68,
+          "condition": "take the load"
+        },
+        {
+          "to": "s12",
+          "prob": 0.32,
+          "condition": "decline"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Accept and decline shares are set so that about 78% of tenders reach the fleet, 6% the brokerage desk and 11% are declined, matching the process map volumes (7,700 planned and 600 brokered loads from 9,500 tenders)."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Decline the tender",
+      "description": "The representative rejects the tender in the TMS, which sends an EDI 990 decline or is clicked in the portal, or emails the shipper, with a reason code such as no capacity. The freight goes to the next carrier in the shipper's routing guide.",
+      "role": "tl-customer-rep",
+      "kind": "communication",
+      "inputs": [
+        "capacity decision"
+      ],
+      "outputs": [
+        "tender decline"
+      ],
+      "systems": [
+        "tms",
+        "edi-gateway",
+        "shipper-portals",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "declined",
+          "outcome": "declined"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-otri"
+        ],
+        "note": "Declining contracted tenders is common; US carriers rejected more than 20% of tenders through 2021. This carrier's 11% decline share is the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Accept the tender",
+      "description": "The representative accepts the tender in the TMS, which sends the EDI 990 acceptance, or clicks accept in the shipper's portal, or confirms by email. If the deadline has passed, the shipper's system has already given the load to another carrier.",
+      "role": "tl-customer-rep",
+      "kind": "communication",
+      "inputs": [
+        "reviewed tender",
+        "capacity decision"
+      ],
+      "outputs": [
+        "tender acceptance"
+      ],
+      "systems": [
+        "tms",
+        "edi-gateway",
+        "shipper-portals",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.98,
+          "condition": "accepted in time"
+        },
+        {
+          "to": "END",
+          "prob": 0.02,
+          "condition": "response deadline passed",
+          "outcome": "expired"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of tenders lost to the response deadline is the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Complete the order in the TMS",
+      "description": "The representative finishes the order: bill of lading and pickup numbers, purchase orders, special instructions, accessorial flags, temperature for reefer loads and the billing party. Errors here show up later as missed pickups or rejected invoices.",
+      "role": "tl-customer-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "accepted tender"
+      ],
+      "outputs": [
+        "booked order"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Wrong reference, instruction or billing party.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.35,
+          "condition": "load crosses the Canada-US border"
+        },
+        {
+          "to": "s16",
+          "prob": 0.39,
+          "condition": "domestic load needing an appointment"
+        },
+        {
+          "to": "s18",
+          "prob": 0.26,
+          "condition": "domestic load with drop trailer or open dock hours"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Cross-border share of 35% follows the org file's border-crossings driver; appointment shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Record customs broker and border details",
+      "description": "For a cross-border load the representative records the importer's customs broker, the port of entry and whether the shipper is C-TPAT or PIP certified, and emails the shipper to confirm that the commercial invoice will travel with the freight and go to the broker.",
+      "role": "tl-customer-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "booked order"
+      ],
+      "outputs": [
+        "border details on order"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Wrong or missing broker, found when the customs desk files the eManifest.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.6,
+          "condition": "appointment needed"
+        },
+        {
+          "to": "s18",
+          "prob": 0.4,
+          "condition": "no appointment needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-cbsa-aci"
+        ],
+        "note": "The broker and commodity details feed the eManifest; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Request pickup and delivery appointments",
+      "description": "The representative books the pickup slot with the shipper's shipping office and the delivery slot through the consignee's dock-scheduling portal, by email or by phone, choosing times the driver can reach within hours-of-service limits.",
+      "role": "tl-customer-rep",
+      "kind": "coordination",
+      "inputs": [
+        "booked order"
+      ],
+      "outputs": [
+        "appointment requests"
+      ],
+      "systems": [
+        "email-phone",
+        "shipper-portals",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Appointment requested for the wrong date or reference.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Shipper and consignee confirm the appointments",
+      "description": "The receiving docks confirm or counter-offer a slot. Large retail and grocery distribution centres often reply within hours through their portal; smaller receivers answer by email the next day.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "appointment requests"
+      ],
+      "outputs": [
+        "confirmed appointments"
+      ],
+      "systems": [
+        "email-phone",
+        "shipper-portals"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of dock-scheduling response times."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Release the load to the planning board",
+      "description": "The representative enters confirmed appointment times, sets the load status to available, and the order appears on the load planners' board for the pickup region and date.",
+      "role": "tl-customer-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "booked order",
+        "confirmed appointments"
+      ],
+      "outputs": [
+        "booked load on planning board"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Appointment time typed wrong.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.88,
+          "condition": "no change from the shipper"
+        },
+        {
+          "to": "s19",
+          "prob": 0.09,
+          "condition": "shipper changes the load"
+        },
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "shipper cancels the load",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Change and cancellation shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Update the order after a shipper change",
+      "description": "When the shipper sends an EDI 204 change or an email moving the date, adding a stop or changing the weight, the representative updates the order, tells the planner if the load is already planned, and re-books appointments when the date moved.",
+      "role": "tl-customer-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "tender change"
+      ],
+      "outputs": [
+        "updated order"
+      ],
+      "systems": [
+        "tms",
+        "edi-gateway",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Change applied to only some fields, leaving a stale appointment.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.6,
+          "condition": "new appointments needed"
+        },
+        {
+          "to": "s20",
+          "prob": 0.4,
+          "condition": "no new appointments"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; changes arrive hours to two days after the original tender."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Send the load confirmation",
+      "description": "The TMS sends the shipper a load confirmation by email or EDI with the carrier's load number, accepted rate and appointment times, and starts EDI 214 status messages for shippers on EDI.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "booked load"
+      ],
+      "outputs": [
+        "load confirmation"
+      ],
+      "systems": [
+        "tms",
+        "edi-gateway"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common TMS behaviour in 2019-2022."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Route the load to the fleet or the brokerage desk",
+      "description": "The representative checks the planner's note on the order. Loads the fleet cannot cover but that the customer relationship requires are flagged for the brokerage desk; all others stay on the planning board for the company fleet and owner-operators.",
+      "role": "tl-customer-rep",
+      "kind": "coordination",
+      "inputs": [
+        "booked load"
+      ],
+      "outputs": [
+        "routed load"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.93,
+          "condition": "fleet will haul it",
+          "outcome": "booked_fleet"
+        },
+        {
+          "to": "s22",
+          "prob": 0.07,
+          "condition": "brokerage desk will cover it"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Brokerage share of accepted loads (600 of about 8,300) follows the process map volumes."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Hand the load to the brokerage desk",
+      "description": "The representative moves the order to the brokerage queue in the TMS and sends the brokerage agent a short note with the customer's rate, appointment times and any special handling, so the agent can find a third-party carrier.",
+      "role": "tl-customer-rep",
+      "kind": "communication",
+      "inputs": [
+        "routed load"
+      ],
+      "outputs": [
+        "booked load for brokerage"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Special instruction not passed on to the third-party carrier.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "handed over",
+          "outcome": "booked_brokerage"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Missing tender details",
+      "share_of_cases": 0.08,
+      "description": "The tender lacks a pickup number, commodity, appointment requirement or temperature, and the representative has to ask the shipper while the response clock runs.",
+      "path": [
+        "s05",
+        "s06",
+        "s07",
+        "s08"
+      ]
+    },
+    {
+      "name": "Rate not on file",
+      "share_of_cases": 0.07,
+      "description": "The lane has no contract rate or the tender rate differs, so pricing has to confirm or set a spot rate before acceptance.",
+      "path": [
+        "s08",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "Tender expired before response",
+      "share_of_cases": 0.02,
+      "description": "The response arrives after the shipper's deadline and the load has already gone to another carrier.",
+      "path": [
+        "s13"
+      ]
+    },
+    {
+      "name": "Shipper change after booking",
+      "share_of_cases": 0.09,
+      "description": "The shipper moves the date, adds a stop or changes the weight after acceptance; appointments are re-booked and the planner is told.",
+      "path": [
+        "s18",
+        "s19",
+        "s16",
+        "s17",
+        "s18"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.5,
+        "p90": 1.4
+      },
+      "unit": "calendar days from tender receipt to release on the planning board or decline",
+      "population": "Canadian truckload carriers, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: tender responses are due within minutes to a few hours, but dock appointment confirmations take hours to a day and tenders arriving overnight wait for the desk."
+      }
+    },
+    {
+      "metric": "tender_rejection_rate_us_market",
+      "value": {
+        "low": 0.2,
+        "high": 0.27
+      },
+      "unit": "share of contracted tenders declined by carriers",
+      "population": "US truckload market, 2021",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-otri"
+        ],
+        "note": "FreightWaves SONAR Outbound Tender Reject Index; this file uses about 11% for a Canadian carrier that also brokers overflow."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Portal and email tenders are re-keyed into the TMS, which costs time and introduces date and reference errors.",
+      "steps": [
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-sps-tender"
+        ],
+        "note": "Manual portal logins, spreadsheets and phone calls described by SPS Commerce."
+      }
+    },
+    {
+      "description": "Representatives cannot see firm capacity, so a third of tenders wait for a load planner's call while the shipper's response deadline runs.",
+      "steps": [
+        "s10",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common practice."
+      }
+    },
+    {
+      "description": "Dock appointment confirmations take hours to a day and are chased by email and phone.",
+      "steps": [
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Late shipper changes force re-booking and can arrive after the load is planned.",
+      "steps": [
+        "s19"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "assumptions": [
+    "Volumes and shares are set to agree with the org file: 9,500 tenders a month give about 7,400 loads to the fleet, 600 to brokerage and about 1,050 declines (the process map's 7,700 planning cases also include re-planned loads), with 2% expired and 3% cancelled.",
+    "Shipper and consignee effort is not counted as touch time; external steps carry only elapsed waits.",
+    "Representatives work extended weekday hours with Saturday cover, so tenders arriving overnight or on Sunday wait several hours; this sits in the high end of the queue waits.",
+    "Staffing check: representative touch time averages about 26 minutes per tender, which at 9,500 tenders implies about 31 FTE at 130 productive hours a month, against 22 representatives in the org file who also handle detention and customer calls. Either the org file understates the desk (about 30 representatives would fit) or Canadian representatives handled tenders faster than estimated here.",
+    "Loaded costs come from the org file (wage x 1.30 for hourly staff, x 1.35 for salaried staff).",
+    "Brokered loads follow the same booking steps; the split between fleet and brokerage is drawn at the end because the simulation does not carry the planner's decision forward."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  },
+  "sources": [
+    {
+      "id": "src-sps-tender",
+      "accessed": "2026-11-24",
+      "title": "4 impacts from streamlining load tender response times",
+      "publisher": "SPS Commerce, The Supply Chain Source",
+      "url": "https://www.spscommerce.com/community/articles/load-tender-response-times",
+      "year": 2025,
+      "supports": "EDI 204 load tenders; carrier responses slowed by manual handling: spreadsheets, whiteboards, logging into several shipper portals, phone calls and faxes; response time affects whether the carrier wins the freight."
+    },
+    {
+      "id": "src-fw-otri",
+      "accessed": "2026-11-24",
+      "title": "Where did all the truckload capacity go?",
+      "publisher": "FreightWaves",
+      "url": "https://www.freightwaves.com/news/where-did-all-the-truckload-capacity-go",
+      "year": 2021,
+      "supports": "US Outbound Tender Reject Index (share of contracted load tenders that carriers turned down) was above 20% for much of 2021, falling from about 27% to near 20% over the year; 21.92% in late December 2021."
+    },
+    {
+      "id": "src-cbsa-aci",
+      "accessed": "2026-11-24",
+      "title": "Highway mode: Transmit electronic commercial data (Advance Commercial Information / eManifest)",
+      "publisher": "Canada Border Services Agency",
+      "url": "https://www.cbsa-asfc.gc.ca/prog/aci-manif-ipec/hcc-ctr-eng.html",
+      "year": null,
+      "supports": "Highway carriers transmit cargo and conveyance data at least 1 hour before arrival at the port of entry; corrections must be sent as soon as known, including a change of port; tractor and trailer plates must be valid and cargo descriptions clear; late, incorrect or incomplete data can draw AMPS monetary penalties; contingency plan for system outages."
+    }
+  ]
+}

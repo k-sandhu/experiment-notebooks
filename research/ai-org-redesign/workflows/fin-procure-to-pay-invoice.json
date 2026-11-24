@@ -1,0 +1,2356 @@
+{
+  "schema_version": "0.2",
+  "id": "fin-procure-to-pay-invoice",
+  "name": "Process one purchase-order-backed supplier invoice (accounts payable)",
+  "org": null,
+  "process": null,
+  "sector": "cross-industry",
+  "function": "finance: accounts payable",
+  "summary": "Accounts payable turns a supplier's invoice for goods or services bought on a purchase order into a correct payment. An AP clerk captures the invoice, the ERP matches it to the purchase order and the goods receipt, and about one invoice in five stops on a hold that a buyer, receiver or requester has to clear. Cleared invoices wait for the payment run that covers their due date, which a supervisor prepares, the controller approves and a second signatory releases at the bank. Most elapsed time is waiting: for keying queues, for buyers and requesters to fix holds, for suppliers to send credit memos, and for the due date.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A US mid-size manufacturer or distributor with a central AP team, an ERP with purchasing and receiving modules, OCR invoice capture, and weekly or twice-weekly payment runs.",
+    "org_size_employees": 2000,
+    "notes": "Covers PO-backed invoices only. Non-PO invoices, expense claims and card spend are separate processes. Vendor master changes are a separate process."
+  },
+  "currency": "USD",
+  "unit_of_work": "one supplier invoice referencing a purchase order",
+  "trigger": "A supplier invoice that references (or should reference) a purchase order arrives in the AP mailbox or mail tray.",
+  "end_state": "The invoice is paid by ACH, wire or check with remittance advice, or is rejected as a duplicate, returned to the supplier or disputed and not paid.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2000,
+      "mode": 2500,
+      "high": 3200
+    },
+    "seasonality": "Peaks in the last week of each month and at fiscal year-end; lower in late December and August.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Author estimate for a company of about 2,000 employees and roughly $500 to $700 million revenue. At APQC's median of about 9,500 invoices per AP FTE per year (procurify_apqc) this volume needs about 3 to 4 AP FTE, which is consistent with APQC's median of 6.8 AP FTE per $1 billion revenue."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "Supplier billing",
+        "object": "supplier invoice",
+        "share": 0.9
+      },
+      {
+        "from": "Requesters forwarding invoices sent to them directly",
+        "object": "supplier invoice",
+        "share": 0.1
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "paid_electronically",
+        "to": "Supplier",
+        "object": "ACH or wire payment and remittance advice"
+      },
+      {
+        "outcome": "paid_by_check",
+        "to": "Supplier",
+        "object": "check with remittance stub"
+      },
+      {
+        "outcome": "any",
+        "to": "Month-end close",
+        "object": "AP sub-ledger postings, holds and accrual data"
+      },
+      {
+        "outcome": "any",
+        "to": "Cash management and treasury",
+        "object": "payment file and cash requirement forecast"
+      },
+      {
+        "outcome": "returned_to_supplier",
+        "to": "Supplier",
+        "object": "invoice rejection notice"
+      },
+      {
+        "outcome": "rejected_duplicate",
+        "to": "Supplier",
+        "object": "duplicate invoice notice"
+      },
+      {
+        "outcome": "any",
+        "to": "Purchasing",
+        "object": "PO change orders and retrospective PO requests"
+      },
+      {
+        "outcome": "any",
+        "to": "Tax reporting",
+        "object": "1099 reportable payment data"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "ap_clerk",
+      "title": "Accounts payable clerk",
+      "department": "Finance: accounts payable",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.4,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 39,
+        "high": 43
+      },
+      "occupation_code": "SOC 43-3031",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bls_433031",
+          "bls_ecec2021"
+        ],
+        "note": "Loaded cost = BLS OEWS May 2021 hourly wage (25th percentile, mean or median, 75th percentile) x 1.8. The 1.8 combines benefits (wages were about 70 percent of private-sector compensation in December 2021, a factor of about 1.43, from BLS ECEC) with an overhead factor of about 1.25 for space, IT and supervision, which is an author estimate. FTE on this process is an author estimate consistent with APQC's median of about 9,500 invoices per AP FTE per year (procurify_apqc)."
+      }
+    },
+    {
+      "id": "ap_supervisor",
+      "title": "Accounts payable supervisor",
+      "department": "Finance: accounts payable",
+      "layer": "supervisor",
+      "fte_on_process": 0.35,
+      "loaded_cost_per_hour": {
+        "low": 41,
+        "mode": 52,
+        "high": 67
+      },
+      "occupation_code": "SOC 43-1011",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bls_431011",
+          "bls_ecec2021"
+        ],
+        "note": "Loaded cost = BLS OEWS May 2021 hourly wage (25th percentile, mean or median, 75th percentile) x 1.8. The 1.8 combines benefits (wages were about 70 percent of private-sector compensation in December 2021, a factor of about 1.43, from BLS ECEC) with an overhead factor of about 1.25 for space, IT and supervision, which is an author estimate. FTE share is an author estimate."
+      }
+    },
+    {
+      "id": "buyer",
+      "title": "Buyer",
+      "department": "Procurement",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 43,
+        "mode": 55,
+        "high": 76
+      },
+      "occupation_code": "SOC 13-1020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bls_131020",
+          "bls_ecec2021"
+        ],
+        "note": "Loaded cost = BLS OEWS May 2021 hourly wage (25th percentile, mean or median, 75th percentile) x 1.8. The 1.8 combines benefits (wages were about 70 percent of private-sector compensation in December 2021, a factor of about 1.43, from BLS ECEC) with an overhead factor of about 1.25 for space, IT and supervision, which is an author estimate. FTE share (time spent on invoice holds and retrospective POs) is an author estimate."
+      }
+    },
+    {
+      "id": "receiving_clerk",
+      "title": "Receiving clerk",
+      "department": "Warehouse and receiving",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.25,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 32,
+        "high": 40
+      },
+      "occupation_code": "SOC 43-5071",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bls_435071",
+          "bls_ecec2021"
+        ],
+        "note": "Loaded cost = BLS OEWS May 2021 hourly wage (25th percentile, mean or median, 75th percentile) x 1.8. The 1.8 combines benefits (wages were about 70 percent of private-sector compensation in December 2021, a factor of about 1.43, from BLS ECEC) with an overhead factor of about 1.25 for space, IT and supervision, which is an author estimate. FTE share is an author estimate."
+      }
+    },
+    {
+      "id": "requester",
+      "title": "Requester (department employee who ordered the goods or services)",
+      "department": "Operating departments",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 45,
+        "mode": 60,
+        "high": 85
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Requesters come from many occupations; cost is an author estimate for a typical professional or technician. FTE share spread over many people is an author estimate."
+      }
+    },
+    {
+      "id": "budget_holder",
+      "title": "Budget holder (department manager)",
+      "department": "Operating departments",
+      "layer": "manager",
+      "fte_on_process": 0.06,
+      "loaded_cost_per_hour": {
+        "low": 53,
+        "mode": 85,
+        "high": 131
+      },
+      "occupation_code": "SOC 11-1021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bls_111021",
+          "bls_ecec2021"
+        ],
+        "note": "Loaded cost = BLS OEWS May 2021 hourly wage (25th percentile, mean or median, 75th percentile) x 1.8. The 1.8 combines benefits (wages were about 70 percent of private-sector compensation in December 2021, a factor of about 1.43, from BLS ECEC) with an overhead factor of about 1.25 for space, IT and supervision, which is an author estimate. FTE share is an author estimate."
+      }
+    },
+    {
+      "id": "controller",
+      "title": "Controller",
+      "department": "Finance",
+      "layer": "manager",
+      "fte_on_process": 0.06,
+      "loaded_cost_per_hour": {
+        "low": 86,
+        "mode": 114,
+        "high": 166
+      },
+      "occupation_code": "SOC 11-3031",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bls_113031",
+          "bls_ecec2021"
+        ],
+        "note": "Loaded cost = BLS OEWS May 2021 hourly wage (25th percentile, mean or median, 75th percentile) x 1.8. The 1.8 combines benefits (wages were about 70 percent of private-sector compensation in December 2021, a factor of about 1.43, from BLS ECEC) with an overhead factor of about 1.25 for space, IT and supervision, which is an author estimate. FTE share is an author estimate."
+      }
+    },
+    {
+      "id": "treasury_manager",
+      "title": "Treasury or cash manager (second payment signatory)",
+      "department": "Finance: treasury",
+      "layer": "manager",
+      "fte_on_process": 0.04,
+      "loaded_cost_per_hour": {
+        "low": 86,
+        "mode": 114,
+        "high": 166
+      },
+      "occupation_code": "SOC 11-3031",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bls_113031",
+          "bls_ecec2021"
+        ],
+        "note": "Loaded cost = BLS OEWS May 2021 hourly wage (25th percentile, mean or median, 75th percentile) x 1.8. The 1.8 combines benefits (wages were about 70 percent of private-sector compensation in December 2021, a factor of about 1.43, from BLS ECEC) with an overhead factor of about 1.25 for space, IT and supervision, which is an author estimate. FTE share is an author estimate."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "erp",
+      "name": "ERP purchasing, receiving and payables modules",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "capture",
+      "name": "Invoice scanning and OCR capture tool",
+      "kind": "workflow"
+    },
+    {
+      "id": "email",
+      "name": "Email and shared AP mailbox",
+      "kind": "communication"
+    },
+    {
+      "id": "image_archive",
+      "name": "Invoice image archive",
+      "kind": "document_store"
+    },
+    {
+      "id": "hold_log",
+      "name": "Exception and hold tracking spreadsheet",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "bank_portal",
+      "name": "Bank online banking portal",
+      "kind": "external_portal"
+    },
+    {
+      "id": "check_printer",
+      "name": "Check printer and signature equipment",
+      "kind": "instrument"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive and log incoming invoice",
+      "description": "The AP clerk opens the shared AP mailbox and the paper mail tray, date-stamps paper invoices and scans them, saves emailed PDFs to the capture queue and forwards statements, quotes and misdirected mail. About half of invoices still arrive on paper or as unstructured PDFs.",
+      "role": "ap_clerk",
+      "kind": "intake",
+      "inputs": [
+        "supplier invoice (paper or PDF)"
+      ],
+      "outputs": [
+        "scanned invoice image in capture queue"
+      ],
+      "systems": [
+        "email",
+        "capture",
+        "image_archive"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Invoice misfiled, scanned with a missing page or left in a requester's inbox",
+        "typically_caught_at": "s03"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "rfp_ardent2021",
+          "stanford_poinv"
+        ],
+        "note": "51 percent of invoices received electronically in 2020 (rfp_ardent2021); emailed PDF intake described by stanford_poinv. Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Extract invoice data by OCR",
+      "description": "The capture tool reads the scanned image in a scheduled batch and pulls supplier, invoice number, dates, PO number, totals, tax and, where it can, line items, then creates a draft invoice in the ERP for verification. It often misreads fields on poor scans or unusual layouts.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "scanned invoice image"
+      ],
+      "outputs": [
+        "draft invoice record with extracted fields"
+      ],
+      "systems": [
+        "capture",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.15,
+        "defect_description": "OCR misreads a field such as amount, date or PO number, or misses line detail",
+        "typically_caught_at": "s03"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "transcepta_exc"
+        ],
+        "note": "OCR misreads named as a cause of exceptions (transcepta_exc). Rule-based OCR capture was common in mid-size AP teams in the period; batch timing and misread rate are author estimates."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Verify captured data and complete invoice entry",
+      "description": "The AP clerk compares the draft against the invoice image, corrects misread fields, keys missing lines, confirms the supplier and remit-to address, enters or corrects the PO number and saves the invoice for matching. If the invoice has no usable PO reference the clerk sets it aside for research.",
+      "role": "ap_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "draft invoice record",
+        "invoice image"
+      ],
+      "outputs": [
+        "entered invoice ready for matching"
+      ],
+      "systems": [
+        "erp",
+        "capture",
+        "image_archive"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3.5,
+        "high": 9
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Keying error in quantity, price, invoice number or supplier",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.95,
+          "condition": "valid PO number on the invoice"
+        },
+        {
+          "to": "s04",
+          "prob": 0.05,
+          "condition": "no PO number, or the PO number is wrong or closed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "auxis_ap",
+          "transcepta_exc",
+          "pcf_copy"
+        ],
+        "note": "APQC links manual keying share to productivity (auxis_ap); manual keying errors named by transcepta_exc; PCF 9.6.1.3 audit invoices and key data. Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Look up missing or invalid purchase order",
+      "description": "The AP clerk searches the ERP for open POs from that supplier, checks the requester or ship-to name on the invoice and emails the likely requester or buyer. If no PO exists the requester is asked to raise one; if the invoice cannot be traced it goes back to the supplier.",
+      "role": "ap_clerk",
+      "kind": "lookup",
+      "inputs": [
+        "entered invoice",
+        "open PO list for the supplier"
+      ],
+      "outputs": [
+        "PO reference, or request for a PO, or rejection"
+      ],
+      "systems": [
+        "erp",
+        "email",
+        "hold_log"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Invoice matched to the wrong PO or PO line",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.6,
+          "condition": "matching PO found and entered"
+        },
+        {
+          "to": "s05",
+          "prob": 0.3,
+          "condition": "goods or services were bought without a PO"
+        },
+        {
+          "to": "END",
+          "prob": 0.1,
+          "condition": "invoice cannot be traced; returned to the supplier asking for a valid PO reference",
+          "outcome": "returned_to_supplier"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "transcepta_exc",
+          "oatug_match"
+        ],
+        "note": "Non-PO invoices and wrong PO line references are described as exception causes. Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Requester raises after-the-fact requisition",
+      "description": "The requester who ordered without a PO opens the purchasing module, enters a requisition for the goods or services already received with the account, cost centre and a short justification, and submits it for approval. Requesters often need one or two reminders first.",
+      "role": "requester",
+      "kind": "data_entry",
+      "inputs": [
+        "AP email asking for a PO",
+        "invoice copy"
+      ],
+      "outputs": [
+        "submitted retrospective requisition"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Wrong account or cost centre on the requisition",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Retrospective (after-the-fact) purchase orders are common practice where buying policy is not followed; the steps and times are author estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Budget holder approves after-the-fact requisition",
+      "description": "The budget holder receives the ERP approval notice, reads the justification, checks the spend against the budget and approves or rejects the requisition. Approvals wait when the manager is travelling or in meetings.",
+      "role": "budget_holder",
+      "kind": "approval",
+      "inputs": [
+        "retrospective requisition"
+      ],
+      "outputs": [
+        "approved requisition"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Delegation of authority and approval limits matrix (APQC PCF 9.3.1.4 set and enforce approval limits)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.97,
+          "condition": "approved"
+        },
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "rejected; invoice disputed with the supplier and not paid",
+          "outcome": "rejected_not_paid"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pcf_copy",
+          "corpay_audit"
+        ],
+        "note": "Approval at the correct dollar level under a documented matrix (corpay_audit). Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Buyer issues retrospective purchase order",
+      "description": "The buyer converts the approved requisition into a PO with the supplier's price, marks it as after-the-fact, and records a receipt or two-way match flag so the invoice can match. The buyer emails AP the PO number.",
+      "role": "buyer",
+      "kind": "data_entry",
+      "inputs": [
+        "approved requisition",
+        "invoice copy"
+      ],
+      "outputs": [
+        "purchase order"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "PO price or quantity keyed differently from the invoice",
+        "typically_caught_at": "s10"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Internal control over financial reporting (SOX 404 for public issuers): purchasing kept separate from payables and payment",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "corpay_audit",
+          "sox404"
+        ],
+        "note": "Separation of purchasing, invoice entry and payment described by corpay_audit. Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Run duplicate and supplier checks",
+      "description": "On save the ERP checks the invoice against earlier invoices for the same supplier, invoice number, date and amount, confirms the supplier is active and not blocked, and flags possible duplicates for review instead of letting them match.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "entered invoice",
+        "invoice history",
+        "supplier master"
+      ],
+      "outputs": [
+        "invoice cleared for matching, or duplicate flag"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Duplicate payment prevention check required under the company's internal controls over payables",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.985,
+          "condition": "no duplicate flag"
+        },
+        {
+          "to": "s09",
+          "prob": 0.015,
+          "condition": "possible duplicate flagged"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "corpay_audit",
+          "transcepta_exc"
+        ],
+        "note": "Automated duplicate detection before payment (corpay_audit); duplicate invoices as an exception cause (transcepta_exc). Flag rate is an author estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Investigate suspected duplicate invoice",
+      "description": "The AP supervisor opens both invoice images, compares numbers, dates, amounts and PO lines, checks whether the first one was paid and, if unsure, calls the supplier. A true duplicate is voided and the supplier is told; a false flag is released.",
+      "role": "ap_supervisor",
+      "kind": "validation",
+      "inputs": [
+        "flagged invoice",
+        "earlier invoice and payment history"
+      ],
+      "outputs": [
+        "voided duplicate or released invoice"
+      ],
+      "systems": [
+        "erp",
+        "image_archive",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A real duplicate with an altered invoice number is released",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.5,
+          "condition": "confirmed duplicate; voided and supplier told",
+          "outcome": "rejected_duplicate"
+        },
+        {
+          "to": "s10",
+          "prob": 0.5,
+          "condition": "not a duplicate; released for matching"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "corpay_audit",
+          "transcepta_exc"
+        ],
+        "note": "Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Run three-way match",
+      "description": "The ERP compares each invoice line with the PO price and quantity and with the quantity received on the goods receipt, within set tolerances. Lines that agree pass; lines outside tolerance get a price, quantity or missing-receipt hold. Held invoices are matched again in the nightly validation run after a fix.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "entered invoice",
+        "purchase order",
+        "goods receipt"
+      ],
+      "outputs": [
+        "matched invoice, or invoice on hold with hold type"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Three-way match as a key control over payables in internal control over financial reporting (SOX 404 for public issuers)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.56,
+          "condition": "matched within tolerance, no extra charges"
+        },
+        {
+          "to": "s20",
+          "prob": 0.22,
+          "condition": "matched, with freight, tax or other charges to code"
+        },
+        {
+          "to": "s11",
+          "prob": 0.08,
+          "condition": "price variance outside tolerance"
+        },
+        {
+          "to": "s15",
+          "prob": 0.05,
+          "condition": "billed quantity exceeds quantity received"
+        },
+        {
+          "to": "s17",
+          "prob": 0.09,
+          "condition": "no goods receipt posted yet"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "rfp_ardent2021",
+          "transcepta_exc",
+          "tue_bpic2019",
+          "oatug_match"
+        ],
+        "note": "About 25 percent of invoices had exceptions in 2020 (rfp_ardent2021) and about 22.5 percent on average (transcepta_exc, citing Ardent); this file uses 22 percent for PO-backed invoices. The split by hold type is an author estimate. Invoices entered before goods receipt stay blocked until goods are received (tue_bpic2019)."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Research price variance",
+      "description": "The AP clerk opens the held invoice, compares the invoiced unit price with the PO and any contract or price list, checks for unit-of-measure and freight differences, logs the hold in the tracking sheet and emails the buyer with the variance amount.",
+      "role": "ap_clerk",
+      "kind": "analysis",
+      "inputs": [
+        "invoice on price hold",
+        "purchase order"
+      ],
+      "outputs": [
+        "variance note to buyer"
+      ],
+      "systems": [
+        "erp",
+        "email",
+        "hold_log"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Variance misread, for example a unit-of-measure difference treated as a price change",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oatug_match",
+          "stanford_poinv"
+        ],
+        "note": "Price holds over tolerance (stanford_poinv uses $250 per line); AP triages before routing to the buyer (oatug_match). Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Buyer resolves price discrepancy",
+      "description": "The buyer checks the quote or contract and contacts the supplier. If the supplier's price is right the buyer amends the PO by change order; if the supplier overbilled the buyer asks for a credit memo; a small agreed increase without a PO change goes to the budget holder.",
+      "role": "buyer",
+      "kind": "judgment",
+      "inputs": [
+        "variance note",
+        "quote or contract",
+        "supplier contact"
+      ],
+      "outputs": [
+        "PO change order, credit request or variance approval request"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "PO amended to an incorrect price",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.4,
+          "condition": "PO amended by change order; hold releases at next validation"
+        },
+        {
+          "to": "s13",
+          "prob": 0.35,
+          "condition": "supplier overbilled; credit memo or corrected invoice requested"
+        },
+        {
+          "to": "s14",
+          "prob": 0.2,
+          "condition": "variance accepted; budget holder approval needed"
+        },
+        {
+          "to": "s11",
+          "prob": 0.05,
+          "condition": "buyer asks AP for more detail"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oatug_match",
+          "transcepta_exc",
+          "cfo_inv_error"
+        ],
+        "note": "Buyers fix price holds by change order or supplier credit (oatug_match); exceptions take 3 to 7 days to resolve (transcepta_exc, unsourced claim); APQC best companies resolve invoice errors in three days or less (cfo_inv_error). Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Wait for supplier credit memo or corrected invoice",
+      "description": "The supplier's billing team issues a credit memo or a replacement invoice and sends it to the AP mailbox. AP cannot pay the held invoice until it arrives, so the case waits on the supplier.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "credit request"
+      ],
+      "outputs": [
+        "credit memo or corrected invoice"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "credit memo or corrected invoice received and entered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Supplier response time is an author estimate; external party hands-on time is not counted."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Budget holder approves price variance",
+      "description": "The budget holder gets an email from the buyer or AP showing the PO price, the invoiced price and the reason, and approves paying the higher amount or rejects it. The approval email is saved to the invoice.",
+      "role": "budget_holder",
+      "kind": "approval",
+      "inputs": [
+        "variance approval request"
+      ],
+      "outputs": [
+        "approval or rejection"
+      ],
+      "systems": [
+        "email",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Delegation of authority: spend above the approved PO value needs budget holder approval",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.9,
+          "condition": "approved; AP releases the hold"
+        },
+        {
+          "to": "s13",
+          "prob": 0.1,
+          "condition": "rejected; credit requested from supplier"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "corpay_audit",
+          "stanford_poinv"
+        ],
+        "note": "Approval at the right dollar level (corpay_audit); over-tolerance lines need added funds (stanford_poinv). Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Research quantity variance with receiving",
+      "description": "The AP clerk compares billed quantities with the goods receipt lines, checks for partial deliveries and other invoices against the same PO line, and emails the receiving dock or requester asking them to confirm what arrived.",
+      "role": "ap_clerk",
+      "kind": "communication",
+      "inputs": [
+        "invoice on quantity hold",
+        "goods receipt history"
+      ],
+      "outputs": [
+        "receipt query to receiving"
+      ],
+      "systems": [
+        "erp",
+        "email",
+        "hold_log"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Query sent to the wrong receiver",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oatug_match"
+        ],
+        "note": "AP checks other invoices matched to the same PO line and routes quantity holds to requesters and receivers. Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Receiving checks records and corrects goods receipt",
+      "description": "The receiving clerk looks up the packing slip and the receipt in the ERP, and if needed checks the stock location. A missed or mis-keyed receipt is corrected; a genuine short or damaged delivery is confirmed back to AP and the buyer.",
+      "role": "receiving_clerk",
+      "kind": "lookup",
+      "inputs": [
+        "receipt query",
+        "packing slip",
+        "warehouse records"
+      ],
+      "outputs": [
+        "corrected goods receipt or short-shipment confirmation"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Receipt posted for goods that did not arrive",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.55,
+          "condition": "receipt corrected; hold releases at next validation"
+        },
+        {
+          "to": "s13",
+          "prob": 0.4,
+          "condition": "short or damaged delivery; credit or corrected invoice requested"
+        },
+        {
+          "to": "s15",
+          "prob": 0.05,
+          "condition": "records unclear; AP asked to re-check"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oatug_match"
+        ],
+        "note": "Receivers resolve quantity received holds by confirming receipt. Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Send goods receipt reminder",
+      "description": "For an invoice held because no receipt is posted, the AP clerk emails the requester or uses the ERP notice to ask them to confirm delivery and post the receipt, and logs the hold in the tracking sheet.",
+      "role": "ap_clerk",
+      "kind": "communication",
+      "inputs": [
+        "invoice on missing-receipt hold"
+      ],
+      "outputs": [
+        "receipt reminder"
+      ],
+      "systems": [
+        "erp",
+        "email",
+        "hold_log"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "stanford_poinv",
+          "tue_bpic2019"
+        ],
+        "note": "Holds for missing receiving notify the preparer (stanford_poinv); invoices entered before goods receipt stay blocked until goods are received (tue_bpic2019). Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Requester confirms delivery and posts goods receipt",
+      "description": "The requester checks that the goods arrived or the service was performed and enters the receipt in the ERP desktop receiving screen. Sometimes the goods have not yet arrived, and the invoice stays on hold until they do.",
+      "role": "requester",
+      "kind": "data_entry",
+      "inputs": [
+        "receipt reminder",
+        "delivery or service evidence"
+      ],
+      "outputs": [
+        "goods receipt"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Receipt posted for the full quantity when only part arrived",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.75,
+          "condition": "receipt posted; invoice rematched in the nightly run"
+        },
+        {
+          "to": "s19",
+          "prob": 0.2,
+          "condition": "no response within about a week"
+        },
+        {
+          "to": "s13",
+          "prob": 0.05,
+          "condition": "goods never arrived or were rejected; credit requested"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oatug_match",
+          "stanford_poinv"
+        ],
+        "note": "Requesters confirm receipt through desktop receiving (oatug_match). Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Chase overdue receipt confirmation",
+      "description": "After about a week without a receipt, the AP clerk sends a second reminder and copies the requester's manager, and notes the chase in the tracking sheet. Suppliers asking about payment status often prompt this chase.",
+      "role": "ap_clerk",
+      "kind": "communication",
+      "inputs": [
+        "hold tracking sheet"
+      ],
+      "outputs": [
+        "escalated reminder"
+      ],
+      "systems": [
+        "email",
+        "hold_log"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 7200,
+        "high": 10080
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "stanford_poinv"
+        ],
+        "note": "Unresolved holds escalate to the financial approver after 28 days at Stanford; this file uses an earlier chase typical of corporate AP. Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Review tax, freight and coding",
+      "description": "The AP clerk codes freight and other charges not on the PO, accrues use tax when the supplier charged none, and for 1099-reportable suppliers checks that a valid taxpayer ID is on file, applying backup withholding when it is not.",
+      "role": "ap_clerk",
+      "kind": "validation",
+      "inputs": [
+        "matched invoice with extra charges",
+        "supplier tax profile"
+      ],
+      "outputs": [
+        "coded invoice with tax treatment"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Freight or tax coded to the wrong account, or use tax missed",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "IRS information reporting and backup withholding (Forms 1099-NEC and 1099-MISC; 24 percent withholding when a reportable payee lacks a correct TIN)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "stanford_poinv",
+          "irs_bwh",
+          "pcf_copy"
+        ],
+        "note": "AP applies use tax to shipping and tax not on the PO (stanford_poinv); backup withholding rule (irs_bwh); PCF 9.6.1.6 process payables taxes. Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Post invoice and schedule by due date",
+      "description": "Once the invoice is matched or its hold is released, the ERP posts the liability to the AP sub-ledger and general ledger and sets the payment due date from the supplier's terms and payment method.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved, matched invoice"
+      ],
+      "outputs": [
+        "posted AP liability with due date"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "stanford_poinv",
+          "iu_faq"
+        ],
+        "note": "Invoices without holds are paid automatically per terms, typically net 30 from invoice date. Timing is an author estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Prepare and review payment proposal",
+      "description": "On payment run day the AP supervisor runs the payment proposal for invoices due before the next run, reviews it for blocked suppliers, large amounts, recent bank detail changes and early-payment discounts, and screens payees against the sanctions list before sending it for approval. The invoice waits here until the run that covers its due date.",
+      "role": "ap_supervisor",
+      "kind": "review",
+      "inputs": [
+        "posted invoices due",
+        "supplier master"
+      ],
+      "outputs": [
+        "reviewed payment proposal"
+      ],
+      "systems": [
+        "erp",
+        "hold_log"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 25920
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Payment proposal includes a supplier whose bank details were changed fraudulently",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OFAC sanctions regulations (31 CFR chapter V): US persons may not pay blocked persons, so payees are screened against the SDN list",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "corpay_audit",
+          "ofac_faq",
+          "pcf_copy",
+          "procurify_apqc"
+        ],
+        "note": "Manager review of payment runs (corpay_audit); OFAC compliance (ofac_faq); PCF 9.6.1.1 verify AP pay file; payment timing is often set around payroll and liquidity (cfo_ap_cycle). The wait to the due-date run is calibrated so that the median receipt-to-payment time is near the APQC median of 15 days (procurify_apqc, cfo_ap_cycle); per-invoice review time is an author estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Approve payment run",
+      "description": "The controller reviews the payment run summary, totals by supplier and any large or unusual payments, and approves it in the ERP. Invoices queried are pulled from the run and go back to AP.",
+      "role": "controller",
+      "kind": "approval",
+      "inputs": [
+        "reviewed payment proposal"
+      ],
+      "outputs": [
+        "approved payment run"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Internal control over financial reporting (SOX 404 for public issuers): payment approval separate from invoice entry, vendor master maintenance and payment execution",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 0.98,
+          "condition": "approved"
+        },
+        {
+          "to": "s22",
+          "prob": 0.02,
+          "condition": "invoice queried and pulled from the run"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "corpay_audit",
+          "sox404",
+          "pcf_copy"
+        ],
+        "note": "PCF 9.6.1.4 approve payments; separation of approval from execution (corpay_audit). Touch and wait ranges and branch shares are author estimates for a mid-size company with an ERP and OCR capture in 2019 to 2022."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Release payment file in bank portal",
+      "description": "The ERP generates the ACH and wire file and the check print file. A second signatory logs into the bank portal, checks the file total against the approved run and releases it under the bank's dual authorization rules.",
+      "role": "treasury_manager",
+      "kind": "approval",
+      "inputs": [
+        "approved payment run",
+        "payment file"
+      ],
+      "outputs": [
+        "released payment file"
+      ],
+      "systems": [
+        "erp",
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.3
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Bank mandate and treasury policy requiring dual authorization to release payments",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s26",
+          "prob": 0.62,
+          "condition": "ACH or wire payment"
+        },
+        {
+          "to": "s25",
+          "prob": 0.38,
+          "condition": "supplier paid by check"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "nacha_afp2022",
+          "rfp_ardent2021",
+          "corpay_audit"
+        ],
+        "note": "Checks were 33 percent of B2B payments in 2022 (nacha_afp2022) and 43 percent of AP payments were not electronic in 2020 (rfp_ardent2021); this file uses 38 percent. Dual authorization practice from corpay_audit."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Print, sign and mail checks",
+      "description": "The AP clerk prints the checks with remittance stubs on secure stock, applies the signature or routes large checks for a manual second signature, stuffs and mails them, and sends the positive pay file to the bank.",
+      "role": "ap_clerk",
+      "kind": "physical",
+      "inputs": [
+        "check print file"
+      ],
+      "outputs": [
+        "mailed check with remittance stub",
+        "positive pay file"
+      ],
+      "systems": [
+        "check_printer",
+        "erp",
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Check mailed to an outdated address",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Check signing authority limits and positive pay with the bank",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "check mailed",
+          "outcome": "paid_by_check"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Check printing and positive pay are common practice; times are author estimates."
+      }
+    },
+    {
+      "id": "s26",
+      "name": "Bank settles electronic payment",
+      "description": "The bank processes the ACH batch or wire and credits the supplier's account, usually the next business day for ACH. The case waits on the bank.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "released payment file"
+      ],
+      "outputs": [
+        "settled payment"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s27",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "stanford_poinv"
+        ],
+        "note": "ACH issued Monday to Friday with a one business day post date (stanford_poinv). Weekend effects are an author estimate."
+      }
+    },
+    {
+      "id": "s27",
+      "name": "Send remittance advice",
+      "description": "The ERP emails a remittance advice listing the invoices paid, credit memos taken and any withholding to the supplier's remittance contact.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "settled payment"
+      ],
+      "outputs": [
+        "remittance advice"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "paid_electronically"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Automatic email remittance from the ERP is common practice; timing is an author estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Price variance outside tolerance",
+      "share_of_cases": 0.08,
+      "description": "Invoiced unit price differs from the PO by more than the tolerance. AP researches, the buyer either amends the PO, asks the supplier for a credit memo or gets budget holder approval for the difference.",
+      "path": [
+        "s10",
+        "s11",
+        "s12",
+        "s14",
+        "s13",
+        "s03",
+        "s21"
+      ]
+    },
+    {
+      "name": "Quantity variance",
+      "share_of_cases": 0.05,
+      "description": "Billed quantity exceeds the quantity received. Receiving corrects a missed receipt or confirms a short delivery, which leads to a supplier credit.",
+      "path": [
+        "s10",
+        "s15",
+        "s16",
+        "s13",
+        "s03",
+        "s21"
+      ]
+    },
+    {
+      "name": "Missing goods receipt",
+      "share_of_cases": 0.09,
+      "description": "The invoice arrives before anyone posts the receipt (or before the goods arrive). AP reminds and chases the requester; the invoice rematches overnight once the receipt is posted.",
+      "path": [
+        "s10",
+        "s17",
+        "s18",
+        "s19",
+        "s18",
+        "s10"
+      ]
+    },
+    {
+      "name": "Missing or invalid purchase order",
+      "share_of_cases": 0.05,
+      "description": "The invoice has no PO number or a wrong one. AP looks it up; where nothing was ordered on a PO the requester raises an after-the-fact requisition that the budget holder approves and the buyer converts.",
+      "path": [
+        "s03",
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s08"
+      ]
+    },
+    {
+      "name": "Suspected duplicate",
+      "share_of_cases": 0.015,
+      "description": "The ERP flags an invoice that resembles an earlier one; the supervisor voids true duplicates.",
+      "path": [
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Supplier credit memo loop",
+      "share_of_cases": 0.06,
+      "description": "Price or quantity errors by the supplier need a credit memo or corrected invoice, which re-enters at data entry and is matched again.",
+      "path": [
+        "s12",
+        "s13",
+        "s03",
+        "s08",
+        "s10"
+      ]
+    },
+    {
+      "name": "Invoice pulled from payment run",
+      "share_of_cases": 0.02,
+      "description": "The controller queries an invoice during approval and it waits for the next run.",
+      "path": [
+        "s23",
+        "s22"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 15,
+        "p90": 30
+      },
+      "unit": "calendar days from invoice receipt until payment is transmitted",
+      "population": "APQC Open Standards Benchmarking, cross-industry (as cited by Procurify and Corpay)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "procurify_apqc",
+          "corpay_audit",
+          "cfo_ap_cycle"
+        ],
+        "note": "p50 is the APQC median of 15 days (quartile groups average 12 and 24 days, cfo_ap_cycle). p90 is an author estimate: the slowest APQC quartile averages 23 to 24 days at organisation level, and within one organisation the slowest tenth of invoices (holds, credit memos) run longer."
+      }
+    },
+    {
+      "metric": "average_invoice_processing_time_days",
+      "value": 10,
+      "unit": "days",
+      "population": "Ardent Partners survey respondents, 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "rfp_ardent2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "invoice_exception_rate",
+      "value": {
+        "ardent_2020": 0.25,
+        "ardent_average_cited": 0.225,
+        "best_in_class": 0.09
+      },
+      "unit": "share of invoices",
+      "population": "Ardent Partners survey respondents",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "rfp_ardent2021",
+          "transcepta_exc"
+        ],
+        "note": "transcepta_exc attributes 22.5 percent and under 9 to 10 percent best-in-class to Ardent Partners."
+      }
+    },
+    {
+      "metric": "cost_per_invoice",
+      "value": {
+        "apqc_median": 5.78,
+        "apqc_median_alt": 6.0,
+        "ardent_2020_average": 10.89
+      },
+      "unit": "USD per invoice",
+      "population": "APQC Open Standards Benchmarking; Ardent Partners 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "procurify_apqc",
+          "corpay_audit",
+          "rfp_ardent2021"
+        ],
+        "note": "Two secondary sources cite slightly different APQC medians."
+      }
+    },
+    {
+      "metric": "invoices_per_ap_fte_per_year",
+      "value": {
+        "top": 24284,
+        "median": 9483,
+        "bottom": 5000
+      },
+      "unit": "invoices per FTE per year",
+      "population": "APQC Open Standards Benchmarking (as cited)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "procurify_apqc"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "share_invoices_received_electronically",
+      "value": 0.51,
+      "unit": "share of invoices",
+      "population": "Ardent Partners 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "rfp_ardent2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "share_b2b_payments_by_check",
+      "value": 0.33,
+      "unit": "share of B2B payments",
+      "population": "AFP 2022 Digital Payments Survey, US and Canada",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "nacha_afp2022"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "bpic2019_median_throughput_days",
+      "value": 64,
+      "unit": "days from PO item creation to case end",
+      "population": "BPI Challenge 2019 event log, one coatings company, 251,734 PO items",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "vidgof2023",
+          "tue_bpic2019"
+        ],
+        "note": "Not comparable with invoice cycle time: it includes ordering, delivery and goods receipt before the invoice."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Held invoices wait days for buyers, receivers and requesters who treat AP queries as low priority, so exceptions dominate elapsed time and drive supplier calls about late payment.",
+      "steps": [
+        "s12",
+        "s16",
+        "s18",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oatug_match",
+          "transcepta_exc"
+        ],
+        "note": "Exception resolution of 3 to 7 days cited by transcepta_exc without a named source."
+      }
+    },
+    {
+      "description": "About half of invoices arrive on paper or as PDFs that OCR misreads, so clerks re-key or correct fields and keying errors later cause false holds.",
+      "steps": [
+        "s01",
+        "s02",
+        "s03"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "rfp_ardent2021",
+          "auxis_ap"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Goods receipts are not posted on time, so correct invoices sit on missing-receipt holds.",
+      "steps": [
+        "s17",
+        "s18",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "stanford_poinv",
+          "tue_bpic2019"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Buying without a PO forces after-the-fact requisitions, approvals and PO creation after the invoice arrives.",
+      "steps": [
+        "s04",
+        "s05",
+        "s06",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "transcepta_exc"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Supplier credit memos re-enter the process at data entry and must be matched again, doubling the work on a disputed invoice.",
+      "steps": [
+        "s13",
+        "s03"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's reading of how credit memos flow through capture and matching."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "tue_bpic2019",
+      "title": "BPI Challenge 2019 (dataset description)",
+      "publisher": "Eindhoven University of Technology research portal / 4TU.ResearchData",
+      "url": "https://research.tue.nl/en/datasets/bpi-challenge-2019/",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "Real purchase-to-pay event log from a multinational coatings and paints company: 76,349 purchase documents, 251,734 items (cases), 1,595,923 events, 42 activities, 627 users (20 batch users); four flow types (3-way match invoice after goods receipt, 3-way match invoice before goods receipt with invoices blocked until goods are received, 2-way match, consignment)."
+    },
+    {
+      "id": "vidgof2023",
+      "title": "The Impact of Process Complexity on Process Performance: A Study using Event Log Data (Vidgof, Wurm, Mendling)",
+      "publisher": "arXiv",
+      "url": "https://arxiv.org/html/2307.06106v1",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "Reports a median throughput time of 64 days for the BPI Challenge 2019 log (251,734 traces), measured from purchase order item creation, so it includes ordering and delivery time."
+    },
+    {
+      "id": "rfp_ardent2021",
+      "title": "Latest A/P benchmarks to help measure your efficiency (citing Ardent Partners, Accounts Payable Metrics that Matter in 2021)",
+      "publisher": "Resourceful Finance Pro",
+      "url": "https://www.resourcefulfinancepro.com/articles/ap-benchmarks-2021/",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "2020 figures: average cost to process an invoice $10.89; average processing time 10 days; about 25 percent of invoices flagged for exceptions; 51 percent of invoices received electronically; 57 percent of payments sent electronically."
+    },
+    {
+      "id": "procurify_apqc",
+      "title": "The 4 KPIs your accounts payable team should be tracking immediately (citing APQC)",
+      "publisher": "Procurify",
+      "url": "https://www.procurify.com/blog/the-4-kpis-your-accounts-payable-team-should-be-tracking-immediately/",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "APQC figures as cited: invoice receipt to payment median 15 days, bottom performers 23 days; invoices per AP FTE per year median 9,483 (top about 24,284, bottom about 5,000); cost per invoice median $5.78 (top $2.05, bottom $10.00); AP FTEs per $1B revenue median 6.8."
+    },
+    {
+      "id": "cfo_ap_cycle",
+      "title": "Hidden delays that slow payments and strain cash flow: Metric of the Month (Perry D. Wiggins, citing APQC)",
+      "publisher": "CFO.com",
+      "url": "https://www.cfo.com/news/hidden-delays-that-slow-payments-and-strain-cash-flow-metric-of-the-month/806681/",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "APQC cross-industry benchmark, cycle time in days from receipt of invoice until payment is transmitted: 25th percentile group averages 12 days, median 15 days, upper quartile averages 24 days. Delays come from invoices sent to the wrong inbox, tax, price or quantity errors needing correction, and payment timing set around payroll or liquidity."
+    },
+    {
+      "id": "cfo_inv_error",
+      "title": "Fixing invoice errors shouldn't take a week: Metric of the Month (citing APQC)",
+      "publisher": "CFO.com",
+      "url": "https://www.cfo.com/news/fixing-invoice-errors-shouldnt-take-a-week-metric-of-the-month/655053/",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "APQC measure 'cycle time to resolve an invoice error' (days to reconcile invoice lines with POs and receiving documents, including waiting); the best companies resolve errors in three days or less and bottom performers take twice as long as top performers. Causes: incorrect pricing or charges, wrong quantity against the PO, wrong tax, incorrect customer information."
+    },
+    {
+      "id": "corpay_audit",
+      "title": "Accounts payable audit: checklist, procedures, and controls",
+      "publisher": "Corpay",
+      "url": "https://www.corpay.com/resources/blog/accounts-payable-audit",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Describes AP controls: segregation of vendor setup, invoice entry, approval, payment execution and reconciliation; approval matrix; three-way match with an exception queue; vendor master change review and dual authorization; duplicate checks before payment; manager review of payment runs. Cites APQC median cost per invoice of $6.00 and median receipt-to-payment cycle time of 15 days."
+    },
+    {
+      "id": "transcepta_exc",
+      "title": "Top 7 causes of invoice exceptions",
+      "publisher": "Transcepta",
+      "url": "https://www.transcepta.com/blog/7-causes-of-invoice-exceptions",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Lists exception causes (missing vendor data, OCR misreads, PO price and quantity mismatches, non-PO invoices, tax errors, manual keying errors, duplicates); states an average exception rate of about 22.5 percent (attributed to Ardent Partners), best-in-class under 9 to 10 percent, and an average of 3 to 7 days to resolve an exception (no source given)."
+    },
+    {
+      "id": "oatug_match",
+      "title": "Resolving match exceptions in Oracle Fusion",
+      "publisher": "OATUG Insight (Oracle Applications and Technology Users Group)",
+      "url": "https://www.oatug.org/insight-spring2025/features-archive/resolving-match-exceptions",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Practitioner description of who works match holds: AP identifies and triages holds; buyers fix price holds by PO change order or supplier credit; requesters and receivers resolve quantity received holds by confirming receipt; holds release on the next validation run; manual release by AP only with a release code."
+    },
+    {
+      "id": "stanford_poinv",
+      "title": "Purchase order invoice processing",
+      "publisher": "Stanford University Financial Management Services (Fingate)",
+      "url": "https://fingate.stanford.edu/purchasing-contracts/purchase-order-invoice-processing",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Invoices emailed to AP reference the PO; lines over the PO by more than $250 go on hold until a change order; AP self-assesses use tax for shipping and tax not on the PO; holds for missing receiving or approvals notify the preparer, with escalation after 28 days; invoices without holds are paid automatically on terms, typically net 30; ACH and check runs Monday to Friday."
+    },
+    {
+      "id": "iu_faq",
+      "title": "Invoice payment FAQs",
+      "publisher": "Indiana University Training",
+      "url": "https://training.iu.edu/news/articles/accounts-payable/invoice-payment-faqs.html",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Standard terms net 30 from invoice date; suppliers paid per the terms and payment method in the supplier profile."
+    },
+    {
+      "id": "pcf_copy",
+      "title": "9.0 Manage financial resources (APQC Process Classification Framework, cross-industry, reproduced)",
+      "publisher": "Cape Chamber of Commerce",
+      "url": "https://capechamber.co.za/enterprise/improve-your-business-processes/9-manage-financial-resources",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "APQC PCF 9.6.1 Process accounts payable: verify AP pay file with PO and vendor master, audit invoices and key data, approve payments, process payables taxes, research and resolve payable exceptions, process payments, respond to AP inquiries."
+    },
+    {
+      "id": "auxis_ap",
+      "title": "Accounts payable metrics: are you a peak performer?",
+      "publisher": "Auxis",
+      "url": "https://www.auxis.com/accounts-payable-key-performance-metrics-are-you-a-top-performer/",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Cites APQC: AP staff keying under 25 percent of invoice lines have almost twice the median productivity of those keying 75 percent; top performers pay within 2.8 days of receipt; AP FTEs per $1B revenue 3.3 (top) to 14.4 (bottom)."
+    },
+    {
+      "id": "nacha_afp2022",
+      "title": "AFP survey finds businesses actively shifting to ACH and other electronic B2B payments",
+      "publisher": "Nacha",
+      "url": "https://www.nacha.org/news/afp-survey-finds-businesses-actively-shifting-ach-and-other-electronic-b2b-payments",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "2022 AFP Digital Payments Survey: 33 percent of B2B payments in the US and Canada made by check (50 percent in 2013)."
+    },
+    {
+      "id": "bls_433031",
+      "title": "Occupational Employment and Wages, May 2021: 43-3031 Bookkeeping, Accounting, and Auditing Clerks",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/oes/2021/may/oes433031.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Mean hourly wage $21.70; 25th percentile $17.67; 75th percentile $23.92."
+    },
+    {
+      "id": "bls_431011",
+      "title": "Occupational Employment and Wages, May 2021: 43-1011 First-Line Supervisors of Office and Administrative Support Workers",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/oes/2021/may/oes431011.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Median hourly wage $29.13; 25th percentile $22.83; 75th percentile $36.98."
+    },
+    {
+      "id": "bls_131020",
+      "title": "Occupational Employment and Wages, May 2021: 13-1020 Buyers and Purchasing Agents",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/oes/2021/may/oes131020.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Median hourly wage $30.51; 25th percentile $23.63; 75th percentile $42.22."
+    },
+    {
+      "id": "bls_435071",
+      "title": "Occupational Employment and Wages, May 2021: 43-5071 Shipping, Receiving, and Inventory Clerks",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/oes/2021/may/oes435071.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Median hourly wage $17.74; 25th percentile $14.35; 75th percentile $21.97."
+    },
+    {
+      "id": "bls_111021",
+      "title": "Occupational Employment and Wages, May 2021: 11-1021 General and Operations Managers",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/oes/2021/may/oes111021.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Median hourly wage $47.10; 25th percentile $29.18; 75th percentile $72.96."
+    },
+    {
+      "id": "bls_113031",
+      "title": "Occupational Employment and Wages, May 2021: 11-3031 Financial Managers",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/oes/2021/may/oes113031.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Median hourly wage $63.32; 25th percentile $47.89; 75th percentile $92.24."
+    },
+    {
+      "id": "bls_ecec2021",
+      "title": "Employer Costs for Employee Compensation, December 2021 (news release)",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/news.release/archives/ecec_03182022.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Private industry: wages and salaries 70.5 percent and benefits 29.5 percent of total compensation; office and administrative support 69.7 percent wages."
+    },
+    {
+      "id": "irs_bwh",
+      "title": "Backup withholding",
+      "publisher": "Internal Revenue Service",
+      "url": "https://www.irs.gov/businesses/small-businesses-self-employed/backup-withholding",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Payers must withhold at 24 percent from reportable payments (including 1099-NEC and 1099-MISC payments) when the payee has not given a correct taxpayer identification number."
+    },
+    {
+      "id": "ofac_faq",
+      "title": "OFAC FAQs: basic information on OFAC and sanctions",
+      "publisher": "US Treasury Office of Foreign Assets Control",
+      "url": "https://ofac.treasury.gov/faqs/topic/1501",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "All US persons must comply with OFAC sanctions; US persons are generally prohibited from transactions with blocked persons on the SDN list; blocked property must be reported within 10 business days."
+    },
+    {
+      "id": "sox404",
+      "title": "15 U.S. Code 7262: Management assessment of internal controls (Sarbanes-Oxley Act section 404)",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/uscode/text/15/7262",
+      "year": 2002,
+      "accessed": "2026-11-17",
+      "supports": "Annual reports of public issuers must contain management's assessment of internal control over financial reporting; auditor attestation for accelerated filers."
+    }
+  ],
+  "assumptions": [
+    "General workflow for a US mid-size company of about 2,000 employees; volume 2,500 PO-backed invoices a month (tier C).",
+    "Loaded cost per hour = BLS May 2021 wage x 1.8 (benefits factor 1.43 from BLS ECEC December 2021, overhead factor 1.25 estimated).",
+    "OCR capture is in place but about half of invoices still need manual correction or keying; e-invoicing networks are not assumed.",
+    "Exception rate of 22 percent at first match is taken from Ardent Partners figures for all invoices; the split into price 8, quantity 5 and missing receipt 9 percent is an author estimate. The BPI Challenge 2019 log was used for the flow structure (invoice before or after goods receipt, blocking until receipt) but its statistics were not computed for this file.",
+    "Cases rematch after a fix through s10 or release directly to posting; the simulator reuses the same branch probabilities on every pass, so repeat holds are slightly overstated.",
+    "Most of the elapsed time after matching is waiting for the payment run that covers the due date (s22). The wait range was set so the simulated median sits near the APQC median of 15 days; companies that pay strictly at net 30 from invoice date would show longer cycles.",
+    "Payment proposal, approval and release are done once per run; their per-invoice touch time is the run time divided by the invoices in the run.",
+    "External party steps (supplier, bank) carry zero hands-on time so that staffing figures count only internal staff.",
+    "fte_on_process for requesters, budget holders and buyers is spread over many people.",
+    "The simulated labour cost of about $12 per invoice is above the APQC median of about $6 because it counts time spent by buyers, receivers, requesters and approvers outside AP and uses a 1.8 loading factor; it is close to Ardent's 2020 average of $10.89. Stated AP staffing (3.4 clerks plus a part-time supervisor for 2,500 invoices a month) implies about 8,000 invoices per AP FTE per year, a little below the APQC median of 9,483.",
+    "The simulated p90 (about 24 days) is below the 30-day p90 estimate because the triangular waits cap the slowest holds; real logs have longer tails from invoices on hold for months."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

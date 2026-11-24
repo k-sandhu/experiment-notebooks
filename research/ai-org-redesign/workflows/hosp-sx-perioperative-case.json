@@ -1,0 +1,2091 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-sx-perioperative-case",
+  "name": "Perform a surgical case from admission to recovery",
+  "org": "community-hospital-corp",
+  "process": "sx-perioperative-case",
+  "sector": "healthcare (acute care hospital)",
+  "function": "surgical and perioperative services",
+  "summary": "On the day of surgery the patient is registered and admitted to same-day surgery, seen by the anaesthesiologist and surgeon, taken to the operating room and operated on by a team of surgeon, anaesthesiologist and two nurses who run the mandatory three-phase surgical safety checklist. The patient recovers in the post-anaesthesia care unit and goes home the same day or to a ward bed. Day-of-surgery cancellations, late starts, waits for the room to be turned over, defective instrument trays and holds in recovery while waiting for a ward bed set how many cases a room completes in a day.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital corporation with about 17 operating rooms, a same-day surgery unit and recovery room at each site, surgeons and anaesthesiologists with privileges paid by OHIP, and unionized perioperative nurses and attendants.",
+    "org_size_employees": 5790,
+    "notes": "The case mix is about 70% day surgery. Emergency cases arriving from sx-emergency-surgery follow the same steps from s04 with shorter waits; they are folded into the volume."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one surgical case",
+  "trigger": "A booked patient arrives for surgery on the day on the final slate, or an add-on urgent case is called to the OR.",
+  "end_state": "The patient leaves recovery for home or a ward bed, or the case is cancelled on the day.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2200,
+      "mode": 2450,
+      "high": 2600
+    },
+    "seasonality": "Lower in July-August and late December (planned OR closures); very low in April-June 2020 and parts of 2021 (elective pauses); higher in February-March.",
+    "surge": {
+      "cause": "Fiscal year-end push to complete funded procedure volumes (February-March)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 30,
+        "mode": 45,
+        "high": 60
+      },
+      "volume_multiplier": {
+        "low": 1.05,
+        "mode": 1.1,
+        "high": 1.15
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; quality-based procedure funding (src10) rewards completing volumes before March 31."
+      }
+    },
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Volume from the organisation file (40,000-45,000 surgeries a year from the corporation's annual reports); not re-checked against those reports by this author."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "sx-or-scheduling",
+        "object": "or_schedule",
+        "share": 0.65
+      },
+      {
+        "from": "sx-preadmission-clinic",
+        "object": "preop_assessment",
+        "share": 0.23
+      },
+      {
+        "from": "sx-emergency-surgery",
+        "object": "surgical_case",
+        "share": 0.12
+      }
+    ],
+    "inputs": [
+      {
+        "from": "hr-staff-scheduling",
+        "object": "staff_schedule"
+      },
+      {
+        "from": "sx-sterile-reprocessing",
+        "object": "instrument_tray"
+      },
+      {
+        "from": "fin-materials-management",
+        "object": "supplies"
+      },
+      {
+        "from": "dx-blood-transfusion",
+        "object": "blood_product"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "discharged_home",
+        "to": "sx-sterile-reprocessing",
+        "object": "used_instruments"
+      },
+      {
+        "outcome": "admitted_to_ward",
+        "to": "sx-sterile-reprocessing",
+        "object": "used_instruments"
+      },
+      {
+        "outcome": "discharged_home",
+        "to": "dx-pathology",
+        "object": "pathology_specimen"
+      },
+      {
+        "outcome": "admitted_to_ward",
+        "to": "dx-pathology",
+        "object": "pathology_specimen"
+      },
+      {
+        "outcome": "admitted_to_ward",
+        "to": "sx-surgical-inpatient-care",
+        "object": "admitted_patient"
+      },
+      {
+        "outcome": "discharged_home",
+        "to": "patient",
+        "object": "discharge_instructions"
+      },
+      {
+        "outcome": "any",
+        "to": "dh-chart-coding",
+        "object": "patient_chart"
+      },
+      {
+        "outcome": "any",
+        "to": "fin-materials-management",
+        "object": "supply_requisition"
+      },
+      {
+        "outcome": "admitted_to_ward",
+        "to": "fs-patient-portering",
+        "object": "transport_request"
+      },
+      {
+        "outcome": "any",
+        "to": "qp-incident-management",
+        "object": "incident_report"
+      },
+      {
+        "outcome": "cancelled_day_of_surgery",
+        "to": "sx-surgical-booking",
+        "object": "surgical_booking_request"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "surgeon",
+      "title": "Surgeon",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 23.18,
+      "loaded_cost_per_hour": {
+        "low": 180,
+        "mode": 240,
+        "high": 320
+      },
+      "occupation_code": "NOC 2016 3111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. About 90 surgeons with privileges; hands-on OR time for 3,700 cases."
+      },
+      "shift_pattern": "on_call"
+    },
+    {
+      "id": "anesthesiologist",
+      "title": "Anesthesiologist",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 26.49,
+      "loaded_cost_per_hour": {
+        "low": 180,
+        "mode": 220,
+        "high": 280
+      },
+      "occupation_code": "NOC 2016 3111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. All 40 anaesthesiologists in the organisation file; hands-on time implies about 40 FTE at 130 productive hours; physicians commonly work longer months than that, so the headcount also covers obstetric, emergency and pain work."
+      },
+      "shift_pattern": "on_call"
+    },
+    {
+      "id": "or_rn",
+      "title": "Perioperative registered nurse",
+      "department": "Perioperative services",
+      "layer": "individual_contributor",
+      "fte_on_process": 66.22,
+      "loaded_cost_per_hour": {
+        "low": 47,
+        "mode": 62,
+        "high": 68
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Most of the 150 perioperative nurses (many part-time); two nurses per room, paid for whole shifts including turnover and waits between cases."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "pacu_rn",
+      "title": "Recovery room and day surgery nurse",
+      "department": "Perioperative services",
+      "layer": "individual_contributor",
+      "fte_on_process": 36.42,
+      "loaded_cost_per_hour": {
+        "low": 47,
+        "mode": 62,
+        "high": 68
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Most of the 90 recovery and day surgery nurses."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "or_attendant",
+      "title": "Operating room attendant",
+      "department": "Perioperative services",
+      "layer": "individual_contributor",
+      "fte_on_process": 14.57,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 31,
+        "high": 34
+      },
+      "occupation_code": "NOC 2016 3413",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Most of the 30 OR attendants; turnover cleaning, transport and tray runs."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "registration_clerk",
+      "title": "Patient registration clerk",
+      "department": "Patient registration and switchboard",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.99,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 34,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Surgical admitting desk clerks at three sites; this role is not in the organisation file's role list for this process."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "bed_flow_coordinator",
+      "title": "Patient flow coordinator (bed allocation)",
+      "department": "Patient flow and bed management",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.66,
+      "loaded_cost_per_hour": {
+        "low": 51,
+        "mode": 63,
+        "high": 70
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Bed requests for post-operative admissions; not in the organisation file's role list for this process."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "porter",
+      "title": "Patient porter",
+      "department": "Portering and security",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.99,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 30,
+        "high": 32
+      },
+      "occupation_code": "NOC 2016 3413",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Transfers to the ward; not in the organisation file's role list for this process."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "surg_manager",
+      "title": "Patient care manager, perioperative or surgical unit",
+      "department": "Surgical and perioperative program",
+      "layer": "manager",
+      "fte_on_process": 1.99,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 78,
+        "high": 89
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Three site perioperative managers' daily oversight, not modelled as steps."
+      }
+    },
+    {
+      "id": "surg_director",
+      "title": "Director, surgical and perioperative services",
+      "department": "Surgical and perioperative program",
+      "layer": "director",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 88,
+        "mode": 101,
+        "high": 119
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Program oversight, not modelled as steps."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "hcv",
+      "name": "Ministry health card validation service",
+      "kind": "external_portal"
+    },
+    {
+      "id": "or_scheduling",
+      "name": "Operating room scheduling and perioperative documentation module",
+      "kind": "workflow"
+    },
+    {
+      "id": "lis",
+      "name": "Laboratory information system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "ris_pacs",
+      "name": "Radiology information system, PACS and voice recognition dictation",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "erp",
+      "name": "Enterprise resource planning system (general ledger, accounts payable, purchasing, inventory)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "bed_board",
+      "name": "Electronic bed board and patient flow dashboard",
+      "kind": "workflow"
+    },
+    {
+      "id": "incident_system",
+      "name": "Safety incident and complaints reporting system",
+      "kind": "workflow"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "operating_rooms",
+      "name": "Operating rooms",
+      "kind": "facility",
+      "count": 17
+    },
+    {
+      "id": "pacu_bays",
+      "name": "Post-anaesthesia care bays",
+      "kind": "facility",
+      "count": 24
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Register the patient at surgical admitting",
+      "description": "The patient arrives 1.5 to 2 hours before the scheduled time. The registration clerk confirms identity and health card, activates the pre-registered surgical visit in the hospital information system, prints the wristband and labels and sends the patient to same-day surgery.",
+      "role": "registration_clerk",
+      "kind": "intake",
+      "inputs": [
+        "patient",
+        "surgical case"
+      ],
+      "outputs": [
+        "active surgical visit",
+        "wristband"
+      ],
+      "systems": [
+        "his",
+        "hcv"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong visit or wrong patient labels printed.",
+        "typically_caught_at": "s02"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of community hospital practice; registration is in the organisation file's dh-patient-registration process but done at the surgical desk on the day."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Admit the patient to same-day surgery",
+      "description": "The day surgery nurse checks the wristband, allergies, fasting, medications taken, escort home, consent and pre-admission results, takes vital signs, starts the IV and completes the pre-operative checklist in the chart.",
+      "role": "pacu_rn",
+      "kind": "validation",
+      "inputs": [
+        "active surgical visit",
+        "pre-operative assessment",
+        "consent"
+      ],
+      "outputs": [
+        "completed pre-operative checklist"
+      ],
+      "systems": [
+        "his",
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 12,
+        "mode": 20,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A missed allergy, medication or fasting problem is not recorded.",
+        "typically_caught_at": "s04"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada required organizational practices: two patient identifiers and medication reconciliation at admission",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.92,
+          "condition": "ready"
+        },
+        {
+          "to": "s03",
+          "prob": 0.08,
+          "condition": "problem found: not fasting, results missing, consent unsigned, unwell or no escort"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "leslie2013",
+          "wright2010"
+        ],
+        "note": "Patient readiness (missing blood work or investigations, unsigned consent) caused 23% of late starts in an Ontario hospital (wright2010) and patient and process factors drive day-of cancellations (leslie2013); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Anaesthesiologist and surgeon decide to proceed or cancel",
+      "description": "The anaesthesiologist reviews the problem with the surgeon: a missing result may be done urgently, a patient who ate may be moved later in the list, while an unwell or unescorted patient is cancelled and returned to the booking office for a new date.",
+      "role": "anesthesiologist",
+      "kind": "judgment",
+      "inputs": [
+        "completed pre-operative checklist",
+        "problem note"
+      ],
+      "outputs": [
+        "proceed or cancel decision"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.45,
+          "condition": "problem fixed; proceed"
+        },
+        {
+          "to": "END",
+          "prob": 0.55,
+          "condition": "case cancelled on the day of surgery",
+          "outcome": "cancelled_day_of_surgery"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "leslie2013"
+        ],
+        "note": "8.07% of 19,141 elective cases at an Ontario teaching hospital (2005-2009) were cancelled on the day, 58.5% for process factors (leslie2013); urology at profile-matched Ontario hospitals ran 5.5%. The 4-5% cancelled here plus later cancellations give about 6%, the author's estimate for a community hospital."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Anaesthesiologist assesses the patient in the holding area",
+      "description": "Between cases the anaesthesiologist reviews the pre-admission notes, examines the airway, confirms fasting and medications, explains the anaesthetic plan and obtains consent for anaesthesia or a regional block.",
+      "role": "anesthesiologist",
+      "kind": "judgment",
+      "inputs": [
+        "completed pre-operative checklist",
+        "pre-operative assessment"
+      ],
+      "outputs": [
+        "anaesthetic plan"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 90
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "wright2010"
+        ],
+        "note": "Anaesthesiologist availability was the largest single cause (24%) of late first-case starts (wright2010); minutes and waits are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Surgeon confirms consent and marks the site",
+      "description": "The surgeon sees the patient, confirms the procedure and side against the consent and booking, marks the operative site and answers last questions. Late lists may be cancelled here when an earlier case over-runs.",
+      "role": "surgeon",
+      "kind": "validation",
+      "inputs": [
+        "consent",
+        "booked case"
+      ],
+      "outputs": [
+        "marked site"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 40
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada and hospital policy: surgical site marking by the operating surgeon before the patient enters the OR",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s04"
+      ],
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.985,
+          "condition": "proceed"
+        },
+        {
+          "to": "END",
+          "prob": 0.015,
+          "condition": "list over-ran; case cancelled",
+          "outcome": "cancelled_day_of_surgery"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "wright2010"
+        ],
+        "note": "Surgeon availability caused 21% of late starts (wright2010); site marking is an Accreditation Canada practice; minutes and the over-run share are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Walk or wheel the patient to the operating room",
+      "description": "When the room is ready the OR attendant collects the patient from the holding area and takes them on a stretcher to the operating room, handing the chart to the circulating nurse.",
+      "role": "or_attendant",
+      "kind": "travel",
+      "inputs": [
+        "patient",
+        "chart"
+      ],
+      "outputs": [
+        "patient in OR"
+      ],
+      "systems": [
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the wait is for the room to be cleaned and set up after the previous case. Patient transport caused only 3.7% of late starts in wright2010."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Set up the room and open the sterile trays",
+      "description": "The scrub and circulating nurses open the instrument trays and supplies from the case cart, check each tray's external and internal sterilization indicators and wrapper integrity, lay out instruments and do the first count.",
+      "role": "or_rn",
+      "kind": "physical",
+      "inputs": [
+        "case cart",
+        "instrument trays",
+        "preference card"
+      ],
+      "outputs": [
+        "sterile field",
+        "initial count"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 18,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Initial count recorded wrongly.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "CSA Z314 and PIDAC best practice: check chemical indicators and package integrity before opening sterile items",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "people": 2,
+      "concurrent_with": [
+        "s06"
+      ],
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 10,
+            "mode": 18,
+            "high": 35
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.96,
+          "condition": "trays intact and complete"
+        },
+        {
+          "to": "s08",
+          "prob": 0.04,
+          "condition": "tray wet, torn, indicator failed or incomplete"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pidac2013"
+        ],
+        "note": "Sterility indicators and package integrity are checked before use (pidac2013); minutes and defect share are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Replace a defective or incomplete tray",
+      "description": "The OR attendant fetches a backup set from sterile storage or medical device reprocessing; if none exists, reprocessing runs the set urgently and the case waits. The defect is reported to reprocessing.",
+      "role": "or_attendant",
+      "kind": "physical",
+      "inputs": [
+        "defective tray"
+      ],
+      "outputs": [
+        "replacement tray",
+        "defect report"
+      ],
+      "systems": [
+        "email_phone",
+        "incident_system"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "PIDAC best practice and CSA Z314: immediate-use steam sterilization not used for complete sets or implants",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 8,
+            "mode": 15,
+            "high": 45
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "replacement opened"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pidac2013"
+        ],
+        "note": "Immediate-use steam sterilization is for emergencies only and not for complete trays or implants (pidac2013); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Run the briefing",
+      "description": "With the patient in the room, the circulating nurse as checklist coordinator leads the briefing with the surgeon and anaesthesiologist: identity, procedure, site, allergies, expected blood loss, antibiotic prophylaxis, equipment and implants.",
+      "role": "or_rn",
+      "kind": "review",
+      "inputs": [
+        "surgical safety checklist"
+      ],
+      "outputs": [
+        "completed briefing"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Ministry of Health mandatory three-phase surgical safety checklist (briefing, time out, debriefing) with public reporting of completion; Accreditation Canada required organizational practice",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 2,
+            "mode": 3,
+            "high": 6
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oh_ssc"
+        ],
+        "note": "The checklist is complete only when the coordinator confirms all tasks in the briefing, time out and debriefing; Ontario completion was 98.4-99.3% in 2019-2022 (oh_ssc)."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Induce anaesthesia",
+      "description": "The anaesthesiologist applies monitors, gives the induction drugs or performs the spinal or block, secures the airway and positions the patient with the nurses.",
+      "role": "anesthesiologist",
+      "kind": "physical",
+      "inputs": [
+        "anaesthetic plan"
+      ],
+      "outputs": [
+        "anaesthetized patient"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 3,
+            "mode": 8,
+            "high": 25
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; short for sedation and local cases, longer for regional blocks and difficult airways."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Pause for the time out",
+      "description": "Before incision the whole team stops: the coordinator reads out patient, procedure, side and site, and the team confirms antibiotics given, imaging displayed and implants available.",
+      "role": "or_rn",
+      "kind": "review",
+      "inputs": [
+        "surgical safety checklist"
+      ],
+      "outputs": [
+        "completed time out"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Ministry of Health mandatory three-phase surgical safety checklist (briefing, time out, debriefing) with public reporting of completion; Accreditation Canada required organizational practice",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 1,
+            "mode": 2,
+            "high": 4
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oh_ssc"
+        ],
+        "note": "Time out is the second checklist phase (oh_ssc)."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Perform the operation",
+      "description": "The surgeon performs the procedure, from incision to closure, with the scrub nurse passing instruments; specimens are handed off for labelling.",
+      "role": "surgeon",
+      "kind": "physical",
+      "inputs": [
+        "anaesthetized patient",
+        "sterile field"
+      ],
+      "outputs": [
+        "completed procedure",
+        "specimens"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 10,
+        "mode": 35,
+        "high": 130
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 10,
+            "mode": 35,
+            "high": 130
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for a community hospital mix of day surgery (cataracts, scopes, hernias, gynaecology) and inpatient cases (joints, bowel, hysterectomy)."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Scrub and circulate during the operation",
+      "description": "The scrub nurse passes instruments and keeps the count; the circulating nurse fetches supplies, labels specimens, documents implants and times, and runs the count at closure.",
+      "role": "or_rn",
+      "kind": "physical",
+      "inputs": [
+        "sterile field"
+      ],
+      "outputs": [
+        "intraoperative record entries",
+        "labelled specimens"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 35,
+        "high": 130
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "people": 2,
+      "concurrent_with": [
+        "s12"
+      ],
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; runs for the length of the operation."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Maintain anaesthesia during the operation",
+      "description": "The anaesthesiologist keeps the patient anaesthetized and stable, gives fluids, blood products and drugs, and records vital signs in the anaesthetic record.",
+      "role": "anesthesiologist",
+      "kind": "physical",
+      "inputs": [
+        "anaesthetized patient"
+      ],
+      "outputs": [
+        "anaesthetic record"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 35,
+        "high": 130
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s13"
+      ],
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; runs for the length of the operation."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Do the final count and send specimens",
+      "description": "Before skin closure the scrub and circulating nurses count sponges, sharps and instruments against the record; specimens are bagged with the requisition and sent to pathology.",
+      "role": "or_rn",
+      "kind": "validation",
+      "inputs": [
+        "count record",
+        "labelled specimens"
+      ],
+      "outputs": [
+        "count confirmed",
+        "pathology specimen"
+      ],
+      "systems": [
+        "or_scheduling",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "A specimen is mislabelled or not sent.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "ORNAC perioperative standards and hospital surgical count policy (sponges, sharps, instruments)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "people": 2,
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 3,
+            "mode": 5,
+            "high": 10
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.99,
+          "condition": "count correct"
+        },
+        {
+          "to": "s16",
+          "prob": 0.01,
+          "condition": "count discrepancy"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the count is an ORNAC standard and hospital policy."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Resolve a count discrepancy",
+      "description": "The team searches the field, drapes and room; if the item is not found, an intraoperative X-ray is taken before the patient leaves, and an incident report is filed.",
+      "role": "or_rn",
+      "kind": "physical",
+      "inputs": [
+        "count discrepancy"
+      ],
+      "outputs": [
+        "resolved count",
+        "incident report"
+      ],
+      "systems": [
+        "incident_system",
+        "ris_pacs"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "ORNAC perioperative standards and hospital surgical count policy",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "people": 2,
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 10,
+            "mode": 20,
+            "high": 45
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "resolved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Wake the patient and run the debriefing",
+      "description": "The anaesthesiologist reverses the anaesthetic and extubates the patient while the coordinator runs the debriefing: procedure done, counts, specimens, equipment problems and concerns for recovery.",
+      "role": "anesthesiologist",
+      "kind": "physical",
+      "inputs": [
+        "anaesthetized patient",
+        "surgical safety checklist"
+      ],
+      "outputs": [
+        "awake patient",
+        "completed debriefing"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 7,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Ministry of Health mandatory three-phase surgical safety checklist (briefing, time out, debriefing) with public reporting of completion; Accreditation Canada required organizational practice",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 3,
+            "mode": 7,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oh_ssc"
+        ],
+        "note": "Debriefing is the third checklist phase (oh_ssc); emergence times are the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Transfer to recovery and hand over",
+      "description": "The anaesthesiologist and circulating nurse wheel the patient to the post-anaesthesia care unit and give the recovery nurse a structured handover. If no recovery bay or nurse is free, the patient is held in the operating room.",
+      "role": "pacu_rn",
+      "kind": "communication",
+      "inputs": [
+        "awake patient",
+        "anaesthetic record"
+      ],
+      "outputs": [
+        "handover received"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 30
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 3,
+            "mode": 8,
+            "high": 50
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; PACU holds are named in the organisation file's process description."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Clean and turn over the room",
+      "description": "Two OR attendants remove waste, linen and the soiled case cart, wipe surfaces and equipment, mop the floor and bring in the next case cart.",
+      "role": "or_attendant",
+      "kind": "physical",
+      "inputs": [
+        "used room",
+        "used instruments"
+      ],
+      "outputs": [
+        "clean room",
+        "soiled case cart"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 10,
+        "mode": 18,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "PIDAC environmental cleaning best practice and hospital OR cleaning procedure between cases",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "people": 2,
+      "concurrent_with": [
+        "s18"
+      ],
+      "resources": [
+        {
+          "id": "operating_rooms",
+          "occupied_min": {
+            "low": 10,
+            "mode": 18,
+            "high": 35
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; turnover here is the time from one patient leaving the room to the room being ready for the next."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Complete the intraoperative record and supply charges",
+      "description": "The circulating nurse finishes the intraoperative record in the OR module: times, staff, counts, implants with lot numbers, specimens and supplies used, which feed the supply reorder.",
+      "role": "or_rn",
+      "kind": "data_entry",
+      "inputs": [
+        "intraoperative record entries"
+      ],
+      "outputs": [
+        "completed intraoperative record",
+        "supply requisition"
+      ],
+      "systems": [
+        "or_scheduling",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Implant lot or supply missed in the record.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s19"
+      ],
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Write the operative note and post-operative orders",
+      "description": "The surgeon dictates or writes the operative note, writes post-operative orders and the discharge prescription for day patients, and talks to the family.",
+      "role": "surgeon",
+      "kind": "drafting",
+      "inputs": [
+        "completed procedure"
+      ],
+      "outputs": [
+        "operative note",
+        "post-operative orders"
+      ],
+      "systems": [
+        "his",
+        "ris_pacs"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Orders incomplete or unclear, so recovery nurses page the surgeon.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s20"
+      ],
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Recover the patient in the post-anaesthesia care unit",
+      "description": "The recovery nurse monitors airway, breathing, pain, nausea and the wound, gives medications and scores the patient against the discharge criteria before release.",
+      "role": "pacu_rn",
+      "kind": "physical",
+      "inputs": [
+        "handover received",
+        "post-operative orders"
+      ],
+      "outputs": [
+        "recovery record"
+      ],
+      "systems": [
+        "his",
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "PACU discharge criteria (score-based) approved by the department of anaesthesia",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s21"
+      ],
+      "resources": [
+        {
+          "id": "pacu_bays",
+          "occupied_min": {
+            "low": 20,
+            "mode": 50,
+            "high": 120
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s23",
+          "prob": 0.7,
+          "condition": "day surgery patient"
+        },
+        {
+          "to": "s24",
+          "prob": 0.3,
+          "condition": "inpatient or ICU admission"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; roughly 70% of community hospital surgery is day surgery."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Recover in the day surgery unit and discharge home",
+      "description": "The day surgery nurse sits the patient up, gives fluids, checks pain and walking, reviews written discharge instructions and prescriptions with the patient and escort, and discharges them.",
+      "role": "pacu_rn",
+      "kind": "communication",
+      "inputs": [
+        "recovery record",
+        "discharge prescription"
+      ],
+      "outputs": [
+        "discharge instructions",
+        "discharged patient"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Instructions not understood; patient phones or returns to the ED.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "discharged",
+          "outcome": "discharged_home"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Request an inpatient bed",
+      "description": "The recovery nurse calls the patient flow coordinator for the bed booked on the slate; when no bed is clean, the coordinator finds one on another unit and the patient waits in recovery.",
+      "role": "bed_flow_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "bed request"
+      ],
+      "outputs": [
+        "bed assignment"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s25",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Porter takes the patient to the ward",
+      "description": "When the bed is ready a porter comes to recovery and wheels the patient on the stretcher to the surgical unit, where the recovery nurse's report has already been phoned through.",
+      "role": "porter",
+      "kind": "travel",
+      "inputs": [
+        "bed assignment"
+      ],
+      "outputs": [
+        "admitted patient"
+      ],
+      "systems": [
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 45,
+        "high": 300
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "pacu_bays",
+          "occupied_min": {
+            "low": 15,
+            "mode": 45,
+            "high": 300
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "admitted",
+          "outcome": "admitted_to_ward"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the wait is for a clean bed and a porter, and holds recovery bays."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Problem found at admission",
+      "share_of_cases": 0.08,
+      "description": "The patient is not fasting, results are missing, consent is unsigned, the patient is unwell or has no escort; about half are cancelled.",
+      "path": [
+        "s02",
+        "s03"
+      ]
+    },
+    {
+      "name": "Defective or incomplete instrument tray",
+      "share_of_cases": 0.04,
+      "description": "A tray is wet, torn, missing an instrument or has a failed indicator; a replacement is fetched while the room waits.",
+      "path": [
+        "s07",
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Count discrepancy",
+      "share_of_cases": 0.01,
+      "description": "The final count does not match; the team searches and takes an X-ray before the patient leaves.",
+      "path": [
+        "s15",
+        "s16",
+        "s17"
+      ]
+    },
+    {
+      "name": "Recovery hold waiting for a ward bed",
+      "share_of_cases": 0.3,
+      "description": "Inpatients wait in recovery for a clean bed and a porter, holding a recovery bay and sometimes the OR.",
+      "path": [
+        "s22",
+        "s24",
+        "s25"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.23,
+        "p90": 0.35
+      },
+      "unit": "calendar days from arrival at surgical admitting to leaving recovery (about 5.5 and 8.5 hours)",
+      "population": "Community hospital surgical cases, mixed day and inpatient",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: arrival 1.5-2 hours before surgery, about 1-1.5 hours in the room for a typical community case, 1-2 hours in recovery and day-surgery discharge."
+      }
+    },
+    {
+      "metric": "day_of_surgery_cancellation_rate",
+      "value": 0.0807,
+      "unit": "share of elective cases",
+      "population": "Kingston, Ontario, general surgery, gynaecology and urology, 2005-2009",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "leslie2013"
+        ],
+        "note": "1,544 of 19,141 cases; process factors 58.5%."
+      }
+    },
+    {
+      "metric": "surgical_safety_checklist_completion",
+      "value": {
+        "low": 0.984,
+        "high": 0.993
+      },
+      "unit": "share of surgeries with all three phases completed",
+      "population": "Ontario hospitals, half-years 2019-2022",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oh_ssc"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "first_case_on_time_start_share",
+      "value": {
+        "before": 0.06,
+        "after": 0.6
+      },
+      "unit": "share of first cases in the room by 08:00",
+      "population": "One Ontario hospital, 2005-2007",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "wright2010"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Cases are cancelled on the day for problems that could have been caught earlier: missing results, unsigned consent, fasting errors, no escort or no bed.",
+      "steps": [
+        "s02",
+        "s03"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "leslie2013"
+        ],
+        "note": "8.07% day-of-surgery cancellations, most for process factors."
+      }
+    },
+    {
+      "description": "Late first-case starts while waiting for the anaesthesiologist, the surgeon or patient readiness lose room time every morning.",
+      "steps": [
+        "s04",
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "wright2010"
+        ],
+        "note": "Cause shares 24%, 21% and 23% in wright2010."
+      }
+    },
+    {
+      "description": "Room turnover between cases depends on two attendants and the next case cart; delays are common when attendants cover several rooms.",
+      "steps": [
+        "s19",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; named in the organisation file's description."
+      }
+    },
+    {
+      "description": "Inpatients wait in recovery for a ward bed, which fills recovery bays and can stop the OR from sending the next patient.",
+      "steps": [
+        "s18",
+        "s24",
+        "s25"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; PACU holds are named in the organisation file's description."
+      }
+    },
+    {
+      "description": "Wet, incomplete or wrongly assembled instrument trays hold the room while a replacement is found.",
+      "steps": [
+        "s07",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oh_ssc",
+      "title": "Hospital patient safety: Surgical safety checklist completion",
+      "publisher": "Ontario Health",
+      "url": "https://ontariohealth.ca/system/reporting/performance/hospital-patient-safety/surgical-safety",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "Three-phase surgical safety checklist (briefing, time out, debriefing), coordinator confirmation and Ontario completion rates 2019-2022."
+    },
+    {
+      "id": "leslie2013",
+      "title": "Day of surgery cancellation rates in urology: identification of modifiable factors (Leslie RJ, Beiko D, van Vlymen J, Siemens DR), CUAJ 7(5-6):167-73",
+      "publisher": "Canadian Urological Association Journal",
+      "url": "https://cuaj.ca/index.php/journal/article/view/1345",
+      "year": 2013,
+      "accessed": "2026-11-24",
+      "supports": "Day-of-surgery cancellation rate and causes in an Ontario hospital."
+    },
+    {
+      "id": "wright2010",
+      "title": "Improving on-time surgical starts in an operating room (Wright JG, Roche A, Khoury AE), Can J Surg 53(3):167-170",
+      "publisher": "Canadian Journal of Surgery, Canadian Medical Association",
+      "url": "https://www.canjsurg.ca/content/53/3/167",
+      "year": 2010,
+      "accessed": "2026-11-24",
+      "supports": "Causes of late first-case starts (anaesthesiologist, patient readiness, surgeon, transport) in an Ontario hospital."
+    },
+    {
+      "id": "pidac2013",
+      "title": "Best Practices for Cleaning, Disinfection and Sterilization of Medical Equipment/Devices in All Health Care Settings, 3rd edition (May 2013)",
+      "publisher": "Provincial Infectious Diseases Advisory Committee (PIDAC), Public Health Ontario",
+      "url": "https://www.publichealthontario.ca/-/media/documents/B/2013/bp-cleaning-disinfection-sterilization-hcs.pdf",
+      "year": 2013,
+      "accessed": "2026-11-24",
+      "supports": "Checking sterilization indicators and package integrity; restrictions on immediate-use steam sterilization."
+    }
+  ],
+  "assumptions": [
+    "The simulated median (about 7.4 hours) is about 1.35 times the 5.5-hour estimate because the waits before surgery include cases later in the day that wait for earlier cases to finish; the estimate itself is the author's, not a measured figure. The case mix is a community hospital blend: skin-to-skin time 10-130 minutes (mode 35), about 70% day surgery. Endoscopy done in separate rooms is a separate process; if the organisation file's 3,700 surgeries a month include endoscopy and minor procedures, the long cases here overstate the average.",
+    "Work done together is split into parallel steps for each role (s12 surgeon, s13 two nurses, s14 anaesthesiologist; s19 to s22 room turnover, record, operative note and the start of recovery) linked with concurrent_with, so labour is counted per role and elapsed time once. Room turnover therefore runs while the patient is in recovery and does not lengthen the patient's cycle.",
+    "The briefing, time out and count are attributed to the circulating nurse as checklist coordinator; the surgeon's and anaesthesiologist's few minutes in them are not counted separately.",
+    "Operating room occupancy is counted from tray opening (s07) to the start of room cleaning, plus turnover; this is about 1.5 hours per case at the mode. Against the organisation file's 17 rooms at about 165 hours a month each (about 2,800 room-hours), 3,700 cases would need about 5,500 room-hours, so the organisation file's OR count or hours look low, or a large share of reported surgeries are short procedures outside the main ORs.",
+    "Surgical assistants (family physicians or second surgeons) who help in larger cases are not modelled.",
+    "Registration clerks, the bed flow coordinator and porters do steps in this process but are not in the organisation file's role list for it.",
+    "Hands-on time x volume implies about 230 FTE against about 265 stated. Stated nursing FTE is higher than hands-on time because perioperative nurses are scheduled for whole room days and stay with the room through turnover, late starts and gaps between cases. Anaesthesiologists' implied time (about 40 FTE at 130 hours) equals the organisation file's headcount of 40, which leaves little room for their obstetric, ICU and on-call work unless they work well over 130 hours a month, as physicians commonly do.",
+    "Organisation file corrected on 2026-11-24: operating room cases are the reported surgeries less endoscopies (about 1,300 a month, counted in sx-endoscopy and done in the endoscopy rooms), about 2,450 a month. Previously all 3,700 reported surgeries went through the operating rooms, which needed about twice the room hours the 17 rooms have. Stated FTE on this process were scaled to the new volume."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

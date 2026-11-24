@@ -1,0 +1,1719 @@
+{
+  "schema_version": "0.2",
+  "id": "efc-apply-customer-payments",
+  "name": "Apply customer payments (equipment finance company)",
+  "org": "equipment-finance-co",
+  "process": "apply-customer-payments",
+  "sector": "equipment leasing and finance",
+  "function": "operations (billing and payments)",
+  "summary": "Most lease payments arrive by pre-authorised debit and post themselves; this workflow covers the roughly 9,000 items a month that do not. Cash application clerks work lockbox cheques, EFT and bill payments with missing or wrong contract numbers, wires, payments that cover several contracts, payout payments and short or over payments, then balance each day's deposits so treasury, funders and the ledger get correct collections. It is slow and error-prone because Canadian EFT carries little remittance data, small business customers send details by e-mail or not at all, and a payment on the wrong contract shows up only when a customer is chased for money already paid.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A privately owned Canadian independent lessor with about 55,000 active contracts, a bank wholesale lockbox, a bank cash management portal and a lease management system with rule-based auto-matching.",
+    "org_size_employees": 340,
+    "notes": "About 15% of some 55,000 monthly payments come by cheque, EFT, wire or bill payment; with payouts, partial and catch-up payments and receipts that fail auto-matching, about 9,000 items a month need a clerk. Daily batch tasks are shown as one item's share."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one payment item needing manual application",
+  "trigger": "A payment arrives at the bank (lockbox cheque, EFT, wire or online bill payment) and does not post automatically.",
+  "end_state": "The payment is applied to the right contract or contracts, or refunded, returned or transferred out of suspense, the day's deposits balance and the receipts are posted to the ledger.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 7500,
+      "mode": 9000,
+      "high": 11000
+    },
+    "seasonality": "Peaks in the first days of the month after the 1st due date and at month end with payouts; 2020 deferrals and catch-up payments raised volume.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file process map (7,500 to 11,000 items, driver d_active_contracts, about 85% of payments by debit)."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "clearing_bank",
+        "object": "payment_settlement",
+        "share": 0.55
+      },
+      {
+        "from": "customer",
+        "object": "customer_payment",
+        "share": 0.4
+      },
+      {
+        "from": "bill-customers",
+        "object": "open_receivables",
+        "share": 0.05
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "close-the-month",
+        "object": "journal_entries"
+      },
+      {
+        "outcome": "applied",
+        "to": "collect-early-stage",
+        "object": "delinquent_account"
+      },
+      {
+        "outcome": "any",
+        "to": "report-to-securitisation-funders",
+        "object": "collections_data"
+      },
+      {
+        "outcome": "any",
+        "to": "manage-daily-cash",
+        "object": "collections_data"
+      },
+      {
+        "outcome": "any",
+        "to": "maintain-data-and-reporting",
+        "object": "collections_data"
+      },
+      {
+        "outcome": "cheque_returned_nsf",
+        "to": "process-returned-payments",
+        "object": "payment_return"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "cash_app_clerk",
+      "title": "Cash application and payment processing clerk",
+      "department": "Billing and payment processing",
+      "layer": "individual_contributor",
+      "fte_on_process": 5.5,
+      "loaded_cost_per_hour": {
+        "low": 24,
+        "mode": 30,
+        "high": 38
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_jb_14200"
+        ],
+        "note": "Cost from the organisation file: Job Bank 2023-2024 Ontario wage for accounting clerks (median $25.00) at about 90% for 2019-2022, loaded by 1.35. Seven clerks also process returned payments (about 1,300 a month), so about 5.5 FTE here is an author estimate."
+      }
+    },
+    {
+      "id": "mgr_billing",
+      "title": "Manager, billing and payments",
+      "department": "Billing and payment processing",
+      "layer": "manager",
+      "fte_on_process": 0.15,
+      "loaded_cost_per_hour": {
+        "low": 58,
+        "mode": 70,
+        "high": 85
+      },
+      "occupation_code": "NOC 10021",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file cost (loading 1.35). Weekly unapplied review, refund approvals and problem cheque guidance; author estimate."
+      }
+    },
+    {
+      "id": "treasury_analyst",
+      "title": "Treasury and cash analyst",
+      "department": "Treasury and securitisation",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 48,
+        "high": 60
+      },
+      "occupation_code": "NOC 11101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file cost (loading 1.35). Daily collections review; author estimate."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lms",
+      "name": "Lease management system (contracts, schedules, billing, tax codes, asset records, servicing)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "bank_portal",
+      "name": "Bank cash management portal for pre-authorised debit files, EFT payments and wires",
+      "kind": "external_portal"
+    },
+    {
+      "id": "gl_erp",
+      "name": "General ledger and accounts payable (mid-market ERP)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "collections_system",
+      "name": "Collections queue manager and dialer",
+      "kind": "workflow"
+    },
+    {
+      "id": "contact_centre",
+      "name": "Contact centre telephony and shared mailboxes",
+      "kind": "communication"
+    },
+    {
+      "id": "doc_imaging",
+      "name": "Document imaging and contract file store",
+      "kind": "document_store"
+    },
+    {
+      "id": "data_warehouse",
+      "name": "Data warehouse and business intelligence reports",
+      "kind": "analytics"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheet models (pool cuts, borrowing base, covenants, budget, tax workpapers)",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, calendars and team chat",
+      "kind": "communication"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Bank receives and processes the payment",
+      "description": "The clearing bank's courier empties the lockbox, the processing centre opens the envelopes, images cheques and stubs and deposits the funds; EFT credits, wires and online bill payments arrive with whatever reference the payer typed. The day's lockbox data, images, EFT and bill payment remittance files are ready the next morning.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "customer cheque, EFT, wire or bill payment"
+      ],
+      "outputs": [
+        "deposit",
+        "lockbox data and images",
+        "remittance files"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 600,
+        "mode": 960,
+        "high": 2400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; payers often omit or mistype the contract number.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_nbc_lockbox",
+          "src_pc_trends2020"
+        ],
+        "note": "Lockbox pick-up, imaging and same-day deposit described by National Bank. Wait runs from receipt at the bank to files available next business morning, longer over weekends; author estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Import bank files and try to auto-match",
+      "description": "Early in the morning the lease system imports the settlement, lockbox and remittance files. Items whose reference matches a contract number and whose amount equals the open receivable post automatically and leave this workflow; the rest drop into the manual cash application queue with their images.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "lockbox data",
+        "EFT and bill payment remittance files",
+        "open receivables"
+      ],
+      "outputs": [
+        "manual cash application queue"
+      ],
+      "systems": [
+        "lms",
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "item did not auto-match"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_nacha_cashapp",
+          "src_pc_iso_case"
+        ],
+        "note": "Auto-matching depends on structured remittance from the bank (Nacha and CRF survey); Standard 005 AFT leaves little room for remittance data (Payments Canada case study). About 85% of payments are debits that post without this step (organisation file)."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Sort queue and pull images and remittances",
+      "description": "A clerk downloads the lockbox images from the bank portal, opens the remittance mailbox where customers, dealers and brokers e-mail payment details, and sorts the queue by type: single identifiable payments, unclear references, multi-contract payments, payouts, non-lease receipts and problem cheques.",
+      "role": "cash_app_clerk",
+      "kind": "intake",
+      "inputs": [
+        "manual queue",
+        "lockbox images",
+        "remittance e-mails"
+      ],
+      "outputs": [
+        "sorted work list"
+      ],
+      "systems": [
+        "lms",
+        "bank_portal",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.3,
+        "high": 0.8
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 360
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.63,
+          "condition": "single payment with an identifiable contract"
+        },
+        {
+          "to": "s05",
+          "prob": 0.13,
+          "condition": "reference missing or wrong"
+        },
+        {
+          "to": "s06",
+          "prob": 0.11,
+          "condition": "one payment for several contracts"
+        },
+        {
+          "to": "s07",
+          "prob": 0.07,
+          "condition": "payout or purchase option payment"
+        },
+        {
+          "to": "s09",
+          "prob": 0.03,
+          "condition": "insurance proceeds, dealer refund or other non-lease receipt"
+        },
+        {
+          "to": "s10",
+          "prob": 0.03,
+          "condition": "postdated, stale-dated, unsigned or 'paid in full' cheque"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_nbc_lockbox"
+        ],
+        "note": "Online images and an exception module are described by National Bank. Type shares are author estimates for a lessor whose non-debit payers are mostly small businesses paying by cheque."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Identify contract and apply payment",
+      "description": "The clerk searches the lease system by contract number, customer name or amount, compares the payment with the open receivables on that customer's contracts and applies it with the date the bank received it, so the customer is not charged late interest for the lessor's processing time.",
+      "role": "cash_app_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "payment item",
+        "open receivables"
+      ],
+      "outputs": [
+        "applied payment"
+      ],
+      "systems": [
+        "lms",
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0.6,
+        "mode": 1.2,
+        "high": 3.0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.015,
+        "defect_description": "Payment applied to the wrong contract, often another contract of the same customer.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.12,
+          "condition": "amount differs from the open receivable"
+        },
+        {
+          "to": "s19",
+          "prob": 0.88,
+          "condition": "applied in full"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_rbc_creditors"
+        ],
+        "note": "Value-dating to the payment date rather than the reconciliation date is the practice RBC recommends billers disclose. Times and shares are author estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Research unclear payment",
+      "description": "For an EFT or bill payment with a missing or wrong reference, the clerk searches by payer name, amount and date, checks the bank detail for the payer's account name, looks in the remittance mailbox and collection notes for a promise to pay, and asks collections or customer service if a customer said they had paid.",
+      "role": "cash_app_clerk",
+      "kind": "lookup",
+      "inputs": [
+        "payment detail",
+        "remittance mailbox",
+        "collection notes"
+      ],
+      "outputs": [
+        "identified contract or unidentified item"
+      ],
+      "systems": [
+        "lms",
+        "bank_portal",
+        "collections_system",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 2.5,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A guess on a near match applies the payment to the wrong customer.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.68,
+          "condition": "contract identified"
+        },
+        {
+          "to": "s13",
+          "prob": 0.32,
+          "condition": "still unidentified"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_pc_iso_case"
+        ],
+        "note": "Payments Canada notes remittance advice is typically sent by e-mail or portal and AFT batch payments are matched manually. Times and identification rate are author estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Split payment across contracts",
+      "description": "For a cheque or EFT that pays several contracts, the clerk opens the customer's remittance advice (e-mail, spreadsheet or stub), allocates the amount to each contract and checks that the parts add up; without an advice the clerk allocates by the customer's open invoices only where they add up exactly.",
+      "role": "cash_app_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "payment item",
+        "remittance advice"
+      ],
+      "outputs": [
+        "allocated payments"
+      ],
+      "systems": [
+        "lms",
+        "email_collab",
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3.5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Allocation between contracts is wrong, leaving one contract short and another in credit.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.75,
+          "condition": "allocation balances"
+        },
+        {
+          "to": "s11",
+          "prob": 0.15,
+          "condition": "total short or over"
+        },
+        {
+          "to": "s14",
+          "prob": 0.1,
+          "condition": "no remittance advice"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_nacha_cashapp"
+        ],
+        "note": "Remittance by e-mail and mail is hard to automate (Nacha and CRF survey). Shares and times are author estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Match payout payment to the quote",
+      "description": "The clerk finds the payout quote issued by lease administration, checks the amount, taxes and expiry date against the payment and applies it to the payout receivable.",
+      "role": "cash_app_clerk",
+      "kind": "validation",
+      "inputs": [
+        "payment item",
+        "payout quote"
+      ],
+      "outputs": [
+        "applied payout payment"
+      ],
+      "systems": [
+        "lms",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 2.5,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Payment accepted against an expired quote, so the contract is closed short.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.88,
+          "condition": "matches the quote"
+        },
+        {
+          "to": "s11",
+          "prob": 0.12,
+          "condition": "short, over or quote expired"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file process quote-and-process-buyouts issues the quotes (about 800 a month). Author estimate of times."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Tell lease administration the payout is paid",
+      "description": "The clerk e-mails or tasks lease administration that the payout funds are applied so they can terminate billing, stop the debit, request title transfer and tell treasury if the contract sits in a securitised pool.",
+      "role": "cash_app_clerk",
+      "kind": "communication",
+      "inputs": [
+        "applied payout payment"
+      ],
+      "outputs": [
+        "payout paid notice"
+      ],
+      "systems": [
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Notice not sent, so billing and debits continue after payout.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Handoff described in the organisation file's buyout process. Author estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Route non-lease receipt",
+      "description": "For insurance claim cheques, dealer refunds, protection program refunds and other receipts that do not pay a lease invoice, the clerk posts the money to a clearing account and sends the image to the owning team (lease administration for casualty proceeds, accounting for supplier refunds).",
+      "role": "cash_app_clerk",
+      "kind": "coordination",
+      "inputs": [
+        "receipt image"
+      ],
+      "outputs": [
+        "clearing account posting",
+        "routing e-mail"
+      ],
+      "systems": [
+        "lms",
+        "gl_erp",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Receipt sits in the clearing account because no team claims it.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Handle problem cheque",
+      "description": "For cheques the bank holds in exception or will not process (postdated beyond the window, stale-dated, unsigned, wrong payee, or marked 'paid in full' on a partial amount), the clerk decides with the manager's guidance whether to accept, hold or return the cheque, and writes to the customer when it goes back.",
+      "role": "cash_app_clerk",
+      "kind": "judgment",
+      "inputs": [
+        "exception items from the bank",
+        "contract balance"
+      ],
+      "outputs": [
+        "accept, hold or return decision"
+      ],
+      "systems": [
+        "bank_portal",
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 300
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A 'paid in full' cheque for less than the balance is deposited without review.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Cash handling policy for restrictive endorsements and stale or postdated cheques; the bank requires a decision on exception items before 2 pm for same-day processing",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.5,
+          "condition": "accepted or deposited on its date"
+        },
+        {
+          "to": "END",
+          "prob": 0.5,
+          "condition": "cheque returned to the payer",
+          "outcome": "returned_to_payer"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_nbc_lockbox"
+        ],
+        "note": "National Bank lists 'paid in full' items, payments without stubs and postdated cheques outside the period as exceptions, and stale-dated and unsigned cheques as not processed, with a 2 pm decision deadline. Shares and times are author estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Apply partial or overpayment",
+      "description": "The clerk applies a short payment in the order the contract and the system hierarchy set (taxes, rent, then late charges and fees, oldest first), or decides what to do with an overpayment: leave it as a credit on the next invoice when the customer asked, or start a refund.",
+      "role": "cash_app_clerk",
+      "kind": "judgment",
+      "inputs": [
+        "payment item",
+        "open receivables",
+        "payment hierarchy"
+      ],
+      "outputs": [
+        "applied partial payment",
+        "credit balance"
+      ],
+      "systems": [
+        "lms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2.5,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Hierarchy overridden by hand in the wrong order, leaving tax or rent open.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Lease agreement terms and servicing policy on the order in which partial payments are applied",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.6,
+          "condition": "shortfall remains"
+        },
+        {
+          "to": "s17",
+          "prob": 0.15,
+          "condition": "overpayment to refund"
+        },
+        {
+          "to": "s19",
+          "prob": 0.25,
+          "condition": "overpayment left as a credit"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_leasepak_hier"
+        ],
+        "note": "Payment order and priority by receivable type as documented for NETSOL LeasePak. Shares are author estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Tell collections about the shortfall",
+      "description": "The clerk adds a note to the account and flags the remaining past-due amount so it appears in the early-stage collections queue, with the payer's explanation if the remittance gave one.",
+      "role": "cash_app_clerk",
+      "kind": "communication",
+      "inputs": [
+        "applied partial payment"
+      ],
+      "outputs": [
+        "delinquent account flag"
+      ],
+      "systems": [
+        "lms",
+        "collections_system"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file process collect-early-stage receives delinquent accounts from this process. Author estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Post unidentified payment to suspense",
+      "description": "The clerk posts the payment to the unapplied cash suspense account with the payer name, amount, date and bank reference, and adds it to the unapplied cash log with the research done so far.",
+      "role": "cash_app_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "unidentified payment"
+      ],
+      "outputs": [
+        "suspense posting",
+        "unapplied cash log entry"
+      ],
+      "systems": [
+        "lms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1.5,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: unapplied cash held in a suspense account that is reconciled and aged",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard practice; author estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Chase remittance details",
+      "description": "The clerk e-mails or calls the payer, or the dealer or broker who arranged the lease, asking which contract or contracts the payment was for, and diarises a follow-up.",
+      "role": "cash_app_clerk",
+      "kind": "communication",
+      "inputs": [
+        "unapplied cash log",
+        "payer contact details"
+      ],
+      "outputs": [
+        "remittance request"
+      ],
+      "systems": [
+        "email_collab",
+        "contact_centre",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 2.5,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Wait for the payer's reply",
+      "description": "The payer, dealer or broker replies with the contract numbers or a remittance advice, often after a reminder; some never reply.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "remittance request"
+      ],
+      "outputs": [
+        "remittance advice or no reply"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.65,
+          "condition": "contract identified"
+        },
+        {
+          "to": "s06",
+          "prob": 0.1,
+          "condition": "advice lists several contracts"
+        },
+        {
+          "to": "s16",
+          "prob": 0.25,
+          "condition": "no useful reply"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of reply times and rates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Review aged unapplied cash",
+      "description": "Each week the manager of billing and payments reviews the aged unapplied cash log, decides which items to chase again, which to refund to the payer traced through the bank, and which old unidentified items to transfer out of suspense under policy.",
+      "role": "mgr_billing",
+      "kind": "review",
+      "inputs": [
+        "aged unapplied cash log"
+      ],
+      "outputs": [
+        "decisions on aged items"
+      ],
+      "systems": [
+        "spreadsheets",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 5040,
+        "high": 10080
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: management review of aged suspense balances",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.4,
+          "condition": "chase again"
+        },
+        {
+          "to": "s17",
+          "prob": 0.35,
+          "condition": "refund to the payer"
+        },
+        {
+          "to": "END",
+          "prob": 0.25,
+          "condition": "transferred out of suspense under policy",
+          "outcome": "written_back_unidentified"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; weekly review is common practice."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Prepare refund request",
+      "description": "The clerk prepares a refund request with the payment proof, the customer's instruction or the bank trace, and the account statement showing the credit, and sends it for approval before accounts payable issues the cheque or EFT.",
+      "role": "cash_app_clerk",
+      "kind": "drafting",
+      "inputs": [
+        "credit balance",
+        "payment proof"
+      ],
+      "outputs": [
+        "refund request"
+      ],
+      "systems": [
+        "lms",
+        "gl_erp",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Refund requested on a credit that is needed for an upcoming invoice.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Approve refund",
+      "description": "The manager of billing and payments checks the credit, the payee and the support and approves the refund for payment by accounts payable, or sends it back.",
+      "role": "mgr_billing",
+      "kind": "approval",
+      "inputs": [
+        "refund request"
+      ],
+      "outputs": [
+        "approved refund"
+      ],
+      "systems": [
+        "lms",
+        "gl_erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Internal control over financial reporting: the clerk who applies cash cannot approve or release refunds",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.95,
+          "condition": "approved and sent to accounts payable",
+          "outcome": "refund_issued"
+        },
+        {
+          "to": "s17",
+          "prob": 0.05,
+          "condition": "sent back for support"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Balance the day's deposits",
+      "description": "At the end of the day a clerk checks that payments applied plus items in suspense equal each deposit on the bank statement, by lockbox batch, EFT file and wire, and clears differences before the day is closed. The time shown is one item's share of this daily task.",
+      "role": "cash_app_clerk",
+      "kind": "validation",
+      "inputs": [
+        "bank deposit report",
+        "cash applied report",
+        "suspense postings"
+      ],
+      "outputs": [
+        "balanced daily cash report"
+      ],
+      "systems": [
+        "lms",
+        "bank_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.6
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 480
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: daily reconciliation of cash receipts applied to bank deposits",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard practice; author estimate of the per-item share."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Confirm collections in the cash position",
+      "description": "The treasury analyst takes the balanced daily cash report into the cash position, checks collections on contracts sold to each conduit and flags amounts to be remitted. The time shown is one item's share of the daily task.",
+      "role": "treasury_analyst",
+      "kind": "review",
+      "inputs": [
+        "balanced daily cash report"
+      ],
+      "outputs": [
+        "daily collections by pool"
+      ],
+      "systems": [
+        "spreadsheets",
+        "data_warehouse"
+      ],
+      "touch_min": {
+        "low": 0.02,
+        "mode": 0.05,
+        "high": 0.15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Securitisation servicing agreements: collections on sold contracts tracked by pool and passed to the conduit",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file sends collections data to manage-daily-cash and report-to-securitisation-funders. Author estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Post cash receipts to the ledger",
+      "description": "Overnight the lease system posts the day's cash receipts and suspense movements to the general ledger and loads collections by contract and pool into the data warehouse for treasury, funders and reporting.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "applied payments",
+        "suspense postings"
+      ],
+      "outputs": [
+        "cash receipts journal",
+        "collections data"
+      ],
+      "systems": [
+        "lms",
+        "gl_erp",
+        "data_warehouse"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 300,
+        "mode": 600,
+        "high": 900
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.975,
+          "condition": "posted",
+          "outcome": "applied"
+        },
+        {
+          "to": "s22",
+          "prob": 0.015,
+          "condition": "misapplication found later"
+        },
+        {
+          "to": "END",
+          "prob": 0.01,
+          "condition": "cheque returned unpaid",
+          "outcome": "cheque_returned_nsf"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Overnight interface is an author estimate; returned cheques go to process-returned-payments."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Reverse and reapply misapplied payment",
+      "description": "When a customer, collector or the month-end review finds a payment on the wrong contract, the clerk reverses it, checks whether late charges or a debit retry were triggered by the error, waives them and reapplies the payment correctly.",
+      "role": "cash_app_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "misapplication report"
+      ],
+      "outputs": [
+        "reversed and reapplied payment"
+      ],
+      "systems": [
+        "lms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 30240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Late charge triggered by the error not waived.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "reapply"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Unidentified payment",
+      "share_of_cases": 0.05,
+      "description": "No contract can be found; the payment sits in suspense while the clerk chases the payer, dealer or broker, and the manager reviews it weekly until it is applied, refunded or transferred out.",
+      "path": [
+        "s05",
+        "s13",
+        "s14",
+        "s15",
+        "s16"
+      ]
+    },
+    {
+      "name": "Short payment",
+      "share_of_cases": 0.1,
+      "description": "The payment is less than the amount due; it is applied in hierarchy order and the shortfall goes to collections.",
+      "path": [
+        "s04",
+        "s11",
+        "s12",
+        "s19"
+      ]
+    },
+    {
+      "name": "Overpayment refunded",
+      "share_of_cases": 0.03,
+      "description": "An overpayment or duplicate payment is refunded through accounts payable after manager approval.",
+      "path": [
+        "s11",
+        "s17",
+        "s18"
+      ]
+    },
+    {
+      "name": "Payout payment differs from quote",
+      "share_of_cases": 0.01,
+      "description": "The payout amount is short or the quote has expired; lease administration requotes or the shortfall is collected.",
+      "path": [
+        "s07",
+        "s11"
+      ]
+    },
+    {
+      "name": "Problem cheque",
+      "share_of_cases": 0.03,
+      "description": "Postdated, stale-dated, unsigned or 'paid in full' cheques need a decision before the bank's deadline and half go back to the payer.",
+      "path": [
+        "s10"
+      ]
+    },
+    {
+      "name": "Misapplied payment",
+      "share_of_cases": 0.015,
+      "description": "A payment applied to the wrong contract is found days or weeks later, usually when the customer is chased, and is reversed and reapplied with any late charges waived.",
+      "path": [
+        "s21",
+        "s22",
+        "s04"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.5,
+        "p90": 3.5
+      },
+      "unit": "calendar days from receipt at the bank to applied and posted",
+      "population": "Manually applied payments at a mid-size lessor (derived)",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "src_nbc_lockbox",
+          "src_billtrust_ar"
+        ],
+        "note": "Derived: lockbox data available the next business day (National Bank), a one-day days-to-apply target (Billtrust), and an overnight ledger posting. p90 reflects weekends and items chased for remittance; author estimate."
+      }
+    },
+    {
+      "metric": "auto_cash_hit_rate",
+      "value": {
+        "high_performers": "80% and above",
+        "low_performers": "0% to 20%"
+      },
+      "unit": "share of payments applied automatically",
+      "population": "Companies in the Nacha and Credit Research Foundation cash application survey (US, 2021)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_nacha_cashapp"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "days_to_cash_application_target",
+      "value": 1,
+      "unit": "days",
+      "population": "Vendor-recommended executive metric",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_billtrust_ar"
+        ],
+        "note": "A target, not a measured median."
+      }
+    },
+    {
+      "metric": "corporate_cheque_volume_change_2019",
+      "value": -0.15,
+      "unit": "share change from 2018",
+      "population": "Canada, all corporate cheques",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_pc_trends2020"
+        ],
+        "note": "Payments Canada reports corporate cheque use fell 15% from 2018."
+      }
+    },
+    {
+      "metric": "sme_share_using_cheques_2019",
+      "value": 0.45,
+      "unit": "share of SMEs",
+      "population": "Canadian small and medium enterprises (RFi Group survey cited by Payments Canada)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_pc_trends2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "manual_items_per_clerk_day",
+      "value": 86,
+      "unit": "items",
+      "population": "This organisation",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 430 items a business day over about 5 FTE."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "EFT and bill payments arrive with little or wrong reference data, so clerks search by name and amount and chase payers by e-mail.",
+      "steps": [
+        "s05",
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_pc_iso_case",
+          "src_nacha_cashapp"
+        ],
+        "note": "Limited AFT remittance room and e-mailed remittances are documented; effect on this lessor is author judgement."
+      }
+    },
+    {
+      "description": "Payments applied to the wrong contract are found only when a collector calls a customer who has paid, which creates complaints and late charge reversals.",
+      "steps": [
+        "s04",
+        "s06",
+        "s22"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author judgement."
+      }
+    },
+    {
+      "description": "Unapplied cash ages in a spreadsheet log reviewed weekly; old items need manager decisions and refunds through another department.",
+      "steps": [
+        "s13",
+        "s16",
+        "s17",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author judgement."
+      }
+    },
+    {
+      "description": "Payout payments must be matched to quotes and handed to lease administration quickly, or billing and debits continue after payout.",
+      "steps": [
+        "s07",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author judgement."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src_nbc_lockbox",
+      "title": "Wholesale lockbox: specifications user guide",
+      "publisher": "National Bank of Canada",
+      "url": "https://nbc.ca/content/dam/bnc/outils-apps/entreprises/guides/wholesale-lockbox-specifications-user-guide.pdf",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "Courier empties the lockbox every business day; cheque, stub and correspondence images online; exceptions (multiple payments that do not balance, no stub or reference, 'paid in full', postdated outside the period) need a decision before 2 pm; stale-dated and unsigned cheques not processed; funds credited the day items are processed."
+    },
+    {
+      "id": "src_pc_trends2020",
+      "title": "Canadian Payment Methods and Trends 2020",
+      "publisher": "Payments Canada",
+      "url": "https://payments.ca/sites/default/files/2022-08/PaymentsCanada_2020CanadianPaymentsMethodsAndTrendsReport_En.pdf",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "2019 data: corporate cheque use fell 15% from 2018; 45% of SMEs and 43% of mid-market companies use cheques and paper; cheques 16% of SME spend; EFT holds most business payment value; 23% of consumer bills paid by PAD."
+    },
+    {
+      "id": "src_pc_iso_case",
+      "title": "Specialty retailer prepares for benefits of richer payments data (ISO 20022 case study)",
+      "publisher": "Payments Canada",
+      "url": "https://payments.ca/sites/default/files/2022-08/PaymentsCanada_2019SpecialtyRetailerISO20022CaseStudy_En.pdf",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "AFT batch payments use Standard 005, which offers limited room for remittance data; remittance advice typically sent by e-mail or portal; incoming batch payments matched manually to invoices."
+    },
+    {
+      "id": "src_nacha_cashapp",
+      "title": "Goofus and Gallant: cash application",
+      "publisher": "Nacha",
+      "url": "https://www.nacha.org/news/goofus-and-gallant-cash-application",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Nacha and Credit Research Foundation survey: high performers apply 80% or more of payments automatically, low performers 0% to 20%; high performers get remittance feeds from banks, low performers by e-mail and mail."
+    },
+    {
+      "id": "src_leasepak_hier",
+      "title": "Payment hierarchy (U0212)",
+      "publisher": "NETSOL Technologies (LeasePak documentation)",
+      "url": "https://docsuite.netsoltech.com/v76a/docsuite/refguide/u/u02/u0212/payment_hierarchy.php",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Partial payments are applied by priority and payment order across receivable types (rent, interest, sales tax, late charges, fees); items with order 0 paid in invoice order."
+    },
+    {
+      "id": "src_rbc_creditors",
+      "title": "Best practices document for creditors (bill payment)",
+      "publisher": "RBC Royal Bank",
+      "url": "https://www.rbcroyalbank.com/business/customer-service/_assets-custom/pdf/RBC-Best-Practices-Document-for-Billers.pdf",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Creditors may value-date bill payments to the day paid or to the day they reconcile remittance details, which can be days later and cause late fees; disclosure encouraged."
+    },
+    {
+      "id": "src_billtrust_ar",
+      "title": "Accounts receivable performance metrics",
+      "publisher": "Billtrust",
+      "url": "https://www.billtrust.com/?p=14505",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Days to cash application target of 1 day; match rate target 85% to 95% or more."
+    },
+    {
+      "id": "src_jb_14200",
+      "title": "Wages for accounting and related clerks (NOC 14200)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/wagereport/occupation/27033",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Hourly wages 2023-2024: Ontario low $18.12, median $25.00, high $37.00; Toronto region median $25.64."
+    }
+  ],
+  "assumptions": [
+    "Only items that fail auto-matching are cases; the roughly 47,000 debits a month that post automatically are outside this workflow.",
+    "Mix of manual items (63% single identifiable payments, 13% unclear references, 11% multi-contract, 7% payouts, 3% non-lease receipts, 3% problem cheques) is an author estimate.",
+    "The organisation file's 9,000 items a month and seven clerks, who also handle returned payments, imply about 4 to 5 minutes per item. The touch times here give a little under 6 minutes on average, so the implied staffing is somewhat above the 5.75 FTE stated; the gap is in line with backlogs and overtime at month start, or with a manual volume in the organisation file that is on the high side.",
+    "Daily batch tasks (deposit balancing, treasury review) are shown as one item's share of the daily effort so that staffing adds up.",
+    "Refunds are paid by accounts payable, outside this workflow. Old unidentified items are transferred out of suspense under the lessor's policy; provincial unclaimed property rules were not researched.",
+    "Collections on securitised contracts are assumed to be tracked by pool daily and settled with conduits under the servicing agreements; the exact remittance timing was not sourced.",
+    "No problem was found in the organisation file for this process, apart from the volume note above."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

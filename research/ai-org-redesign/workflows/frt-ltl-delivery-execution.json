@@ -1,0 +1,1864 @@
+{
+  "schema_version": "0.3",
+  "org": "freight-carrier-co",
+  "sector": "trucking and freight transportation",
+  "currency": "CAD",
+  "cadence": "per_case",
+  "id": "frt-ltl-delivery-execution",
+  "name": "Deliver LTL freight to consignees",
+  "process": "ltl-delivery-execution",
+  "function": "LTL terminal operations",
+  "summary": "City drivers from each LTL terminal take a trailer of staged freight out on a route of about 20 pickup and delivery stops and deliver each shipment to its consignee, counting pieces, noting shortages or damage on the delivery receipt and getting a signature. Dispatchers, customer service and terminal clerks handle the stops that fail: closed receivers, appointments that were never booked, refusals and damaged freight. Delays come from waiting at receivers' docks, traffic and winter storms, and every failed stop costs a second trip and an extra day.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with 38 LTL terminals, five hub cross-docks, a TMS with handheld scanning and a separate document imaging system.",
+    "org_size_employees": 3000,
+    "notes": "One case is one delivery stop on a city route. Route-level work (manifest check, pre-trip and post-trip inspection, the drive back) is divided over about 13 delivery stops per route; pickups on the same route belong to ltl-pickup-execution."
+  },
+  "unit_of_work": "one delivery stop",
+  "trigger": "Freight for the consignee is staged on the destination terminal dock and loaded onto a P&D trailer for the day's route.",
+  "end_state": "The shipment is delivered with a signed receipt and the route is closed out, or it is back in terminal custody as refused or undeliverable.",
+  "volume": {
+    "cases_per_month": {
+      "low": 120000,
+      "mode": 140000,
+      "high": 165000
+    },
+    "seasonality": "Autumn peak from September to mid-December about 15-25% above the yearly average; low in January and in the second quarter of 2020 during COVID-19 lockdowns.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Agrees with the organisation file: about 150,000 LTL shipments a month, a little over one shipment per stop, about 5-8% delivered by cartage agents or interline partners, plus redelivery attempts."
+    },
+    "surge": {
+      "cause": "Winter storm or highway closure (snowstorms, freezing rain, mountain pass closures)",
+      "events_per_year": {
+        "low": 4,
+        "mode": 8,
+        "high": 14
+      },
+      "duration_days": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "volume_multiplier": {
+        "low": 1.2,
+        "mode": 1.4,
+        "high": 1.8
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Same estimate as the organisation file: the backlog of held stops is delivered over the days after the storm."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-dest-dock",
+        "object": "staged_freight",
+        "share": 0.96
+      },
+      {
+        "from": "ltl-osd-exceptions",
+        "object": "recovered_freight",
+        "share": 0.04
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ltl-pd-dispatch",
+        "object": "pd_route"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "delivered",
+        "to": "consignee",
+        "object": "delivered_freight"
+      },
+      {
+        "outcome": "delivered_exception",
+        "to": "consignee",
+        "object": "delivered_freight"
+      },
+      {
+        "outcome": "delivered",
+        "to": "ltl-pod-capture",
+        "object": "delivery_receipt"
+      },
+      {
+        "outcome": "delivered_exception",
+        "to": "ltl-pod-capture",
+        "object": "delivery_receipt"
+      },
+      {
+        "outcome": "delivered_exception",
+        "to": "ltl-osd-exceptions",
+        "object": "osd_report"
+      },
+      {
+        "outcome": "refused",
+        "to": "ltl-refused-freight",
+        "object": "refused_shipment"
+      },
+      {
+        "outcome": "undeliverable",
+        "to": "ltl-refused-freight",
+        "object": "refused_shipment"
+      },
+      {
+        "outcome": "any",
+        "to": "ltl-terminal-performance",
+        "object": "terminal_kpi_data"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "pd-driver",
+      "title": "Pickup and delivery driver",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 385,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 35,
+        "high": 42
+      },
+      "occupation_code": "NOC 73300",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-odfl-10k21"
+        ],
+        "note": "About 79,000 driver hours a month of delivery work at about 205 paid hours per driver. With pickups this exceeds the 540 P&D drivers in the organisation file; Old Dominion ran 5,644 P&D drivers for 12.9 million shipments in 2021, which scaled to 1.8 million shipments suggests about 790 drivers before cartage agents."
+      },
+      "shift_pattern": "office_hours",
+      "productive_hours_per_month": 195
+    },
+    {
+      "id": "city-dispatcher",
+      "title": "City pickup and delivery dispatcher",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 10,
+      "loaded_cost_per_hour": {
+        "low": 33,
+        "mode": 39,
+        "high": 47
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Part of 70 city dispatchers' time spent on failed stops and storm re-sequencing. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "cs-rep",
+      "title": "Customer service representative",
+      "department": "Customer service centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 8,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": "NOC 64409",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Redelivery calls for attempted stops. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "terminal-service-clerk",
+      "title": "Terminal service clerk",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 12,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Route closeout and OS&D report entry. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "terminal-dock-worker",
+      "title": "Terminal dock worker",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 3,
+      "loaded_cost_per_hour": {
+        "low": 25,
+        "mode": 29,
+        "high": 34
+      },
+      "occupation_code": "NOC 75101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Stowing returned freight. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "dock-handheld",
+      "name": "Dock and driver handheld scanning",
+      "kind": "instrument"
+    },
+    {
+      "id": "route-planner",
+      "name": "City route planning and dispatch board",
+      "kind": "workflow"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "pd-truck",
+      "name": "Pickup and delivery truck (day-cab tractor or straight truck)",
+      "kind": "vehicle",
+      "count": 560,
+      "cost_per_hour": {
+        "low": 28,
+        "mode": 36,
+        "high": 46
+      }
+    },
+    {
+      "id": "forklift",
+      "name": "Dock forklift",
+      "kind": "equipment",
+      "count": 420,
+      "cost_per_hour": {
+        "low": 6,
+        "mode": 9,
+        "high": 13
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Check route manifest and trailer load",
+      "description": "At the start of the shift the city driver picks up the handheld and the printed route manifest, walks the P&D trailer and checks that the freight for each stop is loaded in delivery order, nose to tail, and that any dangerous goods shipping documents are in the cab pouch within reach. Missing or misloaded freight is reported to the dock supervisor before the truck leaves.",
+      "role": "pd-driver",
+      "kind": "validation",
+      "inputs": [
+        "route manifest",
+        "loaded P&D trailer",
+        "dangerous goods shipping documents"
+      ],
+      "outputs": [
+        "checked load"
+      ],
+      "systems": [
+        "dock-handheld",
+        "route-planner",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2.5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A shipment loaded on the wrong trailer is not noticed and the stop is attempted without its freight.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.965,
+          "condition": "normal weather and roads"
+        },
+        {
+          "to": "s02",
+          "prob": 0.035,
+          "condition": "storm warning or highway closure on the route"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Freight staged on the destination dock overnight and loaded before the shift; wait is from staging to the driver's start. Route-level work divided over about 13 delivery stops per route (540 P&D drivers, about 6,450 delivery stops a working day); author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Hold or re-sequence routes for a storm",
+      "description": "The city dispatcher watches road reports and weather warnings and decides whether routes leave on time, are re-sequenced to drop rural or mountain stops, or are held until a highway reopens. Stops that cannot be reached are moved to the next day on the dispatch board.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "road and weather reports",
+        "route plan"
+      ],
+      "outputs": [
+        "revised route plan"
+      ],
+      "systems": [
+        "route-planner",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 360,
+        "high": 1440
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "route released"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Winter storms and highway closures (Highway 401, Trans-Canada, Coquihalla) several times a winter as in the organisation file surge; delay per affected stop is the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Complete pre-trip inspection",
+      "description": "The driver walks around the tractor or straight truck and trailer, checks tires, lights, brakes, air lines, coupling and liftgate, and records the daily trip inspection on the handheld or a paper report. A defect that makes the unit unsafe sends the driver to the shop for another unit.",
+      "role": "pd-driver",
+      "kind": "physical",
+      "inputs": [
+        "P&D truck",
+        "trip inspection checklist"
+      ],
+      "outputs": [
+        "trip inspection report"
+      ],
+      "systems": [
+        "dock-handheld",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 0.6,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "National Safety Code Standard 13 daily trip inspection as adopted in provincial regulations",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 0.6,
+            "mode": 1,
+            "high": 2
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "unit fit for service"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Trip inspection of about 15 minutes per shift spread over the route; NSC standard text not opened. Route-level work divided over about 13 delivery stops per route (540 P&D drivers, about 6,450 delivery stops a working day); author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Drive to the delivery stop",
+      "description": "The driver follows the route sequence on the handheld and drives from the previous stop to this consignee, dealing with city traffic, parking and access to the receiving dock. Time spent serving the stops earlier on the route is the wait before this step.",
+      "role": "pd-driver",
+      "kind": "travel",
+      "inputs": [
+        "route sequence"
+      ],
+      "outputs": [
+        "truck at consignee"
+      ],
+      "systems": [
+        "route-planner",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 7,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 150,
+        "high": 420
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 3,
+            "mode": 7,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "arrived"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-pd"
+        ],
+        "note": "Urban routes of 50-60 miles with stops under a mile apart and up to 20 or more stops a day (Heilig 2013); minutes per leg and the queue of earlier stops are the author's estimate for a route of about 21 pickup and delivery stops."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Check in with the receiver",
+      "description": "The driver finds the receiving office or the person in charge, presents the delivery receipt and asks for a door. The receiver may refuse freight that was not ordered or arrived late, or the business may be closed or demand an appointment the shipment does not have.",
+      "role": "pd-driver",
+      "kind": "communication",
+      "inputs": [
+        "delivery receipt"
+      ],
+      "outputs": [
+        "door assignment or refusal"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 30
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 0.5,
+            "mode": 2,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.925,
+          "condition": "receiver accepts"
+        },
+        {
+          "to": "s13",
+          "prob": 0.05,
+          "condition": "closed, no receiver, or appointment required"
+        },
+        {
+          "to": "s11",
+          "prob": 0.025,
+          "condition": "consignee refuses the shipment at the door"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of attempted and refused stops is the author's estimate consistent with the organisation file (about 1,050 refused shipments a month in ltl-refused-freight and about 4% attempted deliveries)."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Wait for a door and unload the freight",
+      "description": "The driver backs onto the assigned door or parks curbside, then unloads the pallets and cartons with a pallet jack or the liftgate, sometimes bringing them inside. Waiting for a free door at busy receivers and distribution centres is common.",
+      "role": "pd-driver",
+      "kind": "physical",
+      "inputs": [
+        "shipment on trailer"
+      ],
+      "outputs": [
+        "freight on consignee dock"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 6,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 8,
+        "high": 60
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.006,
+        "defect_description": "Freight is damaged by the driver while unloading.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 3,
+            "mode": 12,
+            "high": 60
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "unloaded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-pd"
+        ],
+        "note": "A 30-minute stop including driving costs about USD 60 and delays at stops are a measured cost (Heilig 2013); unload and dock wait minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Count pieces and check condition with the receiver",
+      "description": "The driver and receiver count the pieces against the delivery receipt and look at the shrink-wrap and cartons for crushing, punctures or wet freight. A count that does not match or visible damage must be written on the receipt, because the consignee's later claim depends on it.",
+      "role": "pd-driver",
+      "kind": "validation",
+      "inputs": [
+        "delivery receipt",
+        "unloaded freight"
+      ],
+      "outputs": [
+        "count and condition result"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A shortage or damage is missed at the door and later reported as concealed damage.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.95,
+          "condition": "count and condition clean"
+        },
+        {
+          "to": "s08",
+          "prob": 0.05,
+          "condition": "shortage, overage or visible damage"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 2.5% of shipments have an OS&D exception in the organisation file (3,800 a month); about half are found at delivery. Author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Note the exception on the receipt and photograph it",
+      "description": "The driver writes the exception on the delivery receipt or keys an exception code on the handheld (for example two cartons short or one pallet crushed) and takes photos of the damage. The consignee either accepts the shipment with the exception noted or refuses the damaged freight.",
+      "role": "pd-driver",
+      "kind": "data_entry",
+      "inputs": [
+        "count and condition result"
+      ],
+      "outputs": [
+        "exception notation",
+        "photos"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Exception wording is vague or photos are missing, which weakens the claim file.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Carrier delivery procedure: exceptions noted on the delivery receipt support claims under the bill of lading notice rules (written notice within 60 days of delivery)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.88,
+          "condition": "accepted with exception noted"
+        },
+        {
+          "to": "s11",
+          "prob": 0.12,
+          "condition": "consignee refuses the damaged freight"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dayross-bol",
+          "src-manitoulin-terms"
+        ],
+        "note": "Notice-of-claim limits from Canadian LTL bill of lading conditions; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Obtain signature and close the stop",
+      "description": "The receiver prints a name and signs on the handheld screen or the paper delivery receipt; the driver scans the stop closed, which time-stamps the delivery and updates tracing in the TMS. Paper receipts are kept for imaging at the terminal.",
+      "role": "pd-driver",
+      "kind": "data_entry",
+      "inputs": [
+        "delivery receipt"
+      ],
+      "outputs": [
+        "signed delivery receipt",
+        "delivery status"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 3
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Illegible or missing name, or the stop is not scanned closed.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.88,
+          "condition": "prepaid shipment, normal stop"
+        },
+        {
+          "to": "s10",
+          "prob": 0.05,
+          "condition": "collect or COD shipment"
+        },
+        {
+          "to": "s24",
+          "prob": 0.07,
+          "condition": "dock wait exceeded free time"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Collect payment for a collect or COD shipment",
+      "description": "For collect and cash-on-delivery shipments the driver collects a cheque or certified funds before releasing the freight, records the amount on the receipt and keeps the payment in the cab envelope for the terminal.",
+      "role": "pd-driver",
+      "kind": "data_entry",
+      "inputs": [
+        "COD amount on receipt"
+      ],
+      "outputs": [
+        "payment collected"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong amount or payment type collected.",
+        "typically_caught_at": "s22"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Bill of lading condition that freight and charges are paid before delivery on collect shipments",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "payment collected"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-terms"
+        ],
+        "note": "Freight and charges paid before delivery (Manitoulin terms III.14); share of collect shipments is the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Call the dispatcher about a refusal",
+      "description": "The driver calls or messages the city dispatcher with the reason the consignee gives for refusing (not ordered, duplicate, damaged, late, wrong address) and the receiver's name.",
+      "role": "pd-driver",
+      "kind": "communication",
+      "inputs": [
+        "refusal reason"
+      ],
+      "outputs": [
+        "refusal report"
+      ],
+      "systems": [
+        "email-phone",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "reported"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Handle the refusal with the consignee",
+      "description": "The dispatcher checks the shipment in the TMS, may phone the consignee or the shipper's contact to resolve a misunderstanding, and tells the driver to deliver after all or to take the freight back. A refusal is recorded with its reason so that customer service can ask the shipper for instructions.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "refusal report",
+        "shipment record"
+      ],
+      "outputs": [
+        "instruction to driver"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.2,
+          "condition": "consignee agrees to accept"
+        },
+        {
+          "to": "s19",
+          "prob": 0.8,
+          "condition": "refusal stands"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Record the attempted delivery",
+      "description": "When the business is closed, nobody can receive, or an appointment is demanded, the driver photographs the closed door or notes the receiver's name, keys an attempt code on the handheld and leaves a notice if possible.",
+      "role": "pd-driver",
+      "kind": "data_entry",
+      "inputs": [
+        "stop details"
+      ],
+      "outputs": [
+        "attempt record"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "attempt recorded"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Log the attempt and pass it to customer service",
+      "description": "The dispatcher sees the attempt code on the board, confirms whether a redelivery or storage charge applies, and sends the shipment to the customer service queue to arrange a new delivery.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "attempt record"
+      ],
+      "outputs": [
+        "redelivery request"
+      ],
+      "systems": [
+        "route-planner",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "queued"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Bring undelivered freight back to the terminal",
+      "description": "The undelivered freight rides on the truck for the rest of the route; at the terminal the driver unloads it at the dock and scans it back into terminal inventory.",
+      "role": "pd-driver",
+      "kind": "physical",
+      "inputs": [
+        "undelivered freight"
+      ],
+      "outputs": [
+        "freight returned to dock"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 2,
+            "mode": 4,
+            "high": 10
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "returned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait is the rest of the route; author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Stow freight in the hold area",
+      "description": "A terminal dock worker moves the returned freight with a forklift to the will-call or hold area, labels the location and scans it so it can be found for the redelivery.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "returned freight"
+      ],
+      "outputs": [
+        "freight in hold location"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Freight stowed without a location scan and later hard to find.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 2,
+            "mode": 4,
+            "high": 10
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "stowed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Arrange a redelivery with the consignee",
+      "description": "A customer service representative phones or emails the consignee to book a redelivery date or appointment and confirms the accessorial charge; if the consignee cannot be reached or will not take the freight, the shipper is notified, as the bill of lading conditions require, for disposal instructions.",
+      "role": "cs-rep",
+      "kind": "communication",
+      "inputs": [
+        "redelivery request"
+      ],
+      "outputs": [
+        "redelivery appointment or undeliverable notice"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.82,
+          "condition": "redelivery booked"
+        },
+        {
+          "to": "END",
+          "prob": 0.18,
+          "condition": "consignee unreachable or refuses; held for shipper instructions",
+          "outcome": "undeliverable"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-terms"
+        ],
+        "note": "Notice to consignor and consignee when delivery cannot be made (Manitoulin terms III.16); times are the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Put the stop back on a route",
+      "description": "The dispatcher adds the shipment to the route for the booked day and asks the dock to load it in sequence; the freight waits on the dock until that day.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "redelivery appointment"
+      ],
+      "outputs": [
+        "updated route"
+      ],
+      "systems": [
+        "route-planner",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "on the route for the booked day"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Most redeliveries go out the next working day; some wait for an appointment two or three days later. Author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Return refused freight and hand it to the service clerk",
+      "description": "The driver brings the refused shipment back at the end of the route, unloads it and gives the refused delivery receipt with the reason to the terminal service clerk, who opens a refused-freight file.",
+      "role": "pd-driver",
+      "kind": "physical",
+      "inputs": [
+        "refused freight",
+        "refused delivery receipt"
+      ],
+      "outputs": [
+        "refused shipment file"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 3,
+            "mode": 6,
+            "high": 12
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "refused freight in terminal custody",
+          "outcome": "refused"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Return to the terminal and turn in paperwork",
+      "description": "After the last stop the driver drives back to the terminal, drops off signed paper receipts and any collected payments at the service counter, and records end-of-day on-duty time on the timecard or handheld.",
+      "role": "pd-driver",
+      "kind": "travel",
+      "inputs": [
+        "signed receipts",
+        "payments"
+      ],
+      "outputs": [
+        "turned-in paperwork",
+        "driver timecard"
+      ],
+      "systems": [
+        "dock-handheld",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 2.5,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 200,
+        "high": 420
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Hours of Service Regulations s. 81(2): drivers within 160 km of the home terminal need no logbook if the carrier keeps daily on-duty records for 6 months",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 1.5,
+            "mode": 2.5,
+            "high": 5
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "back at terminal"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hos"
+        ],
+        "note": "Radius exemption and record keeping from the HOS Regulations; drive back of 30-60 minutes spread over the route is the author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Complete post-trip inspection report",
+      "description": "The driver records any defects found during the day on the post-trip report so the shop can repair the unit overnight; a clean report is signed off on the handheld.",
+      "role": "pd-driver",
+      "kind": "physical",
+      "inputs": [
+        "P&D truck"
+      ],
+      "outputs": [
+        "DVIR"
+      ],
+      "systems": [
+        "dock-handheld",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.6,
+        "high": 1.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "National Safety Code Standard 13 trip inspection and defect reporting",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "pd-truck",
+          "occupied_min": {
+            "low": 0.3,
+            "mode": 0.6,
+            "high": 1.2
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "report filed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "NSC standard text not opened. Route-level work divided over about 13 delivery stops per route (540 P&D drivers, about 6,450 delivery stops a working day); author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Reconcile the route closeout",
+      "description": "The terminal service clerk checks that every stop on the manifest has a status, matches paper receipts and COD payments to the stops, keys exception codes the handheld missed and sends receipts to imaging. Stops delivered with an exception are passed to the OS&D clerk.",
+      "role": "terminal-service-clerk",
+      "kind": "validation",
+      "inputs": [
+        "turned-in paperwork",
+        "route status"
+      ],
+      "outputs": [
+        "closed route",
+        "receipts for imaging"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 45,
+        "high": 300
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A receipt is lost or mismatched before imaging.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.955,
+          "condition": "delivered clean",
+          "outcome": "delivered"
+        },
+        {
+          "to": "s23",
+          "prob": 0.045,
+          "condition": "stop delivered with an exception"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Branch share approximates the share of stops that passed s08; author's estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Open an OS&D report for the exception",
+      "description": "The clerk creates the OS&D record in the TMS from the driver's exception notation and photos so the OS&D clerk can start a search or a damage inspection.",
+      "role": "terminal-service-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "exception notation",
+        "photos"
+      ],
+      "outputs": [
+        "OS&D report"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "delivered with exception recorded",
+          "outcome": "delivered_exception"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Record dock waiting time for a detention charge",
+      "description": "When the wait at the receiver exceeded the free time in the tariff, the driver records arrival and departure times and the receiver's name on the receipt so billing can add the waiting-time accessorial.",
+      "role": "pd-driver",
+      "kind": "data_entry",
+      "inputs": [
+        "arrival and departure times"
+      ],
+      "outputs": [
+        "waiting time record"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.15,
+        "defect_description": "Times not recorded, so the accessorial is lost.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "recorded"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Closed receiver or missing appointment",
+      "share_of_cases": 0.05,
+      "description": "The stop cannot be completed, the freight rides back to the terminal and customer service books a redelivery, usually the next working day.",
+      "path": [
+        "s05",
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17",
+        "s18",
+        "s04"
+      ]
+    },
+    {
+      "name": "Refused shipment",
+      "share_of_cases": 0.031,
+      "description": "The consignee refuses at the door or because of damage; most refusals stand and the freight goes to the refused-freight process.",
+      "path": [
+        "s05",
+        "s11",
+        "s12",
+        "s19"
+      ]
+    },
+    {
+      "name": "Delivered with exception",
+      "share_of_cases": 0.044,
+      "description": "Short or damaged freight is noted on the receipt and an OS&D report is opened.",
+      "path": [
+        "s07",
+        "s08",
+        "s09",
+        "s22",
+        "s23"
+      ]
+    },
+    {
+      "name": "Storm hold",
+      "share_of_cases": 0.035,
+      "description": "Routes are held or re-sequenced for weather and stops move to a later day.",
+      "path": [
+        "s01",
+        "s02",
+        "s03"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.6,
+        "p90": 0.9
+      },
+      "unit": "calendar days from freight staged for the route to route closeout",
+      "population": "Canadian LTL city delivery stops, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Freight staged by about 03:00 goes out with routes starting near 07:00, is delivered mid-route and the route is closed out by about 18:00, about 15 hours; only failed stops and storm holds run into later days. Author's estimate."
+      }
+    },
+    {
+      "metric": "stops_per_route_day",
+      "value": 20,
+      "unit": "pickup and delivery stops per route",
+      "population": "US LTL carriers (route design)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-pd"
+        ],
+        "note": "Carriers build routes with up to 20 or more stops a day."
+      }
+    },
+    {
+      "metric": "pd_unit_cost_per_hour",
+      "value": {
+        "low": 120,
+        "high": 130
+      },
+      "unit": "USD per hour on the street",
+      "population": "US LTL carriers, 2013",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-parcel-pd"
+        ],
+        "note": "Stated cost to keep a P&D unit on the street."
+      }
+    },
+    {
+      "metric": "on_time_service",
+      "value": 99,
+      "unit": "percent of shipments",
+      "population": "Old Dominion Freight Line, fourth quarter 2022 (best-in-class US LTL)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-odfl-q422"
+        ],
+        "note": "Upper bound; a common-practice Canadian carrier would be lower, near 93-96% (author's estimate)."
+      }
+    },
+    {
+      "metric": "shipments_per_pd_driver_day",
+      "value": 18,
+      "unit": "pickups plus deliveries per P&D driver",
+      "population": "Old Dominion Freight Line, 2021",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-odfl-10k21"
+        ],
+        "note": "Derived: 12.88 million LTL shipments a year, each picked up and delivered, over 5,644 P&D drivers and about 250 working days."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Waiting for a door at large receivers and distribution centres ties up the truck and pushes later stops past closing time.",
+      "steps": [
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-pd"
+        ],
+        "note": "Delays at stops are one of the measures carriers track because they drive P&D cost."
+      }
+    },
+    {
+      "description": "Closed receivers and missing appointments cause a second trip, an extra day and a storage or redelivery charge the consignee often disputes.",
+      "steps": [
+        "s13",
+        "s14",
+        "s17",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL city delivery practice."
+      }
+    },
+    {
+      "description": "Paper receipts and vague exception notes make it hard to prove the condition of freight at delivery when a claim arrives weeks later.",
+      "steps": [
+        "s08",
+        "s22"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dayross-bol"
+        ],
+        "note": "Claims may be filed up to 60 days after delivery, long after the stop."
+      }
+    },
+    {
+      "description": "Winter storms and highway closures hold routes and create a backlog over the following days.",
+      "steps": [
+        "s02"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "See volume surge."
+      }
+    }
+  ],
+  "assumptions": [
+    "A case is one delivery stop. Route-level work (manifest check, pre-trip and post-trip inspection, drive back) is divided over about 13 delivery stops per route, so those steps show one or two minutes.",
+    "The wait before driving to a stop is the time spent on earlier stops on the route; the wait before the drive back is the rest of the route. Together they make most of the same-day cycle time.",
+    "The stop is triggered by staged freight; the day's route from ltl-pd-dispatch is treated as a standing input. Redelivery attempts loop back to the drive step rather than starting a new case.",
+    "The branch to the OS&D report at closeout uses the share of stops with exceptions; the simulation cannot remember the earlier branch, so a few clean stops pass through it and a few exception stops skip it.",
+    "Staffing check: drivers work about 205 paid hours a month, not the 130 productive hours the validator uses, so 385 driver FTE cover hands-on time that the validator converts to more FTE.",
+    "Collision reports and IT tickets from handheld faults are rare by-products of the route and are left out of the outcome links.",
+    "Loaded costs come from the organisation file (wage times 1.30 for hourly staff, 1.35 for salaried).",
+    "Times reflect handheld scanning with paper delivery receipts still common in 2019-2022; electronic signature capture spread during COVID-19 contactless delivery in 2020.",
+    "Organisation file corrected on 2026-11-24: dvir and driver_timecard are produced once per driver-day by ltl-pd-dispatch, not by each stop, so they are no longer outputs of this workflow."
+  ],
+  "sources": [
+    {
+      "id": "src-hos",
+      "title": "Commercial Vehicle Drivers Hours of Service Regulations (SOR/2005-313)",
+      "publisher": "Government of Canada, Justice Laws",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2005-313/FullText.html",
+      "year": "2005 (consolidated)",
+      "supports": "Section 81(2): no record of duty status needed within a 160 km radius of the home terminal when the driver returns daily and the carrier keeps daily on-duty records for 6 months; 13 hours driving and 14 hours on duty per day.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-dayross-bol",
+      "title": "Bill of Lading Terms & Conditions",
+      "publisher": "Day & Ross",
+      "url": "https://dayross.com/BOLTerms",
+      "year": "2026",
+      "supports": "Canadian LTL bill of lading conditions: written notice of claim within 60 days of delivery (9 months for non-delivery), final claim within 9 months of shipment, liability of CAD 4.41 per kg for Canadian origin, undisclosed dangerous goods may be warehoused at the consignor's expense. Current version; the claim limits match the long-standing provincial uniform conditions.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-manitoulin-terms",
+      "title": "Terms and Conditions",
+      "publisher": "Manitoulin Transport",
+      "url": "https://manitoulintransport.com/?page_id=88",
+      "year": "n.d.",
+      "supports": "Carrier may correct the weight on the bill of lading (III.19); right to open and inspect packages (B.5); notice to consignor and consignee when delivery cannot be made, storage, return after ten days without instructions (III.16-17); 60-day notice and 9-month claim limits; CAD 4.41 per kg liability.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-parcel-pd",
+      "title": "Insights on LTL Carrier Pickup and Delivery Operations",
+      "publisher": "PARCEL Industry (Joe Heilig)",
+      "url": "https://parcelindustry.com/article-3541-Insights-on-LTL-Carrier-Pickup-and-Delivery-Operations.html",
+      "year": "2013",
+      "supports": "Routes of up to 20 or more stops a day; urban routes 50-60 miles, metro 90-100, peddle 150-200; USD 120-130 an hour to keep a P&D unit on the street; a 30-minute stop costs about USD 60; carriers measure time at stop, delays, stops per hour, miles per stop and shipments per stop.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-odfl-q422",
+      "title": "Old Dominion Freight Line Reports Fourth Quarter 2022 Earnings Per Diluted Share of $2.92",
+      "publisher": "Old Dominion Freight Line",
+      "url": "https://ir.odfl.com/news-events/press-releases/detail/280/old-dominion-freight-line-reports-fourth-quarter-2022/",
+      "year": "2023",
+      "supports": "99% on-time service in the fourth quarter of 2022 with a cargo claims ratio of 0.1%.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-odfl-10k21",
+      "title": "Old Dominion Freight Line Form 10-K for the year ended December 31, 2021",
+      "publisher": "US Securities and Exchange Commission (EDGAR)",
+      "url": "https://www.sec.gov/Archives/edgar/data/878927/000156459022006303/odfl-10k_20211231.htm",
+      "year": "2022",
+      "supports": "251 service centres responsible for pickup and delivery in their area; 5,644 P&D drivers; 12,880 thousand LTL shipments in 2021; weight per shipment 1,571 lb.",
+      "accessed": "2026-11-24"
+    }
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

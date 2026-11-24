@@ -1,0 +1,1624 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-med-icu-critical-care",
+  "name": "Provide intensive care",
+  "org": "community-hospital-corp",
+  "process": "med-icu-critical-care",
+  "sector": "hospital care",
+  "function": "critical care",
+  "summary": "This process follows one patient from referral to the intensive care unit until they step down to a ward, die or are transferred to a tertiary ICU. An intensivist decides on admission and leads daily rounds, critical care nurses care for one or two patients each around the clock, respiratory therapists run ventilators and a pharmacist reviews infusions. Beds are few and usually full, so admissions wait for a bed to be freed and patients ready to leave wait in the ICU for a ward bed; the COVID-19 waves of 2020-2022 multiplied demand and forced transfers between hospitals.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital corporation with about 30 adult ICU beds (a larger unit at the main site and small units at the others), community intensivists and critical care nurses at 1:1 to 1:2.",
+    "org_size_employees": 5790,
+    "notes": "One loop of steps s09-s12 is one ICU day. Medication passes in the ICU are part of the nursing day here and are also counted in med-medication-administration."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one ICU admission",
+  "trigger": "An emergency physician or the rapid response team refers a critically ill patient to the intensivist.",
+  "end_state": "The patient leaves the ICU: stepped down to a ward, transferred to another hospital, or died; or the intensivist decides the patient does not need ICU care.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 120,
+      "mode": 150,
+      "high": 190
+    },
+    "seasonality": "Higher in winter with respiratory infections; in 2020-2022 driven by COVID-19 waves.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file estimate for about 30 ICU beds. Cross-check: 30 beds x 30.4 days x 90% occupancy = 820 patient days a month; at a mean stay of about 5.4 days that is about 150 admissions."
+    },
+    "surge": {
+      "cause": "COVID-19 waves (2020-2022)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 2,
+        "high": 3
+      },
+      "duration_days": {
+        "low": 30,
+        "mode": 60,
+        "high": 90
+      },
+      "volume_multiplier": {
+        "low": 1.2,
+        "mode": 1.6,
+        "high": 2.5
+      },
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src3"
+        ],
+        "note": "Ontario's COVID-19 ICU census peaked at 283, 450 and 940 patients in waves 1-3 against about 2,012 adult ICU beds, and ventilated patients reached 180% of the pre-pandemic average (src3). Multiplier for this hospital is the author's estimate, copied from the organisation file."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ed-admission-boarding",
+        "object": "admitted_patient",
+        "share": 0.7
+      },
+      {
+        "from": "med-rapid-response",
+        "object": "admitted_patient",
+        "share": 0.3
+      }
+    ],
+    "inputs": [
+      {
+        "from": "hr-staff-scheduling",
+        "object": "staff_schedule"
+      },
+      {
+        "from": "dx-lab-testing",
+        "object": "lab_result"
+      },
+      {
+        "from": "cs-pharmacy-order-verification",
+        "object": "dispensed_medication"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "cs-pharmacy-order-verification",
+        "object": "medication_order"
+      },
+      {
+        "outcome": "stepped_down",
+        "to": "cs-bed-management",
+        "object": "bed_request"
+      },
+      {
+        "outcome": "stepped_down",
+        "to": "med-inpatient-medical-care",
+        "object": "admitted_patient"
+      },
+      {
+        "outcome": "transferred_out",
+        "to": "ed-interfacility-transfer",
+        "object": "transfer_request"
+      },
+      {
+        "outcome": "died_in_icu",
+        "to": "donation_agency",
+        "object": "donation_referral"
+      },
+      {
+        "outcome": "died_in_icu",
+        "to": "coroner",
+        "object": "death_notification"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "intensivist",
+      "title": "Intensivist",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 4.0,
+      "loaded_cost_per_hour": {
+        "low": 170,
+        "mode": 210,
+        "high": 260
+      },
+      "occupation_code": "NOC 2016 3111",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src3"
+        ],
+        "note": "Intensivists carry 12-15 patients in large Ontario ICUs (src3); here about 10 intensivists cover 30 beds across sites, in house by day and on call from home at night at the smaller sites. FTE on this process is the author's estimate."
+      },
+      "shift_pattern": "on_call"
+    },
+    {
+      "id": "icu_rn",
+      "title": "Critical care registered nurse",
+      "department": "Intensive care units",
+      "layer": "individual_contributor",
+      "fte_on_process": 90.0,
+      "loaded_cost_per_hour": {
+        "low": 49,
+        "mode": 63,
+        "high": 69
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src3"
+        ],
+        "note": "Level 3 ICUs assign one critical care nurse per ventilated patient, with two-patient assignments for less sick patients (src3). 30 beds at about 90% occupancy and an average ratio of 1:1.5 need about 18 nurses per 12-hour shift, about 90-100 productive FTE. The organisation file's 110 ICU RN headcount covers this only if almost all are full time."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "rt",
+      "title": "Respiratory therapist",
+      "department": "Allied health",
+      "layer": "individual_contributor",
+      "fte_on_process": 5.0,
+      "loaded_cost_per_hour": {
+        "low": 43,
+        "mode": 55,
+        "high": 62
+      },
+      "occupation_code": "NOC 2016 3214",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Respiratory therapists cover ventilated ICU patients alongside ED, wards and code calls; author's estimate of their ICU time."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "pharmacist",
+      "title": "Hospital pharmacist",
+      "department": "Pharmacy",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 81,
+        "high": 89
+      },
+      "occupation_code": "NOC 2016 3131",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "A pharmacist attends weekday ICU rounds and reviews infusion and antimicrobial orders; author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "icu_charge_nurse",
+      "title": "ICU charge nurse",
+      "department": "Intensive care",
+      "layer": "supervisor",
+      "fte_on_process": 6.0,
+      "loaded_cost_per_hour": {
+        "low": 57,
+        "mode": 63,
+        "high": 70
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The organisation file has no ICU charge nurse. Each ICU site runs a charge nurse on every shift who manages admissions, step-downs and staffing; about 3 sites x 2 shifts gives about 10-12 heads. Cost set equal to the emergency charge nurse."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "med_manager",
+      "title": "Patient care manager, inpatient unit",
+      "department": "Medicine and critical care program",
+      "layer": "manager",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 78,
+        "high": 89
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "ICU patient care manager time on bed escalations, surge staffing and family concerns."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "bed_board",
+      "name": "Electronic bed board and patient flow dashboard",
+      "kind": "workflow"
+    },
+    {
+      "id": "pharmacy_system",
+      "name": "Pharmacy information system and automated dispensing cabinets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "criticall_portal",
+      "name": "CritiCall Ontario referral line and portal",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    },
+    {
+      "id": "lis",
+      "name": "Laboratory information system",
+      "kind": "system_of_record"
+    }
+  ],
+  "resources": [
+    {
+      "id": "bed_icu",
+      "name": "Intensive care beds",
+      "kind": "bed",
+      "count": 30
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Assess the referred patient for ICU admission",
+      "description": "The intensivist takes the call from the emergency physician or the rapid response team, reviews vital signs, blood gases and imaging, sees the patient and decides whether ICU care will help, starting resuscitation where needed.",
+      "role": "intensivist",
+      "kind": "judgment",
+      "inputs": [
+        "referral call",
+        "ED or ward record"
+      ],
+      "outputs": [
+        "ICU consult note",
+        "admission decision"
+      ],
+      "systems": [
+        "his",
+        "email_phone",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Patient who needs ICU care is declined and deteriorates on the ward.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.85,
+          "condition": "admit to ICU"
+        },
+        {
+          "to": "END",
+          "prob": 0.15,
+          "condition": "managed on the ward with ICU follow-up",
+          "outcome": "declined_managed_on_ward"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Decline share and response time are the author's estimates; at night the intensivist at the smaller sites is on call from home."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Find an ICU bed and a nurse",
+      "description": "The ICU charge nurse checks the bed board and the nursing assignment, decides whether a nurse can take the patient one-to-one or a second patient, and calls patient flow if a bed must be freed first.",
+      "role": "icu_charge_nurse",
+      "kind": "coordination",
+      "inputs": [
+        "admission decision",
+        "ICU census"
+      ],
+      "outputs": [
+        "bed and nurse assignment or bed shortfall"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Assignment exceeds safe nursing workload.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.75,
+          "condition": "bed and nurse available"
+        },
+        {
+          "to": "s03",
+          "prob": 0.22,
+          "condition": "a bed must be freed"
+        },
+        {
+          "to": "s18",
+          "prob": 0.03,
+          "condition": "no ICU capacity at any site: transfer out"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "Large ICUs ran over capacity 45-51 days a year and discharged patients faster when full (src1). Shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Free a bed by stepping down or moving a patient",
+      "description": "The charge nurse and intensivist pick the most stable ICU patient, ask patient flow to expedite a ward bed or move that patient to another site's ICU, and keep the new patient in the ED or recovery room until the bed is clean.",
+      "role": "icu_charge_nurse",
+      "kind": "coordination",
+      "inputs": [
+        "ICU census",
+        "bed board"
+      ],
+      "outputs": [
+        "freed ICU bed"
+      ],
+      "systems": [
+        "bed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 720
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Patient stepped down too early to make room.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "bed ready"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "When ICUs were over capacity the discharge-to-admission ratio rose to 1.7 (src1). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Receive and admit the patient",
+      "description": "Two ICU nurses move the patient onto the ICU bed, connect cardiac, oxygen and pressure monitoring, check lines and drains, start or take over infusions on smart pumps, do a full assessment and begin the flowsheet.",
+      "role": "icu_rn",
+      "kind": "physical",
+      "inputs": [
+        "patient",
+        "handover"
+      ],
+      "outputs": [
+        "admission nursing assessment",
+        "running infusions"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Infusion rate transcribed wrongly from the ED pump.",
+        "typically_caught_at": "s12"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada ROPs: client identification, information transfer at care transitions, infusion pump safety",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "people": 2,
+      "resources": [
+        {
+          "id": "bed_icu",
+          "occupied_min": {
+            "low": 600,
+            "mode": 900,
+            "high": 1300
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src4"
+        ],
+        "note": "Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Intensivist admission assessment and orders",
+      "description": "The intensivist examines the patient, reviews results, writes the admission note and orders for sedation, vasopressors, ventilation targets, fluids, antimicrobials, nutrition and VTE prophylaxis, and talks with the family about goals of care.",
+      "role": "intensivist",
+      "kind": "judgment",
+      "inputs": [
+        "consult note",
+        "results"
+      ],
+      "outputs": [
+        "admission orders",
+        "admission note"
+      ],
+      "systems": [
+        "his",
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Home medication or prophylaxis omitted.",
+        "typically_caught_at": "s08"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Public Hospitals Act, Regulation 965: treatment on the order of an authorized practitioner",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s04"
+      ],
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.3,
+          "condition": "needs invasive ventilation"
+        },
+        {
+          "to": "s07",
+          "prob": 0.3,
+          "condition": "needs central or arterial lines"
+        },
+        {
+          "to": "s08",
+          "prob": 0.4,
+          "condition": "no procedure needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "33% of Canadian ICU patients (34% in Ontario) are invasively ventilated (src1); some arrive already intubated. Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Set up the airway and ventilator",
+      "description": "The respiratory therapist prepares airway equipment, assists the intensivist with intubation, connects and sets the ventilator, takes an arterial blood gas and adjusts settings to the targets ordered.",
+      "role": "rt",
+      "kind": "physical",
+      "inputs": [
+        "ventilation orders"
+      ],
+      "outputs": [
+        "ventilated patient",
+        "blood gas"
+      ],
+      "systems": [
+        "his",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Ventilator settings differ from the ordered targets.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s05"
+      ],
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.6,
+          "condition": "lines also needed"
+        },
+        {
+          "to": "s08",
+          "prob": 0.4,
+          "condition": "no lines needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "Ventilation share from src1; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Insert central venous and arterial lines",
+      "description": "The intensivist inserts a central venous catheter and an arterial line under ultrasound with full barrier precautions, following the insertion checklist with the nurse, and orders a chest X-ray to confirm position.",
+      "role": "intensivist",
+      "kind": "physical",
+      "inputs": [
+        "consent",
+        "insertion checklist"
+      ],
+      "outputs": [
+        "central and arterial lines"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Line-related complication or later bloodstream infection.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Central line insertion bundle and checklist (Safer Healthcare Now)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Reconcile medications on admission",
+      "description": "The pharmacist compares the patient's home medication list with the ICU orders, flags home drugs to continue or hold, checks antimicrobial doses against kidney function and records the reconciliation.",
+      "role": "pharmacist",
+      "kind": "validation",
+      "inputs": [
+        "admission orders",
+        "best possible medication history"
+      ],
+      "outputs": [
+        "reconciled medication list"
+      ],
+      "systems": [
+        "pharmacy_system",
+        "his",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 600
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Discrepancy missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada ROP: medication reconciliation at care transitions",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src4"
+        ],
+        "note": "Wait reflects pharmacist coverage on weekdays and days only; author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Give a day of critical care nursing",
+      "description": "Over each 24 hours the ICU nurse assesses the patient hourly, titrates sedation and vasopressor infusions, manages lines, turns and mouth-cares the patient, draws blood, records the flowsheet and checks the ventilator-associated pneumonia, line infection and pressure injury bundles; the bed is occupied all day.",
+      "role": "icu_rn",
+      "kind": "physical",
+      "inputs": [
+        "care plan",
+        "orders"
+      ],
+      "outputs": [
+        "flowsheet",
+        "bundle checks"
+      ],
+      "systems": [
+        "his",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 720,
+        "mode": 900,
+        "high": 1200
+      },
+      "wait_before_min": {
+        "low": 360,
+        "mode": 540,
+        "high": 720
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Infusion titration or bundle element missed.",
+        "typically_caught_at": "s12"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "ICU care bundles (ventilator-associated pneumonia, central line infection, pressure injury) and independent double checks of high-alert infusions",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "bed_icu",
+          "occupied_min": {
+            "low": 1400,
+            "mode": 1440,
+            "high": 1480
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.5,
+          "condition": "patient is ventilated"
+        },
+        {
+          "to": "s11",
+          "prob": 0.5,
+          "condition": "not ventilated"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src3",
+          "src5"
+        ],
+        "note": "One loop of s09-s12 is one ICU day. Nurse minutes reflect a ratio of 1:1 for ventilated and 1:2 for other patients (src3); ISMP Canada found missing double checks in IV incidents (src5). The wait pads the loop to 24 hours."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Manage the ventilator and test readiness to breathe",
+      "description": "The respiratory therapist checks the ventilator and airway each shift, suctions, takes blood gases, adjusts settings and, when the patient meets criteria, runs a spontaneous breathing trial with the nurse lightening sedation, reporting the result at rounds.",
+      "role": "rt",
+      "kind": "physical",
+      "inputs": [
+        "ventilator settings",
+        "blood gas"
+      ],
+      "outputs": [
+        "breathing trial result",
+        "ventilator changes"
+      ],
+      "systems": [
+        "his",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 90,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Breathing trial not done, prolonging ventilation.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s09"
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "19% of invasively ventilated ICU patients died in ICU vs 4% of others (src1). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Review the medication profile for rounds",
+      "description": "The pharmacist reviews infusions, antimicrobials, sedation and drug levels against the latest labs, and prepares dose changes and stop dates to raise at rounds.",
+      "role": "pharmacist",
+      "kind": "analysis",
+      "inputs": [
+        "medication profile",
+        "lab results"
+      ],
+      "outputs": [
+        "pharmacy recommendations"
+      ],
+      "systems": [
+        "pharmacy_system",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Drug level or interaction missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s09",
+        "s10"
+      ],
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Lead interprofessional ICU rounds and decide the plan",
+      "description": "The intensivist leads rounds with the nurse, respiratory therapist and pharmacist, examines the patient, reviews overnight events and results, sets the day's goals and decides whether the patient stays, can step down to a ward, should move to comfort care or needs transfer to a tertiary ICU.",
+      "role": "intensivist",
+      "kind": "judgment",
+      "inputs": [
+        "flowsheet",
+        "results",
+        "pharmacy recommendations"
+      ],
+      "outputs": [
+        "daily goals",
+        "orders",
+        "disposition decision"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Patient kept in ICU longer than needed or stepped down too early.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s11"
+      ],
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.78,
+          "condition": "still needs ICU care: next ICU day"
+        },
+        {
+          "to": "s13",
+          "prob": 0.185,
+          "condition": "ready to step down to a ward"
+        },
+        {
+          "to": "s16",
+          "prob": 0.02,
+          "condition": "move to comfort care"
+        },
+        {
+          "to": "s18",
+          "prob": 0.015,
+          "condition": "needs a tertiary ICU (cardiac, neuro, ECMO)"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "Daily exit probabilities give a mean ICU stay of about 5 days with ICU mortality near 9% (src1: 9% ICU mortality, about 3 days average stay nationally including step-down units). Transfer share is the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Write the transfer order and request a ward bed",
+      "description": "The intensivist writes the transfer order and summary, and the charge nurse enters the bed request on the bed board for the right ward, then chases patient flow at bed meetings.",
+      "role": "icu_charge_nurse",
+      "kind": "coordination",
+      "inputs": [
+        "transfer order"
+      ],
+      "outputs": [
+        "bed request"
+      ],
+      "systems": [
+        "bed_board",
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Bed requested for the wrong service.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Keep the patient in ICU until a ward bed opens",
+      "description": "The patient, now well enough for a ward, waits in the ICU bed; the nurse continues lower-intensity care, often with two patients, and the new admission the ICU needs waits for this bed.",
+      "role": "icu_rn",
+      "kind": "physical",
+      "inputs": [
+        "bed request"
+      ],
+      "outputs": [
+        "continued care"
+      ],
+      "systems": [
+        "his",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 600
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1800
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "bed_icu",
+          "occupied_min": {
+            "low": 240,
+            "mode": 480,
+            "high": 1800
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "ward bed assigned"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src2"
+        ],
+        "note": "69.1% of Alberta ICU patients had avoidable discharge delay, median 7.2 hours (IQR 2.4-27.7), 12.8% of ICU patient-days (src2). The triangular wait approximates this spread."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Hand over and transfer the patient to the ward",
+      "description": "The ICU nurse gives a structured report to the ward nurse, reconciles medications for the transfer, removes lines no longer needed, and goes with the porter to the ward; about one transfer in fourteen happens at night.",
+      "role": "icu_rn",
+      "kind": "communication",
+      "inputs": [
+        "transfer order",
+        "flowsheet"
+      ],
+      "outputs": [
+        "handover report",
+        "transferred patient"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Ongoing treatment or pending result missed at handover.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada ROPs: information transfer and medication reconciliation at care transitions",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "patient on ward",
+          "outcome": "stepped_down"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1",
+          "src4"
+        ],
+        "note": "Night discharge 7% and 48-hour readmission 1% in Canadian ICUs (src1). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Meet the family and withdraw life support",
+      "description": "The intensivist meets the family, explains that treatment is no longer helping, agrees a plan for comfort care, and writes orders to stop vasopressors and ventilation with medication for comfort.",
+      "role": "intensivist",
+      "kind": "communication",
+      "inputs": [
+        "prognosis",
+        "family"
+      ],
+      "outputs": [
+        "goals of care note",
+        "comfort care orders"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait is for family to arrive and decide; author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Give end-of-life care and make required notifications",
+      "description": "The ICU nurse stays with the patient and family while life support is withdrawn, manages symptoms, and after death notifies the organ and tissue donation agency, contacts the coroner when required, and prepares the body and the paperwork.",
+      "role": "icu_rn",
+      "kind": "physical",
+      "inputs": [
+        "comfort care orders"
+      ],
+      "outputs": [
+        "death record",
+        "donation agency notification"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 120,
+        "mode": 240,
+        "high": 600
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Donation agency not notified within the required time.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Trillium Gift of Life Network Act: hospitals notify the donation agency of every death and imminent death",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "patient dies",
+          "outcome": "died_in_icu"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1"
+        ],
+        "note": "ICU mortality 9% (src1). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Arrange transfer to a tertiary ICU through CritiCall",
+      "description": "The intensivist calls CritiCall Ontario, which conferences an accepting intensivist at a tertiary hospital; the intensivist presents the case and waits while the receiving hospital finds a bed.",
+      "role": "intensivist",
+      "kind": "communication",
+      "inputs": [
+        "patient summary"
+      ],
+      "outputs": [
+        "transfer request",
+        "acceptance"
+      ],
+      "systems": [
+        "criticall_portal",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "accepted"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src3"
+        ],
+        "note": "976 critically ill patients were moved between Ontario hospitals from January to July 2021 (src3). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Prepare the transfer and hand over to the transport team",
+      "description": "The ICU nurse copies the chart and images, prepares infusions and a transport ventilator with the respiratory therapist, gives report to the critical care transport paramedics and sends the patient.",
+      "role": "icu_rn",
+      "kind": "coordination",
+      "inputs": [
+        "acceptance",
+        "chart"
+      ],
+      "outputs": [
+        "transfer package",
+        "transferred patient"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 720
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Transfer package incomplete.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation Canada ROP: information transfer at care transitions",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "patient leaves",
+          "outcome": "transferred_out"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait covers the receiving bed and transport crew; author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "No bed free on referral",
+      "share_of_cases": 0.22,
+      "description": "The ICU is full; the most stable patient is stepped down early or moved to another site while the new patient waits in the ED or recovery room.",
+      "path": [
+        "s02",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Delayed step-down",
+      "share_of_cases": 0.69,
+      "description": "A patient ready for the ward waits in the ICU bed for hours or days until a ward bed opens.",
+      "path": [
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Comfort care and death in ICU",
+      "share_of_cases": 0.09,
+      "description": "Life support is withdrawn after a family meeting and the patient dies in the ICU.",
+      "path": [
+        "s12",
+        "s16",
+        "s17"
+      ]
+    },
+    {
+      "name": "Transfer to a tertiary ICU",
+      "share_of_cases": 0.07,
+      "description": "The patient needs care the community ICU cannot give, or no ICU bed exists at any site, and is moved through CritiCall.",
+      "path": [
+        "s18",
+        "s19"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 3,
+        "p90": 10
+      },
+      "unit": "days from ICU admission to ICU discharge",
+      "population": "Adult ICU stays in Canada (outside Quebec), 2013-2014",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src1",
+          "src2"
+        ],
+        "note": "src1 reports a length of ICU stay of approximately 3 days (including step-down units); src2 reports mean stays of 87-142 hours in Alberta ICUs. p90 is the author's estimate."
+      }
+    },
+    {
+      "metric": "icu_mortality",
+      "value": 0.09,
+      "unit": "share of ICU stays ending in death in ICU",
+      "population": "Canadian ICUs, 2013-2014",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src1"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "invasive_ventilation_share",
+      "value": 0.34,
+      "unit": "share of ICU patients invasively ventilated (Ontario: 9% long-term, 25% short-term)",
+      "population": "Ontario ICUs, 2013-2014",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src1"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "avoidable_discharge_delay",
+      "value": {
+        "p50": 7.2
+      },
+      "unit": "hours, median, among the 69.1% of patients delayed",
+      "population": "17 Alberta ICUs, 2012-2016",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src2"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "icu_readmission_48h",
+      "value": 0.01,
+      "unit": "share of ICU discharges to a ward readmitted within 48 hours",
+      "population": "Canadian ICUs, 2013-2014",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src1"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "night_discharge_share",
+      "value": 0.07,
+      "unit": "share of ICU discharges at night",
+      "population": "Canadian ICUs, 2013-2014",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src1"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Patients ready for the ward wait in ICU beds for a ward bed, which blocks new admissions from the ED and operating rooms.",
+      "steps": [
+        "s13",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src2"
+        ],
+        "note": "69.1% delayed, 12.8% of ICU patient-days avoidable."
+      }
+    },
+    {
+      "description": "When the ICU is full, stable patients are stepped down early or moved to another hospital to make room.",
+      "steps": [
+        "s02",
+        "s03",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src1"
+        ],
+        "note": "Discharge-to-admission ratio 1.7 when over capacity."
+      }
+    },
+    {
+      "description": "During COVID-19 waves, nurses took two ventilated patients or led teams of redeployed ward nurses, and patients were moved between regions.",
+      "steps": [
+        "s09",
+        "s18",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src3"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Small ICUs at the smaller sites rely on an intensivist on call from home at night, delaying admission decisions.",
+      "steps": [
+        "s01"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's observation of common community hospital practice."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src1",
+      "title": "Care in Canadian ICUs",
+      "publisher": "Canadian Institute for Health Information",
+      "url": "https://www.cihi.ca/sites/default/files/document/care-canadian-icu-report-en.pdf",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "230,800 adult ICU admissions in 2013-2014; 8 in 10 ICU stays follow urgent hospital admission (Ontario: 52% urgent medical, 28% urgent surgical); ICU mortality 9%; 48-hour ICU readmission 1%; length of ICU stay approximately 3 days; 33% invasively ventilated (Ontario 9% long-term, 25% short-term); 19% of invasively ventilated patients died in ICU vs 4% of others; night discharge 7%; large and teaching ICUs over capacity 45-51 days a year and discharge-to-admission ratio 1.7 when over capacity."
+    },
+    {
+      "id": "src2",
+      "title": "Assessment of Costs of Avoidable Delays in Intensive Care Unit Discharge",
+      "publisher": "JAMA Network Open (Bagshaw SM, Tran DT, Opgenorth D and others)",
+      "url": "https://jamanetwork.com/journals/jamanetworkopen/fullarticle/2769505",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "17 adult ICUs in Alberta, 28,904 patients: 69.1% had avoidable ICU discharge delay (time from decision to transfer to discharge, minus 4 hours), median 7.2 hours (IQR 2.4-27.7); 12.8% of ICU patient-days avoidable; mean ICU stay 142.4 hours with delay and 87.1 hours without."
+    },
+    {
+      "id": "src3",
+      "title": "Critical Care Capacity During the COVID-19 Pandemic (Ontario COVID-19 Science Advisory Table science brief, summary page)",
+      "publisher": "Institute for Pandemics, University of Toronto",
+      "url": "https://pandemics.utoronto.ca/?p=4957",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Ontario had 2,012 adult ICU beds before the pandemic; peak COVID-19 ICU census 283, 450 and 940 in waves 1-3; 976 critically ill patients transferred January-July 2021; level 3 ICUs typically assign one critical care nurse per ventilated patient, with two-patient assignments and team models under a critical care nurse during surges; intensivist loads 12-15 patients in large ICUs; nurse vacancy rose from 5.8% to 9%; 32.8% of COVID-19 ICU patients died in ICU."
+    },
+    {
+      "id": "src4",
+      "title": "Required Organizational Practices 2021 Handbook",
+      "publisher": "Accreditation Canada (copy hosted by Vitalite Health Network)",
+      "url": "https://vitalitenb.ca/images/files/documents/medecins/2021_rop_handbook.pdf",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Accreditation Canada ROPs include client identification with two identifiers, information transfer at care transitions, medication reconciliation at care transitions (best possible medication history at admission), concentrated electrolytes, heparin safety, high-alert medications, infusion pump safety, narcotics safety, falls prevention, pressure ulcer prevention and venous thromboembolism prophylaxis."
+    },
+    {
+      "id": "src5",
+      "title": "Intravenous Medication Safety: A Multi-Incident Analysis (ISMP Canada Safety Bulletin vol. 20 no. 7)",
+      "publisher": "Institute for Safe Medication Practices Canada",
+      "url": "https://ismpcanada.ca/wp-content/uploads/ISMPCSB2020-i7-IVMedsAnalysis.pdf",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "1,583 IV medication incidents from Canadian reporting systems (2015-2018); about one-third were administration errors (wrong patient, drug, dose, route or rate); lack of an independent double check and over-reliance on smart pumps and barcode technology contributed; about 1 in 6 involved pump programming or accessories; MAR and pharmacy label mismatches and portering delays also contributed."
+    }
+  ],
+  "assumptions": [
+    "Loaded costs come from the organisation file. The intensivist cost is an equivalent hourly cost; intensivists bill OHIP or receive an alternative funding stipend.",
+    "Daily exit probabilities (18.5% step-down, 2% comfort care, 1.5% transfer out) give a mean ICU stay of about 5 days, between CIHI's national figure of about 3 days, which includes step-down units, and the 4-6 day means reported in Alberta (src2). A community ICU without a separate step-down unit keeps lower-acuity patients longer.",
+    "ICU nursing time per day assumes an average ratio of about 1:1.5 (one-to-one for ventilated patients, one-to-two for others), so the ICU RN workload here needs about 90 FTE; the organisation file's 110 ICU RN headcount supports this only with mostly full-time staff.",
+    "The share of patients entering from the rapid response team versus the ED (30/70) is the author's estimate. Planned admissions after surgery (about 18% of Ontario ICU stays in src1) have no link from the surgical program in the organisation file and are counted within the ED share here.",
+    "The organisation file has no ICU charge nurse role; icu_charge_nurse is added (not_in_org_file).",
+    "About 15% of cases are referrals the intensivist does not admit; they are counted in the volume because they consume intensivist time, so actual ICU admissions are about 128 a month and simulated ICU bed use is about 80% of available bed-hours.",
+    "Readmission to ICU within 48 hours (1%, src1) is not modelled as a loop; such patients enter again as new cases."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

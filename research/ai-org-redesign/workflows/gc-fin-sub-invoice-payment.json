@@ -1,0 +1,1555 @@
+{
+  "schema_version": "0.3",
+  "id": "gc-fin-sub-invoice-payment",
+  "name": "Process and pay subcontractor progress invoices",
+  "org": "general-contractor-co",
+  "process": "fin-sub-invoice-payment",
+  "sector": "construction - non-residential general contracting",
+  "function": "finance",
+  "summary": "Each month every subcontractor on a project bills for the share of its work done so far. The project team first agrees the percentages on a draft (pencil) bill so that the general contractor can include them in its own progress draw to the owner; the subcontractor then sends a formal invoice with a statutory declaration and proof of workers' compensation coverage. Accounts payable matches the invoice to the subcontract in the ERP, checks the 10% holdback, the WSIB clearance and the declaration, and the project manager approves it. Payment waits for the owner to pay the general contractor and then goes out in the next weekly payment run, within 7 days of the owner's payment on Ontario contracts under prompt payment. The process is slow because of the owner's payment cycle, missing paperwork from subcontractors and approvals that sit with busy project managers.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A national Canadian general contractor with about 220 active projects and about 3,000 active subcontracts billing each month, using a construction ERP with an invoice scanning and approval workflow.",
+    "org_size_employees": 2800,
+    "notes": "About half of invoices fall under Ontario's prompt payment rules from October 2019 for newly procured contracts; the western and Atlantic regions and older Ontario contracts paid on pay-when-paid subcontract terms."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one subcontractor invoice",
+  "trigger": "A subcontractor sends its draft progress billing for the month to the project team, usually around the 20th to 25th.",
+  "end_state": "The approved amount less holdback is paid to the subcontractor by EFT or cheque, and the ERP has posted the cost, the payable and the holdback.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2400,
+      "mode": 3000,
+      "high": 3800
+    },
+    "seasonality": "Arrives in a wave in the last ten days of each month; volumes are lowest in January and highest in late summer and autumn.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "About 220 projects with 12 to 16 active trade contracts each, matching the organisation file driver."
+    },
+    "surge": {
+      "cause": "Year-end and holdback-release peaks in November and December when owners rush to certify work before fiscal year-end",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 15,
+        "mode": 20,
+        "high": 30
+      },
+      "volume_multiplier": {
+        "low": 1.1,
+        "mode": 1.2,
+        "high": 1.35
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate; public owners with March year-ends add a smaller second peak."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "subcontractor",
+        "object": "subcontractor_invoice",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "scm-subcontract-buyout",
+        "object": "subcontract"
+      },
+      {
+        "from": "scm-vendor-master",
+        "object": "vendor_record"
+      },
+      {
+        "from": "ops-subtrade-change",
+        "object": "subcontract_change_order"
+      },
+      {
+        "from": "fin-owner-receivables",
+        "object": "owner_payment"
+      },
+      {
+        "from": "legal-lien-adjudication",
+        "object": "lien_claim"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "paid_eft",
+        "to": "subcontractor",
+        "object": "subcontractor_payment"
+      },
+      {
+        "outcome": "paid_cheque",
+        "to": "subcontractor",
+        "object": "subcontractor_payment"
+      },
+      {
+        "outcome": "any",
+        "to": "ops-progress-draw",
+        "object": "subcontractor_invoice"
+      },
+      {
+        "outcome": "any",
+        "to": "fin-holdback-release",
+        "object": "holdback_ledger"
+      },
+      {
+        "outcome": "any",
+        "to": "fin-month-end-close",
+        "object": "journal_entries"
+      },
+      {
+        "outcome": "any",
+        "to": "subcontractor",
+        "object": "notice_of_non_payment"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "assistant-pm",
+      "title": "Assistant project manager / project coordinator",
+      "department": "Construction operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 9.0,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 48,
+        "high": 60
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Logs and checks pencil drafts against the schedule of values; about 24 minutes per invoice."
+      }
+    },
+    {
+      "id": "project-manager",
+      "title": "Project manager",
+      "department": "Construction operations",
+      "layer": "manager",
+      "fte_on_process": 12.0,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 72,
+        "high": 95
+      },
+      "occupation_code": "NOC 70010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Reviews percent complete, marks up drafts, approves in the workflow and signs notices of non-payment."
+      }
+    },
+    {
+      "id": "ap-clerk",
+      "title": "Accounts payable clerk",
+      "department": "Finance transactions (AP, billing, payroll)",
+      "layer": "individual_contributor",
+      "fte_on_process": 11.0,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 33,
+        "high": 40
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Scans, indexes, matches and checks compliance documents, answers payment chases and prepares payment runs; about 28 minutes per invoice, which leaves little of the 18 AP clerks for about 6,500 supplier invoices a month."
+      }
+    },
+    {
+      "id": "project-accountant",
+      "title": "Project accountant",
+      "department": "Finance",
+      "layer": "individual_contributor",
+      "fte_on_process": 5.2,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 48,
+        "high": 60
+      },
+      "occupation_code": "NOC 11100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Lien checks, reconciling sub invoices to the owner draw and releasing invoices when the owner pays."
+      }
+    },
+    {
+      "id": "finance-manager",
+      "title": "Regional finance manager",
+      "department": "Finance",
+      "layer": "manager",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 88,
+        "high": 110
+      },
+      "occupation_code": "NOC 11100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves the weekly payment run; about one hour per run per region."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "erp",
+      "name": "Construction ERP (job cost, general ledger, payables, receivables, payroll)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "ap-capture",
+      "name": "AP invoice scanning and approval workflow",
+      "kind": "workflow"
+    },
+    {
+      "id": "pm-platform",
+      "name": "Project management platform (drawings, RFIs, submittals, daily logs, change events)",
+      "kind": "workflow"
+    },
+    {
+      "id": "gov-portals",
+      "name": "Government portals (WSIB clearance, Ministry of Labour notice of project, CRA, land registry)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email",
+      "name": "Email, Teams and mobile phones",
+      "kind": "communication"
+    },
+    {
+      "id": "docs",
+      "name": "Document management (SharePoint and network drives)",
+      "kind": "document_store"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Log the draft progress billing",
+      "description": "The assistant project manager receives the subcontractor's draft billing by email or the project platform, saves it to the project folder and logs it on the monthly billing tracker so the draw can be assembled.",
+      "role": "assistant-pm",
+      "kind": "intake",
+      "inputs": [
+        "draft progress billing"
+      ],
+      "outputs": [
+        "logged draft billing"
+      ],
+      "systems": [
+        "email",
+        "pm-platform",
+        "docs"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check the billing against the schedule of values",
+      "description": "The assistant project manager compares each line with the subcontract schedule of values and the approved change orders in the ERP, and checks that the previous billed amount and holdback carried forward match last month.",
+      "role": "assistant-pm",
+      "kind": "lookup",
+      "inputs": [
+        "logged draft billing",
+        "subcontract",
+        "change orders"
+      ],
+      "outputs": [
+        "checked draft billing"
+      ],
+      "systems": [
+        "erp",
+        "pm-platform"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "An unapproved change order or a wrong previous-billed total slips through.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Review percent complete against the site",
+      "description": "The project manager walks the work with the superintendent or reads the daily logs and schedule update, and judges whether the percentages claimed for each line match the work actually installed and stored.",
+      "role": "project-manager",
+      "kind": "judgment",
+      "inputs": [
+        "checked draft billing",
+        "schedule update"
+      ],
+      "outputs": [
+        "reviewed percentages"
+      ],
+      "systems": [
+        "pm-platform"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 5760
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Over-billing accepted, front-loading the subcontract.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.35,
+          "condition": "percentages need adjusting"
+        },
+        {
+          "to": "s06",
+          "prob": 0.65,
+          "condition": "accepted as drafted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of pencil drafts marked down is an estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Mark up the draft and return it",
+      "description": "The project manager marks the agreed percentages on the draft, emails it back to the subcontractor and asks for a formal invoice at the revised amount.",
+      "role": "project-manager",
+      "kind": "communication",
+      "inputs": [
+        "reviewed percentages"
+      ],
+      "outputs": [
+        "marked-up draft"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Subcontractor revises the invoice",
+      "description": "The subcontractor's office revises its billing to the agreed amount and reissues it, sometimes after a phone call disputing the markdown.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "marked-up draft"
+      ],
+      "outputs": [
+        "revised invoice"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Receive and scan the formal invoice",
+      "description": "The formal invoice, statutory declaration and WSIB clearance arrive by email or mail at accounts payable; the AP clerk scans paper copies into the invoice workflow.",
+      "role": "ap-clerk",
+      "kind": "intake",
+      "inputs": [
+        "formal invoice",
+        "statutory declaration",
+        "WSIB clearance"
+      ],
+      "outputs": [
+        "scanned invoice"
+      ],
+      "systems": [
+        "ap-capture"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mlt2021"
+        ],
+        "note": "CCDC 2-2020 requires workers' compensation evidence and a CCDC 9A statutory declaration with each contractor application; the company passes the same requirement down to subcontractors."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Index and match to the subcontract",
+      "description": "The AP clerk keys the vendor, job, subcontract number, invoice number, period and amounts in the workflow, and matches the invoice to the subcontract commitment and its billed-to-date total in the ERP.",
+      "role": "ap-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "scanned invoice",
+        "subcontract commitment"
+      ],
+      "outputs": [
+        "indexed invoice"
+      ],
+      "systems": [
+        "ap-capture",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong job or cost code keyed, or invoice posted twice.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Check WSIB clearance and insurance",
+      "description": "The AP clerk looks up the subcontractor on the WSIB clearance portal or in the prequalification database and checks that the clearance certificate and liability insurance certificate are current for the billing period.",
+      "role": "ap-clerk",
+      "kind": "validation",
+      "inputs": [
+        "indexed invoice"
+      ],
+      "outputs": [
+        "compliance check result"
+      ],
+      "systems": [
+        "gov-portals",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Workplace Safety and Insurance Act: principals check contractor clearance to avoid liability for unpaid premiums",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.92,
+          "condition": "certificates current"
+        },
+        {
+          "to": "s09",
+          "prob": 0.08,
+          "condition": "clearance or insurance expired"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mlt2021"
+        ],
+        "note": "Workers' compensation compliance evidence is required with each payment application; the expired share is an estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Request missing certificates and hold the invoice",
+      "description": "The AP clerk puts the invoice on hold in the workflow and emails the subcontractor for a current clearance certificate or insurance certificate.",
+      "role": "ap-clerk",
+      "kind": "communication",
+      "inputs": [
+        "compliance check result"
+      ],
+      "outputs": [
+        "hold notice"
+      ],
+      "systems": [
+        "ap-capture",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Subcontractor supplies the certificate",
+      "description": "The subcontractor logs in to the WSIB portal to obtain a new clearance certificate, or asks its insurance broker for a renewed liability certificate, and emails it to accounts payable.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "hold notice"
+      ],
+      "outputs": [
+        "current certificate"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Check holdback and the statutory declaration",
+      "description": "The AP clerk checks that 10% holdback has been deducted, that the subcontractor's statutory declaration covers payment of its own trades and suppliers to the previous billing, and that billed-to-date does not exceed the subcontract value plus approved changes.",
+      "role": "ap-clerk",
+      "kind": "validation",
+      "inputs": [
+        "indexed invoice",
+        "statutory declaration"
+      ],
+      "outputs": [
+        "checked invoice"
+      ],
+      "systems": [
+        "ap-capture",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Holdback miscalculated on a revised invoice.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Construction Act holdback; CCDC statutory declaration requirement passed down to subcontracts",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.94,
+          "condition": "in order"
+        },
+        {
+          "to": "s12",
+          "prob": 0.06,
+          "condition": "declaration missing or a lien is registered"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mlt2021",
+          "dla2019"
+        ],
+        "note": "Statutory declaration and holdback rules from the sources; the 10% rate and share with problems are author's estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Check liens and hold funds",
+      "description": "The project accountant searches the land registry and the legal team's lien list for liens or written notices against the project by this subcontractor's trades, and holds back the claimed amount or asks for a bond to vacate.",
+      "role": "project-accountant",
+      "kind": "lookup",
+      "inputs": [
+        "checked invoice",
+        "lien notices"
+      ],
+      "outputs": [
+        "lien hold decision"
+      ],
+      "systems": [
+        "gov-portals",
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Construction Act lien and written notice of lien provisions",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Approve the invoice in the workflow",
+      "description": "The project manager opens the invoice in the approval workflow, compares the amount with the percentages agreed on the draft and the project budget, and approves it, approves part, or rejects it.",
+      "role": "project-manager",
+      "kind": "approval",
+      "inputs": [
+        "checked invoice"
+      ],
+      "outputs": [
+        "approved invoice"
+      ],
+      "systems": [
+        "ap-capture",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Company signing authority matrix: project manager approves job costs, AP pays",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.92,
+          "condition": "approved in full"
+        },
+        {
+          "to": "s14",
+          "prob": 0.08,
+          "condition": "amount disputed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Issue a notice of non-payment",
+      "description": "The project manager, with the project accountant, drafts the notice of non-payment in the prescribed form stating the amount withheld and the reasons, and sends it to the subcontractor before the payment deadline; the undisputed balance continues to payment.",
+      "role": "project-manager",
+      "kind": "drafting",
+      "inputs": [
+        "approved invoice",
+        "dispute reasons"
+      ],
+      "outputs": [
+        "notice of non-payment"
+      ],
+      "systems": [
+        "email",
+        "docs"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Notice sent late or without full reasons, so the full amount becomes payable.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Construction Act Part I.1: notice of non-payment before the payment deadline",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bj2019"
+        ],
+        "note": "Ontario statutory timelines; applies to contracts procured after 1 October 2019."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Reconcile the invoice to the owner draw",
+      "description": "The project accountant ties the approved subcontractor amount to the line in the general contractor's progress draw to the owner, so that the company can tell when the owner has paid for this work.",
+      "role": "project-accountant",
+      "kind": "analysis",
+      "inputs": [
+        "approved invoice",
+        "progress draw"
+      ],
+      "outputs": [
+        "reconciled invoice"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Owner certifies and pays the draw",
+      "description": "The consultant certifies the general contractor's draw and the owner pays it, within 28 days of a proper invoice under Ontario prompt payment or on the owner's own cycle elsewhere.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "reconciled invoice"
+      ],
+      "outputs": [
+        "owner payment"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 14400,
+        "mode": 30240,
+        "high": 72000
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.7,
+          "condition": "paid without a chase"
+        },
+        {
+          "to": "s22",
+          "prob": 0.3,
+          "condition": "subcontractor chases payment first"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bj2019",
+          "mlt2021"
+        ],
+        "note": "Owner pays within 28 days of a proper invoice in Ontario and under CCDC 2-2020; the wait counts from the subcontractor approval, partway through the owner's cycle, and the high end covers slow owners and non-Ontario contracts."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Release invoices when the owner pays",
+      "description": "The project accountant sees the owner's receipt posted in the ERP, marks the subcontractor invoices included in that draw as released for payment, and notes the 7-day prompt payment deadline where it applies.",
+      "role": "project-accountant",
+      "kind": "validation",
+      "inputs": [
+        "owner payment"
+      ],
+      "outputs": [
+        "released invoices"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Construction Act s.6.5: pay subcontractors within 7 days of receiving the owner's payment",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bj2019"
+        ],
+        "note": "Ontario statutory timelines; applies to contracts procured after 1 October 2019."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Select the invoice for the weekly payment run",
+      "description": "The AP clerk selects released invoices for the weekly payment run in the ERP, checks the net amount after holdback and any back-charges, and prints the run proposal.",
+      "role": "ap-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "released invoices"
+      ],
+      "outputs": [
+        "payment run proposal"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "bdo2020"
+        ],
+        "note": "BDO notes contractors had to rework back-office payment timing for the 7-day rule; weekly runs are the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Approve the payment run",
+      "description": "The regional finance manager reviews the run proposal, checks large or unusual payments and vendors on hold, and approves the run in the ERP. Minutes are the share of a one-hour review per invoice.",
+      "role": "finance-manager",
+      "kind": "approval",
+      "inputs": [
+        "payment run proposal"
+      ],
+      "outputs": [
+        "approved payment run"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.3,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Payment release by a manager independent of invoice entry",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Generate payments and post the holdback",
+      "description": "The ERP creates the EFT file for the bank or the cheque print file, and posts the payment, the holdback payable and the job cost.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved payment run"
+      ],
+      "outputs": [
+        "EFT file or cheque",
+        "holdback ledger entry",
+        "journal entries"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.65,
+          "condition": "paid by EFT",
+          "outcome": "paid_eft"
+        },
+        {
+          "to": "s21",
+          "prob": 0.35,
+          "condition": "paid by cheque"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "EFT share in 2019-2022 is an estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Sign and mail the cheque",
+      "description": "The AP clerk gets the cheque signed by two signing officers, attaches the remittance advice and mails or couriers it, or holds it for pick-up.",
+      "role": "ap-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "cheque"
+      ],
+      "outputs": [
+        "mailed cheque"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Two signing officers on cheques",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "cheque sent",
+          "outcome": "paid_cheque"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Answer the subcontractor's payment chase",
+      "description": "The subcontractor calls or emails to ask when it will be paid; the AP clerk looks up the invoice status, whether the owner has paid and when the next run is, and replies.",
+      "role": "ap-clerk",
+      "kind": "communication",
+      "inputs": [
+        "payment inquiry"
+      ],
+      "outputs": [
+        "status reply"
+      ],
+      "systems": [
+        "erp",
+        "ap-capture",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 14400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "owner payment arrives"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Pencil draft marked down",
+      "share_of_cases": 0.35,
+      "description": "The project manager lowers claimed percentages and the subcontractor must reissue its invoice.",
+      "path": [
+        "s03",
+        "s04",
+        "s05",
+        "s06"
+      ]
+    },
+    {
+      "name": "Expired WSIB clearance or insurance",
+      "share_of_cases": 0.08,
+      "description": "The invoice is held until the subcontractor provides a current certificate.",
+      "path": [
+        "s08",
+        "s09",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Disputed amount",
+      "share_of_cases": 0.08,
+      "description": "The project manager issues a notice of non-payment for the disputed part; the undisputed balance is paid.",
+      "path": [
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Lien or missing declaration",
+      "share_of_cases": 0.06,
+      "description": "A lien or missing statutory declaration leads the project accountant to hold funds.",
+      "path": [
+        "s11",
+        "s12",
+        "s13"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 45,
+        "p90": 60
+      },
+      "unit": "calendar days from the subcontractor's draft billing to payment",
+      "population": "Subcontractor progress invoices of a Canadian general contractor, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Ontario prompt payment sets 35 days from the GC's proper invoice to subcontractor payment (Bennett Jones, 2019); adding about a week before the GC invoices and slower non-Ontario owners gives about 45 days median. No published cycle-time study was opened."
+      }
+    },
+    {
+      "metric": "statutory_pay_deadline",
+      "value": 35,
+      "unit": "days after the contractor delivered its proper invoice to the owner",
+      "population": "Ontario contracts procured after 1 October 2019",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bj2019"
+        ],
+        "note": "Ontario statutory timelines; applies to contracts procured after 1 October 2019."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Subcontractors wait for the owner's payment cycle; before prompt payment and outside Ontario, pay-when-paid terms let delays pass straight down.",
+      "steps": [
+        "s16",
+        "s22"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bj2019"
+        ],
+        "note": "Ontario statutory timelines; applies to contracts procured after 1 October 2019."
+      }
+    },
+    {
+      "description": "Invoices sit for days in project managers' approval queues during the month-end crunch.",
+      "steps": [
+        "s03",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "description": "Expired WSIB clearances and missing statutory declarations put invoices on hold and generate chases.",
+      "steps": [
+        "s08",
+        "s09",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian general contractor payables practice."
+      }
+    },
+    {
+      "description": "Notice-of-non-payment deadlines are tracked by hand; a late notice makes the full amount payable.",
+      "steps": [
+        "s14"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "bdo2020"
+        ],
+        "note": "BDO advises tracking deadlines and pre-populating notice forms."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "bj2019",
+      "accessed": "2026-11-24",
+      "title": "Prompt Payment for Construction in Ontario",
+      "publisher": "Bennett Jones LLP",
+      "url": "https://www.bennettjones.com/Insights/Blogs/Prompt-Payment-for-Construction-in-Ontario",
+      "year": 2019,
+      "supports": "Ontario prompt payment from 1 October 2019: proper invoice monthly; owner pays within 28 days unless notice of non-payment within 14 days; contractor pays subcontractors within 7 days of receiving payment and no later than 35 days after delivering its proper invoice unless it gives notice of non-payment with an undertaking to refer to adjudication within 21 days; contracts procured before 1 October 2019 are grandfathered."
+    },
+    {
+      "id": "dla2019",
+      "accessed": "2026-11-24",
+      "title": "Prompt payment and adjudication have arrived in Ontario",
+      "publisher": "DLA Piper",
+      "url": "https://www.dlapiper.com/en/insights/publications/2019/10/prompt-payment-and-adjudication-have-arrived-in-ontario",
+      "year": 2019,
+      "supports": "Payments down the chain subject to notices of non-payment; contractor relying on an owner's notice must refer its dispute to adjudication; holdback release mandatory unless a notice is published; public contracts above a prescribed value require both a performance bond and a labour and material payment bond."
+    },
+    {
+      "id": "mlt2021",
+      "accessed": "2026-11-24",
+      "title": "The new CCDC 2 - 2020: contract changes you need to know",
+      "publisher": "MLT Aikins LLP",
+      "url": "https://www.mltaikins.com/insights/the-new-ccdc-2-2020-contract-changes-you-need-to-know/",
+      "year": 2021,
+      "supports": "Monthly applications for payment; evidence of workers' compensation compliance and a CCDC 9A statutory declaration with each application after the first; owner pays 28 days after receipt; holdback paid within 10 working days after the holdback period."
+    },
+    {
+      "id": "bdo2020",
+      "accessed": "2026-11-24",
+      "title": "Prompt payment and adjudication: spotlight on Ontario construction",
+      "publisher": "BDO Canada",
+      "url": "https://www.bdo.ca/insights/prompt-payment-and-adjudication-spotlight-on-ontario-construction",
+      "year": 2020,
+      "supports": "Contractor pays subcontractors within 7 days of receiving owner payment; notices of non-payment needed even for partial disputes; advice to track deadlines, pre-populate notice forms and update back-office systems that were not yet configured for the new timelines."
+    }
+  ],
+  "assumptions": [
+    "The assistant project manager and regional finance manager take part although the process map lists only the AP clerk, project manager and project accountant.",
+    "The owner payment wait (s16) is measured from the end of the GC's internal approval, partway through the owner's 28-day cycle; the range covers Ontario prompt payment contracts and slower pay-when-paid contracts in other provinces.",
+    "The 7-day payment rule after owner payment applies only to Ontario contracts procured after 1 October 2019; other provinces' prompt payment laws were not checked for this period.",
+    "Payment chases (s22) are counted once per invoice that has one, though some subcontractors call several times.",
+    "Loaded costs come from the organisation file."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

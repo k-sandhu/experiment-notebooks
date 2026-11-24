@@ -1,0 +1,1629 @@
+{
+  "schema_version": "0.3",
+  "id": "mine-ts-grade-control",
+  "name": "Face mapping, sampling and grade control",
+  "org": "mining-operator-co",
+  "process": "ts-grade-control",
+  "sector": "mining (underground gold)",
+  "function": "mine geology",
+  "summary": "After every blast in an ore heading, a mine geologist and a sampler go to the new face, check that it is supported, wash it, map the vein and chip a line of samples across it, and tell the crew where the next round should go and whether the muck is ore or waste. The samples go up with the end-of-shift traffic and travel by the daily company shuttle to the mine's own assay office in Wawa, and the results come back by email a day or two later. The geologist then loads the assays, updates the ore outline and grades used by planners and engineers, and corrects the ore or waste call if the assays disagree with what was seen. Delays come from waiting for headings to be bolted, the daily shuttle and lab batching; errors come from inconsistent chipping, a visual ore call that turns out wrong and sample mix-ups.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A single-mine Canadian gold producer running a 500-650 tpd narrow-vein underground mine in northern Ontario, with a technical services department of about 20 engineers, surveyors and geologists on a 14-on, 14-off rotation.",
+    "org_size_employees": 300,
+    "notes": "Practice follows the Eagle River mine technical reports (2016, 2022) and the neighbouring Island Gold report (2020); software is AutoCAD with Promine, Microsoft Access drillhole database, Excel workbooks and email, with Deswik and Leapfrog arriving in 2021."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one face mapped and sampled",
+  "trigger": "A development round in an ore heading (sill, sub-level, drawpoint or raise on vein) has been blasted, mucked and supported, exposing a new face.",
+  "end_state": "The face assays are loaded, the grade control outline and grades are updated and sent to shift control and planners, and any wrong ore or waste call has been corrected.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 40,
+      "mode": 65,
+      "high": 100
+    },
+    "seasonality": "Little seasonality; the count follows the number of ore development rounds, which drops in months when crews are moved to capital waste development or during mill or hoist shutdowns.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "er2016",
+        "er2022"
+      ],
+      "note": "Chip samples are taken every round of 3-4 m in ore development headings (er2016). Ore development supplied 19% (er2022) to 30% (er2016) of an underground mill feed of about 16,400 t a month, i.e. 3,100-4,900 t, which at 2.7 t/m3 and 3 m x 2.7 m sub-levels to 4 m x 4 m sills is about 110-180 m of ore drifting, or 35-60 rounds; raises and faces in the mineralised envelope that end up below cut-off add the rest. Waste capital development is under survey control and is not sampled (er2022), so the organisation file's 130 faces a month, which scales with all development metres, is about twice this estimate."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "mine-dev-drill-blast",
+        "object": "developed_face",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "mill-assay-lab",
+        "object": "assay_result"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "mill-assay-lab",
+        "object": "face_sample"
+      },
+      {
+        "outcome": "model updated",
+        "to": "ts-stope-design",
+        "object": "grade_control_model"
+      },
+      {
+        "outcome": "model updated",
+        "to": "mine-shift-control",
+        "object": "grade_control_model"
+      },
+      {
+        "outcome": "model updated",
+        "to": "ts-reconciliation",
+        "object": "grade_control_model"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "mine-geologist",
+      "title": "Mine geologist",
+      "department": "Mine geology",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.3,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 68,
+        "high": 84
+      },
+      "occupation_code": "NOC 2113",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022"
+        ],
+        "note": "Table 16-10 of er2022 lists 10 mine geology staff; the share of time on face sampling is the author's estimate from per-face times times volume."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "geo-technician",
+      "title": "Geology technician and sampler",
+      "department": "Mine geology",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.9,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 2212",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "island"
+        ],
+        "note": "Faces are sampled by the production geologist and a technician (er2022; island). FTE share is the author's estimate."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "chief-geologist",
+      "title": "Chief mine geologist",
+      "department": "Mine geology",
+      "layer": "manager",
+      "fte_on_process": 0.03,
+      "loaded_cost_per_hour": {
+        "low": 90,
+        "mode": 108,
+        "high": 130
+      },
+      "occupation_code": "NOC 2113",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Reviews only faces that change the ore outline materially; author's estimate."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "assay-technician",
+      "title": "Assay technician",
+      "department": "Assay laboratory",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.45,
+      "loaded_cost_per_hour": {
+        "low": 34,
+        "mode": 40,
+        "high": 48
+      },
+      "occupation_code": "NOC 2211",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "er2016"
+        ],
+        "note": "All underground production samples are prepared and fire-assayed at the company assay office in Wawa. This lab time is also part of the mill-assay-lab process; FTE share is the author's estimate."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "assay-supervisor",
+      "title": "Assay lab superintendent or shift supervisor",
+      "department": "Assay laboratory",
+      "layer": "supervisor",
+      "fte_on_process": 0.03,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 64,
+        "high": 76
+      },
+      "occupation_code": "NOC 2211",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2016"
+        ],
+        "note": "QC data are reviewed by lab shift supervisors and the assay lab superintendent (er2016)."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "lhd-operator",
+      "title": "Scooptram (LHD) operator",
+      "department": "Underground production and development",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.02,
+      "loaded_cost_per_hour": {
+        "low": 44,
+        "mode": 51,
+        "high": 60
+      },
+      "occupation_code": "NOC 8231",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "er2016"
+        ],
+        "note": "Muck samples are collected by the muckers at the drawpoints (er2022, er2016). Not listed among the process roles in the organisation file."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "ug-shift-supervisor",
+      "title": "Underground shift supervisor",
+      "department": "Underground production and development",
+      "layer": "supervisor",
+      "fte_on_process": 0.01,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 82,
+        "high": 98
+      },
+      "occupation_code": "NOC 8221",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Receives corrections to ore or waste routing; author's estimate."
+      },
+      "shift_pattern": "field_rotation"
+    }
+  ],
+  "systems": [
+    {
+      "id": "shift-sheets",
+      "name": "Shift reports, line-up boards and production tallies (paper and spreadsheets)",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "radio",
+      "name": "Leaky feeder radio and surface radio network",
+      "kind": "communication"
+    },
+    {
+      "id": "geo-db",
+      "name": "Geological drillhole and sample database",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mine-planning",
+      "name": "Mine design and scheduling software (3D design, scheduling)",
+      "kind": "analytics"
+    },
+    {
+      "id": "lims",
+      "name": "Assay laboratory information system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email",
+      "name": "Email and calendar (Microsoft Outlook/Exchange)",
+      "kind": "communication"
+    },
+    {
+      "id": "docs",
+      "name": "Shared drives and document library (procedures, permits, drawings)",
+      "kind": "document_store"
+    }
+  ],
+  "resources": [
+    {
+      "id": "ug-utility",
+      "name": "Underground utility fleet (scissor lifts and light vehicles)",
+      "kind": "vehicle",
+      "count": 14,
+      "cost_per_hour": {
+        "low": 30,
+        "mode": 45,
+        "high": 65
+      }
+    },
+    {
+      "id": "assay-lab",
+      "name": "Company assay office in Wawa (preparation, fire assay, AA; not accredited)",
+      "kind": "facility",
+      "count": 1,
+      "cost_per_hour": {
+        "low": 60,
+        "mode": 85,
+        "high": 120
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Check line-up for ore rounds ready to sample",
+      "description": "At the start of shift the mine geologist reads the shift reports and line-up board to see which ore headings were blasted, mucked out and bolted on the previous shift. A face can only be sampled after the heading has been inspected for safety and all rock support is installed, so freshly blasted faces wait for the mucking and bolting cycle.",
+      "role": "mine-geologist",
+      "kind": "intake",
+      "inputs": [
+        "shift report",
+        "line-up board"
+      ],
+      "outputs": [
+        "list of faces to sample"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022"
+        ],
+        "note": "Sampling follows each advance once the heading is inspected and supported (er2022); wait for mucking and bolting is the author's estimate of one shift."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Plan sampling route and confirm headings are free",
+      "description": "The geologist orders the faces by level to make one trip, then radios or phones the shift supervisor to confirm that each heading is not being drilled, charged or mucked when the pair arrives. Headings that are busy are moved to later in the shift or to the next day.",
+      "role": "mine-geologist",
+      "kind": "coordination",
+      "inputs": [
+        "list of faces to sample"
+      ],
+      "outputs": [
+        "sampling route"
+      ],
+      "systems": [
+        "radio",
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Coordination with the crew is standard practice; times are the author's estimate per face."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Drive underground to the heading",
+      "description": "The sampler and geologist take a light vehicle down the ramp with sample bags, tags, hammer, wedge, paint and a water hose, and drive between the faces on the route. The time shown is the share of the round trip charged to one face, since a trip usually covers several faces.",
+      "role": "geo-technician",
+      "kind": "travel",
+      "inputs": [
+        "sampling route",
+        "sample kit"
+      ],
+      "outputs": [
+        "crew at heading"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "ug-utility",
+          "occupied_min": {
+            "low": 20,
+            "mode": 35,
+            "high": 60
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Ramp access with light vehicles is described in er2022; the per-face share of travel is the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check the heading is safe to enter",
+      "description": "The geologist examines the back and walls for loose rock, confirms bolts and screen are installed to the face and checks that blasting fumes have cleared before anyone stands at the face. Faces in raises or under unsupported ground are not chipped; they are sampled from the muck or by test holes instead.",
+      "role": "mine-geologist",
+      "kind": "validation",
+      "inputs": [
+        "crew at heading"
+      ],
+      "outputs": [
+        "workplace check"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Ontario Regulation 854 under the Occupational Health and Safety Act: workplace examination and no work under unsupported ground; site sampling procedure",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.88,
+          "condition": "face safe and accessible"
+        },
+        {
+          "to": "s10",
+          "prob": 0.12,
+          "condition": "face not accessible (raise, unsupported or busy): muck or test-hole sampling instead"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "er2016"
+        ],
+        "note": "Inspection and support before sampling (er2022); raises are sometimes chip sampled and always muck sampled depending on safety (er2016). Share sent to muck sampling is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Wash and mark up the face",
+      "description": "The sampler washes the face with the water hose so the vein and contacts show, then paints a horizontal sample line at shoulder height. The line position is measured as distance and azimuth from the nearest survey bolt so the samples can be plotted later.",
+      "role": "geo-technician",
+      "kind": "physical",
+      "inputs": [
+        "workplace check"
+      ],
+      "outputs": [
+        "washed, located face"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022"
+        ],
+        "note": "Face washed and marked with spray paint, located from the nearest survey bolt (er2022)."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Map the face and set sample intervals",
+      "description": "The geologist sketches the vein, sheared diorite contacts, structures and any visible gold on a face sheet, and paints sample limits that respect the contacts: at least 0.3 m in ore, at most 0.3 m where visible gold shows, one sample across waste. This judgement decides how well the samples represent the face.",
+      "role": "mine-geologist",
+      "kind": "judgment",
+      "inputs": [
+        "washed, located face"
+      ],
+      "outputs": [
+        "face map",
+        "marked sample intervals"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 50
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Sample interval crosses a contact or misses the vein edge, or visible gold is not flagged for the lab.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "er2016"
+        ],
+        "note": "Sampling intervals and rules from er2022; mapping of every face is described in er2022 and er2016."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Give direction and ore or waste call to the crew",
+      "description": "From the map, the geologist paints the vein limits and centre line for the next round and tells the shift supervisor or jumbo operator whether to follow, slash or turn the heading. The geologist also calls the current muck pile ore or waste by eye, because the assays will not be back before it is hauled.",
+      "role": "mine-geologist",
+      "kind": "communication",
+      "inputs": [
+        "face map"
+      ],
+      "outputs": [
+        "paint lines",
+        "visual ore or waste call"
+      ],
+      "systems": [
+        "radio"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Visual ore or waste call is wrong, so the round's muck goes to the wrong destination.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Ore drifting is developed under geology control (er2022 notes this for on-vein drifts); the visual call before assays is the author's description of common practice."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Chip samples across the face",
+      "description": "The sampler chips each interval with a rock hammer or mallet and wedge, catching the fragments in a bag held at the face, and bags and tags each sample in sequence. A face usually gives four to ten samples of about 1.5 to 2.5 kg.",
+      "role": "geo-technician",
+      "kind": "physical",
+      "inputs": [
+        "marked sample intervals"
+      ],
+      "outputs": [
+        "bagged face samples"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 25,
+        "mode": 40,
+        "high": 70
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Uneven chipping takes more of the soft or quartz-rich parts, biasing the grade up.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "er2016",
+          "island"
+        ],
+        "note": "Hammer or mallet and wedge chipping, bags with tags (er2022); 2.5 kg samples (er2016); 1.5-2 kg (island). Samples per face are the author's estimate from 0.3-0.5 m lengths on 1.5-4 m faces."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Carry samples to the core shack and surface",
+      "description": "The samples are dropped at the underground core shack during the shift and brought to surface at the end of the beat geologist's shift. On surface they go into the sample boxes between the geology office and the warehouse to wait for the shuttle.",
+      "role": "geo-technician",
+      "kind": "travel",
+      "inputs": [
+        "bagged face samples"
+      ],
+      "outputs": [
+        "samples on surface"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 600
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "ug-utility",
+          "occupied_min": {
+            "low": 10,
+            "mode": 20,
+            "high": 30
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022"
+        ],
+        "note": "Drop-off at the underground core shack and transfer at end of shift (er2022)."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Collect muck or test-hole samples instead",
+      "description": "When the face cannot be chipped, the geologist hands the crew pre-tagged bags. LHD operators take a handful of muck from each bucket while loading a truck, making one composite of about 3 kg per 25 to 30 t truck, and send the bags up at the end of their shift.",
+      "role": "lhd-operator",
+      "kind": "physical",
+      "inputs": [
+        "pre-tagged sample bags"
+      ],
+      "outputs": [
+        "muck samples"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Handfuls favour fines, so the muck sample is less representative than a chip line.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "er2016"
+        ],
+        "note": "Muck sampling by muckers, one composite per 25-30 t truck, about 3 kg (er2022, er2016)."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Log samples and fill in the submission sheet",
+      "description": "The sampler enters the sample numbers, heading, interval and visible gold flags in the geology database and prints the lab submission list that travels with the bags. Visible gold samples get an orange tag so the lab applies its extra QC steps.",
+      "role": "geo-technician",
+      "kind": "data_entry",
+      "inputs": [
+        "samples on surface",
+        "face map"
+      ],
+      "outputs": [
+        "submission sheet"
+      ],
+      "systems": [
+        "geo-db",
+        "docs"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Sample numbers out of sequence or tag does not match the sheet.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.96,
+          "condition": "shuttle runs"
+        },
+        {
+          "to": "s13",
+          "prob": 0.04,
+          "condition": "shuttle cancelled by road or weather conditions"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022"
+        ],
+        "note": "Orange VG tag and lab VG protocol (er2022); share of cancelled shuttles is the author's estimate for winter road closures on the mine road and Highway 17."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Lab receives and sorts the samples",
+      "description": "The daily company shuttle takes the sealed bags to the mine assay office in Wawa. An assay technician puts the bags in numerical order, checks them against the submission list and adds them to the next preparation batch.",
+      "role": "assay-technician",
+      "kind": "intake",
+      "inputs": [
+        "submission sheet",
+        "bagged samples"
+      ],
+      "outputs": [
+        "logged lab batch"
+      ],
+      "systems": [
+        "lims"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 900,
+        "high": 1800
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "er2016"
+        ],
+        "note": "Daily company shuttle to the Wawa assay office (er2022, er2016); receiving against a packing list (er2016, appendix C). Transit wait is the author's estimate of one overnight hold."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Hold samples on site until the shuttle runs",
+      "description": "When the shuttle is cancelled by a snowstorm or road closure, the sampler keeps the bags in the locked sample boxes, tells the geologist that results will be late and sends them on the next run. The heading keeps advancing on the visual call in the meantime.",
+      "role": "geo-technician",
+      "kind": "coordination",
+      "inputs": [
+        "submission sheet"
+      ],
+      "outputs": [
+        "held samples"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "shuttle resumes"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Winter road closures in the Wawa area are common; frequency and duration are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Prepare and fire-assay the samples",
+      "description": "Technicians dry, crush to about 6 mm, riffle split, pulverise and fuse each sample, cupel the lead button and weigh the gold bead on a microbalance, in furnace batches of 24 to 28 samples that include a blank, a standard and a duplicate. The time shown is the lab time for one face's samples.",
+      "role": "assay-technician",
+      "kind": "physical",
+      "inputs": [
+        "logged lab batch"
+      ],
+      "outputs": [
+        "raw assays"
+      ],
+      "systems": [
+        "lims"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Contamination or a sample swap in the batch; low-grade results are biased upward.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "assay-lab",
+          "occupied_min": {
+            "low": 45,
+            "mode": 75,
+            "high": 120
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "er2016"
+        ],
+        "note": "Fire assay with gravimetric finish, batch composition and QC insertion (er2022; er2016 appendix C); per-face lab time and batching wait are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Review lab QC and release results",
+      "description": "The assay supervisor checks the blank, standard and duplicate in each tray and the visible gold replicates, reruns trays that fail and emails the certificate to mine geology. The lab is not accredited, so this internal QC is the main check on the numbers.",
+      "role": "assay-supervisor",
+      "kind": "review",
+      "inputs": [
+        "raw assays"
+      ],
+      "outputs": [
+        "assay certificate by email"
+      ],
+      "systems": [
+        "lims",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Mine assay office internal QC protocol: one blank, one certified reference material and one duplicate per 28-sample tray, extra checks on visible gold samples",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.95,
+          "condition": "QC passes"
+        },
+        {
+          "to": "s14",
+          "prob": 0.05,
+          "condition": "QC failure: tray rerun"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022"
+        ],
+        "note": "11% QC insertion, VG protocol, not accredited, low-grade CRM failures (er2022); rerun share is the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Load assays and match them to samples",
+      "description": "The geologist saves the emailed certificate, imports the results into the drillhole and sample database and the channel samples into Promine, and checks that every sample number on the submission sheet has a result. Missing or duplicate numbers are queried with the lab.",
+      "role": "mine-geologist",
+      "kind": "data_entry",
+      "inputs": [
+        "assay certificate by email",
+        "submission sheet"
+      ],
+      "outputs": [
+        "assays in database"
+      ],
+      "systems": [
+        "email",
+        "geo-db",
+        "mine-planning"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 300,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Transcription error or results attached to the wrong face.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "island"
+        ],
+        "note": "Channel sample results recorded in Promine and the Access database (er2022; island)."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Check assays against the face map",
+      "description": "The geologist compares each result with the mapped geology: high grades should sit in quartz and visible gold intervals, waste samples should be low. A result that contradicts the map is sent back for a re-assay of the reject.",
+      "role": "mine-geologist",
+      "kind": "validation",
+      "inputs": [
+        "assays in database",
+        "face map"
+      ],
+      "outputs": [
+        "accepted assays"
+      ],
+      "systems": [
+        "geo-db"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.95,
+          "condition": "results consistent"
+        },
+        {
+          "to": "s14",
+          "prob": 0.05,
+          "condition": "result contradicts mapping: re-assay"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Check of assays against mapping is standard practice; rejection share is the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Composite the face grade and update the outline",
+      "description": "The geologist calculates the length-weighted grade and true width for the face, plots it on the level plan and longitudinal section, and moves the ore outline and block grades for the heading and the stope above or below. Before 2021 this was a polygonal model on longitudinal sections; from 2021 the chip composites also fed a 3D model.",
+      "role": "mine-geologist",
+      "kind": "analysis",
+      "inputs": [
+        "accepted assays"
+      ],
+      "outputs": [
+        "updated grade control outline"
+      ],
+      "systems": [
+        "mine-planning",
+        "geo-db"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 35,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "High chip grades are not capped or are over-weighted, overstating the block grade.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022",
+          "er2016"
+        ],
+        "note": "Polygonal estimates before 2021 and 3D estimation from 2021, chip samples used in the model (er2022); sections and plans from the database (er2016)."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Compare assays with the visual ore call",
+      "description": "The geologist checks whether the round that was called ore by eye really is above the 2 g/t development cut-off, and whether a waste call hid ore. If the call was wrong, shift control must correct the tally and change the routing of any muck still on the level.",
+      "role": "mine-geologist",
+      "kind": "judgment",
+      "inputs": [
+        "updated grade control outline",
+        "visual ore or waste call"
+      ],
+      "outputs": [
+        "confirmed or corrected call"
+      ],
+      "systems": [
+        "shift-sheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.9,
+          "condition": "call confirmed"
+        },
+        {
+          "to": "s20",
+          "prob": 0.1,
+          "condition": "call wrong: correct tally and routing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "er2022"
+        ],
+        "note": "Development cut-off grade of 2.0 g/t (er2022); share of wrong calls is the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Correct the tally and the routing of the muck",
+      "description": "The shift supervisor changes the ore or waste code of the loads on the shift sheet and, if muck is still on the level or at the remuck, tells the LHD and truck operators where to send it. Loads already hoisted or dumped stay as they are and become a reconciliation item.",
+      "role": "ug-shift-supervisor",
+      "kind": "communication",
+      "inputs": [
+        "confirmed or corrected call"
+      ],
+      "outputs": [
+        "corrected tally"
+      ],
+      "systems": [
+        "shift-sheets",
+        "radio"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 360,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's description of common practice."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Send the daily geology note",
+      "description": "The geologist emails the updated face grades, ore outlines and heading directions to shift control, the mine captains and the planning engineers, and posts the marked-up level plans. Outline changes that affect a stope design or the monthly plan are flagged for the chief geologist.",
+      "role": "mine-geologist",
+      "kind": "communication",
+      "inputs": [
+        "updated grade control outline"
+      ],
+      "outputs": [
+        "grade control model update"
+      ],
+      "systems": [
+        "email",
+        "docs"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.8,
+          "condition": "routine update",
+          "outcome": "model updated"
+        },
+        {
+          "to": "s22",
+          "prob": 0.2,
+          "condition": "outline change affects a stope or the plan"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's description of common practice; share flagged is the author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Chief geologist reviews the outline change",
+      "description": "The chief geologist looks at the face results, the revised outline and the effect on the stope tonnes and grade, and accepts the change or asks for more sampling. Accepted changes are passed to the planning and stope design engineers.",
+      "role": "chief-geologist",
+      "kind": "review",
+      "inputs": [
+        "grade control model update"
+      ],
+      "outputs": [
+        "approved outline change"
+      ],
+      "systems": [
+        "mine-planning",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Geology department rule that changes to key composites and ore outlines are made or approved by the department head",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "model updated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Restricted editing of key composite intervals by the geology department head is described in er2016; review time is the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Face not accessible",
+      "share_of_cases": 0.12,
+      "description": "Raise faces or headings under unsupported ground are sampled from the muck or by test holes, which are less representative.",
+      "path": [
+        "s04",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Shuttle cancelled",
+      "share_of_cases": 0.04,
+      "description": "A snowstorm or road closure holds samples on site for a day or two while the heading keeps advancing on the visual call.",
+      "path": [
+        "s11",
+        "s13",
+        "s12"
+      ]
+    },
+    {
+      "name": "Wrong visual call",
+      "share_of_cases": 0.1,
+      "description": "Assays show the round was misclassified; the tally is corrected and loads already sent become a reconciliation difference.",
+      "path": [
+        "s19",
+        "s20"
+      ]
+    },
+    {
+      "name": "Lab QC failure",
+      "share_of_cases": 0.05,
+      "description": "A tray fails its blank or standard and is rerun, adding a day.",
+      "path": [
+        "s15",
+        "s14"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 3.5,
+        "p90": 6
+      },
+      "unit": "calendar days from face exposed to grade control model updated",
+      "population": "Narrow-vein underground gold mine with off-site company lab and daily shuttle",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Built from one shift for mucking and bolting, same-day sampling, end-of-shift transfer, a daily shuttle (er2022) and a one-day lab turnaround; no published turnaround for this lab was found."
+      }
+    },
+    {
+      "metric": "chip_sample_spacing",
+      "value": "every round, 3-4 m",
+      "unit": "metres of advance between sampled faces",
+      "population": "Eagle River ore development headings",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "er2016"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "lab_qc_insertion_rate",
+      "value": 0.11,
+      "unit": "share of samples that are QC samples",
+      "population": "Eagle River mine assay office, 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "er2022"
+        ],
+        "note": "3 QC samples per 28-sample tray."
+      }
+    },
+    {
+      "metric": "muck_sample_support",
+      "value": "25-30",
+      "unit": "tonnes represented by one muck sample",
+      "population": "Eagle River",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "er2022",
+          "er2016"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Assays return a day or more after the round, so the ore or waste call and the heading direction rest on the geologist's eye; wrong calls send waste to the mill or ore to the waste fill.",
+      "steps": [
+        "s07",
+        "s19",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Follows from the daily shuttle and lab batching (er2022); size of the effect is not published."
+      }
+    },
+    {
+      "description": "Chip samples average higher than drill core in the same domains, so grade control grades need capping and can overstate stope grades.",
+      "steps": [
+        "s08",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "er2022"
+        ],
+        "note": "er2022 reports chip samples tend to have higher averages than core samples for the same domain and that chip capping levels were adjusted."
+      }
+    },
+    {
+      "description": "The mine lab is not accredited and reported unreliable gold values below 3 g/t and a 15-20% positive bias on the low-grade standard in 2021, which matters for ore or waste decisions near the 2 g/t development cut-off.",
+      "steps": [
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "er2022"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Sampling depends on the beat geologist's route and on headings being bolted and free, so faces are skipped or sampled late when crews move fast.",
+      "steps": [
+        "s01",
+        "s02"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from the sequencing described in er2022."
+      }
+    }
+  ],
+  "assumptions": [
+    "Volume is 40-100 faces a month (mode 65), below the organisation file's 90-170 (mode 130), because only ore and on-vein headings are chip sampled; waste capital development is under survey control (er2022).",
+    "The assay lab steps (s12, s14, s15) are the same work as the mill-assay-lab process; when assembling the organisation model, count the lab labour once.",
+    "The assay office is in Wawa, about an hour from the mine, reached by a daily company shuttle (er2022, er2016); the organisation file places the lab in the processing department at site, which this workflow keeps for role ids.",
+    "Travel time underground is the share of one trip charged to one face; a sampling trip covers three to five faces.",
+    "Touch times per face are the author's estimates. The simulated cycle time adds every wait in sequence; the sampler and geologist work together at the face, which the step list shows as alternating roles.",
+    "Loaded costs per hour are taken from the organisation file (wage times 1.30 for staff and 1.35 for hourly roles).",
+    "Organisation file corrected on 2026-11-24 to match this workflow's sources: ids were renamed (mill-elution-refining to mill-gold-room-refining, loaded_carbon to gold_concentrate, tailings_slurry to filtered_tailings, elution-circuit to refinery), and roles and resources this workflow added are now in the organisation file. Notes above that describe a mismatch refer to the file before the correction."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  },
+  "sources": [
+    {
+      "id": "er2022",
+      "title": "Technical Report for the Eagle River Gold Mining Complex, Ontario, Canada (CAPR001445)",
+      "publisher": "SRK Consulting (Canada) Inc. for Wesdome Gold Mines Ltd.",
+      "url": "https://s203.q4cdn.com/643390454/files/doc_downloads/2022/11/ERtechnicalReport.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Reference mine practice: channel (chip) sampling of underground faces by production geologist and technician after each advance once the heading is inspected and supported, sample lengths 0.3 m minimum in ore and 0.3 m maximum with visible gold; test-hole, long-hole and muck sampling (one muck sample per 25-30 t truck, taken by muckers); samples brought to surface at end of the beat geologist's shift and shuttled daily to the company assay office in Wawa; mine lab not accredited, 11% QC insertion (blank, CRM, duplicate per 28-sample tray), VG protocol, low-grade CRM bias; channel results recorded in Promine; polygonal estimates before 2021, Leapfrog/Datamine 3D model from 2021; chip samples average higher than core; mine-to-mill reconciliation within 5%; stope design with 1.5 m minimum width, 0.5 m HW and FW dilution from CMS reconciliation, 90% stope and 99% development recovery, stope cut-off 5.5 g/t, development cut-off 2.0 g/t, density 2.7 t/m3; captive sub-level open stoping via Alimak raises, 13-18 m 64 mm down-holes on a 3-2-3 pattern, shrink mucking, CRF sill mats and URF fill; 19% of mill feed from sill development; ore hoisted in 4 t skips and trucked 16.6 km from the portal pad to the mill; two 12 h shifts 365 days a year; UG labour table with 9 mine engineering and 10 mine geology staff; recommendation to evaluate tools for short-term planning; ventilation rule 0.06 m3/s per kW of diesel"
+    },
+    {
+      "id": "er2016",
+      "title": "Technical Report for the Eagle River Mining Complex including the Eagle River Gold Mine, the Mishi Gold Mine and Related Infrastructure",
+      "publisher": "Wesdome Gold Mines Ltd. (G. Mannard and P. Ng), hosted by minedocs.com",
+      "url": "https://minedocs.com/12/EagleRiver_TechnicalReport_03172016.pdf",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Chip samples taken every round (every 3 to 4 m) in ore development headings across the full face, about 2.5 kg, 0.3-0.5 m lengths; raises sometimes chip sampled and always muck sampled; muck sample per 25-30 t; sealed samples transported daily to the company Mine Assay office with results emailed to the mine; assay data in Microsoft Access linked to Promine and Surpac/Gemcom, databases updated weekly and audited monthly; about 30% of production from silling and development; CMS surveys show about 1.0 m wall overbreak; Mishi grade control on blast hole samples"
+    },
+    {
+      "id": "island",
+      "title": "NI 43-101 Technical Report for the Island Gold Mine, Dubreuilville, Ontario, Canada (exhibit 99.1)",
+      "publisher": "Alamos Gold Inc. (filed on SEC EDGAR)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1178819/000117881920000070/ex991technicalreportfo.htm",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "Neighbouring Wawa-area mine: resource shapes created by geology and passed to production engineering for mineable stope design with recovery and dilution factors; each stope gets a package with drilling plans, blast letters, ventilation and gas check instructions, mucking plans and backfilling directives; Matthews stability graph used for stope dimensions; CMS surveys and beat geologists control dilution while mucking; chip samples 1.5-2 kg taken by geological technician or geologist, assays entered into Promine; all underground production samples assayed at the Wesdome laboratory in Wawa; 2019 production reconciled to mill was 107% of tonnes, 98% of grade and 105% of ounces of the current reserve model, with monthly comparison going forward"
+    }
+  ]
+}

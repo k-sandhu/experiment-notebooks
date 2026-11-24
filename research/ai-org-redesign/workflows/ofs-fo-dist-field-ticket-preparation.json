@@ -1,0 +1,1777 @@
+{
+  "schema_version": "0.3",
+  "id": "ofs-fo-dist-field-ticket-preparation",
+  "name": "Prepare and get field tickets signed",
+  "org": "oilfield-services-co",
+  "process": "fo-dist-field-ticket-preparation",
+  "sector": "oil and gas services (pressure pumping)",
+  "function": "field operations",
+  "summary": "At the end of each cementing job, each coiled tubing day and each frac pumping day the field supervisor records the services, equipment hours, materials and standby on a tablet field ticket, and the customer's wellsite supervisor reviews and signs it. District administrators then check the ticket against the job file and the customer's price book, add the customer's cost coding (AFE, cost centre or WBS) and release it to billing. Tickets stall when the customer's representative has left the lease, when coding is missing, when quantities are disputed, and when customers require a second approval of the ticket in their e-invoicing network before any invoice can be sent.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian pressure pumping company with frac, cementing and coiled tubing crews working from district bases in Alberta and northeast BC, where field supervisors write tickets on tablets and district administrators check them before billing.",
+    "org_size_employees": 1350,
+    "notes": "Common practice of large WCSB pressure pumpers in 2019-2022: an ERP with billing, AR and AP modules, tablet field ticketing linked to the price book, customer e-invoicing networks (mainly OpenInvoice), OCR scanning of supplier invoices, email, phone and Excel. No machine-learning coding or matching."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one field ticket (one cementing job, one coiled tubing or nitrogen day, or one frac pumping day on a pad)",
+  "trigger": "A cementing job, a coiled tubing or nitrogen shift, or a frac pumping day ends and the supervisor opens the ticket that was created from the dispatch order.",
+  "end_state": "The ticket is signed or approved by the customer, priced, coded and released to billing in the ERP, or it is closed as not billable.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 350,
+      "mode": 750,
+      "high": 950
+    },
+    "seasonality": "Highest from January to March when frozen ground allows access and winter drilling peaks; lowest in April and May during spring break-up road bans; a second peak from September to early December.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "trican-mda-2022"
+      ],
+      "note": "Jobs are about 7,300-7,600 a year (about 620 a month, trican-mda-2022), and a job is typically one invoice. Tickets outnumber invoices because frac pads and multi-day coiled tubing jobs are ticketed per day and rolled into one invoice per well or pad: about 420 cementing tickets, 200 coiled tubing and nitrogen day tickets and 130 frac day tickets (7 crews x about 18 pumping days) a month. Low end is break-up and 2020."
+    },
+    "surge": {
+      "cause": "December program completions, when producers push to finish capital programs and close AFEs before year end",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 10,
+        "mode": 20,
+        "high": 30
+      },
+      "volume_multiplier": {
+        "low": 1.1,
+        "mode": 1.25,
+        "high": 1.4
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Year-end completion push described in the organisation file's surge for billing; size estimated."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "fo-cem-job-execution",
+        "object": "cement_job_report",
+        "share": 0.5
+      },
+      {
+        "from": "fo-cem-remedial-and-abandonment-cementing",
+        "object": "cement_job_report",
+        "share": 0.06
+      },
+      {
+        "from": "fo-ct-job-execution",
+        "object": "ct_job_report",
+        "share": 0.2
+      },
+      {
+        "from": "fo-ct-nitrogen-services",
+        "object": "ct_job_report",
+        "share": 0.07
+      },
+      {
+        "from": "fo-frac-job-execution",
+        "object": "treatment_data",
+        "share": 0.17
+      }
+    ],
+    "inputs": [
+      {
+        "from": "cs-price-book-maintenance",
+        "object": "price_book"
+      },
+      {
+        "from": "it-erp-and-application-support",
+        "object": "system_change"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "released_to_billing",
+        "to": "fin-field-ticket-to-invoice",
+        "object": "signed_field_ticket"
+      },
+      {
+        "outcome": "any",
+        "to": "customer-wellsite-supervisor",
+        "object": "field_ticket"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "cem-supervisor",
+      "title": "Cementing supervisor",
+      "department": "Cementing service line",
+      "layer": "supervisor",
+      "fte_on_process": 2.1,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 78,
+        "high": 102
+      },
+      "occupation_code": "NOC 82021",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 30 minutes per cementing ticket plus occasional trips back for signatures, over about 420 tickets a month."
+      },
+      "shift_pattern": "on_call",
+      "productive_hours_per_month": 180
+    },
+    {
+      "id": "ct-supervisor",
+      "title": "Coiled tubing supervisor",
+      "department": "Coiled tubing and nitrogen service line",
+      "layer": "supervisor",
+      "fte_on_process": 0.9,
+      "loaded_cost_per_hour": {
+        "low": 62,
+        "mode": 80,
+        "high": 104
+      },
+      "occupation_code": "NOC 82021",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 35 minutes per coiled tubing or nitrogen day ticket over about 200 tickets a month."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "frac-field-supervisor",
+      "title": "Frac field supervisor",
+      "department": "Fracturing service line",
+      "layer": "supervisor",
+      "fte_on_process": 0.7,
+      "loaded_cost_per_hour": {
+        "low": 65,
+        "mode": 82,
+        "high": 108
+      },
+      "occupation_code": "NOC 82021",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 45 minutes per frac day ticket over about 130 tickets a month."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "frac-data-tech",
+      "title": "Data van technician",
+      "department": "Fracturing service line",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 44,
+        "mode": 56,
+        "high": 72
+      },
+      "occupation_code": "NOC 84101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Treatment summary export of about 25 minutes per frac day ticket."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "district-admin",
+      "title": "District administrator (field tickets and job files)",
+      "department": "District operations and dispatch",
+      "layer": "individual_contributor",
+      "fte_on_process": 8.5,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 40,
+        "high": 50
+      },
+      "occupation_code": "NOC 13110",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Hands-on ticket work averages about 1.5 hours per ticket including queries, coding requests, backup and electronic approvals (about 8.5 FTE at 130 hours). The 20 district administrators also handle timesheets, permits and base admin."
+      }
+    },
+    {
+      "id": "district-manager",
+      "title": "District manager",
+      "department": "District operations and dispatch",
+      "layer": "manager",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 100,
+        "mode": 125,
+        "high": 155
+      },
+      "occupation_code": "NOC 80010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves price overrides, standby and non-billable decisions on about one ticket in five."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "field-ticket-app",
+      "name": "Electronic field ticketing on tablets, linked to the ERP price book",
+      "kind": "workflow"
+    },
+    {
+      "id": "erp",
+      "name": "ERP (finance, procurement, inventory, plant maintenance, billing)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "einvoice-portal",
+      "name": "Customer e-invoicing and field ticket approval networks",
+      "kind": "external_portal"
+    },
+    {
+      "id": "frac-daq",
+      "name": "Data van acquisition and treatment monitoring system",
+      "kind": "instrument"
+    },
+    {
+      "id": "dispatch-board",
+      "name": "Dispatch and crew scheduling board (scheduling module, whiteboards, spreadsheets)",
+      "kind": "workflow"
+    },
+    {
+      "id": "email",
+      "name": "Email, Microsoft Teams and mobile phones",
+      "kind": "communication"
+    },
+    {
+      "id": "doc-store",
+      "name": "Document management (SharePoint and network drives)",
+      "kind": "document_store"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Excel workbooks",
+      "kind": "spreadsheet"
+    }
+  ],
+  "resources": [
+    {
+      "id": "pickup-fleet",
+      "name": "Crew pickup trucks and light vehicles",
+      "kind": "vehicle",
+      "count": 450,
+      "cost_per_hour": {
+        "low": 18,
+        "mode": 25,
+        "high": 35
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Open draft ticket from the dispatch order",
+      "description": "When the crew rigs out, the field ticket app opens a draft ticket already filled from the dispatch order and the customer's price book: customer, well licence and surface location, job type, unit numbers and the crew list. Nobody types this part; it comes across from the dispatch board and the ERP price book.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "dispatch order",
+        "customer price book"
+      ],
+      "outputs": [
+        "draft field ticket"
+      ],
+      "systems": [
+        "field-ticket-app",
+        "dispatch-board",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.56,
+          "condition": "cementing job"
+        },
+        {
+          "to": "s03",
+          "prob": 0.27,
+          "condition": "coiled tubing or nitrogen day"
+        },
+        {
+          "to": "s04",
+          "prob": 0.17,
+          "condition": "frac pumping day"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Typical tablet ticketing linked to dispatch and price book in 2019-2022; service-line split from ticket counts in the volume note."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Record cementing quantities on the ticket",
+      "description": "The cementing supervisor sits in the unit cab after rig-out and enters sacks of each blend, additives, water and spacer volumes, pump hours, bulk truck kilometres, crew hours and any standby while waiting on the rig. He checks the numbers against the pump chart and the bulk ticket and adds notes on anything that went wrong.",
+      "role": "cem-supervisor",
+      "kind": "data_entry",
+      "inputs": [
+        "cement job report",
+        "bulk delivery ticket",
+        "pump chart"
+      ],
+      "outputs": [
+        "completed cementing ticket"
+      ],
+      "systems": [
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 50
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 180
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Wrong sack count, missed additive or standby hours left off.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "yager-2015",
+          "enverus-51ofs"
+        ],
+        "note": "Contractor's representative prepares the ticket and the producer's representative signs it (yager-2015); mobile ticket apps let crews fill out tickets on site (enverus-51ofs). Times tier C."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Record coiled tubing or nitrogen day on the ticket",
+      "description": "At the end of the shift the coiled tubing supervisor enters unit and crew hours, depth run, plugs milled, fluid and nitrogen volumes, chemicals, tubing footage charges and standby. Multi-day jobs get one ticket per day that the customer signs each morning.",
+      "role": "ct-supervisor",
+      "kind": "data_entry",
+      "inputs": [
+        "coiled tubing job record",
+        "nitrogen meter readings"
+      ],
+      "outputs": [
+        "completed coiled tubing day ticket"
+      ],
+      "systems": [
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 600
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.09,
+        "defect_description": "Footage, nitrogen volume or standby recorded wrong.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "yager-2015",
+          "enverus-51ofs"
+        ],
+        "note": "Contractor's representative prepares the ticket and the producer's representative signs it (yager-2015); mobile ticket apps let crews fill out tickets on site (enverus-51ofs). Times tier C."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Export the day's treatment summary from the data van",
+      "description": "The data van technician runs the stage reports for the day from the acquisition system: fluid volumes, proppant tonnes by type, chemical volumes and pumping time for each stage. The report can only be run when the van is not monitoring a live stage, usually at the overnight shutdown or between stages, and is then attached to the frac ticket.",
+      "role": "frac-data-tech",
+      "kind": "data_entry",
+      "inputs": [
+        "treatment data"
+      ],
+      "outputs": [
+        "daily stage summary"
+      ],
+      "systems": [
+        "frac-daq",
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A stage is missed or a chemical volume is mistyped when the summary is re-keyed.",
+        "typically_caught_at": "s06"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "aogr-proppant-2018"
+        ],
+        "note": "Frac van personnel record delivery and stage data (aogr-proppant-2018). Times and the wait for the van tier C."
+      },
+      "concurrent_with": [
+        "s05"
+      ]
+    },
+    {
+      "id": "s05",
+      "name": "Build the frac day ticket",
+      "description": "The frac field supervisor adds pump hours by unit, horsepower charges, blender and data van days, iron and manifold rental, crew charges, proppant and chemicals from the stage summary, sand hauling and any third-party items. He starts on the equipment and crew lines while the data van technician runs the stage reports, then compares the pumped stages with the customer's stage count before showing the ticket to the company man.",
+      "role": "frac-field-supervisor",
+      "kind": "data_entry",
+      "inputs": [
+        "daily stage summary",
+        "equipment list"
+      ],
+      "outputs": [
+        "completed frac day ticket"
+      ],
+      "systems": [
+        "field-ticket-app",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 25,
+        "mode": 40,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "A rental item, a standby period or a third-party charge is left off or doubled.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "yager-2015",
+          "enverus-51ofs"
+        ],
+        "note": "Contractor's representative prepares the ticket and the producer's representative signs it (yager-2015); mobile ticket apps let crews fill out tickets on site (enverus-51ofs). Times tier C."
+      },
+      "concurrent_with": [
+        "s04"
+      ]
+    },
+    {
+      "id": "s06",
+      "name": "Customer's wellsite supervisor reviews and signs",
+      "description": "The customer's wellsite supervisor (the company man) reads the ticket on the tablet or a printout, compares quantities with his own daily report and signs, or disputes a line. If he has left the lease or is busy with the rig, the ticket goes unsigned and is either taken back to him later or sent to the customer for electronic approval.",
+      "role": "external",
+      "kind": "review",
+      "inputs": [
+        "completed field ticket"
+      ],
+      "outputs": [
+        "signed field ticket or disputed ticket"
+      ],
+      "systems": [
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 720
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Customer master service agreements and invoicing standards: field ticket signed by the customer's field representative",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.74,
+          "condition": "signed on location"
+        },
+        {
+          "to": "s02",
+          "prob": 0.06,
+          "condition": "cementing quantities disputed, ticket corrected"
+        },
+        {
+          "to": "s03",
+          "prob": 0.03,
+          "condition": "coiled tubing quantities disputed, ticket corrected"
+        },
+        {
+          "to": "s05",
+          "prob": 0.02,
+          "condition": "frac quantities disputed, ticket corrected"
+        },
+        {
+          "to": "s07",
+          "prob": 0.04,
+          "condition": "customer representative gone; supervisor returns for the signature"
+        },
+        {
+          "to": "s08",
+          "prob": 0.11,
+          "condition": "left unsigned for electronic approval"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "yager-2015",
+          "chevron-smart-2021"
+        ],
+        "note": "Signature by the producer's representative (yager-2015); signed ticket required with the invoice (chevron-smart-2021). Branch shares tier C."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Drive back to the rig for the signature",
+      "description": "When the company man had left before the ticket was ready, the cementing supervisor stops at the rig or the customer's field office on the next trip through the area to get the ticket signed. Lease roads, rig moves and weather decide when that trip can happen.",
+      "role": "cem-supervisor",
+      "kind": "travel",
+      "inputs": [
+        "unsigned ticket"
+      ],
+      "outputs": [
+        "ticket presented for signature"
+      ],
+      "systems": [
+        "field-ticket-app",
+        "email"
+      ],
+      "touch_min": {
+        "low": 40,
+        "mode": 75,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1080,
+        "high": 2880
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Journey management and fatigue rules under company driving policy and the Alberta OHS Code Part 2 hazard assessment",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-pain-points"
+        ],
+        "note": "Paper and unsigned tickets cost crews windshield time driving tickets for approval (enverus-pain-points). Share and times tier C."
+      },
+      "resources": [
+        {
+          "id": "pickup-fleet",
+          "occupied_min": {
+            "low": 40,
+            "mode": 75,
+            "high": 150
+          }
+        }
+      ]
+    },
+    {
+      "id": "s08",
+      "name": "Sync the ticket to the office",
+      "description": "The tablet uploads the ticket and its attachments to the field ticket server once the truck reaches cell or Wi-Fi coverage. Remote leases in northwest Alberta and northeast BC often have no signal, so upload waits until the crew is back on the highway or at the base.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "signed or unsigned ticket"
+      ],
+      "outputs": [
+        "ticket in the district queue"
+      ],
+      "systems": [
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 1440
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-51ofs"
+        ],
+        "note": "Mobile ticket apps work offline and submit once there is signal (enverus-51ofs). Delay tier C."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Check the ticket against the job file",
+      "description": "The district administrator opens the ticket next to the dispatch order, the job report or treatment summary, the bulk and haul tickets and the crew time sheet. She checks that every unit and person on the job is charged, hours agree with the job log and the signature matches the customer's representative.",
+      "role": "district-admin",
+      "kind": "validation",
+      "inputs": [
+        "field ticket",
+        "job file",
+        "crew time sheet"
+      ],
+      "outputs": [
+        "checked ticket or query"
+      ],
+      "systems": [
+        "field-ticket-app",
+        "erp",
+        "doc-store"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 960,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A missing charge is not noticed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.87,
+          "condition": "complete"
+        },
+        {
+          "to": "s10",
+          "prob": 0.13,
+          "condition": "missing or inconsistent quantities"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Ask the field supervisor about missing details",
+      "description": "The administrator emails or texts the supervisor with the lines in question: a missing unit, hours that do not match the time sheet, or a material with no quantity. Supervisors on a 14-day rotation answer when they are off shift or between jobs.",
+      "role": "district-admin",
+      "kind": "communication",
+      "inputs": [
+        "ticket query"
+      ],
+      "outputs": [
+        "question to supervisor"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Update the ticket with the supervisor's answer",
+      "description": "When the supervisor replies, the administrator corrects the quantities on the ticket, notes who confirmed the change and re-checks the totals. If the change affects a signed quantity the customer is told when the ticket is sent.",
+      "role": "district-admin",
+      "kind": "data_entry",
+      "inputs": [
+        "supervisor reply"
+      ],
+      "outputs": [
+        "corrected ticket"
+      ],
+      "systems": [
+        "field-ticket-app",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Correction typed on the wrong line.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Check prices against the customer price book",
+      "description": "The administrator compares each line with the customer's price book or tender pricing in the ERP: list price, discount, fuel surcharge and minimum charges. Overrides, unusual standby and lines for failed or repeated work go to the district manager.",
+      "role": "district-admin",
+      "kind": "validation",
+      "inputs": [
+        "checked ticket",
+        "customer price book"
+      ],
+      "outputs": [
+        "priced ticket or override request"
+      ],
+      "systems": [
+        "erp",
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Old price book version or wrong discount applied.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.8,
+          "condition": "prices match"
+        },
+        {
+          "to": "s14",
+          "prob": 0.2,
+          "condition": "override, standby or non-billable question"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cnrl-oi-standards"
+        ],
+        "note": "Customers check invoices against price books and block mismatches (cnrl-oi-standards). Shares and times tier C."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Add the customer's cost coding",
+      "description": "The administrator enters the customer's AFE or cost centre, WBS element, GL account and approver code from the company man's stamp, the dispatch order or the customer's coding list. Coding formats differ by producer and are checked by the customer's e-invoicing system later.",
+      "role": "district-admin",
+      "kind": "lookup",
+      "inputs": [
+        "priced ticket",
+        "customer coding stamp"
+      ],
+      "outputs": [
+        "coded ticket"
+      ],
+      "systems": [
+        "field-ticket-app",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Wrong AFE or cost centre keyed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.6,
+          "condition": "coding complete, no third-party items"
+        },
+        {
+          "to": "s17",
+          "prob": 0.25,
+          "condition": "third-party charges need backup"
+        },
+        {
+          "to": "s15",
+          "prob": 0.15,
+          "condition": "coding missing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "chevron-smart-2021",
+          "cenovus-invoicing"
+        ],
+        "note": "Tickets must carry the customer's WBS and GL coding stamp (chevron-smart-2021); AFE and WBS formats differ by producer (cenovus-invoicing). Shares tier C."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "District manager approves overrides or non-billable work",
+      "description": "The district manager reviews the ticket with the reason for the override: a negotiated discount, standby the customer caused, or a failed job that should not be charged. He approves the charge, changes it, or marks the ticket as not billable and notes the reason for the account manager.",
+      "role": "district-manager",
+      "kind": "approval",
+      "inputs": [
+        "override request"
+      ],
+      "outputs": [
+        "approved ticket or non-billable decision"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company pricing authority matrix: discounts, standby and write-offs approved by the district manager",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.9,
+          "condition": "charge approved"
+        },
+        {
+          "to": "END",
+          "prob": 0.1,
+          "condition": "work not billed (failed job, goodwill or warranty)",
+          "outcome": "not_billed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Ask the customer for missing coding",
+      "description": "The administrator emails the company man or the customer's completions or drilling coordinator asking for the AFE, cost centre or WBS for the well. Many producers issue AFEs late or change them when a well moves between budgets.",
+      "role": "district-admin",
+      "kind": "communication",
+      "inputs": [
+        "coded ticket with gaps"
+      ],
+      "outputs": [
+        "coding request"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Customer supplies the coding",
+      "description": "The customer's representative or office replies with the coding, sometimes after checking with their cost accountant. Requests are often chased more than once.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "coding request"
+      ],
+      "outputs": [
+        "customer coding"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.25,
+          "condition": "third-party charges need backup"
+        },
+        {
+          "to": "s18",
+          "prob": 0.75,
+          "condition": "ready to file"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-pain-points"
+        ],
+        "note": "Coding is the main cause of ticket disputes and delays (enverus-pain-points). Times tier C."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Attach backup for third-party charges",
+      "description": "For sand hauling, water, rentals and other rebilled items the administrator collects the supplier tickets from the proppant logistics team or the supplier, scans them and attaches them to the field ticket. Customers will not approve third-party lines without backup.",
+      "role": "district-admin",
+      "kind": "lookup",
+      "inputs": [
+        "supplier load and rental tickets"
+      ],
+      "outputs": [
+        "ticket with backup"
+      ],
+      "systems": [
+        "doc-store",
+        "email",
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "chevron-smart-2021"
+        ],
+        "note": "Backup documentation must be attached for third-party charges (chevron-smart-2021). Times tier C."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "File the job package",
+      "description": "The administrator saves the ticket, job report, pump charts and backup in the job folder and checks whether this customer accepts a signed ticket or needs its own electronic ticket approval. Unsigned tickets and customers that approve tickets in their e-invoicing network go to that route.",
+      "role": "district-admin",
+      "kind": "data_entry",
+      "inputs": [
+        "ticket with backup"
+      ],
+      "outputs": [
+        "filed job package"
+      ],
+      "systems": [
+        "doc-store",
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.7,
+          "condition": "signed ticket accepted by the customer"
+        },
+        {
+          "to": "s19",
+          "prob": 0.3,
+          "condition": "unsigned, or customer approves tickets electronically"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cenovus-invoicing"
+        ],
+        "note": "Some producers require field tickets to be submitted and approved in OpenInvoice before invoicing (cenovus-invoicing). Share tier C."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Submit the ticket for electronic approval",
+      "description": "The administrator uploads the ticket and backup to the customer's e-invoicing network as a field ticket for approval, or emails a PDF to the customer's representative for producers without one, and enters the coding the network asks for.",
+      "role": "district-admin",
+      "kind": "data_entry",
+      "inputs": [
+        "filed job package"
+      ],
+      "outputs": [
+        "ticket awaiting customer approval"
+      ],
+      "systems": [
+        "einvoice-portal",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Ticket attached to the wrong well or missing a page.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cenovus-invoicing",
+          "enverus-51ofs"
+        ],
+        "note": "Electronic field ticket submission and approval (cenovus-invoicing, enverus-51ofs). Times tier C."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Customer approves the ticket electronically",
+      "description": "The customer's field approver opens the ticket in the network, checks it against their daily report and approves it, rejects it with a comment, or leaves it in the queue. Approvers are field staff who clear queues when they get to a desk.",
+      "role": "external",
+      "kind": "approval",
+      "inputs": [
+        "ticket awaiting customer approval"
+      ],
+      "outputs": [
+        "approved or rejected ticket"
+      ],
+      "systems": [
+        "einvoice-portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Customer field ticket approval in its e-invoicing network before an invoice is accepted",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.72,
+          "condition": "approved"
+        },
+        {
+          "to": "s22",
+          "prob": 0.12,
+          "condition": "rejected with a question"
+        },
+        {
+          "to": "s23",
+          "prob": 0.16,
+          "condition": "no action after about a week"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-51ofs"
+        ],
+        "note": "With electronic approval tickets are usually approved the next day, but paper tickets took weeks (enverus-51ofs). Canadian 2019-2022 waits and shares tier C."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Release the ticket to billing",
+      "description": "The administrator marks the ticket billable in the ERP, which moves it to the billing queue with its attachments and locks the quantities. Only signed or customer-approved tickets may be released.",
+      "role": "district-admin",
+      "kind": "data_entry",
+      "inputs": [
+        "signed or approved ticket"
+      ],
+      "outputs": [
+        "signed field ticket released to billing"
+      ],
+      "systems": [
+        "erp",
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Billing policy: only tickets signed or approved by the customer are released for invoicing",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "released",
+          "outcome": "released_to_billing"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Resolve the customer's ticket question",
+      "description": "The administrator reads the rejection comment, checks it with the field supervisor or the job file, and either corrects the ticket, adds missing backup or explains the charge in a reply before resubmitting.",
+      "role": "district-admin",
+      "kind": "analysis",
+      "inputs": [
+        "rejected ticket"
+      ],
+      "outputs": [
+        "corrected ticket"
+      ],
+      "systems": [
+        "einvoice-portal",
+        "email",
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Correction does not answer the customer's point.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "resubmit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Chase the customer's approver",
+      "description": "Once a week the administrator runs the list of tickets waiting for approval and emails or phones the approvers, copying the account manager for large or old tickets.",
+      "role": "district-admin",
+      "kind": "communication",
+      "inputs": [
+        "approval queue list"
+      ],
+      "outputs": [
+        "reminder"
+      ],
+      "systems": [
+        "einvoice-portal",
+        "email",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "back to the approver"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Quantity dispute on location",
+      "share_of_cases": 0.11,
+      "description": "The company man disputes a quantity, so the supervisor corrects the ticket before it is signed.",
+      "path": [
+        "s06",
+        "s02",
+        "s06"
+      ]
+    },
+    {
+      "name": "Signature missing",
+      "share_of_cases": 0.15,
+      "description": "The customer representative left before signing; the supervisor returns or the ticket goes for electronic approval.",
+      "path": [
+        "s06",
+        "s07",
+        "s06"
+      ]
+    },
+    {
+      "name": "Missing customer coding",
+      "share_of_cases": 0.15,
+      "description": "No AFE or cost centre for the well; the administrator waits days for the customer to supply one.",
+      "path": [
+        "s13",
+        "s15",
+        "s16"
+      ]
+    },
+    {
+      "name": "Electronic ticket rejected or stalled",
+      "share_of_cases": 0.08,
+      "description": "The customer's approver rejects the ticket or leaves it unworked and it is chased weekly.",
+      "path": [
+        "s20",
+        "s22",
+        "s19",
+        "s20",
+        "s23"
+      ]
+    },
+    {
+      "name": "Not billable",
+      "share_of_cases": 0.02,
+      "description": "Failed or repeated work the district manager decides not to charge.",
+      "path": [
+        "s14"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 3,
+        "p90": 11
+      },
+      "unit": "calendar days from end of job or shift to ticket released to billing",
+      "population": "WCSB pressure pumping tickets on tablet ticketing, 2019-2022 (estimate)",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "enverus-pain-points"
+        ],
+        "note": "Estimate. Paper tickets routed through back offices average over seven days from service to submission (enverus-pain-points, US); tablet tickets signed on location cut the typical case to two or three days, while tickets needing coding or electronic approval take one to three weeks."
+      }
+    },
+    {
+      "metric": "paper_ticket_service_to_submission_days",
+      "value": 7,
+      "unit": "days (average, more than)",
+      "population": "US upstream suppliers using paper tickets (vendor webinar, 2025)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-pain-points"
+        ],
+        "note": "Stated as over seven days; vendor material."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Customer representatives leave the lease or are busy with the rig, leaving tickets unsigned and forcing return trips or a second electronic approval.",
+      "steps": [
+        "s06",
+        "s07",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-pain-points",
+          "enverus-51ofs"
+        ],
+        "note": "Signature chasing and windshield time described for paper processes."
+      }
+    },
+    {
+      "description": "Missing or wrong AFE and cost centre coding is the most common reason tickets stop, and producers use different formats.",
+      "steps": [
+        "s13",
+        "s15",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-pain-points",
+          "cenovus-invoicing"
+        ],
+        "note": "Disputes mostly about coding (enverus-pain-points)."
+      }
+    },
+    {
+      "description": "Supervisors on rotation answer office queries days later, and third-party backup has to be collected from logistics and suppliers.",
+      "steps": [
+        "s10",
+        "s11",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "description": "Electronic ticket approvals sit in customer field approvers' queues and need weekly chasing.",
+      "steps": [
+        "s20",
+        "s23"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "trican-mda-2022",
+      "accessed": "2026-11-24",
+      "title": "Trican Well Service Ltd. Management's Discussion and Analysis for the year ended December 31, 2022",
+      "publisher": "Trican Well Service Ltd.",
+      "url": "https://tricanwellservice.com/app/uploads/2023/02/TCW-Q4-2022-MDA-2023.02.22.pdf",
+      "year": 2023,
+      "supports": "A job is typically represented by an invoice and invoice frequency depends on how often the customer asks to be billed during a project; 7,625 jobs in 2022 and 7,291 in 2021; Q4 2022 revenue $236.5 million and Q4 2021 $156.4 million; trade and other receivables $175.4 million at December 31, 2022 and $127.8 million at December 31, 2021; trade and other payables $90.9 million at December 31, 2022; Q4 2022 direct costs $133.4 million; more than 60 customers; one customer 40% of accounts receivable in 2022 (35% in 2021) and 31% of revenue; expected credit losses measured with a provision matrix; working capital and credit facilities cover timing differences between cash collections and payments."
+    },
+    {
+      "id": "enverus-pain-points",
+      "accessed": "2026-11-24",
+      "title": "7 Field Ticketing Pain Points in Upstream Oil & Gas and How Digital Solutions Are Changing the Game",
+      "publisher": "Enverus",
+      "year": 2025,
+      "url": "https://www.enverus.com/blog/7-field-ticketing-pain-points-in-upstream-oil-gas-and-how-digital-solutions-are-changing-the-game/",
+      "supports": "Vendor blog (November 2025, US practice): technicians drive paper tickets to field offices for approval; lost or damaged tickets delay payment for weeks; most ticket disputes are about coding errors or who requested the work rather than price, and supplier-provided coding raises dispute rates; duplicate charges and inflated hours are hard to catch on paper; the average time from service to ticket submission is over seven days when tickets go through back-office staff; digital ticketing users process invoices 3-4 times faster than paper users."
+    },
+    {
+      "id": "enverus-51ofs",
+      "accessed": "2026-11-24",
+      "title": "Get Paid Faster With Digital Field Tickets (51 Oilfield Services customer story)",
+      "publisher": "Enverus",
+      "year": 2024,
+      "url": "https://www.enverus.com/customer-story/get-paid-faster-with-digital-field-tickets/",
+      "supports": "Vendor case study (July 2024, Texas roustabout contractor): paper process of keying tickets into a spreadsheet, scanning and emailing to head office, re-keying into accounting, printing, tracking down the company man for a signature and re-keying into OpenInvoice; about 900 field tickets a month for one customer; tickets entered three times; with mobile tickets and same-day electronic approval, tickets usually approved the next day; ticket submission to payment fell from 1-2 months to 7-10 days; operators use spend codes; OpenInvoice used by most E&P companies in the US market."
+    },
+    {
+      "id": "chevron-smart-2021",
+      "accessed": "2026-11-24",
+      "title": "CBU Wells Supplier Rules for SMART Submissions (March 30, 2021)",
+      "publisher": "Chevron Canada",
+      "year": 2021,
+      "url": "https://canada-test.chevron.com/-/media/canada/work-with-us/documents/Wells-Supplier-Rules-for-SMART-Mar-2021.pdf",
+      "supports": "Rules for drilling, completions/frac and intervention suppliers: invoices that break the rules are rejected and sent back for correction; work location as pad LSD or well UWI; amount approved on the attached ticket must match the final invoice; backup for third-party charges; field ticket with a stamp carrying WBS elements and GL account and a digital signature must be attached; GL account and WBS on the invoice must match the stamp."
+    },
+    {
+      "id": "cenovus-invoicing",
+      "accessed": "2026-11-24",
+      "title": "Invoicing for suppliers",
+      "publisher": "Cenovus Energy",
+      "year": 2026,
+      "url": "https://www.cenovus.com/contractor/invoicing-for-suppliers.html",
+      "supports": "No paper invoices; for OpenInvoice purchase orders suppliers submit field tickets for approval, monitor OpenInvoice for approved field tickets and only then submit invoices from them; back-up such as daily time tickets attached; invoices against approved goods receipts; WBS/AFE and work order coding formats that must be entered in OpenInvoice. Current page; describes the practice of a large Canadian producer."
+    },
+    {
+      "id": "cnrl-oi-standards",
+      "accessed": "2026-11-24",
+      "title": "Canadian Natural Supplier Submission Guidelines (OpenInvoice submission standards), last updated August 2025",
+      "publisher": "Canadian Natural Resources Limited",
+      "year": 2025,
+      "url": "https://www.cnrl.com/content/uploads/2025/08/Canadian-Natural-OI-Submission-Standards.pdf",
+      "supports": "Invoice header and line requirements in OpenInvoice; all field ticket numbers entered and duplicates not allowed; price book on the invoice must match the PO price book or a red alert blocks submission; PO compliance alerts; credits entered as negative quantities; approver codes by site and department."
+    },
+    {
+      "id": "yager-2015",
+      "accessed": "2026-11-24",
+      "title": "The Broken Payment Model That Costs The Oil Industry Millions",
+      "publisher": "OilPrice.com (David Yager, Calgary)",
+      "year": 2015,
+      "url": "https://oilprice.com/Energy/Energy-General/The-Broken-Payment-Model-That-Costs-The-Oil-Industry-Millions.html",
+      "supports": "Canadian oilfield services commentary (July 2015): the field ticket is prepared by the contractor's representative and signed by the producer's representative; the invoice must be perfect to be paid; payment delays follow when billing procedures are not followed; three-month payment is an accepted norm and some producers will not pay before 90 and possibly 120 days; many vendors carry receivables over 90 days."
+    },
+    {
+      "id": "aogr-proppant-2018",
+      "accessed": "2026-11-24",
+      "title": "Real-Time Data Collection Optimizes Proppant Logistics",
+      "publisher": "The American Oil & Gas Reporter",
+      "year": 2018,
+      "url": "https://www.aogr.com/magazine/cover-story/real-time-data-collection-optimizes-proppant-logistics",
+      "supports": "August 2018: container sand delivery adds work for frac van personnel recording delivery tickets; about 200 containers a day on a wellsite; bill of lading data tied to each container and stage and sent electronically for verification and billing to payables."
+    }
+  ],
+  "assumptions": [
+    "Loaded costs are the organisation file's (base wage x 1.35).",
+    "The validator's simulation is memoryless: a quantity dispute at s06 returns to the cementing, coiled tubing or frac entry step in proportion to the ticket mix, so a single simulated case may switch service line; averages are right.",
+    "The return trip for a signature (s07) is shown with the cementing supervisor because cementing crews leave the lease right after the job; coiled tubing and frac supervisors stay on the pad and get the signature next morning inside s06.",
+    "The decision at s18 between a signed ticket and electronic approval is drawn independently of the earlier signature outcome; 30% covers the 11% left unsigned plus customers that require their own ticket approval.",
+    "Frac data van technicians are added to the process because they produce the treatment summary the frac ticket is built from; the organisation file's process map lists only supervisors and district administrators.",
+    "The frac supervisor builds the equipment and crew part of the ticket while the data van technician runs the stage reports, so s04 and s05 are marked as concurrent.",
+    "No step uses 'people': each ticket step is done by one person; crew work is in the job execution processes.",
+    "District managers are added as approvers of price overrides and non-billable decisions.",
+    "Volume is set at about 750 tickets a month, above the organisation file's 640, because frac and coiled tubing work is ticketed per day while invoices are per job.",
+    "The customer's representative appears as role 'external'; the few minutes of their time at s06, s16 and s20 are included in the validator's hands-on totals.",
+    "The simulated median (about 4.2 days, p90 about 12) is above the 3-day estimate because the office check usually waits overnight and about a third of tickets take the electronic approval or coding-request paths; both are unsourced estimates, so the gap is left rather than tuned away."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

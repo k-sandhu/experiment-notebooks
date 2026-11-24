@@ -1,0 +1,1482 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-ed-patient-triage",
+  "name": "Triage and register emergency patients",
+  "org": "community-hospital-corp",
+  "process": "ed-patient-triage",
+  "sector": "public hospital (acute care)",
+  "function": "emergency department",
+  "summary": "Every emergency patient is triaged by a nurse who records the complaint and vital signs and assigns a Canadian Triage and Acuity Scale (CTAS) level from 1 to 5, which sets the order in which patients get a space and a physician. A registration clerk opens the visit, validates the Ontario health card and prints the wristband, and the charge nurse places the patient in a zone or the waiting room. Queues build at shift change and in the late morning and evening, nurses and the eCTAS software often disagree on the level, and from 2020 to 2022 infection screening added a step and narrowed the spaces available.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital corporation with about 160,000 ED visits a year, eCTAS triage and 24-hour registration desks at each site.",
+    "org_size_employees": 5790,
+    "notes": "Walk-in patients follow quick registration, triage and full registration; ambulance patients are triaged in the offload process and join here for bedside registration."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one ED visit",
+  "trigger": "A patient walks into the emergency department, or an ambulance patient's care is transferred to the ED.",
+  "end_state": "The patient has a CTAS level, a validated registration and a place in a treatment space or the waiting room, and appears in the physician queue (or has been redirected to obstetrical triage).",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 10500,
+      "mode": 13000,
+      "high": 13450
+    },
+    "seasonality": "Higher in winter (respiratory viruses) and summer weekends; daily peak late morning to evening. 2020/21 was about 20% below 2018/19.",
+    "evidence": {
+      "tier": "A",
+      "sources": [
+        "hh1819",
+        "hh2021",
+        "hh2122"
+      ],
+      "note": "158,803 (2018/19), 126,357 (2020/21) and 161,049 (2021/22) ED visits a year divided by 12."
+    },
+    "surge": {
+      "cause": "Winter respiratory virus season (influenza and RSV; COVID-19 waves from 2020)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 60,
+        "mode": 90,
+        "high": 120
+      },
+      "volume_multiplier": {
+        "low": 1.05,
+        "mode": 1.12,
+        "high": 1.25
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Taken from the organisation file's process map entry (author's estimate of the usual December-March rise in Ontario ED visits); no period source was opened that quantifies it."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "patient",
+        "object": "ed_patient",
+        "share": 0.8
+      },
+      {
+        "from": "ed-ambulance-offload",
+        "object": "ambulance_patient",
+        "share": 0.2
+      }
+    ],
+    "inputs": [
+      {
+        "from": "hr-staff-scheduling",
+        "object": "staff_schedule"
+      },
+      {
+        "from": "fs-emergency-preparedness",
+        "object": "emergency_plan"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "triaged",
+        "to": "ed-physician-assessment",
+        "object": "triage_record"
+      },
+      {
+        "outcome": "triaged",
+        "to": "ministry_of_health",
+        "object": "health_card_validation"
+      },
+      {
+        "outcome": "redirected_obstetrics",
+        "to": "wc-obstetric-triage",
+        "object": "maternity_patient"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "ed_rn",
+      "title": "Emergency registered nurse",
+      "department": "Emergency program",
+      "layer": "individual_contributor",
+      "fte_on_process": 22.0,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 61,
+        "high": 68
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, headcount basis and loaded cost (wage x 1.35) from the organisation file. FTE on this process is the author's estimate from staffed positions per shift across the three EDs, cross-checked against hands-on time x volume. Triage desk staffing: about two triage nurses around the clock at the large site and one at each smaller site (about 5.5 FTE per round-the-clock post), less time spent on other work."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "registration_clerk",
+      "title": "Patient registration clerk",
+      "department": "Patient registration and switchboard",
+      "layer": "individual_contributor",
+      "fte_on_process": 20.0,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 34,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, headcount basis and loaded cost (wage x 1.35) from the organisation file. FTE on this process is the author's estimate from staffed positions per shift across the three EDs, cross-checked against hands-on time x volume. Round-the-clock registration at three EDs, two to three clerks per shift at the large site."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "ed_charge_nurse",
+      "title": "Emergency charge nurse",
+      "department": "Emergency program",
+      "layer": "supervisor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 57,
+        "mode": 63,
+        "high": 70
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, headcount basis and loaded cost (wage x 1.35) from the organisation file. FTE on this process is the author's estimate from staffed positions per shift across the three EDs, cross-checked against hands-on time x volume."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "ed_unit_clerk",
+      "title": "Emergency unit clerk",
+      "department": "Emergency program",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.0,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 35,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, headcount basis and loaded cost (wage x 1.35) from the organisation file. FTE on this process is the author's estimate from staffed positions per shift across the three EDs, cross-checked against hands-on time x volume."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "ed_assistant",
+      "title": "Emergency patient care assistant",
+      "department": "Emergency program",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.0,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 31,
+        "high": 34
+      },
+      "occupation_code": "NOC 2016 3413",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, headcount basis and loaded cost (wage x 1.35) from the organisation file. FTE on this process is the author's estimate from staffed positions per shift across the three EDs, cross-checked against hands-on time x volume. Includes entrance screening posts in 2020-2022; not listed for this process in the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    }
+  ],
+  "systems": [
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "ed_board",
+      "name": "Emergency department tracking board",
+      "kind": "workflow"
+    },
+    {
+      "id": "hcv",
+      "name": "Ministry health card validation service",
+      "kind": "external_portal"
+    },
+    {
+      "id": "pharmacy_system",
+      "name": "Pharmacy information system and automated dispensing cabinets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    }
+  ],
+  "resources": [],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Patient arrives at the emergency department",
+      "description": "A walk-in patient, often with a family member, comes through the emergency entrance and joins the line for triage, or an ambulance patient who was triaged at the ambulance desk is handed into this process after the transfer of care.",
+      "role": "external",
+      "kind": "intake",
+      "inputs": [
+        "patient"
+      ],
+      "outputs": [
+        "patient in triage line or ambulance patient on board"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.8,
+          "condition": "walk-in"
+        },
+        {
+          "to": "s12",
+          "prob": 0.2,
+          "condition": "arrived by ambulance, already triaged"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "80% of Ontario ED patients arrived by their own means and 20% by ambulance in 2022/23 (OAG 2023 section 4.3.3)."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Screen for infection risk at the entrance",
+      "description": "A screener at the door asks about fever, cough, travel and contacts, hands out a mask and directs a patient who screens positive to a separate waiting area. Before 2020 this was a sign and a triage question; from March 2020 to 2022 it was active screening at every entrance.",
+      "role": "ed_assistant",
+      "kind": "intake",
+      "inputs": [
+        "patient answers"
+      ],
+      "outputs": [
+        "screen result",
+        "mask given"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital infection prevention and control policy; provincial COVID-19 screening guidance for hospitals 2020-2022",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.06,
+          "condition": "screens positive"
+        },
+        {
+          "to": "s03",
+          "prob": 0.94,
+          "condition": "screens negative"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge of Ontario hospital entrance screening 2020-2022; the 6% positive share is an estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Quick-register the arrival",
+      "description": "The registration clerk at the front desk types the patient's name, date of birth and health card number and a few words of complaint to open the emergency visit and time-stamp the arrival, so the triage nurse can document against it.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "health card",
+        "patient answers"
+      ],
+      "outputs": [
+        "visit opened",
+        "arrival time"
+      ],
+      "systems": [
+        "his",
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 12
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong patient chosen from the master patient index or a duplicate chart created.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge: many Ontario EDs open the visit before triage; minutes estimated."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Take a first look at the patient",
+      "description": "The triage nurse glances up from the current patient at each new arrival to check colour, breathing and distress. A patient who looks critically ill is taken straight in ahead of the line.",
+      "role": "ed_rn",
+      "kind": "judgment",
+      "inputs": [
+        "patient appearance"
+      ],
+      "outputs": [
+        "proceed to triage or immediate placement"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 1,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.97,
+          "condition": "can wait for full triage"
+        },
+        {
+          "to": "s06",
+          "prob": 0.03,
+          "condition": "looks critically ill"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge of triage practice; share of immediate placements estimated from CTAS 1 and obvious CTAS 2 presentations."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Complete CTAS triage",
+      "description": "At the triage desk the nurse selects the presenting complaint, takes blood pressure, pulse, oxygen saturation, temperature and a pain score, asks about medications, allergies and history, and enters them in eCTAS, which suggests a CTAS level from 1 (resuscitation) to 5 (non-urgent). The nurse can raise the level by override and writes a short triage note.",
+      "role": "ed_rn",
+      "kind": "judgment",
+      "inputs": [
+        "presenting complaint",
+        "vital signs",
+        "history"
+      ],
+      "outputs": [
+        "CTAS level",
+        "triage note"
+      ],
+      "systems": [
+        "his",
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 4,
+        "high": 25
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "CTAS level wrong; provincial eCTAS override rates were 14-16% a year and over 70 hospitals exceeded the 10% threshold (OAG 2023).",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CTAS level recorded for every visit and reported to CIHI's National Ambulatory Care Reporting System; Ontario Health eCTAS override monitoring above 10%",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.31,
+          "condition": "a medical directive applies"
+        },
+        {
+          "to": "s19",
+          "prob": 0.03,
+          "condition": "suspected stroke or STEMI"
+        },
+        {
+          "to": "s17",
+          "prob": 0.01,
+          "condition": "pregnant over 20 weeks with a pregnancy complaint"
+        },
+        {
+          "to": "s08",
+          "prob": 0.65,
+          "condition": "standard path"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023",
+          "ctas2016"
+        ],
+        "note": "Triage content (subjective and objective information, blood pressure and vitals, eCTAS) from OAG 2023 section 4.4.1; modifiers from ctas2016. Minutes and the queue are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Move a critically ill patient to resuscitation",
+      "description": "The charge nurse takes the patient straight to the resuscitation bay or an acute monitored space, calls the emergency physician to the bedside and assigns nurses. Triage and registration are finished at the bedside.",
+      "role": "ed_charge_nurse",
+      "kind": "coordination",
+      "inputs": [
+        "first look"
+      ],
+      "outputs": [
+        "resuscitation bay assignment"
+      ],
+      "systems": [
+        "ed_board",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ctas2016"
+        ],
+        "note": "CTAS level 1 patients are seen immediately (ctas2016); process minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Start tests under a medical directive",
+      "description": "Following a directive signed by the emergency physicians, the triage nurse orders standard bloodwork, an ECG, a urine test or an X-ray for the complaint, or gives acetaminophen or ibuprofen for pain or fever, so results are ready when the physician sees the patient.",
+      "role": "ed_rn",
+      "kind": "data_entry",
+      "inputs": [
+        "CTAS level",
+        "medical directive"
+      ],
+      "outputs": [
+        "lab, ECG or X-ray orders",
+        "medication given"
+      ],
+      "systems": [
+        "his",
+        "pharmacy_system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Medical directives approved by the hospital's Medical Advisory Committee under the College of Nurses of Ontario directives practice standard",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "OAG 2023: sites had 9 to 37 medical directives; one hospital used them for about 50% of visits; use varies. The 31% share is the author's estimate between those figures."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Complete registration and validate the health card",
+      "description": "The patient goes to the registration desk, where the clerk checks the photo health card, runs the provincial health card validation, confirms address, phone, family doctor and next of kin, prints the wristband and labels and checks two identifiers with the patient.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "health card",
+        "visit"
+      ],
+      "outputs": [
+        "validated registration",
+        "wristband",
+        "labels"
+      ],
+      "systems": [
+        "his",
+        "hcv"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 25
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Out-of-date address, family doctor or version code, which later misroutes reports or billing.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Ontario Ministry of Health health card eligibility check before insured hospital services are recorded; hospital registration policy (two patient identifiers)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.93,
+          "condition": "valid Ontario health card"
+        },
+        {
+          "to": "s09",
+          "prob": 0.07,
+          "condition": "no valid card, out of province or uninsured"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge of Ontario ED registration; minutes and the 7% exception share are estimates."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Register a patient without valid Ontario coverage",
+      "description": "The clerk records out-of-province coverage details for interprovincial billing, a third-party insurer, or an uninsured patient's agreement to pay, and flags the account for patient billing. Care is not delayed for this.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "insurance details or none"
+      ],
+      "outputs": [
+        "payer recorded",
+        "billing flag"
+      ],
+      "systems": [
+        "his",
+        "hcv"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge; minutes estimated."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Assign the patient to a zone",
+      "description": "The charge nurse reads the CTAS level and complaint on the tracking board and decides between the acute stretcher zone, the ambulatory or fast-track zone, the paediatric area or the waiting room, depending on which spaces and nurses are free.",
+      "role": "ed_charge_nurse",
+      "kind": "coordination",
+      "inputs": [
+        "CTAS level",
+        "tracking board"
+      ],
+      "outputs": [
+        "zone assignment"
+      ],
+      "systems": [
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.38,
+          "condition": "space available now"
+        },
+        {
+          "to": "s14",
+          "prob": 0.62,
+          "condition": "no space: waiting room"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of the share placed directly versus sent to the waiting room in a crowded community ED."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Escort the patient to a treatment space",
+      "description": "The patient care assistant walks or wheels the patient to the assigned space, gives a gown, and tells the primary nurse the patient has arrived.",
+      "role": "ed_assistant",
+      "kind": "physical",
+      "inputs": [
+        "zone assignment"
+      ],
+      "outputs": [
+        "patient in treatment space"
+      ],
+      "systems": [
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Link the offloaded ambulance patient's record",
+      "description": "The unit clerk checks that the quick-registration created during offload carries the triage note and CTAS level and that the patient shows in the right space on the tracking board.",
+      "role": "ed_unit_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "offload quick registration",
+        "triage note"
+      ],
+      "outputs": [
+        "linked visit on board"
+      ],
+      "systems": [
+        "his",
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Complete registration at the bedside",
+      "description": "When the patient is in a space or stretcher, the registration clerk does a round of the department, gets the health card from the patient or family, runs health card validation, completes demographics and fixes the wristband.",
+      "role": "registration_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "visit",
+        "health card"
+      ],
+      "outputs": [
+        "validated registration"
+      ],
+      "systems": [
+        "his",
+        "hcv"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 9
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 25,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Card missing or demographics incomplete; finished by a later round.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Ontario Ministry of Health health card eligibility check before insured hospital services are recorded; hospital registration policy (two patient identifiers)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge of bedside registration rounds; the wait is an estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Direct the patient to the waiting room",
+      "description": "The triage nurse tells the patient to wait, not to eat or drink until seen, and to come back to the desk if symptoms get worse, and gives a specimen cup if a urine test was ordered.",
+      "role": "ed_rn",
+      "kind": "communication",
+      "inputs": [
+        "CTAS level"
+      ],
+      "outputs": [
+        "patient in waiting room"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Post the triage record to the physician queue",
+      "description": "The tracking board places the patient in the queue for physicians, ordered by CTAS level and time since triage, and starts the clock for the time to physician initial assessment.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "triage record",
+        "registration"
+      ],
+      "outputs": [
+        "patient in physician queue"
+      ],
+      "systems": [
+        "ed_board",
+        "his"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "Ontario measures time to physician initial assessment from triage (OAG 2023 section 4.2.1)."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Prepare the emergency record",
+      "description": "The unit clerk prints labels and the paper parts of the emergency record (consent, nursing flow sheet and physician sheet where not electronic), puts them in the chart rack by zone and checks the board entry.",
+      "role": "ed_unit_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "registration",
+        "triage note"
+      ],
+      "outputs": [
+        "chart ready"
+      ],
+      "systems": [
+        "his",
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s15"
+      ],
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "triaged"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge of hybrid paper and electronic ED records in 2019-2022."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Redirect a pregnant patient to obstetrical triage",
+      "description": "For a patient more than about 20 weeks pregnant whose complaint is pregnancy-related, the triage nurse confirms she is stable, phones the birthing unit and documents the transfer to obstetrical triage.",
+      "role": "ed_rn",
+      "kind": "coordination",
+      "inputs": [
+        "triage note"
+      ],
+      "outputs": [
+        "obstetrical triage notified"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ctas2016"
+        ],
+        "note": "The 2016 CTAS revision aligned with the Obstetrical Triage Acuity Scale (ctas2016); the 20-week rule and the 1% share are the author's estimate of common Ontario practice."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Escort the patient to the birthing unit",
+      "description": "A patient care assistant takes the patient by wheelchair to the birthing unit and hands over to the obstetrical triage nurse.",
+      "role": "ed_assistant",
+      "kind": "travel",
+      "inputs": [
+        "patient"
+      ],
+      "outputs": [
+        "patient at obstetrical triage"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "redirected_obstetrics"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Activate the stroke or heart attack protocol",
+      "description": "For a suspected stroke within the treatment window or an ECG showing a STEMI, the charge nurse calls the physician, the stroke team or cardiology and CT, and moves the patient to an acute space; registration is finished at the bedside.",
+      "role": "ed_charge_nurse",
+      "kind": "communication",
+      "inputs": [
+        "triage note",
+        "ECG"
+      ],
+      "outputs": [
+        "code activated",
+        "acute space"
+      ],
+      "systems": [
+        "email_phone",
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital stroke and STEMI protocols (time-critical treatment pathways)",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge of Ontario stroke and STEMI protocols; share estimated."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Isolate a patient who screened positive",
+      "description": "The nurse places the patient in a single room or a separate waiting area with droplet and contact precautions, puts an isolation flag on the board and triages them there.",
+      "role": "ed_rn",
+      "kind": "physical",
+      "inputs": [
+        "screen result"
+      ],
+      "outputs": [
+        "patient isolated"
+      ],
+      "systems": [
+        "ed_board"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital infection prevention and control policy (additional precautions)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Critically ill at first look",
+      "share_of_cases": 0.024,
+      "description": "The patient is taken straight to resuscitation and registered at the bedside.",
+      "path": [
+        "s04",
+        "s06",
+        "s13",
+        "s15",
+        "s16"
+      ]
+    },
+    {
+      "name": "No valid Ontario health card",
+      "share_of_cases": 0.05,
+      "description": "Out-of-province, third-party or uninsured patients need payer details recorded.",
+      "path": [
+        "s08",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "Positive infection screen",
+      "share_of_cases": 0.05,
+      "description": "The patient is isolated before triage and registration (mainly 2020-2022).",
+      "path": [
+        "s02",
+        "s20",
+        "s03"
+      ]
+    },
+    {
+      "name": "Pregnant patient redirected",
+      "share_of_cases": 0.008,
+      "description": "Pregnancy complaints after about 20 weeks go to obstetrical triage in the birthing unit.",
+      "path": [
+        "s05",
+        "s17",
+        "s18"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.035,
+        "p90": 0.08
+      },
+      "unit": "calendar days from arrival to triaged, registered and placed (about 50 and 115 minutes)",
+      "population": "Ontario community hospital EDs 2019-2022, author's estimate",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: arrival-to-triage of about 10-20 minutes in busy community EDs plus registration and placement; bedside registration of ambulance patients waits for the clerk's round. No source with arrival-to-triage times for this period was opened."
+      }
+    },
+    {
+      "metric": "ctas_override_rate",
+      "value": {
+        "low": 0.14,
+        "high": 0.16
+      },
+      "unit": "share of eCTAS triages where the nurse overrides the suggested level, Ontario average",
+      "population": "Ontario EDs using eCTAS, five years to 2022/23",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "OAG 2023 section 4.4.2."
+      }
+    },
+    {
+      "metric": "triage_to_physician_benchmark_hours",
+      "value": {
+        "p50": 1,
+        "p90": 3
+      },
+      "unit": "hours from triage to physician initial assessment (proposed CTAS benchmark)",
+      "population": "Canadian EDs",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ctas2016"
+        ],
+        "note": "CTAS 2016 revision proposes a median of 1 hour and a 90th percentile of 3 hours."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "One triage nurse per desk becomes the bottleneck at peaks; patients wait to be triaged and ambulance crews queue behind walk-ins.",
+      "steps": [
+        "s04",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "OAG 2023 names unavailability of nursing staff to triage as a main cause of offload delay; walk-in queue impact is the author's inference."
+      }
+    },
+    {
+      "description": "Triage levels vary between nurses; frequent overrides of the eCTAS level suggest inconsistent triage and training gaps.",
+      "steps": [
+        "s05"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "OAG 2023 section 4.4.2: override rates 14-16%, some hospitals above 25%."
+      }
+    },
+    {
+      "description": "Medical directives that let triage nurses start tests are used unevenly, so many patients wait for the physician before any test is ordered.",
+      "steps": [
+        "s07"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2023"
+        ],
+        "note": "OAG 2023 section 4.2.3: 9 to 37 directives per site, use not tracked centrally."
+      }
+    },
+    {
+      "description": "Registration is done twice for many patients (quick registration, then full registration or a bedside round), re-keying the same identifiers.",
+      "steps": [
+        "s03",
+        "s08",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge of ED registration workflows."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oag2023",
+      "title": "2023 Annual Report, Value-for-Money Audit: Emergency Departments",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en23/AR_emergencydepts_en23.pdf",
+      "year": 2023,
+      "accessed": "2026-11-24",
+      "supports": "20% of visits by ambulance; triage content and eCTAS; override rates 14-16%; medical directives 9-37 per site and about 50% of visits at one hospital; time to physician initial assessment measured from triage."
+    },
+    {
+      "id": "ctas2016",
+      "title": "Revisions to the Canadian Emergency Department Triage and Acuity Scale (CTAS) Guidelines 2016 (CAEP position statement, CTAS National Working Group)",
+      "publisher": "Canadian Journal of Emergency Medicine, Cambridge University Press",
+      "url": "https://www.cambridge.org/core/product/E2CB3E2063C54E11259313FA4FEAE495",
+      "year": 2017,
+      "accessed": "2026-11-24",
+      "supports": "CTAS level 1 seen immediately; modifiers; proposed median 1 h and 90th percentile 3 h triage-to-physician benchmark; alignment with the Obstetrical Triage Acuity Scale."
+    },
+    {
+      "id": "hh1819",
+      "title": "Halton Healthcare 2018/19 Annual Community Report",
+      "publisher": "Halton Healthcare",
+      "url": "https://www.haltonhealthcare.on.ca/2018-19-annual-community-report",
+      "year": 2019,
+      "accessed": "2026-11-24",
+      "supports": "158,803 ED visits in 2018/19."
+    },
+    {
+      "id": "hh2021",
+      "title": "Halton Healthcare 2020-2021 Annual Community Report",
+      "publisher": "Halton Healthcare",
+      "url": "https://www.haltonhealthcare.on.ca/about/reports-and-publications/2020-2021-annual-community-report",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "126,357 ED visits in 2020/21."
+    },
+    {
+      "id": "hh2122",
+      "title": "Halton Healthcare 2021-2022 Annual Community Report",
+      "publisher": "Halton Healthcare",
+      "url": "https://www.haltonhealthcare.on.ca/about/reports-and-publications/2021-2022-annual-community-report",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "161,049 ED visits in 2021/22."
+    }
+  ],
+  "assumptions": [
+    "The simulated median (about 70 minutes from arrival to placement) is about 1.4 times the estimated benchmark, mainly because ambulance patients wait for the registration clerk's bedside round; walk-in patients finish in about 45-60 minutes.",
+    "Ambulance patients' CTAS triage is counted in the offload workflow (hosp-ed-ambulance-offload); here they get only record linking and bedside registration.",
+    "The process ends when the patient is placed and queued for a physician; waiting-room reassessment and the wait for a physician belong to the physician assessment workflow.",
+    "Quick registration before triage is assumed; some sites triage first and register after, which moves the same work rather than removing it.",
+    "Stated FTE reflects staffed triage and registration posts, which include idle time between arrivals overnight, so it exceeds hands-on time by design.",
+    "Patients who leave before triage are rare and not modelled."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

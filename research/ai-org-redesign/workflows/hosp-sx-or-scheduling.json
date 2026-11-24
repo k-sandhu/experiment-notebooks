@@ -1,0 +1,1481 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-sx-or-scheduling",
+  "name": "Build the operating room schedule",
+  "org": "community-hospital-corp",
+  "process": "sx-or-scheduling",
+  "sector": "healthcare (acute care hospital)",
+  "function": "surgical and perioperative services",
+  "summary": "Each week the OR schedulers turn surgeons' allocated blocks and the booked cases into daily slates for about 17 rooms across three sites, check equipment, loaner instruments, beds and staffing, and publish the schedule to every department that prepares for surgery. Every afternoon a huddle revises the next day's slate for add-on emergencies, cancellations and staff gaps. Rooms run close to full when open, so urgent cases bump electives and over-running lists, late starts and day-of-surgery cancellations are the main sources of lost time.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital corporation with about 17 operating rooms, four OR schedulers, a perioperative manager per site and an OR scheduling module in the hospital information system.",
+    "org_size_employees": 5790,
+    "notes": "In 2020-2022 provincial directives closed elective rooms during COVID-19 waves; those weeks follow the same steps with fewer rooms. Block allocation itself is set in sx-surgical-recovery-planning and by the OR committee."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one weekly OR schedule",
+  "trigger": "About three weeks before a surgical week, the scheduler starts the week from the master block schedule and the cases released by the booking office.",
+  "end_state": "The week's surgery is done and its utilization and cancellations have been reviewed by the perioperative manager (and monthly by the department chiefs).",
+  "cadence": "weekly",
+  "volume": {
+    "cases_per_month": {
+      "low": 4.3,
+      "mode": 4.3,
+      "high": 4.3
+    },
+    "seasonality": "Fewer rooms run in July-August, March break and late December; several weeks in 2020 and 2021 ran emergency and urgent cancer cases only.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "One schedule per week, as in the organisation file."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "sx-surgical-booking",
+        "object": "surgical_case",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "sx-surgical-recovery-planning",
+        "object": "or_block_allocation"
+      },
+      {
+        "from": "hr-staff-scheduling",
+        "object": "staff_schedule"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "sx-perioperative-case",
+        "object": "or_schedule"
+      },
+      {
+        "outcome": "any",
+        "to": "sx-sterile-reprocessing",
+        "object": "or_schedule"
+      },
+      {
+        "outcome": "any",
+        "to": "referring_office",
+        "object": "or_schedule"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "or_scheduler",
+      "title": "Operating room scheduler",
+      "department": "Perioperative services",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.6,
+      "loaded_cost_per_hour": {
+        "low": 34,
+        "mode": 38,
+        "high": 42
+      },
+      "occupation_code": "NOC 2016 1243",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. All four schedulers in the organisation file, at 0.9 FTE each on this process; they also take part in booking."
+      }
+    },
+    {
+      "id": "surg_manager",
+      "title": "Patient care manager, perioperative or surgical unit",
+      "department": "Surgical and perioperative program",
+      "layer": "manager",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 78,
+        "high": 89
+      },
+      "occupation_code": "NOC 2016 0311",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Three site managers, about a fifth of their time on staffing rooms, huddles and reviews."
+      }
+    },
+    {
+      "id": "anesthesiologist",
+      "title": "Anesthesiologist",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.15,
+      "loaded_cost_per_hour": {
+        "low": 180,
+        "mode": 220,
+        "high": 280
+      },
+      "occupation_code": "NOC 2016 3111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. The anaesthesia scheduling lead and daily anaesthesia lead."
+      },
+      "shift_pattern": "on_call"
+    },
+    {
+      "id": "dept_chief",
+      "title": "Department chief / medical director",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "director",
+      "fte_on_process": 0.05,
+      "loaded_cost_per_hour": {
+        "low": 170,
+        "mode": 210,
+        "high": 260
+      },
+      "occupation_code": "NOC 2016 3111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Conflict decisions and monthly OR committee review."
+      }
+    },
+    {
+      "id": "bed_flow_coordinator",
+      "title": "Patient flow coordinator (bed allocation)",
+      "department": "Patient flow and bed management",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.05,
+      "loaded_cost_per_hour": {
+        "low": 51,
+        "mode": 63,
+        "high": 70
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, layer and loaded cost (wage x 1.35: about 25% benefits and HOOPP pension plus 10% overhead; physicians at estimated gross clinical earnings) from the organisation file. Weekly bed check of the draft slate; this role is not in the organisation file's role list for this process."
+      },
+      "shift_pattern": "shift_24x7"
+    }
+  ],
+  "systems": [
+    {
+      "id": "or_scheduling",
+      "name": "Operating room scheduling and perioperative documentation module",
+      "kind": "workflow"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets and shared drives",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    },
+    {
+      "id": "fax",
+      "name": "Fax (referrals, requisitions and reports to community physicians)",
+      "kind": "communication"
+    },
+    {
+      "id": "bed_board",
+      "name": "Electronic bed board and patient flow dashboard",
+      "kind": "workflow"
+    },
+    {
+      "id": "scheduling_system",
+      "name": "Staff scheduling and time-and-attendance system",
+      "kind": "workflow"
+    },
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "board_portal",
+      "name": "Board portal for meeting packages",
+      "kind": "document_store"
+    }
+  ],
+  "resources": [
+    {
+      "id": "operating_rooms",
+      "name": "Operating rooms",
+      "kind": "facility",
+      "count": 17
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Confirm the block schedule for the surgical week",
+      "description": "About three weeks ahead, the OR scheduler opens the master block schedule for each site and checks which rooms run on each weekday, which surgeon or service holds each block, and which rooms are closed for statutory holidays, March break or summer. Changes from the latest block allocation, such as rooms closed during COVID-19 ramp-downs, are applied.",
+      "role": "or_scheduler",
+      "kind": "lookup",
+      "inputs": [
+        "master block schedule",
+        "OR block allocation"
+      ],
+      "outputs": [
+        "week's block template"
+      ],
+      "systems": [
+        "or_scheduling",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "OR time is allocated to each surgical department and the department head allocates it to surgeons; weekday daytime slots go to elective surgery; most hospitals close rooms on statutory holidays, March break and two to ten weeks in summer (oag2016). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Release unfilled block time at the cut-off",
+      "description": "At the booking cut-off the scheduler lists blocks that surgeons have not filled and, under the release rule, offers the time to other surgeons in the same service and then to anyone with long waits. Surgeons' offices are phoned or emailed with the open time.",
+      "role": "or_scheduler",
+      "kind": "coordination",
+      "inputs": [
+        "week's block template",
+        "booked cases"
+      ],
+      "outputs": [
+        "released time offers"
+      ],
+      "systems": [
+        "or_scheduling",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 4320,
+        "high": 7200
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "OR block release policy set by the surgical services or OR committee",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Release rules (often 5 to 10 working days before surgery) are common practice but no source for this hospital was opened; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Surgeons' offices confirm case order for their blocks",
+      "description": "Surgeons' secretaries confirm which booked patients go into each block and in what order, take released time, and phone back changes. Work in the offices is outside the hospital's labour; only a few minutes of handling are counted.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "released time offers"
+      ],
+      "outputs": [
+        "case list per block"
+      ],
+      "systems": [
+        "email_phone",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 5760
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Surgeons schedule and prioritize their own elective cases within their time (oag2016); response times are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Build the draft daily slates",
+      "description": "One scheduler per site places each booked case into a room and time: case length from the surgeon's history in the OR module, order rules (children and diabetics first, latex-allergic first, isolation cases last), anaesthesia type and turnover. Over-booked blocks are trimmed or flagged.",
+      "role": "or_scheduler",
+      "kind": "analysis",
+      "inputs": [
+        "case list per block",
+        "surgical case"
+      ],
+      "outputs": [
+        "draft slates"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 480,
+        "mode": 720,
+        "high": 1080
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.15,
+        "defect_description": "Case lengths underestimated or order rules missed, so a list over-runs or a case is cancelled for lack of time.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "people": 3,
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "The three hospitals audited ran rooms at 92% to 100% utilization when open, against an 85-90% best practice recommended to the Ministry, so slates are packed back to back (oag2016). Hours per site are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Check equipment, implants and instrument set conflicts",
+      "description": "The scheduler checks each day's slate against scarce equipment (laparoscopic towers, C-arms, microscopes, power tools) and instrument sets so that the same set is not needed in two rooms without time to reprocess it, and lists implants and vendor loaner sets to order.",
+      "role": "or_scheduler",
+      "kind": "validation",
+      "inputs": [
+        "draft slates",
+        "equipment list"
+      ],
+      "outputs": [
+        "equipment conflict list",
+        "loaner and implant request"
+      ],
+      "systems": [
+        "or_scheduling",
+        "spreadsheets",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 120,
+        "mode": 240,
+        "high": 420
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "A set or device is double-booked or a loaner is not ordered.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "people": 2,
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice; no source for conflict checking was opened."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Vendors confirm loaner sets and implants",
+      "description": "Implant and instrument vendors confirm delivery of loaner sets to medical device reprocessing, which needs them a day or more before surgery to clean and sterilize them. Late confirmations are chased by phone.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "loaner and implant request"
+      ],
+      "outputs": [
+        "loaner delivery confirmation"
+      ],
+      "systems": [
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 5760
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pidac2013"
+        ],
+        "note": "Loaned equipment must be tracked and logged and reprocessed before use (pidac2013); vendor response times are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Check inpatient and ICU bed needs with patient flow",
+      "description": "The patient flow coordinator compares the number of patients on each day's slate who need a surgical or ICU bed after surgery with the bed forecast, and flags days where elective admissions would exceed beds.",
+      "role": "bed_flow_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "draft slates",
+        "bed forecast"
+      ],
+      "outputs": [
+        "bed capacity flags"
+      ],
+      "systems": [
+        "bed_board",
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; bed shortages are a structural cause of day-of-surgery cancellations (leslie2013 lists 'no hospital bed' among structural factors)."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Assign anaesthesiologists to rooms",
+      "description": "The anaesthesia department's scheduling lead fills the anaesthesia roster against the rooms running each day, including the on-call anaesthesiologist for the emergency room, and notes rooms needing regional blocks or paediatric expertise.",
+      "role": "anesthesiologist",
+      "kind": "coordination",
+      "inputs": [
+        "draft slates",
+        "anaesthesia roster"
+      ],
+      "outputs": [
+        "anaesthesia assignments"
+      ],
+      "systems": [
+        "spreadsheets",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; anaesthesia availability caused 24% of late first-case starts in an Ontario hospital (wright2010)."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Assign nurses and attendants to rooms",
+      "description": "Each site's perioperative manager or charge nurse matches the staff schedule to the rooms running, assigns scrub and circulating nurses with the right specialty skills, and asks the staffing office to fill vacancies, sick calls and vacation gaps.",
+      "role": "surg_manager",
+      "kind": "coordination",
+      "inputs": [
+        "draft slates",
+        "staff schedule"
+      ],
+      "outputs": [
+        "room staffing plan"
+      ],
+      "systems": [
+        "scheduling_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 120,
+        "mode": 180,
+        "high": 300
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "people": 3,
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.65,
+          "condition": "a room cannot be staffed, a bed day is over capacity or a block is over-booked"
+        },
+        {
+          "to": "s11",
+          "prob": 0.35,
+          "condition": "no conflicts"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; 2020-2022 nursing shortages forced some rooms closed."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Department chief settles the week's conflicts",
+      "description": "The chief of surgery or of the affected department decides which cases or rooms give way when staffing, beds or time fall short, using urgency and target dates, and tells the surgeons involved.",
+      "role": "dept_chief",
+      "kind": "approval",
+      "inputs": [
+        "conflict list",
+        "wait list priorities"
+      ],
+      "outputs": [
+        "conflict decisions"
+      ],
+      "systems": [
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Medical staff by-laws and OR committee rules giving department chiefs authority over their service's OR time",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "decided"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Department heads allocate OR time to surgeons (oag2016); the conflict-resolution role and minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Publish the weekly OR schedule",
+      "description": "The scheduler finalizes the week in the OR module and sends it to medical device reprocessing, the pre-admission clinic, same-day surgery, the surgical units, pharmacy, the blood bank, the staffing office and the surgeons' offices.",
+      "role": "or_scheduler",
+      "kind": "communication",
+      "inputs": [
+        "draft slates",
+        "room staffing plan",
+        "anaesthesia assignments"
+      ],
+      "outputs": [
+        "weekly OR schedule"
+      ],
+      "systems": [
+        "or_scheduling",
+        "email_phone",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the distribution list follows the organisation file's outputs for this process."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Check pre-operative readiness for next week's cases",
+      "description": "During the week before surgery the schedulers check each case for pre-admission clearance, consent, blood work and group and screen, and remove or swap cases the anaesthesiologist has deferred.",
+      "role": "or_scheduler",
+      "kind": "validation",
+      "inputs": [
+        "weekly OR schedule",
+        "pre-admission results"
+      ],
+      "outputs": [
+        "confirmed schedule"
+      ],
+      "systems": [
+        "or_scheduling",
+        "his"
+      ],
+      "touch_min": {
+        "low": 120,
+        "mode": 240,
+        "high": 360
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 4320
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "people": 3,
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "leslie2013"
+        ],
+        "note": "Process factors made up 58.5% of day-of-surgery cancellations in an Ontario hospital (leslie2013); the readiness check targets them. Hours are the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Generate case cart pick lists and supply requests",
+      "description": "The OR module prints the instrument and supply pick lists for each case from the surgeons' preference cards, and medical device reprocessing and stores build case carts for the next day.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "confirmed schedule",
+        "preference cards"
+      ],
+      "outputs": [
+        "pick lists"
+      ],
+      "systems": [
+        "or_scheduling"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A preference card is out of date, so an instrument or supply is missing from the cart.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common OR module function in this period."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Run the daily OR huddle for the next day's slate",
+      "description": "Each afternoon the site manager, the charge nurse, the scheduler and the anaesthesia lead review tomorrow's slate: staffing, bed availability, equipment, cancellations and add-on cases waiting.",
+      "role": "surg_manager",
+      "kind": "coordination",
+      "inputs": [
+        "next day's slate",
+        "bed board"
+      ],
+      "outputs": [
+        "huddle actions"
+      ],
+      "systems": [
+        "or_scheduling",
+        "bed_board"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 1000,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "people": 3,
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily huddles are named in the organisation file's process description; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Fit add-on and urgent cases into the slate",
+      "description": "The scheduler places urgent and emergency add-on cases in the emergency room or after elective lists, re-times lists that will over-run, and moves cases between rooms.",
+      "role": "or_scheduler",
+      "kind": "coordination",
+      "inputs": [
+        "huddle actions",
+        "add-on list"
+      ],
+      "outputs": [
+        "revised slate"
+      ],
+      "systems": [
+        "or_scheduling",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 210
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "people": 3,
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.4,
+          "condition": "an urgent case needs a bump"
+        },
+        {
+          "to": "s17",
+          "prob": 0.6,
+          "condition": "no bump needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "About 13% of Ontario surgical cases are emergencies; less urgent emergency cases wait until after about 15:00 when elective lists finish, and three of six sites visited had no daytime room for emergencies (oag2016). Hours are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Anaesthesia lead and surgeons agree which elective case is bumped",
+      "description": "When an urgent case cannot wait for the evening, the anaesthesiologist in charge and the surgeons agree which elective case is delayed or cancelled, and the patient is told.",
+      "role": "anesthesiologist",
+      "kind": "judgment",
+      "inputs": [
+        "revised slate"
+      ],
+      "outputs": [
+        "bump decision"
+      ],
+      "systems": [
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital OR booking policy: emergency priority classes and authority to bump elective cases",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "decided"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "All three hospitals audited let the most urgent emergencies bump other cases (oag2016); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Fill cancellations from the short-notice list",
+      "description": "The scheduler phones patients on the short-notice list who are cleared for surgery to take a cancelled slot, or releases the time to an add-on case.",
+      "role": "or_scheduler",
+      "kind": "communication",
+      "inputs": [
+        "cancellation list",
+        "short-notice list"
+      ],
+      "outputs": [
+        "filled or released slot"
+      ],
+      "systems": [
+        "or_scheduling",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "people": 2,
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "leslie2013"
+        ],
+        "note": "About 8% of elective cases were cancelled on the day in an Ontario hospital (leslie2013), leaving time to refill; hours are the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Publish the final next-day slate",
+      "description": "The scheduler prints and sends the final slate to the rooms, same-day surgery, recovery, portering and medical device reprocessing, and updates the OR module.",
+      "role": "or_scheduler",
+      "kind": "communication",
+      "inputs": [
+        "revised slate"
+      ],
+      "outputs": [
+        "final daily slate"
+      ],
+      "systems": [
+        "or_scheduling",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.8,
+          "condition": "another surgical day in the week"
+        },
+        {
+          "to": "s19",
+          "prob": 0.2,
+          "condition": "last day of the week"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the 0.8 loop gives about five daily cycles per week."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Record actual times and compile utilization",
+      "description": "After the week the scheduler checks that start, end and turnover times were entered for every case, then runs the utilization report: first-case on-time starts, over-runs, turnover, cancellations and their reasons.",
+      "role": "or_scheduler",
+      "kind": "analysis",
+      "inputs": [
+        "OR module case times"
+      ],
+      "outputs": [
+        "weekly utilization report"
+      ],
+      "systems": [
+        "or_scheduling",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 240
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Times missing or entered late, so utilization is misstated.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "wright2010"
+        ],
+        "note": "On-time starts in an Ontario hospital rose from about 6% to about 60% after a task force measured and acted on causes (wright2010); report content and hours are the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Manager reviews the weekly utilization and cancellation report",
+      "description": "The perioperative manager reviews the report with the director, follows up repeated late starts and cancellations with the services involved, and adjusts the next schedules.",
+      "role": "surg_manager",
+      "kind": "review",
+      "inputs": [
+        "weekly utilization report"
+      ],
+      "outputs": [
+        "follow-up actions"
+      ],
+      "systems": [
+        "spreadsheets",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.25,
+          "condition": "month-end: report goes to the department chiefs"
+        },
+        {
+          "to": "END",
+          "prob": 0.75,
+          "condition": "weekly review done",
+          "outcome": "week_closed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Department chiefs review OR use at the surgical services committee",
+      "description": "Once a month the department chiefs review block use by surgeon and service; persistently under-used blocks can be reallocated at the next block review.",
+      "role": "dept_chief",
+      "kind": "review",
+      "inputs": [
+        "monthly utilization summary"
+      ],
+      "outputs": [
+        "block use decisions"
+      ],
+      "systems": [
+        "board_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 14400
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Medical staff by-laws: OR committee oversight of block allocation",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "reviewed",
+          "outcome": "week_closed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Department heads allocate OR time to surgeons (oag2016); the committee review cadence is the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Staffing, bed or time conflict needs a chief's decision",
+      "share_of_cases": 0.65,
+      "description": "A room cannot be staffed, elective admissions exceed forecast beds or a block is over-booked, so the department chief decides which cases give way.",
+      "path": [
+        "s09",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Urgent case bumps an elective case",
+      "share_of_cases": 0.4,
+      "description": "Share of surgical days on which an urgent case cannot wait for the evening and an elective case is delayed or cancelled.",
+      "path": [
+        "s15",
+        "s16",
+        "s17"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 26,
+        "p90": 33
+      },
+      "unit": "calendar days from starting the week's schedule (about three weeks ahead) to the manager's review after the week",
+      "population": "Weekly OR schedule, Ontario community hospital",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: three weeks of preparation, the five-day surgical week and a review within a few days."
+      }
+    },
+    {
+      "metric": "or_utilization_when_open",
+      "value": {
+        "low": 0.92,
+        "high": 1.0
+      },
+      "unit": "share of open OR time used",
+      "population": "Three large Ontario community hospitals, 2014/15",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "Against an 85-90% best practice recommended to the Ministry."
+      }
+    },
+    {
+      "metric": "first_case_on_time_start_share",
+      "value": {
+        "before": 0.06,
+        "after": 0.6
+      },
+      "unit": "share of first cases with the patient in the room by 08:00",
+      "population": "One Ontario hospital, 2005-2007",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "wright2010"
+        ],
+        "note": "Delays caused by anaesthesiologist availability 24%, patient readiness 23%, surgeon availability 21%."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Rooms run at 92-100% of open time, so add-on emergencies wait for elective lists to finish or bump booked patients.",
+      "steps": [
+        "s04",
+        "s15",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oag2016"
+        ],
+        "note": "oag2016 utilization and emergency delay findings."
+      }
+    },
+    {
+      "description": "Case lengths come from surgeons' estimates and history, so lists over-run or cases are cancelled late in the day.",
+      "steps": [
+        "s04",
+        "s15",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; over-running lists are named in the organisation file's description."
+      }
+    },
+    {
+      "description": "Staffing gaps from 2020 to 2022 forced rooms closed at short notice and required daily re-planning with the staffing office.",
+      "steps": [
+        "s09",
+        "s10",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's general knowledge of Ontario perioperative staffing in 2020-2022."
+      }
+    },
+    {
+      "description": "Late first-case starts from anaesthesiologist, surgeon or patient readiness lose time every day.",
+      "steps": [
+        "s08",
+        "s12",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "wright2010"
+        ],
+        "note": "Cause shares from wright2010."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oag2016",
+      "title": "2016 Annual Report, Chapter 3, Section 3.08: Large Community Hospital Operations",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en16/v1_308en16.pdf",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Block allocation by department and surgeon, weekday elective schedule, planned closures, 92-100% utilization, emergency case share and bumping policies, three of six sites without daytime emergency room time."
+    },
+    {
+      "id": "wright2010",
+      "title": "Improving on-time surgical starts in an operating room (Wright JG, Roche A, Khoury AE), Can J Surg 53(3):167-170",
+      "publisher": "Canadian Journal of Surgery, Canadian Medical Association",
+      "url": "https://www.canjsurg.ca/content/53/3/167",
+      "year": 2010,
+      "accessed": "2026-11-24",
+      "supports": "First-case on-time start rates and causes of late starts in an Ontario hospital."
+    },
+    {
+      "id": "leslie2013",
+      "title": "Day of surgery cancellation rates in urology: identification of modifiable factors (Leslie RJ, Beiko D, van Vlymen J, Siemens DR), CUAJ 7(5-6):167-73",
+      "publisher": "Canadian Urological Association Journal",
+      "url": "https://cuaj.ca/index.php/journal/article/view/1345",
+      "year": 2013,
+      "accessed": "2026-11-24",
+      "supports": "Day-of-surgery cancellation rate and causes (structural, patient, process)."
+    },
+    {
+      "id": "pidac2013",
+      "title": "Best Practices for Cleaning, Disinfection and Sterilization of Medical Equipment/Devices in All Health Care Settings, 3rd edition (May 2013)",
+      "publisher": "Provincial Infectious Diseases Advisory Committee (PIDAC), Public Health Ontario",
+      "url": "https://www.publichealthontario.ca/-/media/documents/B/2013/bp-cleaning-disinfection-sterilization-hcs.pdf",
+      "year": 2013,
+      "accessed": "2026-11-24",
+      "supports": "Loaned instruments must be tracked, logged and reprocessed before use."
+    }
+  ],
+  "assumptions": [
+    "The unit of work is one corporation-wide weekly schedule; steps that one scheduler or manager does at each of the three sites use people = 3.",
+    "The cycle starts about three weeks before the surgical week and ends with the review after it; the daily huddle loop (s14 to s18) repeats about five times per week (loop probability 0.8).",
+    "The bed flow coordinator and staffing office take part in the weekly check though the organisation file lists only the scheduler, manager, anaesthesiologist and department chief for this process.",
+    "Block release rules, case ordering rules and huddle timing are common Ontario practice described from the author's general knowledge, not from a source opened for this hospital.",
+    "The organisation file gives 17 operating rooms at 130-250 hours a month each (about 2,800 room-hours a month at the mode). At 3,700 cases a month this leaves about 45 minutes of room time per case including turnover, which is only possible if many of the reported surgeries are short procedures or endoscopies done outside these rooms; the schedule work here does not depend on that figure."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

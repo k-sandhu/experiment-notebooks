@@ -1,0 +1,1432 @@
+{
+  "schema_version": "0.3",
+  "id": "ofs-fin-field-ticket-to-invoice",
+  "name": "Turn field tickets into invoices",
+  "org": "oilfield-services-co",
+  "process": "fin-field-ticket-to-invoice",
+  "sector": "oil and gas services (pressure pumping)",
+  "function": "finance",
+  "summary": "Billing specialists in head office turn signed field tickets into customer invoices. They group the tickets for a job, well or pad according to each customer's billing rules, check prices and rebilled third-party costs, build the invoice in the ERP and key it with the customer's cost coding into the customer's e-invoicing network, attaching the signed tickets. Invoices are slowed by waiting for all daily tickets of a pad and for supplier invoices to rebill, and are rejected by customers for wrong coding, price differences or missing signatures, which sends them back for rework and resubmission.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian pressure pumping company billing more than 60 oil and gas producers per job from signed field tickets, with a central billing team in the Calgary finance department and most invoices submitted through customers' e-invoicing networks.",
+    "org_size_employees": 1350,
+    "notes": "Common practice of large WCSB pressure pumpers in 2019-2022: an ERP with billing, AR and AP modules, tablet field ticketing linked to the price book, customer e-invoicing networks (mainly OpenInvoice), OCR scanning of supplier invoices, email, phone and Excel. No machine-learning coding or matching."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one customer invoice (one job, one well or one pad, made of one or more field tickets)",
+  "trigger": "Signed or customer-approved field tickets are released to the billing queue in the ERP.",
+  "end_state": "The customer has approved the invoice for payment in its e-invoicing network, or has received an emailed invoice with no dispute, and the invoice sits in accounts receivable.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 300,
+      "mode": 620,
+      "high": 800
+    },
+    "seasonality": "Follows field activity with about a week's lag: highest January to March, lowest in April and May during break-up, with a December rush as producers close programs.",
+    "evidence": {
+      "tier": "A",
+      "sources": [
+        "trican-mda-2022"
+      ],
+      "note": "7,291 jobs in 2021 and 7,625 in 2022, a job typically being one invoice (trican-mda-2022): about 610-640 a month. Low end covers break-up and 2020; high end the winter peak."
+    },
+    "surge": {
+      "cause": "Year-end and Q1 invoice wave as producers close capital programs and winter work peaks",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 2
+      },
+      "duration_days": {
+        "low": 15,
+        "mode": 25,
+        "high": 40
+      },
+      "volume_multiplier": {
+        "low": 1.2,
+        "mode": 1.4,
+        "high": 1.7
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Taken from the organisation file's surge for this process (December program completions followed by the winter peak)."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "fo-dist-field-ticket-preparation",
+        "object": "signed_field_ticket",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "cs-price-book-maintenance",
+        "object": "price_book"
+      },
+      {
+        "from": "it-erp-and-application-support",
+        "object": "system_change"
+      },
+      {
+        "from": "fin-accounts-payable",
+        "object": "supplier_invoice"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "approved_by_customer",
+        "to": "producer",
+        "object": "invoice"
+      },
+      {
+        "outcome": "approved_by_customer",
+        "to": "fin-accounts-receivable-and-collections",
+        "object": "invoice"
+      },
+      {
+        "outcome": "sent_by_email",
+        "to": "producer",
+        "object": "invoice"
+      },
+      {
+        "outcome": "sent_by_email",
+        "to": "fin-accounts-receivable-and-collections",
+        "object": "invoice"
+      },
+      {
+        "outcome": "any",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "billing-specialist",
+      "title": "Revenue and billing specialist",
+      "department": "Finance",
+      "layer": "individual_contributor",
+      "fte_on_process": 11.0,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 45,
+        "high": 56
+      },
+      "occupation_code": "NOC 12200",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Hands-on time is about 2.5 hours per invoice over about 620 invoices a month (about 11-12 FTE at 130 hours); the 14 billing specialists also run unbilled-revenue lists and month-end accruals."
+      }
+    },
+    {
+      "id": "controller",
+      "title": "Corporate controller",
+      "department": "Finance",
+      "layer": "manager",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 110,
+        "mode": 135,
+        "high": 165
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves large invoices and credit memos; minutes per case are small."
+      }
+    },
+    {
+      "id": "account-manager",
+      "title": "Account manager",
+      "department": "Sales and customer relations",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 90,
+        "high": 120
+      },
+      "occupation_code": "NOC 62100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Resolves price disputes on about one invoice in twenty, an hour or more each."
+      }
+    },
+    {
+      "id": "district-admin",
+      "title": "District administrator (field tickets and job files)",
+      "department": "District operations and dispatch",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 40,
+        "high": 50
+      },
+      "occupation_code": "NOC 13110",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Gets tickets re-signed or backup found for rejected invoices."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "erp",
+      "name": "ERP (finance, procurement, inventory, plant maintenance, billing)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "einvoice-portal",
+      "name": "Customer e-invoicing and field ticket approval networks",
+      "kind": "external_portal"
+    },
+    {
+      "id": "field-ticket-app",
+      "name": "Electronic field ticketing on tablets, linked to the ERP price book",
+      "kind": "workflow"
+    },
+    {
+      "id": "email",
+      "name": "Email, Microsoft Teams and mobile phones",
+      "kind": "communication"
+    },
+    {
+      "id": "doc-store",
+      "name": "Document management (SharePoint and network drives)",
+      "kind": "document_store"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Excel workbooks",
+      "kind": "spreadsheet"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Ticket lands in the billing queue",
+      "description": "When the district releases a ticket, the ERP adds it to the billing work queue for the customer's billing specialist with the ticket image, job number and attachments. Queues are refreshed overnight.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "signed field ticket released to billing"
+      ],
+      "outputs": [
+        "billing queue item"
+      ],
+      "systems": [
+        "erp",
+        "field-ticket-app"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 720
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Group tickets into an invoice",
+      "description": "The billing specialist checks the customer's billing rule (per job, per well, per pad or monthly) and collects all tickets that belong on the invoice. For a frac pad she waits until the last day ticket of the well or pad is released, and for multi-day coiled tubing work until the job is finished.",
+      "role": "billing-specialist",
+      "kind": "coordination",
+      "inputs": [
+        "billing queue item",
+        "customer billing rules"
+      ],
+      "outputs": [
+        "ticket set for one invoice"
+      ],
+      "systems": [
+        "erp",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 10080
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A ticket is left off or billed twice.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "ticket set complete"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "trican-mda-2022"
+        ],
+        "note": "Invoice frequency depends on how often the customer asks to be billed during a project (trican-mda-2022). Times tier C."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Check prices and discounts",
+      "description": "She compares each ticket line with the customer's price book or tender pricing in the ERP, applies the discount tier, fuel surcharge, minimum charges and proppant pricing, and looks for charges the district may have priced from an old price book.",
+      "role": "billing-specialist",
+      "kind": "validation",
+      "inputs": [
+        "ticket set",
+        "customer price book"
+      ],
+      "outputs": [
+        "priced lines"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong discount tier or old price applied.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.7,
+          "condition": "no rebilled third-party costs"
+        },
+        {
+          "to": "s04",
+          "prob": 0.3,
+          "condition": "third-party costs to rebill"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cnrl-oi-standards"
+        ],
+        "note": "Producers check invoices against their price books (cnrl-oi-standards). Times tier C."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Match rebilled third-party costs to supplier invoices",
+      "description": "For sand hauling, water, rentals and other pass-through items she finds the supplier invoice in accounts payable, checks the quantities against the field ticket and adds the contract markup. If the supplier has not yet invoiced, the invoice waits or goes out with an estimate the customer may reject.",
+      "role": "billing-specialist",
+      "kind": "lookup",
+      "inputs": [
+        "priced lines",
+        "supplier invoices"
+      ],
+      "outputs": [
+        "rebill lines with backup"
+      ],
+      "systems": [
+        "erp",
+        "doc-store"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 5760,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Markup or quantity on a rebilled line is wrong.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "chevron-smart-2021"
+        ],
+        "note": "Third-party charges need backup documentation (chevron-smart-2021). Waits tier C."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Build the invoice in the ERP",
+      "description": "She creates the billing document from the ticket lines, enters the customer's AFE or cost centre and approver from the ticket, applies GST and attaches the signed tickets and backup. Large invoices are flagged for the controller.",
+      "role": "billing-specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "priced lines",
+        "rebill lines"
+      ],
+      "outputs": [
+        "draft invoice"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 50
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "GST or coding entered wrong.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.9,
+          "condition": "under the approval threshold"
+        },
+        {
+          "to": "s06",
+          "prob": 0.1,
+          "condition": "large invoice needs controller approval"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Controller approves a large invoice",
+      "description": "The controller reviews invoices over the approval threshold, usually multi-well frac pads, for pricing, discounts and revenue recognition before they are released.",
+      "role": "controller",
+      "kind": "approval",
+      "inputs": [
+        "draft invoice"
+      ],
+      "outputs": [
+        "approved invoice"
+      ],
+      "systems": [
+        "erp",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Delegation of authority: invoices above a set value approved by the corporate controller",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Post the invoice to receivables and revenue",
+      "description": "The ERP posts the invoice to the customer's receivable account and to revenue by service line and district in the nightly run, and prints the PDF for submission.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved invoice"
+      ],
+      "outputs": [
+        "posted invoice",
+        "ledger postings"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 720
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.8,
+          "condition": "customer uses an e-invoicing network"
+        },
+        {
+          "to": "s09",
+          "prob": 0.2,
+          "condition": "customer takes emailed invoices"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Key the invoice into the customer's e-invoicing network",
+      "description": "The billing specialist re-keys the invoice header and lines into the customer's network (mostly OpenInvoice), selects the customer site and approver code, enters AFE or cost centre, WBS and GL coding and every field ticket number, and uploads the signed tickets and backup.",
+      "role": "billing-specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "posted invoice",
+        "signed field tickets"
+      ],
+      "outputs": [
+        "submitted e-invoice"
+      ],
+      "systems": [
+        "einvoice-portal",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Coding, approver or ticket number keyed wrong.",
+        "typically_caught_at": "s12"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cnrl-oi-standards",
+          "cenovus-invoicing"
+        ],
+        "note": "Producers specify header, coding and field ticket number fields in OpenInvoice (cnrl-oi-standards, cenovus-invoicing). Times tier C."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Email the invoice to the customer",
+      "description": "For customers without a network, she emails the invoice PDF with the signed tickets to the customer's accounts payable mailbox and notes the date sent in the ERP.",
+      "role": "billing-specialist",
+      "kind": "communication",
+      "inputs": [
+        "posted invoice"
+      ],
+      "outputs": [
+        "emailed invoice"
+      ],
+      "systems": [
+        "email",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "sent",
+          "outcome": "sent_by_email"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Network checks the invoice on submission",
+      "description": "The customer's network runs its rules as soon as the invoice is submitted: required fields, price book and PO match, valid coding format and duplicate field ticket numbers. Invoices with a red alert cannot be submitted.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "submitted e-invoice"
+      ],
+      "outputs": [
+        "accepted or blocked e-invoice"
+      ],
+      "systems": [
+        "einvoice-portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Customer invoice submission standards enforced by the e-invoicing network",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.93,
+          "condition": "accepted for customer review"
+        },
+        {
+          "to": "s11",
+          "prob": 0.07,
+          "condition": "blocked by a rule"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cnrl-oi-standards"
+        ],
+        "note": "Price book and PO compliance red alerts block submission; duplicate ticket numbers not allowed (cnrl-oi-standards). Share tier C."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Fix the blocked invoice",
+      "description": "The billing specialist reads the red alert in the network, corrects the price book reference, coding format, currency or duplicate ticket number, and resubmits the invoice.",
+      "role": "billing-specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "blocked e-invoice"
+      ],
+      "outputs": [
+        "corrected e-invoice"
+      ],
+      "systems": [
+        "einvoice-portal"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "resubmit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Customer reviews and approves the invoice",
+      "description": "The customer's field approver and cost accountant check the invoice against the approved tickets, their AFE and their contract pricing, then approve it for payment, reject it with a reason, or leave it waiting in their queue.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "submitted e-invoice"
+      ],
+      "outputs": [
+        "approved or rejected invoice"
+      ],
+      "systems": [
+        "einvoice-portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 8640,
+        "high": 30240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.74,
+          "condition": "approved for payment",
+          "outcome": "approved_by_customer"
+        },
+        {
+          "to": "s13",
+          "prob": 0.16,
+          "condition": "rejected"
+        },
+        {
+          "to": "s19",
+          "prob": 0.1,
+          "condition": "no action after two weeks"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "chevron-smart-2021",
+          "yager-2015"
+        ],
+        "note": "Invoices that break the customer's rules are rejected and sent back (chevron-smart-2021); invoices must be perfect to be paid (yager-2015). Waits and shares tier C."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Find out why the invoice was rejected",
+      "description": "She reads the rejection comment, opens the ticket and contract, and sorts the problem: wrong coding, a disputed price or quantity, or a missing signature or backup.",
+      "role": "billing-specialist",
+      "kind": "analysis",
+      "inputs": [
+        "rejected invoice"
+      ],
+      "outputs": [
+        "rejection cause"
+      ],
+      "systems": [
+        "einvoice-portal",
+        "erp",
+        "doc-store"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.55,
+          "condition": "coding wrong"
+        },
+        {
+          "to": "s15",
+          "prob": 0.3,
+          "condition": "price or quantity dispute"
+        },
+        {
+          "to": "s16",
+          "prob": 0.15,
+          "condition": "signature or backup missing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-pain-points"
+        ],
+        "note": "Most disputes are about coding rather than price (enverus-pain-points). Split tier C."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Get correct coding from the customer",
+      "description": "She emails the customer's approver or cost accountant for the right AFE, cost centre or WBS, and waits for the reply before re-keying.",
+      "role": "billing-specialist",
+      "kind": "communication",
+      "inputs": [
+        "rejection cause"
+      ],
+      "outputs": [
+        "correct coding"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "resubmit with new coding"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Account manager resolves the price dispute",
+      "description": "The account manager talks to the customer's completions or drilling lead about the disputed price, discount or quantity, using the tender pricing and the signed ticket, and agrees either that the charge stands or that a credit will be given.",
+      "role": "account-manager",
+      "kind": "judgment",
+      "inputs": [
+        "disputed invoice",
+        "contract pricing"
+      ],
+      "outputs": [
+        "agreed outcome"
+      ],
+      "systems": [
+        "email",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.65,
+          "condition": "credit agreed"
+        },
+        {
+          "to": "s08",
+          "prob": 0.35,
+          "condition": "charge stands, resubmit with explanation"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "District administrator finds the signature or backup",
+      "description": "The billing specialist asks the district administrator to get the ticket signed or approved by the customer's field representative, or to find the missing supplier ticket, and resubmits once it arrives.",
+      "role": "district-admin",
+      "kind": "coordination",
+      "inputs": [
+        "rejection cause"
+      ],
+      "outputs": [
+        "signed ticket or backup"
+      ],
+      "systems": [
+        "field-ticket-app",
+        "email",
+        "doc-store"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "resubmit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Prepare the credit memo and rebill",
+      "description": "She raises a credit memo for the disputed invoice and a corrected invoice in the ERP, referencing the original invoice and the agreement with the customer.",
+      "role": "billing-specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "agreed outcome"
+      ],
+      "outputs": [
+        "credit memo",
+        "corrected invoice"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Credit amount or reference wrong.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Controller approves the credit memo",
+      "description": "The controller reviews the credit memo against the agreed outcome and approves it; billing staff cannot post credits they raised themselves.",
+      "role": "controller",
+      "kind": "approval",
+      "inputs": [
+        "credit memo"
+      ],
+      "outputs": [
+        "approved credit memo"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Internal control over financial reporting: credit memos approved by someone other than the preparer",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "approved, corrected invoice resubmitted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Chase the customer's approver",
+      "description": "Each week she runs the list of e-invoices not approved after two weeks and emails or calls the customer's approver, copying the account manager for large invoices.",
+      "role": "billing-specialist",
+      "kind": "communication",
+      "inputs": [
+        "aging e-invoice list"
+      ],
+      "outputs": [
+        "reminder"
+      ],
+      "systems": [
+        "einvoice-portal",
+        "email",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "back to the customer"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Waiting on supplier invoice for rebill",
+      "share_of_cases": 0.3,
+      "description": "Pass-through sand hauling, water or rental charges cannot be billed until the supplier's invoice arrives.",
+      "path": [
+        "s04"
+      ]
+    },
+    {
+      "name": "Coding rejection",
+      "share_of_cases": 0.09,
+      "description": "Customer rejects for wrong AFE, cost centre or WBS; new coding is requested and the invoice re-keyed.",
+      "path": [
+        "s12",
+        "s13",
+        "s14",
+        "s08"
+      ]
+    },
+    {
+      "name": "Price dispute and credit",
+      "share_of_cases": 0.05,
+      "description": "Customer disputes a price or quantity; the account manager agrees a credit, a credit memo and rebill follow.",
+      "path": [
+        "s13",
+        "s15",
+        "s17",
+        "s18",
+        "s08"
+      ]
+    },
+    {
+      "name": "Submission blocked by network rules",
+      "share_of_cases": 0.07,
+      "description": "The e-invoicing network blocks the invoice for a price book, PO or duplicate ticket alert.",
+      "path": [
+        "s10",
+        "s11",
+        "s10"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 14,
+        "p90": 40
+      },
+      "unit": "calendar days from ticket released to billing to invoice approved by the customer",
+      "population": "WCSB oilfield service invoices to producers, 2019-2022 (estimate)",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "trican-mda-2022"
+        ],
+        "note": "Estimate. Receivables were 68-75 days of revenue at year-end 2021 and 2022 (computed from receivables and Q4 revenue in trican-mda-2022); with ticket preparation taking a few days and producer payment terms of 30-60 days after approval, invoice building and approval take about two weeks in the typical case."
+      }
+    },
+    {
+      "metric": "days_sales_outstanding_year_end",
+      "value": {
+        "2021": 75,
+        "2022": 68
+      },
+      "unit": "days (receivables / Q4 revenue x 92)",
+      "population": "Trican Well Service, December 31 2021 and 2022",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "trican-mda-2022"
+        ],
+        "note": "Computed: $127.8M / $156.4M x 92 and $175.4M / $236.5M x 92."
+      }
+    },
+    {
+      "metric": "producer_payment_norm_days",
+      "value": 90,
+      "unit": "days (accepted norm per commentator; some producers 90-120)",
+      "population": "Canadian oilfield services, mid-2010s",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "yager-2015"
+        ],
+        "note": "Commentary, not a measured statistic."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Each customer has its own coding format, approver codes and portal rules, and coding errors are the most common rejection.",
+      "steps": [
+        "s08",
+        "s13",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-pain-points",
+          "cnrl-oi-standards",
+          "cenovus-invoicing"
+        ],
+        "note": "Coding disputes and producer-specific formats."
+      }
+    },
+    {
+      "description": "The invoice is built in the ERP and then re-keyed into the customer's network, so the same data is entered twice.",
+      "steps": [
+        "s05",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "enverus-51ofs"
+        ],
+        "note": "Tickets entered several times in paper and semi-digital processes (enverus-51ofs)."
+      }
+    },
+    {
+      "description": "Pass-through charges wait on supplier invoices, holding up the whole customer invoice.",
+      "steps": [
+        "s04"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from general knowledge of WCSB oilfield service billing and finance operations, 2019-2022."
+      }
+    },
+    {
+      "description": "Invoices sit unapproved in customer queues for weeks and need weekly chasing.",
+      "steps": [
+        "s12",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "yager-2015"
+        ],
+        "note": "Long producer payment cycles described for Canadian oilfield services."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "trican-mda-2022",
+      "accessed": "2026-11-24",
+      "title": "Trican Well Service Ltd. Management's Discussion and Analysis for the year ended December 31, 2022",
+      "publisher": "Trican Well Service Ltd.",
+      "url": "https://tricanwellservice.com/app/uploads/2023/02/TCW-Q4-2022-MDA-2023.02.22.pdf",
+      "year": 2023,
+      "supports": "A job is typically represented by an invoice and invoice frequency depends on how often the customer asks to be billed during a project; 7,625 jobs in 2022 and 7,291 in 2021; Q4 2022 revenue $236.5 million and Q4 2021 $156.4 million; trade and other receivables $175.4 million at December 31, 2022 and $127.8 million at December 31, 2021; trade and other payables $90.9 million at December 31, 2022; Q4 2022 direct costs $133.4 million; more than 60 customers; one customer 40% of accounts receivable in 2022 (35% in 2021) and 31% of revenue; expected credit losses measured with a provision matrix; working capital and credit facilities cover timing differences between cash collections and payments."
+    },
+    {
+      "id": "enverus-pain-points",
+      "accessed": "2026-11-24",
+      "title": "7 Field Ticketing Pain Points in Upstream Oil & Gas and How Digital Solutions Are Changing the Game",
+      "publisher": "Enverus",
+      "year": 2025,
+      "url": "https://www.enverus.com/blog/7-field-ticketing-pain-points-in-upstream-oil-gas-and-how-digital-solutions-are-changing-the-game/",
+      "supports": "Vendor blog (November 2025, US practice): technicians drive paper tickets to field offices for approval; lost or damaged tickets delay payment for weeks; most ticket disputes are about coding errors or who requested the work rather than price, and supplier-provided coding raises dispute rates; duplicate charges and inflated hours are hard to catch on paper; the average time from service to ticket submission is over seven days when tickets go through back-office staff; digital ticketing users process invoices 3-4 times faster than paper users."
+    },
+    {
+      "id": "enverus-51ofs",
+      "accessed": "2026-11-24",
+      "title": "Get Paid Faster With Digital Field Tickets (51 Oilfield Services customer story)",
+      "publisher": "Enverus",
+      "year": 2024,
+      "url": "https://www.enverus.com/customer-story/get-paid-faster-with-digital-field-tickets/",
+      "supports": "Vendor case study (July 2024, Texas roustabout contractor): paper process of keying tickets into a spreadsheet, scanning and emailing to head office, re-keying into accounting, printing, tracking down the company man for a signature and re-keying into OpenInvoice; about 900 field tickets a month for one customer; tickets entered three times; with mobile tickets and same-day electronic approval, tickets usually approved the next day; ticket submission to payment fell from 1-2 months to 7-10 days; operators use spend codes; OpenInvoice used by most E&P companies in the US market."
+    },
+    {
+      "id": "chevron-smart-2021",
+      "accessed": "2026-11-24",
+      "title": "CBU Wells Supplier Rules for SMART Submissions (March 30, 2021)",
+      "publisher": "Chevron Canada",
+      "year": 2021,
+      "url": "https://canada-test.chevron.com/-/media/canada/work-with-us/documents/Wells-Supplier-Rules-for-SMART-Mar-2021.pdf",
+      "supports": "Rules for drilling, completions/frac and intervention suppliers: invoices that break the rules are rejected and sent back for correction; work location as pad LSD or well UWI; amount approved on the attached ticket must match the final invoice; backup for third-party charges; field ticket with a stamp carrying WBS elements and GL account and a digital signature must be attached; GL account and WBS on the invoice must match the stamp."
+    },
+    {
+      "id": "cenovus-invoicing",
+      "accessed": "2026-11-24",
+      "title": "Invoicing for suppliers",
+      "publisher": "Cenovus Energy",
+      "year": 2026,
+      "url": "https://www.cenovus.com/contractor/invoicing-for-suppliers.html",
+      "supports": "No paper invoices; for OpenInvoice purchase orders suppliers submit field tickets for approval, monitor OpenInvoice for approved field tickets and only then submit invoices from them; back-up such as daily time tickets attached; invoices against approved goods receipts; WBS/AFE and work order coding formats that must be entered in OpenInvoice. Current page; describes the practice of a large Canadian producer."
+    },
+    {
+      "id": "cnrl-oi-standards",
+      "accessed": "2026-11-24",
+      "title": "Canadian Natural Supplier Submission Guidelines (OpenInvoice submission standards), last updated August 2025",
+      "publisher": "Canadian Natural Resources Limited",
+      "year": 2025,
+      "url": "https://www.cnrl.com/content/uploads/2025/08/Canadian-Natural-OI-Submission-Standards.pdf",
+      "supports": "Invoice header and line requirements in OpenInvoice; all field ticket numbers entered and duplicates not allowed; price book on the invoice must match the PO price book or a red alert blocks submission; PO compliance alerts; credits entered as negative quantities; approver codes by site and department."
+    },
+    {
+      "id": "yager-2015",
+      "accessed": "2026-11-24",
+      "title": "The Broken Payment Model That Costs The Oil Industry Millions",
+      "publisher": "OilPrice.com (David Yager, Calgary)",
+      "year": 2015,
+      "url": "https://oilprice.com/Energy/Energy-General/The-Broken-Payment-Model-That-Costs-The-Oil-Industry-Millions.html",
+      "supports": "Canadian oilfield services commentary (July 2015): the field ticket is prepared by the contractor's representative and signed by the producer's representative; the invoice must be perfect to be paid; payment delays follow when billing procedures are not followed; three-month payment is an accepted norm and some producers will not pay before 90 and possibly 120 days; many vendors carry receivables over 90 days."
+    }
+  ],
+  "assumptions": [
+    "Loaded costs are the organisation file's (base wage x 1.35).",
+    "Account managers are added because they settle price disputes; the organisation file lists only billing specialists, district administrators and the controller for this process.",
+    "Accounts payable supplies supplier invoices for rebilled third-party costs, shown as a standing input from fin-accounts-payable.",
+    "The process ends when the customer approves the invoice (or it is emailed); payment, short payments and collection follow-up belong to fin-accounts-receivable-and-collections.",
+    "Emailed invoices (about 20%) end on sending, so their customer review time is not in this process; this pulls the simulated median below the e-invoice median.",
+    "The simulated median (about 15.5 days, p90 about 33) agrees with the 14-day estimate; it is driven by customer approval waits in the e-invoicing network and by pads waiting for their last daily tickets.",
+    "Year-end receivables to Q4 revenue gives 68-75 days of sales outstanding; this includes the field ticket, billing and customer payment-term periods and is a cross-check rather than this process's cycle time."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

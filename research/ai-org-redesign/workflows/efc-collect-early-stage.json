@@ -1,0 +1,1685 @@
+{
+  "schema_version": "0.2",
+  "id": "efc-collect-early-stage",
+  "name": "Collect early-stage delinquencies",
+  "org": "equipment-finance-co",
+  "process": "collect-early-stage",
+  "sector": "equipment leasing and finance",
+  "function": "collections",
+  "summary": "When a customer's monthly lease payment is returned by the bank or not received, the account enters early-stage collections. An automated notice goes out, many customers pay on their own, and an early-stage collector works the rest: reviews the account, calls and emails until reaching the business, re-presents the returned debit or takes a promise to pay, sends hardship cases to restructuring and passes accounts still unpaid near 30 days to late-stage collectors. Elapsed time is set by call attempts that go unanswered and by waiting for promised payments; most accounts cure within two weeks while about a quarter roll past 30 days.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A mid-size Canadian independent equipment lessor with about 55,000 active contracts, 85% paid by pre-authorised debit, and an early-stage team of 16 collectors and 2 supervisors using a queue manager and dialer.",
+    "org_size_employees": 340,
+    "notes": "Commercial accounts, so consumer collection rules do not apply to in-house contact; pre-authorised debit rules and privacy rules for guarantors do."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one newly delinquent account",
+  "trigger": "A pre-authorised debit is returned or an invoice passes its due date unpaid, and the account is placed in the early-stage collections queue.",
+  "end_state": "The account is current again, the arrears are cleared by a billing correction, the customer is referred to restructuring, or the account is transferred to late-stage collections after 30 days.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2200,
+      "mode": 2700,
+      "high": 3800
+    },
+    "seasonality": "Peaks after month-start billing dates and in winter for seasonal industries; the high end reflects spring 2020, before deferrals took effect.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file demand driver d_delinquency_entries: about 5% of active contracts miss a payment date each month, mostly returned debits that cure within days."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "process-returned-payments",
+        "object": "delinquent_account",
+        "share": 0.75
+      },
+      {
+        "from": "apply-customer-payments",
+        "object": "delinquent_account",
+        "share": 0.25
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "customer",
+        "object": "collection_notice"
+      },
+      {
+        "outcome": "any",
+        "to": "monitor-portfolio-risk",
+        "object": "portfolio_data"
+      },
+      {
+        "outcome": "referred_to_restructure",
+        "to": "restructure-and-defer-payments",
+        "object": "restructure_request"
+      },
+      {
+        "outcome": "transferred_to_late_stage",
+        "to": "collect-late-stage",
+        "object": "delinquent_account"
+      },
+      {
+        "outcome": "any",
+        "to": "resolve-it-service-requests",
+        "object": "it_ticket"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "early_collector",
+      "title": "Early-stage collector",
+      "department": "Early-stage collections",
+      "layer": "individual_contributor",
+      "fte_on_process": 9.5,
+      "loaded_cost_per_hour": {
+        "low": 24,
+        "mode": 30,
+        "high": 38
+      },
+      "occupation_code": "NOC 14202",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jb_collector",
+          "nbc_coll_agent"
+        ],
+        "note": "Title, department, layer and loaded cost from the organisation file (2019-2022 wage x 1.35 for benefits, payroll taxes and overhead). FTE is the author's estimate from step times: about 25 minutes per newly delinquent account across attempts. The 16 collectors in the organisation file also take inbound calls, same-day returned-payment contacts and restructure follow-ups."
+      }
+    },
+    {
+      "id": "early_coll_sup",
+      "title": "Early-stage collections supervisor",
+      "department": "Early-stage collections",
+      "layer": "supervisor",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 47,
+        "high": 56
+      },
+      "occupation_code": "NOC 12011",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Title, department, layer and loaded cost from the organisation file (2019-2022 wage x 1.35 for benefits, payroll taxes and overhead). Approvals and day-30 transfer reviews; the rest of the two supervisors' time is coaching, call quality review and reporting."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "collections_system",
+      "name": "Collections queue manager and dialer",
+      "kind": "workflow"
+    },
+    {
+      "id": "lms",
+      "name": "Lease management system (contracts, schedules, billing, tax codes, asset records, servicing)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "contact_centre",
+      "name": "Contact centre telephony and shared mailboxes",
+      "kind": "communication"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, calendars and team chat",
+      "kind": "communication"
+    },
+    {
+      "id": "bank_portal",
+      "name": "Bank cash management portal for pre-authorised debit files, EFT payments and wires",
+      "kind": "external_portal"
+    },
+    {
+      "id": "bureau_portals",
+      "name": "Commercial and consumer credit bureau portals (Equifax, PayNet)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "doc_imaging",
+      "name": "Document imaging and contract file store",
+      "kind": "document_store"
+    },
+    {
+      "id": "itsm",
+      "name": "IT service management ticketing",
+      "kind": "workflow"
+    },
+    {
+      "id": "data_warehouse",
+      "name": "Data warehouse and business intelligence reports",
+      "kind": "analytics"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Load the account into the collections queue",
+      "description": "The nightly feed from the lease system moves each account with a returned debit or an unpaid invoice past its due date into the collections queue manager, with days past due, amount, number of earlier returns, risk score and contract count, and sorts it into a queue by segment and priority.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "delinquent account from payment processing"
+      ],
+      "outputs": [
+        "queued account"
+      ],
+      "systems": [
+        "lms",
+        "collections_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Account misrouted to the wrong queue or segment.",
+        "typically_caught_at": "s04"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "queued"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "servsol_early",
+          "charter_424b"
+        ],
+        "note": "Risk-tiered early-stage queues and weekly payment status reports are documented; the nightly feed is an author estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Send the automated past-due notice",
+      "description": "The collections system emails, and for customers without email mails, a past-due notice with the amount owing, the returned payment fee where one applies and how to pay, a few days after the missed payment.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "queued account"
+      ],
+      "outputs": [
+        "collection notice"
+      ],
+      "systems": [
+        "collections_system",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Notice sent to an outdated email or address.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "notice sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "leaseservices_faq"
+        ],
+        "note": "Letter and email on days 5 to 7 are documented by a lessor; timing here is an author estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Customer pays without being contacted",
+      "description": "Many missed payments are administrative: the customer moved funds a day late, changed banks or simply forgot. The customer sends an EFT, calls customer service to pay or waits for the next debit, and the account cures before a collector reaches it.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "collection notice"
+      ],
+      "outputs": [
+        "payment or no response"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 8640
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.25,
+          "condition": "paid before contact",
+          "outcome": "cured"
+        },
+        {
+          "to": "s04",
+          "prob": 0.75,
+          "condition": "still unpaid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Self-cure share is an author estimate consistent with the organisation file's statement that most accounts cure within two weeks."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Review the account before calling",
+      "description": "An early-stage collector opens the account in the collections system and the lease system to read the payment history, earlier promises and returns, contact notes, other contracts, guarantors and any open service ticket such as a billing dispute, and decides how to approach the call.",
+      "role": "early_collector",
+      "kind": "lookup",
+      "inputs": [
+        "queued account"
+      ],
+      "outputs": [
+        "account assessment"
+      ],
+      "systems": [
+        "collections_system",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "An open dispute or insolvency note is missed and the customer is chased wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.88,
+          "condition": "normal collection"
+        },
+        {
+          "to": "s05",
+          "prob": 0.07,
+          "condition": "billing dispute or administrative error"
+        },
+        {
+          "to": "s06",
+          "prob": 0.03,
+          "condition": "debit failed through a system or banking-detail error"
+        },
+        {
+          "to": "s19",
+          "prob": 0.02,
+          "condition": "insolvency filing or fraud flag, move to late stage"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "nbc_coll_agent",
+          "monitor_service_coll",
+          "bia_s69"
+        ],
+        "note": "Assessing account status, resolving disputes and escalating are documented duties, and an insolvency filing stays collection action; shares are author estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Refer a billing dispute and pause the account",
+      "description": "When the arrears come from a wrong invoice, a disputed insurance charge or an unprocessed banking change, the collector logs the issue for customer service or billing, puts a hold on collection activity and tells the customer when to expect the correction.",
+      "role": "early_collector",
+      "kind": "coordination",
+      "inputs": [
+        "account assessment"
+      ],
+      "outputs": [
+        "dispute referral",
+        "collection hold"
+      ],
+      "systems": [
+        "collections_system",
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Hold left on after the issue is fixed, so real arrears go unchased.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.55,
+          "condition": "arrears removed by billing adjustment",
+          "outcome": "administrative_resolved"
+        },
+        {
+          "to": "s07",
+          "prob": 0.45,
+          "condition": "part of the arrears is genuine"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "monitor_service_coll"
+        ],
+        "note": "Billing errors and contract disputes as service issues to resolve within collections are documented; shares are author estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Raise an IT ticket for a failed debit",
+      "description": "If the debit failed because of a lease system or debit file error, for example new banking details not loaded, the collector logs an IT ticket with examples, asks billing to send a manual debit and notes the account.",
+      "role": "early_collector",
+      "kind": "communication",
+      "inputs": [
+        "account assessment"
+      ],
+      "outputs": [
+        "IT ticket",
+        "manual debit request"
+      ],
+      "systems": [
+        "itsm",
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Ticket lacks enough detail to fix the root cause.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "ticket raised, customer still to be contacted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; the organisation file lists IT tickets among this process's outputs."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Call the customer",
+      "description": "The collector dials the business contact from the queue, or the dialer connects the call, and either reaches the owner or bookkeeper or leaves a voicemail and sends a short email asking for a call back. Every attempt is noted.",
+      "role": "early_collector",
+      "kind": "communication",
+      "inputs": [
+        "account assessment"
+      ],
+      "outputs": [
+        "contact or attempt note"
+      ],
+      "systems": [
+        "contact_centre",
+        "collections_system",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong contact called or note not saved.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.5,
+          "condition": "right party reached"
+        },
+        {
+          "to": "s08",
+          "prob": 0.5,
+          "condition": "no answer"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "charter_424b",
+          "leaseservices_faq",
+          "cancap_coll"
+        ],
+        "note": "Telephone contact early in delinquency and calls and emails through day 28 are documented; the 50% contact rate per attempt is an author estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Follow up after a missed contact",
+      "description": "A day or two later the collector tries again by phone at a different time, sends a second email or text and, for larger balances, checks the account to see if a payment arrived, then decides whether to keep trying, trace a better number or contact the guarantor.",
+      "role": "early_collector",
+      "kind": "communication",
+      "inputs": [
+        "attempt notes"
+      ],
+      "outputs": [
+        "further attempt"
+      ],
+      "systems": [
+        "contact_centre",
+        "collections_system",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 5760
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Follow-up date missed, account ages without contact.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.38,
+          "condition": "right party reached"
+        },
+        {
+          "to": "END",
+          "prob": 0.15,
+          "condition": "customer pays after messages",
+          "outcome": "cured"
+        },
+        {
+          "to": "s07",
+          "prob": 0.2,
+          "condition": "try again later"
+        },
+        {
+          "to": "s20",
+          "prob": 0.06,
+          "condition": "numbers not working, trace"
+        },
+        {
+          "to": "s21",
+          "prob": 0.04,
+          "condition": "contact the guarantor"
+        },
+        {
+          "to": "s18",
+          "prob": 0.17,
+          "condition": "still no contact near day 30"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "charter_424b",
+          "monitor_service_coll"
+        ],
+        "note": "A second call a week after the first and escalation timing set by leadership are documented; shares are author estimates."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Discuss the arrears and agree a plan",
+      "description": "On the call the collector confirms the amount, asks why the payment failed and whether it will recur, and asks for payment now. Depending on the answer the collector re-presents the debit, takes a promise for a specific amount and date, refers a customer in real difficulty to restructuring, or escalates a customer who refuses or says the business is closing.",
+      "role": "early_collector",
+      "kind": "judgment",
+      "inputs": [
+        "contact",
+        "account assessment"
+      ],
+      "outputs": [
+        "agreed plan"
+      ],
+      "systems": [
+        "contact_centre",
+        "collections_system",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Vague promise accepted without amount, date and method, so it is likely to break.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.45,
+          "condition": "pays now or debit re-presented"
+        },
+        {
+          "to": "s11",
+          "prob": 0.37,
+          "condition": "promise to pay"
+        },
+        {
+          "to": "s14",
+          "prob": 0.03,
+          "condition": "hardship, refer to restructuring"
+        },
+        {
+          "to": "s18",
+          "prob": 0.15,
+          "condition": "refuses or cannot pay"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "monitor_service_coll",
+          "nbc_coll_agent",
+          "cancap_coll"
+        ],
+        "note": "Asking for amount, date and method, negotiating arrangements and recommending deferrals are documented; shares and minutes are author estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Re-present the debit or set up the payment",
+      "description": "For a returned debit the collector schedules a single re-presentment of the same amount in the next debit file; fees are billed separately. For a customer paying arrears plus fees by debit, the collector records a one-time debit authorisation, or gives EFT or wire instructions and notes the expected date.",
+      "role": "early_collector",
+      "kind": "data_entry",
+      "inputs": [
+        "agreed plan"
+      ],
+      "outputs": [
+        "re-presented debit or payment arrangement"
+      ],
+      "systems": [
+        "lms",
+        "collections_system",
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Re-presentment includes the fee or goes out a second time, breaching the payment rule.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Payments Canada Rule H1: an NSF debit may be re-presented once, within 30 days, for the same amount; a one-time debit needs the payor's authorisation",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "payment scheduled"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "payments_h1"
+        ],
+        "note": "The re-presentment and authorisation rules are stated in Rule H1; minutes are author estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Record the promise to pay",
+      "description": "The collector records the promised amount, date and method in the collections system, sets a follow-up for the day after, and emails the customer a confirmation. Promises longer than the collector's limit or with a fee waiver go to the supervisor.",
+      "role": "early_collector",
+      "kind": "data_entry",
+      "inputs": [
+        "agreed plan"
+      ],
+      "outputs": [
+        "promise to pay record",
+        "confirmation email"
+      ],
+      "systems": [
+        "collections_system",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Follow-up date not set.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.82,
+          "condition": "within collector limits"
+        },
+        {
+          "to": "s12",
+          "prob": 0.18,
+          "condition": "longer promise or fee waiver"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "nbc_coll_agent",
+          "servsol_early"
+        ],
+        "note": "Documented promise-to-pay arrangements are described; the 18% needing approval is an author estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Approve an extended arrangement or fee waiver",
+      "description": "The early-stage supervisor reviews arrangements beyond the collector's limit, such as a promise more than two weeks out, split payments or waived late and returned payment fees, against the account's history and approves or asks the collector to renegotiate.",
+      "role": "early_coll_sup",
+      "kind": "approval",
+      "inputs": [
+        "promise to pay record"
+      ],
+      "outputs": [
+        "approved arrangement"
+      ],
+      "systems": [
+        "collections_system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Repeated extensions approved for a customer heading to default.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Collections authority limits for payment arrangements and fee waivers",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.85,
+          "condition": "approved"
+        },
+        {
+          "to": "s09",
+          "prob": 0.15,
+          "condition": "renegotiate"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of common authority limits."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Wait for the promised or re-presented payment",
+      "description": "The account waits for the re-presented debit to clear or for the promised payment date; the collections system shows the follow-up when the date arrives.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "payment arrangement"
+      ],
+      "outputs": [
+        "payment or broken promise"
+      ],
+      "systems": [
+        "bank_portal",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 5760,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.75,
+          "condition": "paid"
+        },
+        {
+          "to": "s16",
+          "prob": 0.25,
+          "condition": "broken promise or second return"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Promise-kept rate is an author estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Prepare a restructuring referral",
+      "description": "For a customer with a genuine cash-flow problem the collector records the reason, recent revenue, how long the difficulty is expected to last and the deferral or term extension asked for, attaches any statements the customer sends and drafts the restructure request.",
+      "role": "early_collector",
+      "kind": "drafting",
+      "inputs": [
+        "agreed plan",
+        "customer information"
+      ],
+      "outputs": [
+        "draft restructure request"
+      ],
+      "systems": [
+        "collections_system",
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Request missing financial information, so credit sends it back.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "draft ready"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cancap_coll",
+          "elfa_sefa2021"
+        ],
+        "note": "Recommending deferrals and restructures, and their scale in 2020, are documented; minutes are author estimates."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Approve the restructuring referral",
+      "description": "The supervisor checks that the customer qualifies under the referral criteria (account history, number of earlier deferrals, contract status) and sends the request to lease administration and credit, pausing collection activity while it is decided.",
+      "role": "early_coll_sup",
+      "kind": "approval",
+      "inputs": [
+        "draft restructure request"
+      ],
+      "outputs": [
+        "restructure request"
+      ],
+      "systems": [
+        "collections_system",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Customer referred who does not meet the criteria.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hardship and restructuring referral criteria in the collections policy",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "referred",
+          "outcome": "referred_to_restructure"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Follow up a broken promise",
+      "description": "When the promised payment does not arrive or the re-presented debit is returned again, the collector calls and emails the customer, asks what happened and either takes one more firm promise, takes payment now, or flags the account for transfer.",
+      "role": "early_collector",
+      "kind": "communication",
+      "inputs": [
+        "broken promise"
+      ],
+      "outputs": [
+        "new plan or escalation"
+      ],
+      "systems": [
+        "contact_centre",
+        "collections_system",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A third or fourth promise accepted without escalation.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.35,
+          "condition": "new promise"
+        },
+        {
+          "to": "s10",
+          "prob": 0.15,
+          "condition": "pays now"
+        },
+        {
+          "to": "s18",
+          "prob": 0.5,
+          "condition": "escalate"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "monitor_service_coll"
+        ],
+        "note": "Unreliable promises and delayed escalation are documented risks; shares are author estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Confirm the cure and close the collection record",
+      "description": "When the payment is applied and the account is current, the nightly feed takes it out of the collections queue and closes the promise; any returned payment fee stays on the next invoice.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "applied payment"
+      ],
+      "outputs": [
+        "closed collection record",
+        "portfolio data"
+      ],
+      "systems": [
+        "lms",
+        "collections_system",
+        "data_warehouse"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "account current",
+          "outcome": "cured"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Review accounts approaching 30 days",
+      "description": "Each week the early-stage supervisor reviews accounts nearing 30 days past due with no payment, broken promises or refusals, and decides which move to late-stage collections and which stay because a payment is days away.",
+      "role": "early_coll_sup",
+      "kind": "review",
+      "inputs": [
+        "aging report",
+        "account notes"
+      ],
+      "outputs": [
+        "transfer decision"
+      ],
+      "systems": [
+        "collections_system",
+        "data_warehouse"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 7200,
+        "high": 14400
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Account kept in early stage on a weak promise and ages further.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Collections policy: accounts over 30 days past due move to late-stage collectors",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.88,
+          "condition": "transfer"
+        },
+        {
+          "to": "s09",
+          "prob": 0.12,
+          "condition": "keep working, payment imminent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "leaseservices_faq",
+          "monitor_service_coll"
+        ],
+        "note": "Escalation from day 31 and leadership-set escalation timing are documented; the weekly review is an author estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Transfer the account to late-stage collections",
+      "description": "The collector writes a hand-off note (contacts reached, promises broken, reasons given, guarantor details, equipment location if known) and the account waits in early stage until it passes 30 days past due, then moves to the late-stage queue.",
+      "role": "early_collector",
+      "kind": "data_entry",
+      "inputs": [
+        "transfer decision",
+        "account notes"
+      ],
+      "outputs": [
+        "late-stage account with hand-off note"
+      ],
+      "systems": [
+        "collections_system",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 14400,
+        "high": 25920
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Hand-off note thin, so the late-stage collector repeats the research.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "transferred",
+          "outcome": "transferred_to_late_stage"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 24% of newly delinquent accounts pass 30 days per the organisation file; the hand-off note is an author estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Trace better contact details",
+      "description": "When the numbers on file do not work, the collector looks for current contacts in the credit bureau report, the business's website and listings, the original application and the dealer that sold the equipment, and updates the account.",
+      "role": "early_collector",
+      "kind": "lookup",
+      "inputs": [
+        "account record"
+      ],
+      "outputs": [
+        "updated contact details"
+      ],
+      "systems": [
+        "bureau_portals",
+        "doc_imaging",
+        "collections_system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong person or business contacted.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "new contact to try"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of common skip tracing practice."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Call the personal guarantor",
+      "description": "Where the business cannot be reached, the collector calls the owner who personally guaranteed the lease at the number on the guarantee, explains the arrears without disclosing more than the guarantee allows and asks the guarantor to have the business pay.",
+      "role": "early_collector",
+      "kind": "communication",
+      "inputs": [
+        "guarantee",
+        "account notes"
+      ],
+      "outputs": [
+        "guarantor contact note"
+      ],
+      "systems": [
+        "contact_centre",
+        "doc_imaging",
+        "collections_system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Information disclosed to someone other than the guarantor.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Guarantor contact rules in the collections and privacy policy",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.5,
+          "condition": "guarantor engages"
+        },
+        {
+          "to": "s18",
+          "prob": 0.5,
+          "condition": "no result"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Billing dispute or administrative error",
+      "share_of_cases": 0.05,
+      "description": "The arrears come from a wrong invoice, disputed charge or unloaded banking change; collection is paused and billing corrects the account.",
+      "path": [
+        "s04",
+        "s05"
+      ]
+    },
+    {
+      "name": "System error behind the failed debit",
+      "share_of_cases": 0.02,
+      "description": "An IT ticket is raised and a manual debit requested.",
+      "path": [
+        "s04",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Insolvency filing or fraud flag",
+      "share_of_cases": 0.015,
+      "description": "The account moves straight to late stage; a notice of intention or bankruptcy stays collection action under the Bankruptcy and Insolvency Act.",
+      "path": [
+        "s04",
+        "s19"
+      ]
+    },
+    {
+      "name": "Unreachable customer",
+      "share_of_cases": 0.06,
+      "description": "Contact numbers fail; the collector traces new details or calls the guarantor.",
+      "path": [
+        "s08",
+        "s20",
+        "s07"
+      ]
+    },
+    {
+      "name": "Broken promise",
+      "share_of_cases": 0.13,
+      "description": "The promised or re-presented payment fails and the collector renegotiates or escalates.",
+      "path": [
+        "s13",
+        "s16",
+        "s11"
+      ]
+    },
+    {
+      "name": "Hardship referral",
+      "share_of_cases": 0.02,
+      "description": "A customer in real difficulty is referred to restructuring after supervisor approval.",
+      "path": [
+        "s09",
+        "s14",
+        "s15"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 11,
+        "p90": 32
+      },
+      "unit": "calendar days from entering the queue to cure, referral or transfer",
+      "population": "Newly delinquent accounts at a Canadian small and mid-ticket equipment lessor, 2019-2022",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "leaseservices_faq",
+          "charter_424b"
+        ],
+        "note": "Derived: the organisation file says most accounts cure within two weeks of the missed payment, which is two to three days before queue entry; lessor timelines put notices at days 5 to 7, calls through day 28 and escalation from day 31, which sets p90."
+      }
+    },
+    {
+      "metric": "receivables_over_30_days",
+      "value": 0.02,
+      "unit": "share of receivables",
+      "population": "ELFA MLFI-25, 25 US equipment finance companies, July 2019",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "elfa_mlfi_jul2019"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "receivables_over_30_days_2020",
+      "value": 0.023,
+      "unit": "share of receivables",
+      "population": "ELFA SEFA, 104 US equipment finance companies, 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "elfa_sefa2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "covid_deferrals_approved_2020",
+      "value": 0.074,
+      "unit": "share of portfolio",
+      "population": "ELFA SEFA, 104 US equipment finance companies, 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "elfa_sefa2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "share_rolling_past_30_days",
+      "value": 0.24,
+      "unit": "share of newly delinquent accounts",
+      "population": "This organisation",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file process note."
+      }
+    },
+    {
+      "metric": "nsf_representment_limit",
+      "value": {
+        "times": 1,
+        "within_days": 30
+      },
+      "unit": "re-presentments of an NSF debit",
+      "population": "Canadian pre-authorised debits",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "payments_h1"
+        ],
+        "note": "Rule H1, payee letter of undertaking."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Half of call attempts reach no one, so collectors spend much of the day on voicemails and repeat attempts while accounts age.",
+      "steps": [
+        "s07",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "description": "Vague promises and repeated extensions let accounts drift toward 30 days before escalation.",
+      "steps": [
+        "s11",
+        "s13",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "monitor_service_coll"
+        ],
+        "note": "Described by a practitioner."
+      }
+    },
+    {
+      "description": "Administrative delinquencies (billing errors, unloaded banking changes) take collector time and annoy good customers.",
+      "steps": [
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "monitor_service_coll"
+        ],
+        "note": "Service issues inside collections are described; the share is an author estimate."
+      }
+    },
+    {
+      "description": "A returned debit can be re-presented only once, so a second failure forces a manual payment chase.",
+      "steps": [
+        "s10",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "payments_h1"
+        ],
+        "note": "Rule H1."
+      }
+    },
+    {
+      "description": "Transfer to late stage waits for a weekly review and day 31 rather than for the evidence that an account will not cure.",
+      "steps": [
+        "s18",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author view."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "elfa_mlfi_jul2019",
+      "title": "ELFA Monthly Leasing and Finance Index, July 2019 (press release)",
+      "publisher": "Equipment Leasing and Finance Association",
+      "url": "https://www.equipmentfa.com/Images/IndustryData/19-09-09-15-10-46-2019-08-23-July-2019-MLFI-Press-Release.pdf",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "25 US equipment finance companies: receivables over 30 days 2.0% in July 2019 (1.70% in June, 1.90% a year earlier); charge-offs 0.37%."
+    },
+    {
+      "id": "elfa_sefa2021",
+      "title": "New data reveals market insights (2021 Survey of Equipment Finance Activity)",
+      "publisher": "Equipment Leasing and Finance Association",
+      "url": "https://www.elfaonline.org/communications/july-august-sept/new-data-reveals-market-insights",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "104 ELFA members, 2020: receivables over 30 days rose 30 basis points to 2.3%; net losses 0.48% of average receivables; COVID deferrals approved on 7.4% of the portfolio."
+    },
+    {
+      "id": "charter_424b",
+      "title": "Charter Equipment Lease 1998-1 LLC prospectus (Form 424B1)",
+      "publisher": "US Securities and Exchange Commission (EDGAR)",
+      "url": "https://www.sec.gov/Archives/edgar/data/0001070771/000089155499001687/0000891554-99-001687.txt",
+      "year": 1999,
+      "accessed": "2026-11-17",
+      "supports": "Collections staff in New York and Toronto: collection activity generally begins by telephone at ten days past due, another call if still delinquent a week later, a written notice at about twenty days, then contractual remedies; weekly payment status report to officers; delinquency table by 31-60, 61-90, 91-120 and 121+ days."
+    },
+    {
+      "id": "leaseservices_faq",
+      "title": "Collections FAQs (Customer Connect help center)",
+      "publisher": "Lease Services",
+      "url": "https://help.leaseservices.com/help-center/category/manage-your-account/collections-faqs",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "A lessor's past-due timeline: late fee on day 1, letter and email on days 5 to 7, emails and calls on days 5 to 28, escalated collections from day 31; customers in difficulty are asked to call to work out a solution."
+    },
+    {
+      "id": "payments_h1",
+      "title": "Rule H1: Pre-authorized debits (PADs)",
+      "publisher": "Payments Canada",
+      "url": "https://www.payments.ca/sites/default/files/h1eng.pdf",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "An NSF PAD may be re-presented electronically once, within 30 calendar days, for the same amount without interest or NSF charges; a one-time PAD needs a new PAD agreement and sporadic PADs need an authorisation for each debit; disputed business PADs can be reclaimed within 10 business days."
+    },
+    {
+      "id": "bia_s69",
+      "title": "Bankruptcy and Insolvency Act, section 69 (stay of proceedings on a notice of intention)",
+      "publisher": "Justice Laws Website, Government of Canada",
+      "url": "https://laws-lois.justice.gc.ca/eng/acts/B-3/page-15.html",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "On filing a notice of intention, no creditor may pursue any remedy or continue any proceeding to recover a claim provable in bankruptcy, with exceptions for secured creditors who took possession or gave a section 244 notice more than ten days earlier."
+    },
+    {
+      "id": "monitor_service_coll",
+      "title": "The gray area between customer service and collections",
+      "publisher": "Monitor (Monitordaily)",
+      "url": "https://www.monitordaily.com/?p=172848",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Equipment finance collections practice: collectors should resolve service barriers, then ask for amount, date and method; vague promises and unprompted extensions let accounts age; escalation timing at 15, 30, 60 and 90 days past due should be set by leadership; coaching through call reviews."
+    },
+    {
+      "id": "nbc_coll_agent",
+      "title": "Collections Agent, Equipment Finance (job posting)",
+      "publisher": "National Bank of Canada via Jobillico",
+      "url": "https://www.jobillico.com/en/job-offer/national-bank/collections-agent/17554368",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Equipment finance collections agent in Winnipeg: answers client inquiries, negotiates payment arrangements, resolves disputes, manages collection files and escalates, documents payment agreements per procedures and compliance requirements."
+    },
+    {
+      "id": "cancap_coll",
+      "title": "Equipment Finance Servicing and Collections Specialist (job posting)",
+      "publisher": "CAN Capital via Accel jobs board",
+      "url": "https://jobs.accel.com/companies/can-capital-2/jobs/83749658-equipment-finance-servicing-collections-specialist-hybrid-in-st-louis-georgia-or-nj-to-fully-remote",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Collections across early, mid and late-stage delinquency by phone, email and letter; repayment plans; recommending deferrals, restructures and settlements; repossession and legal referral in recovery."
+    },
+    {
+      "id": "servsol_early",
+      "title": "Early-stage collections",
+      "publisher": "Servicing Solutions",
+      "url": "https://servicingsolutions.com/?p=15035",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Early-stage collections cover accounts 1 to 30 days past due with calls, emails and SMS, risk-tiered treatment, documented promise-to-pay arrangements and recorded calls for quality review."
+    },
+    {
+      "id": "jb_collector",
+      "title": "Wages: Collector in Ontario (NOC 14202)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/19300/ON",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low $17.95, median $25.38, high $36.69 (2023-2024)."
+    }
+  ],
+  "assumptions": [
+    "About 75% of entries are returned debits and 25% unpaid invoices for customers who pay by cheque or EFT.",
+    "Branch shares (25% self-cure before contact, 50% right-party contact per attempt, 75% of promises kept) are author estimates set so that about 24% of accounts transfer to late stage, as in the organisation file.",
+    "Consumer debt collection statutes do not govern in-house collection of commercial lease arrears; guarantor contact follows company privacy and collections policy. This is the author's understanding, not a sourced legal opinion.",
+    "Billing disputes end this workflow when the arrears are removed by billing; the organisation file has no link from collections back to billing or customer service, so none is listed.",
+    "The director of collections, listed in the organisation file for this process, sets policy and reviews reports but takes no per-account step here.",
+    "The 16 early-stage collectors in the organisation file are more than the about 9.5 FTE the modelled step times need; the difference is inbound calls, returned-payment contacts, restructure follow-ups and idle dialer time.",
+    "External steps carry no touch time."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

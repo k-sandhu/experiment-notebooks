@@ -1,0 +1,1860 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-ltl-origin-dock",
+  "name": "Unload, scan and load freight at the origin terminal",
+  "org": "freight-carrier-co",
+  "process": "ltl-origin-dock",
+  "sector": "trucking and freight transportation",
+  "function": "LTL terminal operations",
+  "summary": "In the evening, dock workers at the origin terminal unload the freight that city drivers picked up, scan every handling unit, run selected pallets through a dimensioner where the terminal has one, and load each shipment onto the linehaul trailer for its next terminal following the load plan. Dock supervisors assign doors, check dangerous goods paperwork and inspect each trailer's load before it is sealed and released to linehaul. The work is compressed into a few hours between the trucks' return and the linehaul departures, so a congested dock leads to misloads, unscanned or damaged pieces, poorly stacked trailers and shipments that miss their departure.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with 33 satellite terminals and 5 hub cross-docks, handheld scanning on the dock and a TMS-based load plan.",
+    "org_size_employees": 3000,
+    "notes": "About 150,000 shipments a month leave origin docks; roughly 40% are picked up in the hub cities and handled by hub dock workers."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one shipment",
+  "trigger": "A city truck with the shipment returns to the origin terminal and is assigned a strip door.",
+  "end_state": "The shipment is scanned onto a sealed linehaul trailer released to linehaul dispatch, with its scan data sent to linehaul planning.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 130000,
+      "mode": 150000,
+      "high": 175000
+    },
+    "seasonality": "Autumn peak from September to mid-December; Monday and Friday nights heaviest; almost no origin work on weekends.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file process map (equal to the ltl-shipments demand driver)."
+    },
+    "surge": {
+      "cause": "Autumn shipping peak (September to mid-December retail and industrial restocking)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 50,
+        "mode": 70,
+        "high": 90
+      },
+      "volume_multiplier": {
+        "low": 1.12,
+        "mode": 1.2,
+        "high": 1.35
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "LTL volumes in Canada rise from September to early December; author's estimate of size."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-pickup-execution",
+        "object": "picked_up_freight",
+        "share": 0.96
+      },
+      {
+        "from": "cartage-agent",
+        "object": "picked_up_freight",
+        "share": 0.04
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ltl-dock-labour-scheduling",
+        "object": "labour_schedule"
+      },
+      {
+        "from": "ltl-linehaul-planning",
+        "object": "linehaul_load_plan"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "loaded",
+        "to": "ltl-linehaul-planning",
+        "object": "shipment_scan_data"
+      },
+      {
+        "outcome": "loaded",
+        "to": "ltl-linehaul-dispatch",
+        "object": "loaded_trailer"
+      },
+      {
+        "outcome": "any",
+        "to": "ltl-reweigh-inspection",
+        "object": "wi_referral"
+      },
+      {
+        "outcome": "any",
+        "to": "ltl-osd-exceptions",
+        "object": "osd_report"
+      },
+      {
+        "outcome": "any",
+        "to": "ltl-dg-handling",
+        "object": "dg_shipping_document"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-yard-equipment",
+        "object": "forklift_fault"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "terminal-dock-worker",
+      "title": "Terminal dock worker",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 125.0,
+      "loaded_cost_per_hour": {
+        "low": 25,
+        "mode": 29,
+        "high": 34
+      },
+      "occupation_code": "NOC 75101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "230 terminal dock workers handle both outbound (origin) and inbound (destination) freight at satellites; about 55% of their time is origin work. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "hub-dock-worker",
+      "title": "Hub dock worker and forklift operator",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 85.0,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 30,
+        "high": 36
+      },
+      "occupation_code": "NOC 75101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "330 hub dock workers mostly cross-dock freight between linehaul trailers; origin freight from the hub cities and dimensioning take about a quarter of their time. Author's estimate."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "dock-supervisor",
+      "title": "Dock supervisor",
+      "department": "LTL terminal network",
+      "layer": "supervisor",
+      "fte_on_process": 14.0,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 47,
+        "high": 56
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "60 dock supervisors cover all dock shifts; door assignment, DG checks and load inspections for origin freight take about a quarter of their time. Author's estimate."
+      },
+      "shift_pattern": "shift_24x7"
+    }
+  ],
+  "systems": [
+    {
+      "id": "dock-handheld",
+      "name": "Dock and driver handheld scanning",
+      "kind": "instrument"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "linehaul-planner-tool",
+      "name": "Linehaul load planning tool and planning spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "forklift",
+      "name": "Dock forklift",
+      "kind": "equipment",
+      "count": 420,
+      "cost_per_hour": {
+        "low": 6,
+        "mode": 9,
+        "high": 13
+      }
+    },
+    {
+      "id": "terminal-dock-door",
+      "name": "Satellite terminal dock door",
+      "kind": "facility",
+      "count": 1000
+    },
+    {
+      "id": "hub-dock-door",
+      "name": "Hub dock door",
+      "kind": "facility",
+      "count": 800
+    },
+    {
+      "id": "dimensioner",
+      "name": "Freight dimensioning and weighing station",
+      "kind": "equipment",
+      "count": 14
+    },
+    {
+      "id": "ltl-trailer",
+      "name": "LTL trailer (53-foot van and 28-foot pup)",
+      "kind": "vehicle",
+      "count": 2400,
+      "cost_per_hour": {
+        "low": 1.5,
+        "mode": 2.5,
+        "high": 4
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Assign the city trailer to a strip door",
+      "description": "As city trucks return between about 3:30 and 7 p.m., the dock supervisor assigns each one a strip door near the outbound doors its freight will go to, and decides which trailers to strip first (heavy, dangerous goods or freight for early departures). Touch time is this shipment's share of the per-trailer decision.",
+      "role": "dock-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "returning city trailers",
+        "door plan"
+      ],
+      "outputs": [
+        "door assignment"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 90
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.4,
+          "condition": "hub terminal"
+        },
+        {
+          "to": "s03",
+          "prob": 0.6,
+          "condition": "satellite terminal"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-dock"
+        ],
+        "note": "Door assignment based on each shipment's next loading door reduces dock travel. Return times and the hub share (shipments picked up in the five hub cities) are the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Unload and scan the shipment at a hub",
+      "description": "A hub dock worker checks the trailer is restrained and the dock plate is set, drives the forklift into the city trailer, lifts the shipment's pallets out and scans each handling unit's PRO label with the handheld.",
+      "role": "hub-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "city trailer at door"
+      ],
+      "outputs": [
+        "shipment on dock",
+        "unload scans"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Provincial occupational health and safety rules for powered lift trucks (for example Ontario Reg. 851 s.51: operated only by a competent worker) and company dock rule: trailer restrained or wheels chocked and dock plate checked before a forklift enters",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-dock"
+        ],
+        "note": "Carriers scan each shipment's dock movement; dock cost depends on handling units. Times per shipment (about 1.5 handling units) are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1.5,
+            "mode": 3,
+            "high": 8
+          }
+        },
+        {
+          "id": "hub-dock-door",
+          "occupied_min": {
+            "low": 3,
+            "mode": 6,
+            "high": 12
+          }
+        }
+      ]
+    },
+    {
+      "id": "s03",
+      "name": "Unload and scan the shipment at a satellite terminal",
+      "description": "A terminal dock worker checks the trailer is restrained and the dock plate is set, unloads the shipment's pallets by forklift or pallet jack and scans each handling unit's PRO label.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "city trailer at door"
+      ],
+      "outputs": [
+        "shipment on dock",
+        "unload scans"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Provincial occupational health and safety rules for powered lift trucks (for example Ontario Reg. 851 s.51: operated only by a competent worker) and company dock rule: trailer restrained or wheels chocked and dock plate checked before a forklift enters",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-dock"
+        ],
+        "note": "Carriers scan each shipment's dock movement. Times are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1.5,
+            "mode": 3,
+            "high": 8
+          }
+        },
+        {
+          "id": "terminal-dock-door",
+          "occupied_min": {
+            "low": 3,
+            "mode": 6,
+            "high": 12
+          }
+        }
+      ]
+    },
+    {
+      "id": "s04",
+      "name": "Compare scanned pieces with the bill",
+      "description": "The handheld compares the pieces scanned with the piece count the driver recorded at pickup and warns the dock worker of a shortage, an overage or a PRO number with no matching pickup.",
+      "role": "system",
+      "kind": "validation",
+      "inputs": [
+        "unload scans",
+        "pickup scan"
+      ],
+      "outputs": [
+        "count match or exception"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.97,
+          "condition": "count matches"
+        },
+        {
+          "to": "s05",
+          "prob": 0.03,
+          "condition": "short, over or damaged"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Recount and write the OS&D report",
+      "description": "The dock worker searches the city trailer and the floor, recounts, photographs damaged pieces and enters an overage, shortage or damage report on the handheld for the OS&D clerk to work.",
+      "role": "terminal-dock-worker",
+      "kind": "data_entry",
+      "inputs": [
+        "count exception"
+      ],
+      "outputs": [
+        "OS&D report"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Select the shipment for dimensioning",
+      "description": "The TMS marks shipments to run through the dimensioner where the terminal has one, favouring larger and density-rated shipments; terminals without a dimensioner skip this.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "shipment record"
+      ],
+      "outputs": [
+        "dimension flag"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.75,
+          "condition": "not dimensioned"
+        },
+        {
+          "to": "s07",
+          "prob": 0.25,
+          "condition": "dimensioned"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dim"
+        ],
+        "note": "Carriers with dimensioners run 30% to 40% of freight through them, and units sit at selected high-volume terminals; with 14 dimensioners at hubs and the largest terminals the author estimates about 25% of origin shipments."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Drive the pallets through the dimensioner",
+      "description": "A hub dock worker drives each pallet through the dimensioning and weighing station, which captures length, width, height, weight and a photo against the PRO number.",
+      "role": "hub-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "shipment on dock"
+      ],
+      "outputs": [
+        "measured dimensions and weight"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 15
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dim"
+        ],
+        "note": "Dimensioners measure pallet dimensions to validate pricing. Times are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "dimensioner",
+          "occupied_min": {
+            "low": 1,
+            "mode": 2,
+            "high": 4
+          }
+        },
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1,
+            "mode": 2,
+            "high": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "s08",
+      "name": "Compare measured weight and density with the bill",
+      "description": "The TMS compares the captured weight and cube with the shipper's bill of lading and flags shipments outside tolerance for a weight and inspection correction.",
+      "role": "system",
+      "kind": "validation",
+      "inputs": [
+        "measured dimensions and weight",
+        "bill of lading data"
+      ],
+      "outputs": [
+        "within tolerance or W&I flag"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.75,
+          "condition": "within tolerance"
+        },
+        {
+          "to": "s09",
+          "prob": 0.25,
+          "condition": "outside tolerance"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-apex-tariff"
+        ],
+        "note": "Shipments are subject to re-weigh and measurement audit with surcharges when declared weight or cube is understated. The 25% share is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Tag the shipment for weight and inspection",
+      "description": "The dock worker tags the pallets and confirms the photos and readings are attached so the weight and inspection auditor can issue a correction certificate before billing.",
+      "role": "hub-dock-worker",
+      "kind": "data_entry",
+      "inputs": [
+        "W&I flag"
+      ],
+      "outputs": [
+        "W&I referral"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Check for dangerous goods",
+      "description": "The dock worker checks the handheld flag and the piece labels for dangerous goods before choosing where the shipment can go in the trailer.",
+      "role": "terminal-dock-worker",
+      "kind": "validation",
+      "inputs": [
+        "shipment on dock"
+      ],
+      "outputs": [
+        "DG flag"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.95,
+          "condition": "no dangerous goods"
+        },
+        {
+          "to": "s11",
+          "prob": 0.05,
+          "condition": "dangerous goods"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Verify DG documents and plan placement",
+      "description": "The dock supervisor checks the shipping document is with the freight, records the dangerous goods on the trailer manifest, works out whether the trailer will need placards, and tells the loader where to place the pieces away from food and incompatible goods.",
+      "role": "dock-supervisor",
+      "kind": "validation",
+      "inputs": [
+        "shipping document",
+        "labelled pieces"
+      ],
+      "outputs": [
+        "DG shipping document on manifest",
+        "placement instruction"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Transportation of Dangerous Goods Regulations: Part 3 shipping document, Part 4 placarding, Part 6 training",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-tdg-sd",
+          "src-tdg-train"
+        ],
+        "note": "Carriers keep the shipping document with the driver and must be trained to handle dangerous goods; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Look up the outbound door and trailer",
+      "description": "The dock worker reads the shipment's next terminal and the outbound door from the handheld, which follows the linehaul load plan, and checks whether the trailer at that door has room.",
+      "role": "terminal-dock-worker",
+      "kind": "lookup",
+      "inputs": [
+        "linehaul load plan",
+        "shipment destination"
+      ],
+      "outputs": [
+        "target door and trailer"
+      ],
+      "systems": [
+        "dock-handheld",
+        "linehaul-planner-tool"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong door read or keyed, leading to a misload.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.47,
+          "condition": "load directly at a satellite"
+        },
+        {
+          "to": "s15",
+          "prob": 0.31,
+          "condition": "load directly at a hub"
+        },
+        {
+          "to": "s13",
+          "prob": 0.22,
+          "condition": "stage on the floor"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-dock"
+        ],
+        "note": "Outbound docks are mostly cross-dock, moving freight straight from the pickup unit to the linehaul trailer; load planning systems project the loads. The staging share is the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Stage the shipment on the floor",
+      "description": "When the trailer is not yet spotted, is waiting for heavy freight to build the floor, or is full, the dock worker sets the shipment in the destination lane on the dock floor and scans it to that location.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "shipment on dock"
+      ],
+      "outputs": [
+        "staged shipment"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.51,
+          "condition": "loaded tonight at a satellite"
+        },
+        {
+          "to": "s15",
+          "prob": 0.34,
+          "condition": "loaded tonight at a hub"
+        },
+        {
+          "to": "s14",
+          "prob": 0.15,
+          "condition": "misses tonight's departure"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1,
+            "mode": 2,
+            "high": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "s14",
+      "name": "Hold the shipment for the next departure",
+      "description": "The staged shipment's trailer closed full or left early, so it sits on the floor until the next night. At the start of that shift the dock supervisor records the service failure and puts it first in line for the next trailer.",
+      "role": "dock-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "staged shipment"
+      ],
+      "outputs": [
+        "carry-over record"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 900,
+        "mode": 1260,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.6,
+          "condition": "satellite"
+        },
+        {
+          "to": "s15",
+          "prob": 0.4,
+          "condition": "hub"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Load the shipment into the linehaul trailer at a hub",
+      "description": "The hub dock worker brings the pallets to the outbound door and places them in the trailer following the load plan: heavy and dense freight on the floor, light freight on top, tiers built tight to the walls, and scans each piece to the trailer.",
+      "role": "hub-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "shipment",
+        "load plan"
+      ],
+      "outputs": [
+        "shipment on linehaul trailer",
+        "load scans"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 90
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Freight stacked badly, causing damage in transit.",
+        "typically_caught_at": "s20"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Provincial occupational health and safety rules for powered lift trucks (for example Ontario Reg. 851 s.51: operated only by a competent worker) and company dock rule: trailer restrained or wheels chocked and dock plate checked before a forklift enters",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-dock",
+          "src-odfl21"
+        ],
+        "note": "Service centres load outbound freight each night for other terminals (src-odfl21); planning tools assign loading doors (src-parcel-dock). Times are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1.5,
+            "mode": 3,
+            "high": 8
+          }
+        },
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 5,
+            "mode": 15,
+            "high": 40
+          }
+        },
+        {
+          "id": "hub-dock-door",
+          "occupied_min": {
+            "low": 5,
+            "mode": 15,
+            "high": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "s16",
+      "name": "Load the shipment into the linehaul trailer at a satellite",
+      "description": "The terminal dock worker loads the pallets into the outbound trailer for the hub or the destination terminal, building tiers tight to the walls with heavy freight on the bottom, and scans each piece to the trailer.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "shipment",
+        "load plan"
+      ],
+      "outputs": [
+        "shipment on linehaul trailer",
+        "load scans"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 90
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Freight stacked badly, causing damage in transit.",
+        "typically_caught_at": "s20"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Provincial occupational health and safety rules for powered lift trucks (for example Ontario Reg. 851 s.51: operated only by a competent worker) and company dock rule: trailer restrained or wheels chocked and dock plate checked before a forklift enters",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.996,
+          "condition": "always"
+        },
+        {
+          "to": "s17",
+          "prob": 0.004,
+          "condition": "forklift fault"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-dock",
+          "src-odfl21"
+        ],
+        "note": "Nightly outbound loading at service centres. Times are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1.5,
+            "mode": 3,
+            "high": 8
+          }
+        },
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 5,
+            "mode": 15,
+            "high": 40
+          }
+        },
+        {
+          "id": "terminal-dock-door",
+          "occupied_min": {
+            "low": 5,
+            "mode": 15,
+            "high": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "s17",
+      "name": "Report a forklift fault and swap the truck",
+      "description": "The dock worker tags out a forklift with a fault such as failing brakes, a hydraulic leak or a dead battery, enters a fault report for the yard equipment mechanic, and waits for a spare.",
+      "role": "terminal-dock-worker",
+      "kind": "data_entry",
+      "inputs": [
+        "forklift fault"
+      ],
+      "outputs": [
+        "forklift fault report"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Lift truck pre-use check and tag-out of defective equipment (provincial OHS rules)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Check the load scan against the trailer's destination",
+      "description": "The handheld checks that the trailer the shipment was scanned into goes to the shipment's next terminal and alarms on a misload.",
+      "role": "system",
+      "kind": "validation",
+      "inputs": [
+        "load scans",
+        "trailer destination"
+      ],
+      "outputs": [
+        "loaded or misload alarm"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.985,
+          "condition": "correct trailer"
+        },
+        {
+          "to": "s19",
+          "prob": 0.015,
+          "condition": "misload alarm"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-dock"
+        ],
+        "note": "Bar code scanning records each shipment's trailer location. Misload rate is the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Pull and reload the misloaded shipment",
+      "description": "The dock worker finds the shipment in the wrong trailer, takes it out, moves it to the correct door and scans it into the right trailer.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "misload alarm"
+      ],
+      "outputs": [
+        "shipment on correct trailer"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 3,
+            "mode": 6,
+            "high": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "s20",
+      "name": "Inspect the trailer load before closing",
+      "description": "When the trailer reaches its departure cut or is full, the dock supervisor looks at the load: crushable freight not under heavy pieces, tiers tight, load bars or decking in place, cube used, and scanned count matching the manifest. Touch time is this shipment's share of the per-trailer check.",
+      "role": "dock-supervisor",
+      "kind": "review",
+      "inputs": [
+        "loaded trailer",
+        "manifest"
+      ],
+      "outputs": [
+        "approved load"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 150,
+        "high": 420
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company load quality standard: supervisor check of trailer load before sealing",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.95,
+          "condition": "load approved"
+        },
+        {
+          "to": "s21",
+          "prob": 0.05,
+          "condition": "restack needed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: city freight is loaded from about 4 to 9 p.m. and linehaul departures run from about 8 p.m. to 1 a.m., so a shipment waits a few hours for its trailer to close."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Restack and secure the load",
+      "description": "The dock worker pulls out and restacks crushed or shifting freight, adds load bars, straps or decking so the tiers cannot move, and rescans any pieces that were moved.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "load defect"
+      ],
+      "outputs": [
+        "secured load"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "NSC Standard 10 cargo securement as adopted by provincial regulation",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ab-nsc"
+        ],
+        "note": "Cargo must be secured so it cannot shift (NSC Standard 10; AR 121/2009 s.17(4)). Time per shipment is the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1,
+            "mode": 2,
+            "high": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "s22",
+      "name": "Close and seal the trailer",
+      "description": "The dock worker closes the doors, applies a numbered seal, records the seal number and closes the trailer manifest on the handheld. Touch time is this shipment's share.",
+      "role": "terminal-dock-worker",
+      "kind": "data_entry",
+      "inputs": [
+        "approved load"
+      ],
+      "outputs": [
+        "sealed trailer",
+        "closed manifest"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.3,
+        "high": 0.8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Seal number recorded wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Release the trailer and send scan data",
+      "description": "The TMS closes the manifest, sends the trailer's shipment, weight and cube data to linehaul planning and marks the trailer ready for linehaul dispatch.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "closed manifest"
+      ],
+      "outputs": [
+        "shipment scan data",
+        "loaded trailer"
+      ],
+      "systems": [
+        "tms",
+        "linehaul-planner-tool"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "loaded"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Short, over or damaged on unloading",
+      "share_of_cases": 0.03,
+      "description": "Scanned pieces do not match the pickup count or a piece is damaged; the dock worker recounts and writes an OS&D report.",
+      "path": [
+        "s04",
+        "s05",
+        "s06"
+      ]
+    },
+    {
+      "name": "Weight or density outside tolerance",
+      "share_of_cases": 0.06,
+      "description": "The dimensioner finds the shipment heavier or bigger than the bill says; it is tagged for weight and inspection.",
+      "path": [
+        "s07",
+        "s08",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "Dangerous goods",
+      "share_of_cases": 0.05,
+      "description": "The supervisor checks the shipping document and plans placement and placards.",
+      "path": [
+        "s10",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Misload caught by the scanner",
+      "share_of_cases": 0.015,
+      "description": "The shipment was scanned into a trailer for the wrong terminal and is pulled and reloaded.",
+      "path": [
+        "s18",
+        "s19",
+        "s20"
+      ]
+    },
+    {
+      "name": "Missed departure",
+      "share_of_cases": 0.033,
+      "description": "The staged shipment's trailer closed full or left before it was loaded; it waits for the next night's departure, a one-day service failure.",
+      "path": [
+        "s13",
+        "s14"
+      ]
+    },
+    {
+      "name": "Trailer load fails inspection",
+      "share_of_cases": 0.05,
+      "description": "The supervisor finds crushable freight under heavy pieces or a loose load; the freight is restacked and secured.",
+      "path": [
+        "s20",
+        "s21",
+        "s22"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.2,
+        "p90": 0.32
+      },
+      "unit": "calendar days from city truck at strip door to trailer released",
+      "population": "Canadian LTL origin terminals, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: city trucks return about 3:30 to 7 p.m. and linehaul trailers close and depart about 8 p.m. to 1 a.m., about 2 to 7 hours later; about 3% of shipments miss the departure and wait a day."
+      }
+    },
+    {
+      "metric": "share_of_freight_dimensioned",
+      "value": {
+        "low": 30,
+        "high": 40
+      },
+      "unit": "percent of freight at carriers with dimensioners",
+      "population": "US LTL carriers, 2016",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-ttnews-dim"
+        ],
+        "note": "SJ Consulting estimate quoted in Transport Topics."
+      }
+    },
+    {
+      "metric": "platform_employees_per_driver",
+      "value": 0.45,
+      "unit": "dock employees per driver (5,350 / 11,802)",
+      "population": "Old Dominion Freight Line, end of 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-odfl21"
+        ],
+        "note": "Ratio computed from the 10-K employee counts; the organisation file has 560 dock workers to 780 LTL drivers (0.72)."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "City trucks return in a wave late in the afternoon, so strip doors, forklifts and dock workers are short for two or three hours and freight queues on the dock.",
+      "steps": [
+        "s01",
+        "s02",
+        "s03"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "description": "Misloads and missed departures cost a service day, and misloads not caught by the scanner surface only at the next terminal.",
+      "steps": [
+        "s12",
+        "s18",
+        "s19",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-parcel-dock"
+        ],
+        "note": "Scanning and door assignment exist to control dock travel and trailer location; rates are the author's estimate."
+      }
+    },
+    {
+      "description": "Poorly built tiers and loose loads cause damage claims; the supervisor's check before sealing catches only part of it.",
+      "steps": [
+        "s15",
+        "s16",
+        "s20",
+        "s21"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice at Canadian LTL carriers in 2019-2022."
+      }
+    },
+    {
+      "description": "Bills of lading understate weight and cube, and only shipments that pass a dimensioner can be corrected.",
+      "steps": [
+        "s06",
+        "s07",
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dim",
+          "src-apex-tariff"
+        ],
+        "note": "Dimensioners exist to correct pricing; tariffs provide for re-weigh surcharges."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-parcel-dock",
+      "title": "A Look at LTL Carrier Dock Operations",
+      "publisher": "Parcel Industry (Joe Heilig, enVista)",
+      "url": "https://parcelindustry.com/print-article-3642-permanent.html",
+      "year": 2013,
+      "accessed": "2026-11-24",
+      "supports": "Dock cost depends on the number of handling units and transfers; outbound service-centre docks are mostly cross-dock, moving shipments directly from the pickup unit to the linehaul trailer; heavy or high-cube shipments loaded as headloads in the trailer nose are not transferred; load planning systems project linehaul loads from picked-up shipments; door assignment reduces travel; dock metrics are shipments per hour or engineered time standards; carriers scan each shipment's dock movement and trailer location. Publication date is not printed on the page; the article number follows the April 2013 article by the same author, so the year is the author's inference."
+    },
+    {
+      "id": "src-odfl21",
+      "title": "Old Dominion Freight Line, Inc. Form 10-K for the fiscal year ended December 31, 2021",
+      "publisher": "US Securities and Exchange Commission (EDGAR)",
+      "url": "https://www.sec.gov/Archives/edgar/data/878927/000156459022006303/odfl-10k_20211231.htm",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Service centres handle pickup and delivery in their local area; each night they load outbound freight for transport to other service centres; inbound freight arriving in the evening is generally scheduled for next-business-day delivery; LTL weight per shipment 1,571 lb (2021) and 1,614 lb (2020); 12,880 thousand LTL shipments in 2021; 23,663 employees including 11,802 drivers and 5,350 platform (dock) employees."
+    },
+    {
+      "id": "src-ttnews-dim",
+      "title": "LTL Carriers Boost Dimensioner Use to Improve Pricing Accuracy, Profits",
+      "publisher": "Transport Topics (Rip Watson)",
+      "url": "https://ttnews.com/articles/ltl-carriers-boost-dimensioner-use-improve-pricing-accuracy-profits",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Carriers typically run 30% to 40% of their freight through dimensioners (SJ Consulting); FedEx Freight had 45 dimensioners, Estes 72, YRC 70, Saia 33, installed at selected high-volume terminals rather than every terminal."
+    },
+    {
+      "id": "src-apex-tariff",
+      "title": "Terms and Conditions - Tariff 101 (16th revision, effective April 14, 2025)",
+      "publisher": "Apex LTL (apexltl.com), Canadian LTL carrier",
+      "url": "https://www.apexltl.com/forms/TARIFF101-20250414.pdf",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "Canadian domestic LTL rules under provincial conditions of carriage: regular pickup and delivery hours 6:00 AM to 6:00 PM; waiting-time free time on pickups and deliveries by billed weight (1-500 lb 15 min, 501-9,999 lb 30 min, 10,000-19,999 lb 1 h) then $25.25 per 15 min; attempted pickup charge $4.25/cwt, minimum $45; carrier provides only one employee (the driver) per vehicle and the consignor loads large or heavy articles; tailgate service up to 1,500 lb per lift; carrier liability $2.00/lb ($4.41/kg) unless higher value declared on the bill of lading; all shipments subject to re-weigh and measurement audit with a $25 rescale fee per pro; bill of lading changes must be authorised in writing; dangerous goods surcharge and excluded classes."
+    },
+    {
+      "id": "src-tdg-sd",
+      "title": "TDG Bulletin: Shipping document",
+      "publisher": "Transport Canada",
+      "url": "https://tc.canada.ca/en/dangerous-goods/tdg-bulletin-shipping-documents",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "The consignor completes the shipping document before the carrier takes possession and a carrier may refuse an improperly documented shipment; road carriers keep a copy within the driver's reach; minimum content is UN number, shipping name, classes, packing group, quantity, number of labelled small containers, 24-hour number and consignor's certification; copies kept 2 years."
+    },
+    {
+      "id": "src-tdg-train",
+      "title": "TDG Bulletin: TDG Training",
+      "publisher": "Transport Canada",
+      "url": "https://tc.canada.ca/en/dangerous-goods/tdg-bulletin-tdg-training",
+      "year": 2019,
+      "accessed": "2026-11-24",
+      "supports": "Anyone who handles, offers or transports dangerous goods must be adequately trained and hold an employer-issued training certificate (TDG Regulations s.6.1) or work under the direct physical supervision of a certified person; road certificates expire after 36 months."
+    },
+    {
+      "id": "src-ab-nsc",
+      "title": "Summary of Maintenance and Safety Program Requirements for Alberta-Based Commercial Trucks / Tractors / Trailers",
+      "publisher": "Government of Alberta, Transportation",
+      "url": "https://www.alberta.ca/system/files/custom_downloaded_images/tr-summary-of-safety-and-maintenance-program-requirements.pdf",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Daily trip inspection follows Schedule 1 of NSC Standard 13 Part 2; a trip inspection report records unit, odometer, carrier, location, each defect or no defect, date and time and the inspector's name and signature; a vehicle may not be driven with a major defect; reports kept 6 months; defects seen while driving must be recorded and reported; cargo must be contained, immobilised or secured so it cannot shift or fall (AR 121/2009 s.17(4), NSC Standard 10)."
+    }
+  ],
+  "assumptions": [
+    "Steps done once per trailer (door assignment, load inspection, sealing) carry this shipment's share of the time, assuming about 10 shipments per city trailer and 20 to 25 per linehaul trailer.",
+    "The hub or satellite split is drawn separately at unloading and at loading, so a simulated shipment can show a hub unload and a satellite load; the totals by role are right but individual paths mix.",
+    "The 40% hub share assumes shipments picked up in the GTA, Montreal, Winnipeg, Calgary and Metro Vancouver are handled on the hub dock.",
+    "Cartage agents bring about 4% of origin freight from small towns to terminals; the organisation file does not link cartage agents to this process.",
+    "The load plan from linehaul planning is a standing input the dock needs; the organisation file sends linehaul_load_plan only to linehaul dispatch.",
+    "Injury reports to workplace safety (listed in the organisation file) are rare per shipment and are not modelled as a step.",
+    "Staffing check: roles state 224 FTE; about 12.5 minutes of hands-on time per shipment times 150,000 shipments implies about 250 FTE at 130 productive hours a month, within the check range. Dock workers on 8-hour shifts have somewhat more than 130 productive hours, so the stated figure is kept."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

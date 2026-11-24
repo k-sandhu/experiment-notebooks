@@ -1,0 +1,1937 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-in-aps-collection",
+  "name": "Collect attending physician statements for life insurers",
+  "org": "diagnostic-lab-services-co",
+  "process": "in-aps-collection",
+  "sector": "health care: insurance medical evidence services",
+  "function": "insurance solutions: APS collection",
+  "summary": "When a life insurer wants to see what an applicant's own doctor has recorded, the company's APS collection team obtains an attending physician statement: the doctor's answers on the insurer's form or a copy of the chart for a period. An APS coordinator checks the applicant's signed authorization, finds the clinic, sends the request by fax, confirms it arrived, chases the office on the insurer's contact cycle, pays the physician's fee, checks the returned pages and releases the statement to the case file. Hands-on work is about half an hour per statement, but elapsed time is weeks because clinics fit these uninsured requests around patient care; rejected authorizations, lost faxes, prepayment demands and incomplete returns add loops.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "The insurance medical evidence line of a large Canadian laboratory company, with a central APS team of about 35 coordinators requesting statements from clinics across Canada for every major life insurer.",
+    "org_size_employees": 3300,
+    "notes": "Fax was still the main channel to physicians' offices in the period; a physician upload portal and courier are also used. Electronic health record retrieval, common in the US, was not available for Canadian clinics."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one APS",
+  "trigger": "The insurance order desk releases an APS request (physician details, request type and signed authorization) into the APS team's queue.",
+  "end_state": "The complete statement is attached to the case and released for case review, or the request is closed as cancelled, no record or unobtainable with the insurer told why.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 6000,
+      "mode": 8000,
+      "high": 10000
+    },
+    "seasonality": "Fairly even; slower in late December and summer when clinics run reduced hours, which also lengthens waits.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file estimate of 8,000 APS requests a month, about one in five of the 38,000 insurance orders; matches the order management workflow's APS share."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "in-order-management",
+        "object": "aps_request",
+        "share": 0.97
+      },
+      {
+        "from": "attending_physician",
+        "object": "aps_document",
+        "share": 0.03
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "attending_physician",
+        "object": "aps_request"
+      },
+      {
+        "outcome": "aps_released",
+        "to": "in-case-review-release",
+        "object": "aps_document"
+      },
+      {
+        "outcome": "closed_no_record",
+        "to": "in-case-review-release",
+        "object": "aps_document"
+      },
+      {
+        "outcome": "aps_released",
+        "to": "fin-accounts-payable",
+        "object": "supplier_invoice"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "aps_coordinator",
+      "title": "APS coordinator",
+      "department": "APS collection team",
+      "layer": "individual_contributor",
+      "fte_on_process": 34.0,
+      "loaded_cost_per_hour": {
+        "low": 25,
+        "mode": 30,
+        "high": 38
+      },
+      "occupation_code": "NOC 13112",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "icontact_aps",
+          "jobbank_13112"
+        ],
+        "note": "APS teams track files with physicians' offices and keep advisors informed (dyn_aps); chasing and callback duties as in APS retrieval postings (icontact_aps). FTE: 34 of the 35 coordinators in the organisation file, below the 42 that hands-on time times 8,000 APS a month implies (see assumptions); the rest is training, advisor calls and absence cover. Wage near the Job Bank 13112 Ontario median. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    },
+    {
+      "id": "insurance_team_lead",
+      "title": "Team lead, insurance customer care",
+      "department": "Insurance order desk and case management",
+      "layer": "supervisor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 34,
+        "mode": 40,
+        "high": 48
+      },
+      "occupation_code": "NOC 12010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Team leads supervise the APS coordinators (the organisation file has them report to this role), review aged files and handle misdirected records; the share of the 12 team leads is an estimate within the 5 FTE the other workflows leave. Loaded cost is the organisation file's hourly wage times 1.35 (benefits, payroll taxes and overhead)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "oms",
+      "name": "Insurance Order Management System with Paraweb ordering and iCARE status hub",
+      "kind": "workflow"
+    },
+    {
+      "id": "fax",
+      "name": "Fax server",
+      "kind": "communication"
+    },
+    {
+      "id": "telephony",
+      "name": "Contact centre telephony with IVR, queues and call recording",
+      "kind": "communication"
+    },
+    {
+      "id": "email_office",
+      "name": "Email and office suite",
+      "kind": "communication"
+    },
+    {
+      "id": "erp",
+      "name": "ERP for general ledger, payables, procurement and inventory",
+      "kind": "system_of_record"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive the APS request in the APS work queue",
+      "description": "When the order desk releases an APS request, the order management system creates an APS task with the insurer, applicant, physician details, request type (insurer form or chart copy for a period) and the image of the signed authorization, assigns it to the regional APS queue and posts an 'APS requested' status to iCARE for the advisor.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "APS request from the order desk",
+        "authorization image"
+      ],
+      "outputs": [
+        "APS task in queue"
+      ],
+      "systems": [
+        "oms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "dyn_car"
+        ],
+        "note": "Orders arrive from carriers through the secure website and advisors track pending APS orders in iCARE (dyn_aps)."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review the request and the applicant's authorization",
+      "description": "An APS coordinator opens the task, reads any special instructions from the insurer, and checks that the authorization is signed and dated within the insurer's validity period, names the applicant exactly as on the health card and covers release to the insurer and its agent. The coordinator also notes whether this physician or hospital is known to refuse copies or electronic signatures.",
+      "role": "aps_coordinator",
+      "kind": "validation",
+      "inputs": [
+        "APS task",
+        "authorization image",
+        "insurer instructions"
+      ],
+      "outputs": [
+        "accepted request or authorization query"
+      ],
+      "systems": [
+        "oms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "An authorization the clinic will not accept (electronic signature, stale date) is passed.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "PIPEDA principle 3 (express consent for sensitive personal information) and provincial health privacy laws: the physician may disclose the record to the insurer only with the patient's signed consent",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.93,
+          "condition": "authorization acceptable"
+        },
+        {
+          "to": "s03",
+          "prob": 0.07,
+          "condition": "authorization missing, stale, wrong name or e-signature not accepted by this office"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "opc_consent",
+          "brokerworld2017"
+        ],
+        "note": "Requirement for a current valid authorization, original signatures at some offices and health card name (dyn_aps); rejected electronic signatures (brokerworld2017). The 7 percent rejection share is an estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Ask the insurer or advisor for a new or original authorization",
+      "description": "The coordinator emails or faxes the insurer's new business area or the advisor, explaining what is wrong with the authorization (date, name, missing page, wet signature required by this office), puts the task on hold in the order management system and sets a reminder.",
+      "role": "aps_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "authorization defect"
+      ],
+      "outputs": [
+        "authorization request to advisor or insurer"
+      ],
+      "systems": [
+        "oms",
+        "email_office",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps"
+        ],
+        "note": "Some hospitals or physicians require an original authorization or handwritten signature (dyn_aps)."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Wait for the applicant to sign a new authorization",
+      "description": "The advisor or insurer contacts the applicant, has a new authorization signed and sends the image or the original by courier. Some applicants are slow to respond or withdraw the application, in which case the insurer cancels the request.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "authorization request"
+      ],
+      "outputs": [
+        "new signed authorization or cancellation"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 5760,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.88,
+          "condition": "new authorization received"
+        },
+        {
+          "to": "s25",
+          "prob": 0.12,
+          "condition": "applicant does not sign or the insurer cancels"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Turnaround of advisor and applicant estimated at one to fourteen days; cancellation share estimated."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Look up the physician and clinic in the provider directory",
+      "description": "The coordinator searches the APS provider directory in the order management system for the physician or clinic, confirming the current fax number, whether records go through a hospital health records department or a copy service, the office's usual fee and whether it wants prepayment. A new physician is added to the directory.",
+      "role": "aps_coordinator",
+      "kind": "lookup",
+      "inputs": [
+        "accepted request"
+      ],
+      "outputs": [
+        "confirmed physician contact and fee profile"
+      ],
+      "systems": [
+        "oms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Stale or wrong fax number used for the clinic.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.88,
+          "condition": "physician found with current details"
+        },
+        {
+          "to": "s06",
+          "prob": 0.12,
+          "condition": "physician not in directory, moved or retired"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "examone_mr"
+        ],
+        "note": "Local familiarity with physicians and the physician name and address speed the request (dyn_aps); vendors keep large physician databases (examone_mr). Directory miss share is an estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Research and confirm the physician's contact details",
+      "description": "The coordinator searches the provincial college's physician register and clinic websites, phones the clinic or hospital to confirm the fax number and which office holds the chart, and if needed calls the advisor to ask the applicant for the clinic's name. A physician who retired or moved may have transferred records to a custodian.",
+      "role": "aps_coordinator",
+      "kind": "lookup",
+      "inputs": [
+        "incomplete physician details"
+      ],
+      "outputs": [
+        "confirmed contact, or unable to identify"
+      ],
+      "systems": [
+        "oms",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.93,
+          "condition": "contact confirmed"
+        },
+        {
+          "to": "s25",
+          "prob": 0.07,
+          "condition": "physician or records custodian cannot be identified"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate from common practice of record retrieval; time and shares not published."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Check the physician's fee against the insurer's limit",
+      "description": "The coordinator compares the office's known fee for the requested report with the fee limit in the insurer's account set-up. Fees within the limit go ahead; a higher fee, a large chart copy or a specialist report needs the insurer's prior approval.",
+      "role": "aps_coordinator",
+      "kind": "judgment",
+      "inputs": [
+        "fee profile",
+        "insurer account rules"
+      ],
+      "outputs": [
+        "fee decision"
+      ],
+      "systems": [
+        "oms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Fee above the insurer limit not flagged.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Insurer service agreement: fee limits and prior approval of physician fees above them",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.9,
+          "condition": "fee within the insurer's limit"
+        },
+        {
+          "to": "s08",
+          "prob": 0.1,
+          "condition": "fee above limit, insurer approval needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps"
+        ],
+        "note": "Prior fee approval is requested from the insurance company when required (dyn_aps). Share needing approval is an estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Request prior fee approval from the insurer",
+      "description": "The coordinator sends the insurer's underwriting or requirements team the physician's quoted fee and the reason (chart copy size, specialist report, rush) by email or the insurer's portal and parks the task until an answer comes.",
+      "role": "aps_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "fee quote"
+      ],
+      "outputs": [
+        "fee approval request"
+      ],
+      "systems": [
+        "oms",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 120
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps"
+        ],
+        "note": "Prior fee approval step described in dyn_aps."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Wait for the insurer to approve the fee",
+      "description": "An underwriter at the insurer decides whether the information is worth the quoted fee, approves it, asks for a narrower request, or cancels the APS because other evidence is enough.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "fee approval request"
+      ],
+      "outputs": [
+        "approval or cancellation"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.92,
+          "condition": "fee approved"
+        },
+        {
+          "to": "s25",
+          "prob": 0.08,
+          "condition": "insurer declines the fee or cancels the APS"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Insurer response time and decline share estimated."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Prepare and fax the request package to the clinic",
+      "description": "The coordinator generates the cover letter in English or French, attaches the insurer's APS form or the chart copy request with the period wanted, the authorization and the fee and payment instructions, faxes it through the fax server (or sends it by courier when the office insists on an original), records the send date and sets the follow-up date of the insurer's contact cycle.",
+      "role": "aps_coordinator",
+      "kind": "drafting",
+      "inputs": [
+        "confirmed contact",
+        "authorization",
+        "insurer APS form"
+      ],
+      "outputs": [
+        "APS request sent to the physician"
+      ],
+      "systems": [
+        "oms",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong number dialled or wrong attachment sent, a misdirected fax of health information.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "canhealth_fax"
+        ],
+        "note": "Forms are sent by fax or courier (dyn_aps); more than 90 percent of Ontario doctors still use fax and misdirected faxes are the leading cause of health privacy breaches (canhealth_fax)."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Call the clinic to confirm the request was received",
+      "description": "A few business days after sending, the coordinator phones the clinic or health records office to confirm the request arrived and is in the queue, asks for an expected completion date and whether payment is wanted first, and notes the answer in the order management system, which updates iCARE.",
+      "role": "aps_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "sent request"
+      ],
+      "outputs": [
+        "receipt confirmed and expected date"
+      ],
+      "systems": [
+        "telephony",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 4320,
+        "high": 7200
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.85,
+          "condition": "clinic confirms receipt"
+        },
+        {
+          "to": "s10",
+          "prob": 0.12,
+          "condition": "clinic has no record of the request or the number was wrong"
+        },
+        {
+          "to": "s14",
+          "prob": 0.03,
+          "condition": "clinic will not start until the fee is paid"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "brokerworld2017",
+          "dyn_aps"
+        ],
+        "note": "Unconfirmed receipt, refaxing and offices wanting payment before release are shown in the worked example (brokerworld2017). Shares are estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Wait for the physician's office to complete the statement",
+      "description": "The physician's staff find the chart, the physician completes the insurer's form or approves the chart copy, and staff or a copy service copy and send it, usually in order of receipt among other uninsured paperwork. The wait runs until the statement comes back or the next follow-up date in the contact cycle arrives.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "APS request in the clinic's queue"
+      ],
+      "outputs": [
+        "completed APS, or nothing yet"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 8640,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.42,
+          "condition": "statement returned before the next follow-up date"
+        },
+        {
+          "to": "s13",
+          "prob": 0.53,
+          "condition": "follow-up date reached with no statement"
+        },
+        {
+          "to": "s25",
+          "prob": 0.05,
+          "condition": "office reports no record of the patient, or the insurer cancels the order"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ipipeline",
+          "wp2015",
+          "doctorsmb",
+          "cpso_tpr",
+          "bcmj2023"
+        ],
+        "note": "APS collection averages 18 to 19.8 days (wp2015, ipipeline); physicians are expected to complete forms within about 30 days (doctorsmb) or 45 days in Ontario (cpso_tpr); follow-ups about every couple of weeks (bcmj2023). The per-cycle return probability is set so the simulated median is near the published averages."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Follow up with the clinic and update the status",
+      "description": "On the follow-up date the coordinator phones or refaxes the clinic, asks for a status and expected date, resends any lost pages, and records the result so iCARE shows the advisor a current status. The diary is reset to the next date in the insurer's contact cycle.",
+      "role": "aps_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "open APS task"
+      ],
+      "outputs": [
+        "status note",
+        "next follow-up date"
+      ],
+      "systems": [
+        "telephony",
+        "fax",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.8,
+          "condition": "office promises completion, wait again"
+        },
+        {
+          "to": "s14",
+          "prob": 0.07,
+          "condition": "office says it needs payment before releasing the records"
+        },
+        {
+          "to": "s16",
+          "prob": 0.13,
+          "condition": "file has passed 30 days without completion"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "bcmj2023",
+          "icontact_aps"
+        ],
+        "note": "Follow-ups by phone or fax according to the carrier's contact cycle (dyn_aps); about every couple of weeks (bcmj2023); callbacks scheduled so cases are not neglected (icontact_aps). Branch shares are estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Request a prepayment cheque for the physician's fee",
+      "description": "The coordinator records the office's fee and approval reference, completes a payment request with the office's invoice or fee letter and sends it to accounts payable for the next cheque or electronic payment run, noting the payment in the task.",
+      "role": "aps_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "fee quote or invoice",
+        "approval reference"
+      ],
+      "outputs": [
+        "payment request to accounts payable"
+      ],
+      "systems": [
+        "oms",
+        "erp",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Payment keyed to the wrong payee or amount.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Company payables controls: a payment needs an approved amount and a set-up payee before accounts payable releases it",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "payment requested"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "brokerworld2017"
+        ],
+        "note": "Prepayment sent to the physician's office when required (dyn_aps); records released only after payment (brokerworld2017)."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Confirm the payment reached the clinic",
+      "description": "After the weekly payment run and mailing, the coordinator checks that the cheque or payment has been issued, phones the office to confirm it arrived and asks it to release the records.",
+      "role": "aps_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "payment request"
+      ],
+      "outputs": [
+        "payment confirmed with the office"
+      ],
+      "systems": [
+        "erp",
+        "telephony",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 7200,
+        "high": 14400
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "payment received by the office"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly payment runs and mail time estimated at two to ten days."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Send the 30-day urgency letter and alert the advisor",
+      "description": "When a file passes 30 days, the coordinator sends the office a letter stressing the urgency of the request and the possible liability for non-completion, and tells the advisor through iCARE and email that the applicant may want to call the physician.",
+      "role": "aps_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "aged APS task"
+      ],
+      "outputs": [
+        "urgency letter",
+        "advisor alert"
+      ],
+      "systems": [
+        "oms",
+        "fax",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 10,
+        "high": 18
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Carrier contact cycle and APS service standard: letter to the office after 30 days without response",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.75,
+          "condition": "keep waiting after the letter"
+        },
+        {
+          "to": "s17",
+          "prob": 0.25,
+          "condition": "still outstanding at the next aged-file review"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dyn_aps",
+          "bcmj2023"
+        ],
+        "note": "A letter is sent after 30 days without response and the applicant may be asked to contact the physician (dyn_aps, bcmj2023)."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Review the aged file and decide whether to keep chasing",
+      "description": "A team lead reviews files outstanding for about 60 days or more in the weekly aged-file report, reads the contact history and, with the insurer's instruction, decides to keep chasing (for example after the applicant calls the physician) or close the request as unobtainable.",
+      "role": "insurance_team_lead",
+      "kind": "review",
+      "inputs": [
+        "aged-file report",
+        "contact history"
+      ],
+      "outputs": [
+        "continue or close decision"
+      ],
+      "systems": [
+        "oms",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "APS service standard: team lead review and insurer instruction before closing an unobtainable request",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.55,
+          "condition": "continue chasing"
+        },
+        {
+          "to": "s25",
+          "prob": 0.45,
+          "condition": "close as unobtainable with the insurer's agreement"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "bcmj2023",
+          "icontact_aps"
+        ],
+        "note": "Insurers may close the application when the APS stays outstanding (bcmj2023); stalled cases are escalated (icontact_aps). Review cadence and split are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Receive the statement and match it to the request",
+      "description": "The statement arrives by fax to the fax server, through the physician APS portal or by courier. A coordinator matches it to the open task by applicant name, date of birth and request number, scans courier copies, and attaches the image to the order.",
+      "role": "aps_coordinator",
+      "kind": "intake",
+      "inputs": [
+        "incoming fax, portal upload or courier envelope"
+      ],
+      "outputs": [
+        "APS image attached to the order"
+      ],
+      "systems": [
+        "fax",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Statement attached to the wrong applicant's order.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "dyn_car"
+        ],
+        "note": "Completed forms are faxed, submitted to the secure site or couriered and handled as priority (dyn_aps); physician APS portal (dyn_car)."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Check the statement for completeness and legibility",
+      "description": "The coordinator pages through the statement or chart copy and checks it is for the right patient, signed, legible, complete (page count, all questions answered) and covers the period the insurer asked for. Chart copies can run to dozens of pages.",
+      "role": "aps_coordinator",
+      "kind": "validation",
+      "inputs": [
+        "APS image",
+        "original request"
+      ],
+      "outputs": [
+        "accepted statement or defect list"
+      ],
+      "systems": [
+        "oms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Missing pages or an unanswered question not noticed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "APS service standard agreed with carriers: check image quality and that all pages are received and legible before release",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 0.86,
+          "condition": "complete and legible"
+        },
+        {
+          "to": "s20",
+          "prob": 0.12,
+          "condition": "pages missing, unsigned or wrong period"
+        },
+        {
+          "to": "s22",
+          "prob": 0.02,
+          "condition": "records of another patient are included"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "ipipeline"
+        ],
+        "note": "Reports reviewed for image quality and complete legible pages (dyn_aps); carriers then spend about 1.4 days reviewing an APS (ipipeline). Defect shares are estimates."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Ask the clinic for the missing pages or signature",
+      "description": "The coordinator phones or faxes the office listing exactly what is missing (pages, signature, a question, the requested period) and keeps the task open.",
+      "role": "aps_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "defect list"
+      ],
+      "outputs": [
+        "request for missing items"
+      ],
+      "systems": [
+        "telephony",
+        "fax",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 120
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; time estimated."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Wait for the clinic to send the missing items",
+      "description": "The office finds and sends the missing pages or has the physician sign or complete the form, usually within days because the chart is already pulled.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "request for missing items"
+      ],
+      "outputs": [
+        "missing pages"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "items received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Handle records of another patient received in error",
+      "description": "A team lead removes the other patient's pages from the order, asks the clinic to confirm destruction or return of the misdirected copy, logs the incident for the privacy office's breach assessment and records what was done. The coordinator then asks for the correct records.",
+      "role": "insurance_team_lead",
+      "kind": "judgment",
+      "inputs": [
+        "misdirected pages"
+      ],
+      "outputs": [
+        "incident record",
+        "corrected file"
+      ],
+      "systems": [
+        "oms",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "PIPEDA breach of security safeguards provisions: assess real risk of significant harm, report and notify where it exists, and keep a record of every breach for two years",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "incident logged, correct records requested"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "opc_breach",
+          "canhealth_fax"
+        ],
+        "note": "Breach record and assessment duties (opc_breach); misdirected faxes are the leading cause of health privacy breaches in Ontario (canhealth_fax). Share and time estimated."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Record the physician's invoice for payment",
+      "description": "If the office enclosed an invoice and was not prepaid, the coordinator checks the amount against the approved fee and keys a payment request with the invoice image for accounts payable; the insurer's fee is flagged for billing with the order.",
+      "role": "aps_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "physician invoice",
+        "approved fee"
+      ],
+      "outputs": [
+        "supplier invoice to accounts payable"
+      ],
+      "systems": [
+        "oms",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 120
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Invoice paid twice (prepaid and invoiced) or at the wrong amount.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Company payables controls: invoice matched to an approved fee before payment",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "invoice recorded or no fee owed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "brokerworld2017"
+        ],
+        "note": "The company pays the physician's fee (dyn_aps); offices send an invoice after copying (brokerworld2017)."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Release the statement to the case file",
+      "description": "The coordinator marks the APS received in the order management system, which posts the image to the case for the evidence reviewer, sets the requirement complete in iCARE and closes the APS task.",
+      "role": "aps_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "accepted statement"
+      ],
+      "outputs": [
+        "APS released to case review",
+        "iCARE status"
+      ],
+      "systems": [
+        "oms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "statement released",
+          "outcome": "aps_released"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps"
+        ],
+        "note": "Completed reports are sent to the insurance company (dyn_aps); the transmission itself belongs to the case review and release process."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Close the request and notify the insurer",
+      "description": "For a cancelled order, a physician who reports no record of the patient, or a request closed as unobtainable, the coordinator records the reason, sends the insurer the office's no-record letter or the contact history, recalls any unpaid fee request and closes the task so iCARE shows the final status.",
+      "role": "aps_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "closure reason",
+        "contact history"
+      ],
+      "outputs": [
+        "closure notice"
+      ],
+      "systems": [
+        "oms",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.4,
+          "condition": "order cancelled by the insurer or advisor",
+          "outcome": "cancelled"
+        },
+        {
+          "to": "END",
+          "prob": 0.25,
+          "condition": "physician reports no record of the applicant",
+          "outcome": "closed_no_record"
+        },
+        {
+          "to": "END",
+          "prob": 0.35,
+          "condition": "closed as unobtainable",
+          "outcome": "closed_unobtainable"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "bcmj2023",
+          "wp2015"
+        ],
+        "note": "Outstanding APS can lead to closure (bcmj2023); an applicant who did not list all doctors can make a second report necessary (wp2015). Outcome split is an estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Authorization not accepted",
+      "share_of_cases": 0.07,
+      "description": "The authorization is stale, names the applicant differently from the health card, lacks a page or carries an electronic signature the office will not accept; a new one is obtained through the advisor.",
+      "path": [
+        "s02",
+        "s03",
+        "s04",
+        "s02"
+      ]
+    },
+    {
+      "name": "Physician not in the directory",
+      "share_of_cases": 0.12,
+      "description": "The physician has moved, retired or is new; the coordinator researches the clinic and the records custodian before sending.",
+      "path": [
+        "s05",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Fee above the insurer's limit",
+      "share_of_cases": 0.1,
+      "description": "A large chart copy or specialist report costs more than the insurer's limit and needs its prior approval.",
+      "path": [
+        "s07",
+        "s08",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "Request not received by the clinic",
+      "share_of_cases": 0.12,
+      "description": "The receipt call finds the fax did not arrive or went to an old number and the package is sent again.",
+      "path": [
+        "s11",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Prepayment demanded",
+      "share_of_cases": 0.1,
+      "description": "The office will not start or release records until paid; a cheque goes out in the next payment run.",
+      "path": [
+        "s13",
+        "s14",
+        "s15",
+        "s12"
+      ]
+    },
+    {
+      "name": "Aged file escalation",
+      "share_of_cases": 0.13,
+      "description": "After 30 days the office gets an urgency letter and the advisor is alerted; files still open at the aged-file review are continued or closed as unobtainable.",
+      "path": [
+        "s13",
+        "s16",
+        "s17",
+        "s25"
+      ]
+    },
+    {
+      "name": "Incomplete statement returned",
+      "share_of_cases": 0.12,
+      "description": "Pages, a signature or the requested period are missing and the office is asked again.",
+      "path": [
+        "s19",
+        "s20",
+        "s21",
+        "s18"
+      ]
+    },
+    {
+      "name": "Another patient's records received",
+      "share_of_cases": 0.02,
+      "description": "The returned copy includes pages of a different patient; the pages are removed, the office is told and the incident is logged for breach assessment.",
+      "path": [
+        "s19",
+        "s22",
+        "s20"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 16,
+        "p90": 40
+      },
+      "unit": "calendar days from APS request released to statement released or request closed",
+      "population": "Life insurance APS requests in Canada and the US",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ipipeline",
+          "wp2015"
+        ],
+        "note": "Published averages are 19.8 days (62 carriers, ipipeline) and 18 days (Canadian companies, wp2015). The median is set a little below these means because the distribution has a long tail; the p90 is the author's estimate."
+      }
+    },
+    {
+      "metric": "aps_average_collection_days",
+      "value": 19.8,
+      "unit": "days",
+      "population": "62 life carriers, more than 3 million applications over two years to 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ipipeline"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "aps_average_days_canada",
+      "value": 18,
+      "unit": "days",
+      "population": "Some Canadian life insurers, as reported in 2015",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "wp2015"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "carrier_aps_review_days",
+      "value": 1.4,
+      "unit": "days",
+      "population": "62 life carriers (review after the APS arrives, outside this process)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ipipeline"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "escalation_letter_after",
+      "value": 30,
+      "unit": "days without response",
+      "population": "The company's APS collection service",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "dyn_aps"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "physician_form_completion_expectation",
+      "value": {
+        "manitoba": 30,
+        "ontario_no_exam": 45
+      },
+      "unit": "days",
+      "population": "Physicians completing third party reports and forms",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "doctorsmb",
+          "cpso_tpr"
+        ],
+        "note": "Doctors Manitoba guidance (generally 30 days) and the CPSO policy approved in 2021 (45 days for reports without an examination)."
+      }
+    },
+    {
+      "metric": "ontario_doctors_using_fax",
+      "value": 0.9,
+      "unit": "share of doctors (more than)",
+      "population": "Ontario physicians (OMA figure reported in 2023)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "canhealth_fax"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Most elapsed time is waiting for physicians' offices, which treat APS requests as uninsured paperwork behind patient care; APS collection is the slowest underwriting requirement.",
+      "steps": [
+        "s12",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ipipeline",
+          "wp2015"
+        ],
+        "note": "APS orders top the list of underwriting delays at 19.8 days average."
+      }
+    },
+    {
+      "description": "Fax requests go missing or to old numbers, so receipt has to be confirmed by phone and packages resent; misdirected faxes of health information are privacy breaches.",
+      "steps": [
+        "s10",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "brokerworld2017",
+          "canhealth_fax"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Offices reject authorizations with electronic signatures, old dates or names that differ from the chart, sending the request back to the advisor and applicant.",
+      "steps": [
+        "s02",
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "brokerworld2017",
+          "dyn_aps"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Fee approvals and prepayment demands add an insurer decision and a payment run to the wait.",
+      "steps": [
+        "s08",
+        "s09",
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "dyn_aps",
+          "brokerworld2017"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Repeated status calls and refaxes take much of the coordinators' time and still leave advisors calling for updates.",
+      "steps": [
+        "s13",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "icontact_aps",
+          "bcmj2023"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "dyn_aps",
+      "title": "APS collection (The model laboratory's insurance testing service brochure)",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "An APS request needs a current, valid authorization from the applicant (some hospitals or physicians require an original or handwritten signature) and the physician's name and address; orders come from carriers through the secure website; prior fee approval is requested from the insurer when required and prepayment is sent to the physician's office; forms go by fax or courier; follow-ups by phone or fax follow the carrier's contact cycle; after 30 days without response a letter warns the office of urgency and potential liability; reports come back by fax, secure site or courier, are handled as priority, checked for image quality and complete legible pages, and sent to the insurer; the applicant's name must match the health card; advisors track pending APS orders in iCARE. Text copy saved by earlier work and read for this file."
+    },
+    {
+      "id": "dyn_car",
+      "title": "Insurance carriers",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Carrier services include paramedicals, tele-interviews, attending physician statements, an APS collection service and a physician APS portal; orders online through the Order Management System, by email or phone."
+    },
+    {
+      "id": "ipipeline",
+      "title": "Five days to issue",
+      "publisher": "iPipeline",
+      "url": "https://uk.ipipeline.com/5days/",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Analysis of more than 3 million life applications at 62 carriers: APS orders are the top underwriting delay with an average collection time of 19.8 days; APS review by the carrier averages 1.4 days."
+    },
+    {
+      "id": "wp2015",
+      "title": "Why does it take so long to get my policies issued?",
+      "publisher": "Wealth Professional",
+      "url": "https://www.wealthprofessional.ca/investments/life-and-health-insurance/why-does-it-take-so-long-to-get-my-policies-issued/197115",
+      "year": 2015,
+      "accessed": "2026-11-17",
+      "supports": "Canadian insurers: some companies report an average of 18 days to obtain an APS; the wait for the doctor is outside the underwriter's control; insurers try to reduce APS use; an applicant who does not list all doctors can force a second report."
+    },
+    {
+      "id": "bcmj2023",
+      "title": "A delay in the attending physician's statement can delay your insurance application",
+      "publisher": "British Columbia Medical Journal (Doctors of BC)",
+      "url": "https://bcmj.org/node/9757",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "The underwriting service sends the APS request to the physician and follows up about every couple of weeks; after several follow-ups the insurer may ask the applicant to step in; an outstanding APS can lead the insurer to close the application; applicants often finish testing in weeks and then wait weeks more."
+    },
+    {
+      "id": "brokerworld2017",
+      "title": "Why does that attending physician's statement take so darn long!?!",
+      "publisher": "Broker World",
+      "url": "https://brokerworldmag.com/why-does-that-attending-physicians-statement-take-so-darn-long/",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Worked example of an APS order: faxed request not received, refaxed, receipt confirmed after 9 days, office quotes 15 days to copy, several invoice follow-ups; offices invoice after copying and release records only after payment; some facilities reject insurer authorizations and electronic signatures; copy services queue requests in order of receipt; maiden names cause missed records."
+    },
+    {
+      "id": "examone_mr",
+      "title": "Medical records (reducing cycle time)",
+      "publisher": "ExamOne",
+      "url": "https://www.examone.com/reducing-cycle-time/medical-records/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "APS vendor practice: requests to more than 800,000 doctors and facilities; written, signed and dated authorization required before records are accessed; electronic health record routing saves days to weeks of APS wait time where available."
+    },
+    {
+      "id": "icontact_aps",
+      "title": "APS retriever (job posting)",
+      "publisher": "iContact BPO via careers-page.com",
+      "url": "https://careers-page.com/icontactbpo/job/8X9WRRWV",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "APS retrievers contact medical facilities by phone and email, prioritise urgent and aging cases, schedule callbacks so cases are not neglected, keep case notes, escalate stalled cases and handle confidential information under authorization protocols; monthly productivity targets for closed cases."
+    },
+    {
+      "id": "doctorsmb",
+      "title": "Reports and forms: time frames for completion",
+      "publisher": "Doctors Manitoba",
+      "url": "https://doctorsmanitoba.ca/managing-your-practice/remuneration/uninsured-servicesx/reports-and-forms-time-frames-for-completion",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "Absent unusual circumstances the time to complete a report or form should generally be 30 days; time depends on the complexity of the request; physicians who cannot meet the deadline should tell the requesting party why and when to expect it."
+    },
+    {
+      "id": "cpso_tpr",
+      "title": "Third party medical reports (Dialogue article on the new policy)",
+      "publisher": "College of Physicians and Surgeons of Ontario",
+      "url": "https://dialogue.cpso.on.ca/2020/09/third-party-medical-reports/",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Policy approved in 2021: outside legal proceedings, third party medical reports that do not require an independent medical examination must be completed within 45 days, and those that do within 60 days; covers treating physicians completing forms for their patients."
+    },
+    {
+      "id": "canhealth_fax",
+      "title": "Ontario plans to eliminate faxes in healthcare in 5 years",
+      "publisher": "Canadian Healthcare Technology",
+      "url": "https://www.canhealth.com/2023/02/08/ontario-plans-to-eliminate-faxes-in-healthcare-in-5-years/",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "The Ontario Medical Association says more than 90 percent of doctors still use fax machines; misdirected faxes were the leading cause of unauthorized disclosure of health information, with nearly 5,000 such breaches reported to Ontario's privacy commissioner in 2021."
+    },
+    {
+      "id": "jobbank_13112",
+      "title": "Wages: Medical administrative assistant in Ontario (NOC 13112)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/25791/ON",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low 17.95, median 25.00, high 32.70 CAD (2023-2024)."
+    },
+    {
+      "id": "opc_consent",
+      "title": "PIPEDA fair information principle 3: Consent",
+      "publisher": "Office of the Privacy Commissioner of Canada",
+      "url": "https://www.priv.gc.ca/en/privacy-topics/privacy-laws-in-canada/the-personal-information-protection-and-electronic-documents-act-pipeda/p_principle/principles/p_consent/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Meaningful consent is required; express consent is generally needed when the information is sensitive; individuals can withdraw consent at any time subject to legal or contractual restrictions."
+    },
+    {
+      "id": "opc_breach",
+      "title": "What you need to know about mandatory reporting of breaches of security safeguards",
+      "publisher": "Office of the Privacy Commissioner of Canada",
+      "url": "https://www.priv.gc.ca/en/privacy-topics/business-privacy/safeguards-and-breaches/privacy-breaches/respond-to-a-privacy-breach-at-your-business/gd_pb_201810/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Breaches posing a real risk of significant harm must be reported to the OPC and affected individuals notified as soon as feasible; health information is usually sensitive; records of every breach must be kept for two years."
+    }
+  ],
+  "assumptions": [
+    "One case is one APS request to one physician or facility. An order that needs statements from two doctors creates two requests.",
+    "The process map lists the physician's statement as a trigger. Statements normally arrive inside cases already open; the 3 percent trigger share stands for statements that arrive without a matching open request (sent after closure or by the applicant's doctor unprompted) and reopen a request at receipt. The step graph models only requests that start at the order desk.",
+    "Physicians' offices are modelled with a follow-up cycle of about a week (range two days to two weeks): each cycle the statement comes back with probability 0.42. This reproduces published averages of 18 to 19.8 days but not the dependence of return chance on file age; the 30-day letter is approximated as 13 percent of follow-ups.",
+    "The company pays physicians' fees and recovers them from the insurer through client invoicing; the payment itself is made by accounts payable in weekly runs. About 10 percent of requests need prepayment.",
+    "Coordinator FTE (34 of 35) is about 8 FTE below the 42 that hands-on time (about 41 minutes per request) times 8,000 requests implies, so the organisation file's 35 coordinators look thin unless follow-up faxes go out automatically from the diary or volume is nearer the low end. Team leads are assumed to supervise the APS team although the organisation file places them in the order desk unit.",
+    "Shares of authorization problems, directory misses, fee approvals, unreceived faxes, incomplete returns and closures are the author's estimates; no opened source gave rates.",
+    "Loaded costs come from the organisation file (wage times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

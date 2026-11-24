@@ -1,0 +1,1526 @@
+{
+  "schema_version": "0.3",
+  "id": "edu-cs-move-in-move-out",
+  "name": "Open and close customer accounts",
+  "org": "electric-distribution-utility",
+  "process": "cs-move-in-move-out",
+  "sector": "electricity distribution",
+  "function": "customer service",
+  "summary": "When people move, the distributor must stop billing the person leaving and start billing whoever takes over the premise: a new occupant, the landlord or, if nobody claims it, an occupant account. Customers submit an online form or call; a representative matches the premise, checks identity and earlier debts, decides on a security deposit under OEB rules, and sets up the orders, which wait for the move date. The smart meter supplies the move-date read and the final bill goes out about three weeks later. Late or wrong move notices, multi-unit addresses and premises nobody claims cause bills to the wrong person, rebilling and some disconnections.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A municipally owned Ontario electricity distributor with about 350,000 customers, monthly billing from smart meter reads, an online moving form and a landlord reversion program.",
+    "org_size_employees": 571,
+    "notes": "Moves dip in spring 2020 and resume in summer; deposit waiver rules changed on March 1, 2020."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one move request (move-out, move-in or both at one premise) or new-service account",
+  "trigger": "A customer submits the moving form or calls, or a newly energized service needs an account.",
+  "end_state": "The outgoing account has a final bill and the premise is billed to the new occupant, the landlord or an occupant account, or is ordered disconnected.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 4000,
+      "mode": 5500,
+      "high": 7500
+    },
+    "seasonality": "Peaks from June to September and at month ends (lease turnover, students); lowest in winter.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file estimate: 15-20% of about 318,000 residential accounts change occupant each year, plus business moves and about 420 new services a month. No published count was found."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "residential-customer",
+        "object": "account_change",
+        "share": 0.62
+      },
+      {
+        "from": "cs-contact-centre",
+        "object": "account_change",
+        "share": 0.3
+      },
+      {
+        "from": "ops-service-connection-work",
+        "object": "energization_notice",
+        "share": 0.08
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "cs-billing",
+        "object": "account_change"
+      },
+      {
+        "outcome": "any",
+        "to": "ops-field-service-orders",
+        "object": "disconnect_order"
+      },
+      {
+        "outcome": "any",
+        "to": "cs-retailer-ebt",
+        "object": "account_change"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "csr",
+      "title": "Customer service representative",
+      "department": "Customer Contact Centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 11.0,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 42,
+        "high": 50
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 11 of the 40 representatives' FTE work move requests from the web queue and phone. Loaded cost = wage x 1.40."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "billing-analyst",
+      "title": "Billing analyst",
+      "department": "Billing and Settlement",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 47,
+        "high": 56
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "New-service account set-up, held final bills and rebills. Loaded cost = wage x 1.40."
+      }
+    },
+    {
+      "id": "meter-data-analyst",
+      "title": "Meter data analyst",
+      "department": "Metering Services",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 44,
+        "mode": 52,
+        "high": 62
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Missing move-date reads. Not listed for this process in the organisation file."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "web-portal",
+      "name": "Customer web portal, MyAccount, mobile app and outage map",
+      "kind": "external_portal"
+    },
+    {
+      "id": "cis",
+      "name": "Customer information and billing system (CIS)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mdm",
+      "name": "Local meter data management and validation tool",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "ami",
+      "name": "Smart meter (AMI) head-end and network",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "ebt-hub",
+      "name": "Electronic business transaction (EBT) hub for retailer transactions",
+      "kind": "external_portal"
+    },
+    {
+      "id": "mwm",
+      "name": "Mobile workforce management and field tablets",
+      "kind": "workflow"
+    },
+    {
+      "id": "email",
+      "name": "Email, calendar and Teams",
+      "kind": "communication"
+    },
+    {
+      "id": "erp",
+      "name": "ERP: general ledger, work orders, purchasing, inventory, fixed assets",
+      "kind": "system_of_record"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Submit a move request",
+      "description": "The customer fills in the online moving form or MyAccount move screen with old and new addresses, move dates and, for renters, the landlord's contact, or gives the same details to a representative by phone. The customer's own time is not counted.",
+      "role": "external",
+      "kind": "intake",
+      "inputs": [
+        "customer move plans"
+      ],
+      "outputs": [
+        "move request"
+      ],
+      "systems": [
+        "web-portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Wrong unit number, move date or missing landlord details on the form.",
+        "typically_caught_at": "s03"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "submitted"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-moving"
+        ],
+        "note": "Channels and information asked for from src-moving."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Load the request into the CIS work queue",
+      "description": "Web form submissions are loaded into a CIS work queue in batches during the day, and phone requests arrive as move orders already started by the contact centre; both are sorted by move date so the nearest moves are worked first.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "move request"
+      ],
+      "outputs": [
+        "queued move request"
+      ],
+      "systems": [
+        "web-portal",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.92,
+          "condition": "move by an existing or new occupant"
+        },
+        {
+          "to": "s08",
+          "prob": 0.08,
+          "condition": "account for a newly energized service"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Review the request and match the premise",
+      "description": "A representative opens the request, finds the premise in the CIS by address and meter number, checks who is billed there now and whether the landlord has a reversion agreement, and fixes or queries an unclear unit number or date.",
+      "role": "csr",
+      "kind": "lookup",
+      "inputs": [
+        "queued move request"
+      ],
+      "outputs": [
+        "matched premise"
+      ],
+      "systems": [
+        "cis",
+        "web-portal"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 2.5,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Request matched to the wrong unit in a multi-unit building.",
+        "typically_caught_at": "s23"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "premise found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022. Summer and month-end backlogs push the queue wait toward the high value."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Verify identity and look for earlier unpaid accounts",
+      "description": "For a new account holder the representative checks the date of birth and photo identification supplied, then searches the CIS for earlier accounts in the same name with unpaid final bills that should follow the customer to the new address.",
+      "role": "csr",
+      "kind": "validation",
+      "inputs": [
+        "matched premise",
+        "identification"
+      ],
+      "outputs": [
+        "verified customer"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Prior unpaid account missed because the name is spelled differently.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Utility identity verification and privacy policy for opening accounts (date of birth and government photo ID)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.94,
+          "condition": "no earlier debt"
+        },
+        {
+          "to": "s05",
+          "prob": 0.06,
+          "condition": "unpaid final bill found"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-moving"
+        ],
+        "note": "Date of birth and photo ID requested per src-moving; debt share is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Transfer an unpaid balance to the new account",
+      "description": "The representative moves the unpaid final balance from the closed account to the new one, notes the transfer, and tells the customer by email or phone, which often leads to a payment arrangement request.",
+      "role": "csr",
+      "kind": "data_entry",
+      "inputs": [
+        "unpaid final bill"
+      ],
+      "outputs": [
+        "transferred balance"
+      ],
+      "systems": [
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Balance transferred to the wrong account.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "transferred"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Close the outgoing account at the move date",
+      "description": "The representative enters the move-out on the account billed at the premise with the move date, sets the final bill flag and mailing address for the final bill, and decides what happens to the premise next: a new occupant, the landlord, or nobody.",
+      "role": "csr",
+      "kind": "data_entry",
+      "inputs": [
+        "verified customer",
+        "matched premise"
+      ],
+      "outputs": [
+        "move-out order"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 2.5,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong move-out date entered.",
+        "typically_caught_at": "s23"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.62,
+          "condition": "a new occupant is taking over"
+        },
+        {
+          "to": "s12",
+          "prob": 0.28,
+          "condition": "landlord is in the reversion program"
+        },
+        {
+          "to": "s13",
+          "prob": 0.1,
+          "condition": "no successor and no landlord agreement"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Open the new account",
+      "description": "The representative creates the new account at the premise from the move date with the billing address, contact details, paperless and payment preferences, rate class and any OESP note, and links it to the premise and meter.",
+      "role": "csr",
+      "kind": "data_entry",
+      "inputs": [
+        "move-out order",
+        "move request"
+      ],
+      "outputs": [
+        "new account"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 7
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong rate class or mailing address on the new account.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "account created"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Create the account for a newly energized service",
+      "description": "When a crew energizes a new service, a billing analyst takes the energization notice and the meter installation record from the field system and creates the premise, meter and account in the CIS so billing starts from the energization date.",
+      "role": "billing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "energization notice",
+        "meter installation record"
+      ],
+      "outputs": [
+        "new account"
+      ],
+      "systems": [
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Meter multiplier or service details keyed wrongly.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "account created"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; new services are about 420 a month in the organisation file."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Decide whether a security deposit is needed",
+      "description": "The representative applies the deposit rules: no deposit for a residential customer with a good payment letter, a satisfactory credit check, low-income status or (from March 2020) enrolment in equal or pre-authorized payment; otherwise a deposit up to the billing cycle factor times the estimated bill, mostly for business accounts.",
+      "role": "csr",
+      "kind": "judgment",
+      "inputs": [
+        "new account",
+        "payment history"
+      ],
+      "outputs": [
+        "deposit decision"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Deposit charged where the rules require a waiver.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.2.4.11-2.4.20A security deposit waivers, maximum and instalments; OEB customer service rule changes effective March 1, 2020",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.88,
+          "condition": "no deposit"
+        },
+        {
+          "to": "s10",
+          "prob": 0.12,
+          "condition": "deposit required"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dsc",
+          "src-csr2020"
+        ],
+        "note": "Rules from src-dsc and src-csr2020; share needing a deposit is the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Send the security deposit request",
+      "description": "The representative calculates the deposit from the estimated monthly bill, offers instalments over at least six months for residential customers (four for others), and sends the deposit letter that tells the customer how to avoid it.",
+      "role": "csr",
+      "kind": "drafting",
+      "inputs": [
+        "deposit decision"
+      ],
+      "outputs": [
+        "deposit letter"
+      ],
+      "systems": [
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Deposit amount calculated on the wrong usage estimate.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "letter sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": "Instalment rule s.2.4.20 and 2.4.20A in src-dsc."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Send the welcome letter and set-up charge notice",
+      "description": "The CIS sends the new account holder a welcome email or letter with the account number, the start date, the one-time account set-up charge that appears on the first bill, and how to register for MyAccount.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "new account"
+      ],
+      "outputs": [
+        "welcome letter"
+      ],
+      "systems": [
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-moving"
+        ],
+        "note": "Set-up charge from src-moving."
+      },
+      "concurrent_with": [
+        "s10"
+      ]
+    },
+    {
+      "id": "s12",
+      "name": "Revert the premise to the landlord's account",
+      "description": "Because the landlord has signed a reversion agreement, the CIS moves the premise to the landlord's account from the day after the move-out without a fee, and emails the landlord that the transfer is done.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "move-out order",
+        "landlord reversion agreement"
+      ],
+      "outputs": [
+        "landlord account active"
+      ],
+      "systems": [
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Agreement on file for the wrong unit.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-landlord"
+        ],
+        "note": "Landlord Reversion Program described in src-landlord."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Write to the premise about service with no account holder",
+      "description": "With no successor and no landlord agreement, the representative leaves the premise on an occupant account and sends a letter to the address and to the owner of record asking the occupant or owner to open an account within a set time.",
+      "role": "csr",
+      "kind": "communication",
+      "inputs": [
+        "move-out order"
+      ],
+      "outputs": [
+        "occupant letter"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Owner address out of date, so the letter is not answered.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Conditions of Service: responsibility for supply to premises with no account holder",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "letter sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Follow up the unclaimed premise",
+      "description": "After the letter period the representative checks whether anyone has opened an account and whether the smart meter shows usage. Usage with no account holder leads to a site visit or disconnect order; otherwise the owner is billed.",
+      "role": "csr",
+      "kind": "judgment",
+      "inputs": [
+        "occupant letter",
+        "interval data"
+      ],
+      "outputs": [
+        "follow-up decision"
+      ],
+      "systems": [
+        "cis",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 14400,
+        "mode": 21600,
+        "high": 43200
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Premise disconnected while occupied.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.6,
+          "condition": "owner or occupant takes the account"
+        },
+        {
+          "to": "s15",
+          "prob": 0.4,
+          "condition": "still unclaimed with usage"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Order a disconnection of the unclaimed premise",
+      "description": "The representative creates a disconnect order with the premise access notes and the reason, which goes to field services through mobile workforce management, and records that the premise is vacant and unbilled.",
+      "role": "csr",
+      "kind": "data_entry",
+      "inputs": [
+        "follow-up decision"
+      ],
+      "outputs": [
+        "disconnect order"
+      ],
+      "systems": [
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong premise ordered for disconnection.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "order sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Check for a retailer contract and send EBT transactions",
+      "description": "The CIS checks whether the old or new account has an electricity retailer contract and, for the few that do, generates the service transaction requests to the retailer through the EBT hub; all others pass straight on.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "move-out order",
+        "new account"
+      ],
+      "outputs": [
+        "retailer transactions"
+      ],
+      "systems": [
+        "cis",
+        "ebt-hub"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Transaction rejected by the hub for a data mismatch.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Retail Settlement Code and EBT standards for service transaction requests between distributors and retailers",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Retail Settlement Code and EBT standards not opened; described from general knowledge."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Hold the orders until the move date",
+      "description": "The move-out and move-in orders sit pending in the CIS until the move date arrives. Requests come in anywhere from several weeks ahead to after the move itself, though ten business days are asked for.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "pending orders"
+      ],
+      "outputs": [
+        "orders due"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "move date reached"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-moving"
+        ],
+        "note": "Ten business days' notice asked for in src-moving; the spread is the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Take the move-date read from the smart meter",
+      "description": "Overnight the CIS asks the meter data management system for the validated midnight register read on the move date and uses it as the final read for the old account and the opening read for the new one.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "orders due"
+      ],
+      "outputs": [
+        "move-date read"
+      ],
+      "systems": [
+        "cis",
+        "mdm",
+        "ami"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.95,
+          "condition": "valid read available"
+        },
+        {
+          "to": "s19",
+          "prob": 0.05,
+          "condition": "read missing or failed validation"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of AMI read success for move dates."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Obtain or estimate a missing move-date read",
+      "description": "A meter data analyst checks why the read failed, requests an on-demand read through the AMI head-end, and if none comes uses the validation, estimation and editing rules to estimate the read, or sends a field read order.",
+      "role": "meter-data-analyst",
+      "kind": "lookup",
+      "inputs": [
+        "read exception"
+      ],
+      "outputs": [
+        "move-date read"
+      ],
+      "systems": [
+        "mdm",
+        "ami",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Estimated read later proves wrong.",
+        "typically_caught_at": "s23"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "read available"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Calculate the final and first-period bills",
+      "description": "In the next billing run for the premise's cycle, the CIS calculates the final bill for the outgoing account and starts billing the new account holder or landlord from the move date, applying any deposit and set-up charge.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "move-date read"
+      ],
+      "outputs": [
+        "calculated bills"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 5760,
+        "mode": 15840,
+        "high": 27360
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.88,
+          "condition": "passes bill validation"
+        },
+        {
+          "to": "s21",
+          "prob": 0.12,
+          "condition": "held by validation"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-moving"
+        ],
+        "note": "Final bill about three weeks after the move-out date (src-moving)."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Review a held final bill",
+      "description": "A billing analyst opens the held final bill, checks the dates against the move order, the read, any overlapping account and the deposit and credit balance, corrects what is wrong and releases it.",
+      "role": "billing-analyst",
+      "kind": "validation",
+      "inputs": [
+        "held bill"
+      ],
+      "outputs": [
+        "released bill"
+      ],
+      "systems": [
+        "cis",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Correction itself introduces an error.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.7.11: 98% of bills accurate, counting cancelled and adjusted bills as inaccurate",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "released"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": "Standard from src-dsc; time is the author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Issue the final bill and refund any credit",
+      "description": "The CIS issues the final bill by email or mail to the forwarding address, applies a security deposit with interest against it, and queues a refund cheque when a credit remains.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "released bill"
+      ],
+      "outputs": [
+        "final bill",
+        "refund"
+      ],
+      "systems": [
+        "cis",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.93,
+          "condition": "bills correct",
+          "outcome": "account_changed"
+        },
+        {
+          "to": "s23",
+          "prob": 0.07,
+          "condition": "move reported late or on wrong dates"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor with a CIS, smart meters and an online moving form in 2019-2022."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Cancel and rebill bills sent to the wrong person",
+      "description": "When a move was reported after bills had gone out, or the date or unit was wrong, a billing analyst cancels the affected bills on both accounts, rebills them from the correct date, moves payments, and writes to both parties.",
+      "role": "billing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "corrected move date"
+      ],
+      "outputs": [
+        "corrected bills"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 35,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Payment moved to the wrong account.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "rebilled",
+          "outcome": "rebilled_after_late_notice"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the organisation file names late or missing move notices as a cause of corrections."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Late or wrong move notice",
+      "share_of_cases": 0.07,
+      "description": "The move is reported after bills went out or with the wrong date or unit, so bills on two accounts are cancelled and reissued.",
+      "path": [
+        "s22",
+        "s23"
+      ]
+    },
+    {
+      "name": "Unclaimed premise",
+      "share_of_cases": 0.1,
+      "description": "Nobody takes over and there is no landlord agreement; the premise gets an occupant letter and, if still unclaimed with usage, a disconnect order.",
+      "path": [
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Security deposit required",
+      "share_of_cases": 0.11,
+      "description": "A customer without a qualifying payment history, mostly a business, is asked for a deposit payable in instalments.",
+      "path": [
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "Missing move-date read",
+      "share_of_cases": 0.05,
+      "description": "The smart meter read for the move date is missing or fails validation and has to be fetched or estimated.",
+      "path": [
+        "s18",
+        "s19"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 30,
+        "p90": 45
+      },
+      "unit": "calendar days from request to final bill",
+      "population": "Residential moves",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-moving"
+        ],
+        "note": "Ten business days' notice is asked for and the final bill arrives about three weeks after the move-out date (src-moving); many customers give less notice, so the median is set below the 35 days the two figures add to."
+      }
+    },
+    {
+      "metric": "move_notice_requested",
+      "value": 10,
+      "unit": "business days before the move",
+      "population": "Residential and landlord requests",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-moving",
+          "src-landlord"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Moves reported late or with the wrong unit mean bills to the wrong person, which have to be cancelled and reissued on two accounts and count against billing accuracy.",
+      "steps": [
+        "s03",
+        "s06",
+        "s23"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; mechanism named in the organisation file."
+      }
+    },
+    {
+      "description": "Summer and month-end peaks build a backlog in the web form queue just when move dates are close.",
+      "steps": [
+        "s03"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Premises with no account holder need letters, waiting and sometimes a field disconnection.",
+      "steps": [
+        "s13",
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-moving",
+      "title": "Moving (residential services)",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/residential/services/moving",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Move requests at least 10 business days before moving day; new customers use an online moving request form and give date of birth, government photo ID and landlord contact; existing customers move or stop service in MyAccount; account set-up charge on the first bill; final bill about three weeks after the move-out date; landlords may not submit for tenants; OESP recipients must re-apply after a move. Page read in 2026; practice in 2019-2022 assumed similar."
+    },
+    {
+      "id": "src-landlord",
+      "title": "Landlord and property managers",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/accounts-services/services/landlord-and-property-managers",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Landlord Reversion Program: when a tenant moves out, service transfers automatically to the enrolled landlord, who is emailed; a new tenant's move-in request transfers it back; set-up and transfer fees waived for enrolled landlords; 10 business days' notice for account changes; 24-hour option for moving emergencies."
+    },
+    {
+      "id": "src-dsc",
+      "title": "Distribution System Code (consolidated, revised March 27, 2024)",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/sites/default/files/Distribution-System-Code_March_20240327.pdf",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "s.2.4.11-2.4.20A security deposit waivers, maximum (billing cycle factor x estimated bill) and instalments over at least 6 months for residential customers; s.2.6.1A monthly billing of residential and GS<50 kW customers (in force December 31, 2016); s.2.6.6.2B payment allocation; s.2.7 arrears payment agreements (down payment up to 15%, 10% for eligible low-income; terms of at least 5 or 10 months, 8, 12 or 16 months for eligible low-income); s.4.2.2.1 disconnection notice not in the bill envelope; s.4.2.2.6 21-day suspension while a LEAP intake agency assesses the customer; s.4.2.3.1 mailed notice deemed received on the fifth day; s.7.6 65% of calls answered in 30 s; s.7.7 abandon rate 10% or less; s.7.8 written response in 10 business days 80% of the time; s.7.10 reconnection within 2 business days 85% of the time; s.7.11 billing accuracy 98% and what counts as an inaccurate bill. Amendment history shows these sections were in force through 2019-2022 apart from the March 2020 changes."
+    },
+    {
+      "id": "src-csr2020",
+      "title": "New Ontario Energy Board customer service rules strengthen consumer protection (news release)",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/sites/default/files/news-release-csr-20200305.pdf",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "Rules in force March 1, 2020: minimum payment period raised from 16 to 20 calendar days; an account overdue notice 7 days before a disconnection notice; disconnection notice period raised from 10 to 14 days, mailed notice deemed received on the fifth calendar day, disconnection within 14 days after the notice period; no disconnection on a day the utility is closed or the day before; winter ban November 15 to April 30 with reconnection by December 1; residential deposits returned after one year of good payment, small business after three; deposits waived for new residential customers enrolling in equal or pre-authorized payment; APA offered to small business; no late charges on APA amounts."
+    }
+  ],
+  "assumptions": [
+    "One case is one move request at a premise (move-out, move-in or a transfer), or one account for a newly energized service. A customer moving within the territory is one case covering both premises.",
+    "The landlord reversion program and online forms are described from Hydro Ottawa pages read in 2026; the 2019-2022 process is assumed to be similar, with landlords then still able to submit for tenants.",
+    "Business moves use the same steps; the organisation file lists only residential customers as a trigger, so business requests are included in the residential share.",
+    "The wait to the move date and the wait for the billing cycle dominate elapsed time; hands-on time is about 15 minutes a case on average, most of it representative keying; requests started by phone have already had their details taken in the contact centre process.",
+    "The meter-data-analyst role is not listed in the organisation file's process map for this process; it appears only for missing reads.",
+    "Roles use the organisation file's ids and loaded costs (wage x 1.40)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

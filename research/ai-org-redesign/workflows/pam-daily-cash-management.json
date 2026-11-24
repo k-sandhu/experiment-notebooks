@@ -1,0 +1,1710 @@
+{
+  "schema_version": "0.2",
+  "id": "pam-daily-cash-management",
+  "name": "Manage daily cash and funding (one business day's cash cycle)",
+  "org": "public-asset-manager",
+  "process": "daily-cash-management",
+  "sector": "public-sector asset management",
+  "function": "investment operations",
+  "summary": "Each business day the cash team checks yesterday's closing balances in every pool, client and mandate account, collects the day's expected flows from trade settlements, unit transactions, client instructions, capital calls, distributions, fees and margin calls, and builds a projection by account and currency. It then funds shortfalls, buys currencies through the trading desk, keys payments in the custodian portal for a second and sometimes a senior authoriser to release, verifies new payment details by call-back, re-projects at midday and lets the custodian sweep surplus cash into the short-term fund. Late capital call notices, same-day client requests and failed settlements cause most exceptions, and the cash ladder lives in spreadsheets across hundreds of accounts.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian provincial public-sector asset manager with about $79 billion in pools and segregated client and mandate accounts at one global custodian, with a four-person cash, collateral and treasury team.",
+    "org_size_employees": 242,
+    "notes": "Snapshot at the end of 2021: four pools, five client portfolios, about 120 external mandates and about 190 private fund interests generating calls and distributions."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one business day's cash cycle",
+  "trigger": "The business day starts: the custodian's overnight statements and pending settlements are available.",
+  "end_state": "All required payments and transfers are released and sent, shortfalls are funded, surplus cash is swept, the forecast is updated and the manager has signed the daily checklist, with any overdraft or returned payment investigated.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 20,
+      "mode": 21,
+      "high": 23
+    },
+    "seasonality": "Heavier at month end (pension payroll funding, unit dealing, manager fees) and at quarter end (capital calls, fee payments, rebalancing).",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "One cycle per Canadian business day per the organisation file's demand driver."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "trade-settlement-fails",
+        "object": "settlement_status",
+        "share": 0.25
+      },
+      {
+        "from": "capital-call-processing",
+        "object": "funding_wire",
+        "share": 0.15
+      },
+      {
+        "from": "pool-unit-transactions",
+        "object": "funding_wire",
+        "share": 0.12
+      },
+      {
+        "from": "client-cash-flow-instructions",
+        "object": "funding_wire",
+        "share": 0.1
+      },
+      {
+        "from": "collateral-margin",
+        "object": "funding_wire",
+        "share": 0.1
+      },
+      {
+        "from": "distribution-processing",
+        "object": "cash_forecast",
+        "share": 0.08
+      },
+      {
+        "from": "pool-rebalancing-cash-deployment",
+        "object": "funding_wire",
+        "share": 0.06
+      },
+      {
+        "from": "manager-fee-validation-payment",
+        "object": "funding_wire",
+        "share": 0.05
+      },
+      {
+        "from": "private-deal-closing-funding",
+        "object": "funding_wire",
+        "share": 0.04
+      },
+      {
+        "from": "hedge-fund-dealing",
+        "object": "funding_wire",
+        "share": 0.03
+      },
+      {
+        "from": "private-investment-exit",
+        "object": "sale_proceeds",
+        "share": 0.02
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "custodian",
+        "object": "funding_wire"
+      },
+      {
+        "outcome": "any",
+        "to": "liquidity-forecasting",
+        "object": "cash_forecast"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "cash_collateral_analyst",
+      "title": "Analyst, cash and collateral",
+      "department": "Cash, collateral and treasury operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 56,
+        "high": 95
+      },
+      "occupation_code": "NOC 11109",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jobbank_11101"
+        ],
+        "note": "Cost from the organisation file (Job Bank NOC 11101 Toronto basis). FTE author estimate; two analysts share the morning work and the team also runs collateral and client cash."
+      }
+    },
+    {
+      "id": "mgr_cash_collateral",
+      "title": "Manager, cash, collateral and treasury operations",
+      "department": "Cash, collateral and treasury operations",
+      "layer": "manager",
+      "fte_on_process": 0.12,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 90,
+        "high": 135
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jobbank_10010"
+        ],
+        "note": "Cost from the organisation file (Job Bank NOC 10010 basis). Releases payments and signs off the day."
+      }
+    },
+    {
+      "id": "head_investment_operations",
+      "title": "Vice president, investment operations",
+      "department": "Investment operations",
+      "layer": "director",
+      "fte_on_process": 0.01,
+      "loaded_cost_per_hour": {
+        "low": 180,
+        "mode": 240,
+        "high": 320
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Cost from the organisation file. Senior authoriser for high-value payments."
+      }
+    },
+    {
+      "id": "trader",
+      "title": "Trader (equities, fixed income, FX and derivatives)",
+      "department": "Public markets trading desk",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.02,
+      "loaded_cost_per_hour": {
+        "low": 120,
+        "mode": 170,
+        "high": 230
+      },
+      "occupation_code": "NOC 11103",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Cost from the organisation file. Executes FX for cash needs; not listed in the process map's roles."
+      }
+    },
+    {
+      "id": "tpm_portfolio_manager",
+      "title": "Portfolio manager, total portfolio (rebalancing, liquidity, overlays)",
+      "department": "Total portfolio management and rebalancing",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.01,
+      "loaded_cost_per_hour": {
+        "low": 140,
+        "mode": 195,
+        "high": 260
+      },
+      "occupation_code": "NOC 11101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Cost from the organisation file. Decides funding for large shortfalls; not listed in the process map's roles."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "custodian_portal",
+      "name": "Custodian portal (custody, accounting records, net asset value reports, cash and corporate action notices)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "oms_ibor",
+      "name": "Order management, pre-trade compliance and investment book of record platform (vendor software as a service)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "unitholder_register",
+      "name": "Pool unitholder register and transfer agency records (custodian module with controlled spreadsheets)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "private_markets_system",
+      "name": "Private markets investment accounting and monitoring system (commitments, calls, distributions, valuations)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "trading_platforms",
+      "name": "Electronic trading and broker platforms (equity, bond and FX multi-dealer)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Excel workbooks and models",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, video calls and collaboration suite",
+      "kind": "communication"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Load overnight custodian cash statements and pending settlements",
+      "description": "Overnight the custodian's end-of-day cash statements and the list of pending settlements for every pool, client and mandate account load into the custodian portal and the book of record's cash view; no one touches this step.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "custodian end-of-day statements",
+        "pending settlement report"
+      ],
+      "outputs": [
+        "opening cash positions"
+      ],
+      "systems": [
+        "custodian_portal",
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 360,
+        "high": 480
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ct_cash"
+        ],
+        "note": "Daily cash control starts from bank and custodian balances. Load time is an author estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check prior-day closing balances and overdrafts",
+      "description": "A cash analyst compares each account's closing balance with yesterday's projection, lists unexpected debits and credits, overdrafts and unapplied receipts, and starts queries with the custodian or the owning team.",
+      "role": "cash_collateral_analyst",
+      "kind": "validation",
+      "inputs": [
+        "opening cash positions",
+        "prior-day projection"
+      ],
+      "outputs": [
+        "balance exception list"
+      ],
+      "systems": [
+        "custodian_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 90,
+        "high": 150
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "An unexpected debit or receipt is not followed up.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ct_cash",
+          "sifma_soc1"
+        ],
+        "note": "Daily monitoring of receipts and disbursements; cash reconciled to the custodian is a SOC 1 objective. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Collect today's expected flows from each source",
+      "description": "A second analyst gathers today's known flows: trade settlements and fails from trade support, unit subscriptions and redemptions, client contributions and withdrawals, capital calls and distributions due, manager fees, margin calls, FX maturities and hedge fund dealing.",
+      "role": "cash_collateral_analyst",
+      "kind": "lookup",
+      "inputs": [
+        "settlement status report",
+        "unit transaction log",
+        "capital call schedule",
+        "margin calls",
+        "fee payment list"
+      ],
+      "outputs": [
+        "list of expected flows"
+      ],
+      "systems": [
+        "oms_ibor",
+        "unitholder_register",
+        "private_markets_system",
+        "custodian_portal",
+        "email_collab",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "A flow from one source is missed or taken twice.",
+        "typically_caught_at": "s04"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ni24101",
+          "mgr_ar21"
+        ],
+        "note": "Trades settle on T+2, so settlements are known in advance; liquidity needs include client outflows, capital calls, rebalancing and FX hedging. Runs alongside s02. Times are author estimates for one business day across all accounts; no published time study was found."
+      },
+      "concurrent_with": [
+        "s02"
+      ]
+    },
+    {
+      "id": "s04",
+      "name": "Build the cash projection by account and currency",
+      "description": "The analyst rolls the cash ladder workbook forward, enters the expected flows against each account and currency, and identifies which accounts will be short or have surplus cash at the end of the day.",
+      "role": "cash_collateral_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "opening cash positions",
+        "list of expected flows"
+      ],
+      "outputs": [
+        "daily cash projection"
+      ],
+      "systems": [
+        "spreadsheets",
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 50,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "A flow is put in the wrong account or currency.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.5,
+          "condition": "all flows confirmed"
+        },
+        {
+          "to": "s06",
+          "prob": 0.5,
+          "condition": "late or unconfirmed items"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ct_cash"
+        ],
+        "note": "A public-sector cash unit forecasts available cash daily. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Record a same-day client request or late capital call",
+      "description": "When a client sends a same-day withdrawal request or a general partner's notice arrives late, the analyst adds the flow to the projection once client service or private markets operations confirms it is verified and approved.",
+      "role": "cash_collateral_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "verified late instruction"
+      ],
+      "outputs": [
+        "updated cash projection"
+      ],
+      "systems": [
+        "spreadsheets",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A late item is added to the wrong account.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The organisation file names late capital call notices and same-day client requests as the main exceptions. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Chase late or unconfirmed items",
+      "description": "The analyst chases trade support on unconfirmed settlements, the collateral desk on margin amounts, private markets operations on calls due and client service on expected client wires, and updates the projection.",
+      "role": "cash_collateral_analyst",
+      "kind": "communication",
+      "inputs": [
+        "daily cash projection"
+      ],
+      "outputs": [
+        "confirmed flows"
+      ],
+      "systems": [
+        "email_collab",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.75,
+          "condition": "items confirmed"
+        },
+        {
+          "to": "s05",
+          "prob": 0.25,
+          "condition": "same-day client request or late capital call"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Decide funding and sweep actions",
+      "description": "For each account the analyst decides how to cover shortfalls (draw on the short-term fund holding or move cash within the same owner) and which currencies to buy, following the funding rules set by total portfolio management.",
+      "role": "cash_collateral_analyst",
+      "kind": "judgment",
+      "inputs": [
+        "daily cash projection",
+        "confirmed flows"
+      ],
+      "outputs": [
+        "funding plan"
+      ],
+      "systems": [
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A shortfall is funded from an account belonging to a different client.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.55,
+          "condition": "currency purchases needed"
+        },
+        {
+          "to": "s11",
+          "prob": 0.25,
+          "condition": "no FX needed"
+        },
+        {
+          "to": "s08",
+          "prob": 0.2,
+          "condition": "large shortfall needs a portfolio decision"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ct_cash"
+        ],
+        "note": "Funding disbursement accounts and sweeping surplus cash are daily tasks. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Total portfolio manager decides how to fund a large shortfall",
+      "description": "For a shortfall larger than the short-term holdings, such as a big capital call or client withdrawal, a total portfolio manager decides whether to sell money market or bond holdings, redeem pool units or adjust an overlay, and places the orders.",
+      "role": "tpm_portfolio_manager",
+      "kind": "judgment",
+      "inputs": [
+        "funding plan"
+      ],
+      "outputs": [
+        "funding decision"
+      ],
+      "systems": [
+        "oms_ibor",
+        "spreadsheets",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.7,
+          "condition": "FX also needed"
+        },
+        {
+          "to": "s11",
+          "prob": 0.3,
+          "condition": "no FX needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgr_ar21"
+        ],
+        "note": "Liquidity is managed so clients need not sell assets in a crisis; the total portfolio team keeps portfolios within ranges. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Request foreign exchange for settlements and payments",
+      "description": "The analyst nets the currency needs by account and raises FX orders in the order management system for the trading desk, noting value dates and settlement accounts.",
+      "role": "cash_collateral_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "funding plan"
+      ],
+      "outputs": [
+        "FX orders"
+      ],
+      "systems": [
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "An FX order has the wrong value date or account.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Trader executes the FX trades",
+      "description": "A trader executes the FX orders on the multi-dealer platform before the currency cut-offs; the executed tickets flow to trade capture and confirmation.",
+      "role": "trader",
+      "kind": "data_entry",
+      "inputs": [
+        "FX orders"
+      ],
+      "outputs": [
+        "executed FX tickets"
+      ],
+      "systems": [
+        "trading_platforms",
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Trading desk executes FX per the organisation file. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Prepare the day's wires and transfers in the custodian portal",
+      "description": "The analyst keys the day's payments and inter-account transfers in the custodian portal (funding transfers, capital calls due, manager fees, margin payments, client withdrawals) or approves those pre-entered by other teams, and checks beneficiary details against the approved list.",
+      "role": "cash_collateral_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "funding plan",
+        "payment instructions from other teams"
+      ],
+      "outputs": [
+        "payments awaiting release"
+      ],
+      "systems": [
+        "custodian_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 25,
+        "mode": 40,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A payment amount, account or value date is keyed wrongly.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.88,
+          "condition": "beneficiaries already verified"
+        },
+        {
+          "to": "s12",
+          "prob": 0.12,
+          "condition": "new or changed payment details"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ct_cash"
+        ],
+        "note": "Executing electronic transfers is a daily cash control task. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Verify new or changed payment details by call-back",
+      "description": "For a new beneficiary or changed bank details the analyst calls a known contact at the payee on a number already on file, never one from the request, records the confirmation and holds the payment if it cannot be verified.",
+      "role": "cash_collateral_analyst",
+      "kind": "validation",
+      "inputs": [
+        "payments awaiting release",
+        "beneficiary change request"
+      ],
+      "outputs": [
+        "verified payment details"
+      ],
+      "systems": [
+        "email_collab",
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Payment instruction change verification: outbound call to a known contact before paying new or changed bank details",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "latham_bec",
+          "fc_fraud",
+          "afp2021"
+        ],
+        "note": "Verify banking instructions by an outbound call to a known contact; 76% of organizations were targeted by email compromise in 2020. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Second authoriser reviews and releases the payments",
+      "description": "The manager reviews each payment against its support and the projection and releases it in the custodian portal as the second authoriser; errors go back to the preparer.",
+      "role": "mgr_cash_collateral",
+      "kind": "approval",
+      "inputs": [
+        "payments awaiting release",
+        "supporting documents"
+      ],
+      "outputs": [
+        "released payments"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Maker-checker over payments: the analyst who prepares a payment cannot release it; no one person initiates, approves and records a transaction",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.71,
+          "condition": "released"
+        },
+        {
+          "to": "s14",
+          "prob": 0.25,
+          "condition": "includes a payment above the high-value limit"
+        },
+        {
+          "to": "s11",
+          "prob": 0.04,
+          "condition": "correction needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "fc_fraud",
+          "sifma_soc1"
+        ],
+        "note": "Segregation of initiation, approval and recording; contributions and distributions authorized (SOC 1). Shares are author estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Senior authoriser releases payments above the high-value limit",
+      "description": "Payments above the high-value threshold, such as large capital calls or client withdrawals, also need the vice president of investment operations, who checks the support and releases them.",
+      "role": "head_investment_operations",
+      "kind": "approval",
+      "inputs": [
+        "released payments"
+      ],
+      "outputs": [
+        "senior-approved payments"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Payment signing authority matrix: high-value payments need a senior authoriser",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "latham_bec"
+        ],
+        "note": "Phone or additional authorization for transactions over a threshold. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Custodian sends the payments before the cut-off",
+      "description": "The custodian processes the released payments and sends them through the payment systems before the currency cut-offs, and posts confirmations in the portal.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "released payments"
+      ],
+      "outputs": [
+        "sent payments"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Custodian payment processing time is an author estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Re-project cash at midday from intraday statements",
+      "description": "Around midday the analyst checks intraday statements for incoming client contributions, distributions and sale proceeds and for settlements that failed, and updates the projection for each account.",
+      "role": "cash_collateral_analyst",
+      "kind": "validation",
+      "inputs": [
+        "intraday statements",
+        "settlement status report"
+      ],
+      "outputs": [
+        "updated cash projection"
+      ],
+      "systems": [
+        "custodian_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A failed settlement is noticed too late for same-day funding.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.8,
+          "condition": "no new shortfall"
+        },
+        {
+          "to": "s17",
+          "prob": 0.2,
+          "condition": "unexpected shortfall"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Failed trades and late receipts change cash during the day, per the organisation file. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Arrange same-day funding for an unexpected shortfall",
+      "description": "When a sale fails to settle, a margin call rises or an expected receipt is late, the analyst arranges an extra transfer from the short-term fund holding or agrees overdraft cover with the custodian and prepares the payment for release.",
+      "role": "cash_collateral_analyst",
+      "kind": "coordination",
+      "inputs": [
+        "updated cash projection"
+      ],
+      "outputs": [
+        "extra transfer"
+      ],
+      "systems": [
+        "custodian_portal",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "extra transfer needs release"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Update the multi-day cash forecast and send it to liquidity forecasting",
+      "description": "The analyst rolls forward the forecast for the next days and weeks with known settlements, calls and client flows and sends it to total portfolio management for the weekly liquidity forecast and to portfolio managers.",
+      "role": "cash_collateral_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "updated cash projection",
+        "capital call schedule"
+      ],
+      "outputs": [
+        "cash forecast"
+      ],
+      "systems": [
+        "spreadsheets",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A known future flow is left out of the forecast.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgr_ar21"
+        ],
+        "note": "Liquidity coverage compares liquid assets with expected outflows including capital calls. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Confirm payments went out and check end-of-day balances",
+      "description": "Late in the afternoon the analyst confirms every released payment shows as sent, checks expected receipts arrived, and lists any account heading for an overdraft or holding unexpected cash.",
+      "role": "cash_collateral_analyst",
+      "kind": "validation",
+      "inputs": [
+        "sent payments",
+        "intraday statements"
+      ],
+      "outputs": [
+        "end-of-day cash check"
+      ],
+      "systems": [
+        "custodian_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Custodian sweeps residual balances into the short-term fund",
+      "description": "After the payment cut-offs the custodian's automatic sweep invests each account's remaining settled cash in the short-term investment fund overnight, so surplus cash earns money market returns without anyone keying a trade.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "end-of-day balances"
+      ],
+      "outputs": [
+        "swept balances"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ct_cash"
+        ],
+        "note": "Available cash is swept into short-term investment vehicles daily. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Manager reviews the daily cash checklist and signs off",
+      "description": "The manager reviews the day's checklist: projections, payments released, call-backs, overdrafts and open items, and signs it off as evidence for the controls report.",
+      "role": "mgr_cash_collateral",
+      "kind": "review",
+      "inputs": [
+        "end-of-day cash check",
+        "daily checklist"
+      ],
+      "outputs": [
+        "signed daily checklist"
+      ],
+      "systems": [
+        "spreadsheets",
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "SOC 1 control objectives over contributions and distributions and cash reconciliation, evidenced daily for the service auditor",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.92,
+          "condition": "clean day",
+          "outcome": "closed"
+        },
+        {
+          "to": "s22",
+          "prob": 0.08,
+          "condition": "overdraft or returned payment"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sifma_soc1",
+          "mgr_ar22"
+        ],
+        "note": "SOC 1 baseline objectives; the model manager's SOC 1 Type II report covered October 2021 to September 2022."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Investigate an overdraft, returned or misdirected payment",
+      "description": "The analyst finds why an account went overdrawn or a payment was returned, arranges the fix, asks the custodian to waive or confirm the overdraft interest, and recharges the cost to the counterparty or owning team where they caused it.",
+      "role": "cash_collateral_analyst",
+      "kind": "communication",
+      "inputs": [
+        "overdraft or return notice"
+      ],
+      "outputs": [
+        "resolved exception"
+      ],
+      "systems": [
+        "custodian_portal",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in inputs pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "resolved",
+          "outcome": "closed_with_exception"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice. Times are author estimates for one business day across all accounts; no published time study was found."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Late or unconfirmed items",
+      "share_of_cases": 0.5,
+      "description": "Settlements, margin amounts, calls or client wires are unconfirmed in the morning and must be chased.",
+      "path": [
+        "s04",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Same-day client request or late capital call",
+      "share_of_cases": 0.12,
+      "description": "A verified same-day withdrawal or a late capital call notice is added to the day's projection and funding.",
+      "path": [
+        "s06",
+        "s05",
+        "s07"
+      ]
+    },
+    {
+      "name": "Large shortfall needs a portfolio decision",
+      "share_of_cases": 0.2,
+      "description": "A shortfall larger than short-term holdings needs a total portfolio manager to decide what to sell or redeem.",
+      "path": [
+        "s07",
+        "s08"
+      ]
+    },
+    {
+      "name": "New or changed payment details",
+      "share_of_cases": 0.12,
+      "description": "A new beneficiary or changed bank details are verified by an outbound call to a known contact before release.",
+      "path": [
+        "s11",
+        "s12",
+        "s13"
+      ]
+    },
+    {
+      "name": "High-value payment",
+      "share_of_cases": 0.25,
+      "description": "A payment above the high-value limit needs the vice president's release as well.",
+      "path": [
+        "s13",
+        "s14"
+      ]
+    },
+    {
+      "name": "Unexpected intraday shortfall",
+      "share_of_cases": 0.2,
+      "description": "A failed sale, larger margin call or late receipt needs an extra same-day transfer and release.",
+      "path": [
+        "s16",
+        "s17",
+        "s13"
+      ]
+    },
+    {
+      "name": "Overdraft or returned payment",
+      "share_of_cases": 0.08,
+      "description": "An account goes overdrawn or a payment comes back and the cause, fix and interest are pursued.",
+      "path": [
+        "s21",
+        "s22"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.75,
+        "p90": 1.2
+      },
+      "unit": "calendar days from the start of the business day (overnight statement load) to the manager's sign-off",
+      "population": "Daily cash cycles of a Canadian public-sector asset manager, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate: statements load overnight, work runs from about 7:30 a.m. to sign-off around 5 to 6 p.m.; days with an overdraft or returned payment carry follow-up into the next day."
+      }
+    },
+    {
+      "metric": "organizations_targeted_by_business_email_compromise_2020",
+      "value": 0.76,
+      "unit": "share of organizations",
+      "population": "More than 500 treasury and finance professionals (AFP 2021 survey)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "afp2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "organizations_with_wire_transfer_fraud_2020",
+      "value": 0.39,
+      "unit": "share of organizations reporting wire transfers affected by fraud",
+      "population": "AFP 2021 survey respondents",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "afp2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "settlement_cycle",
+      "value": "T+2",
+      "unit": "business days after trade date for Canadian and US securities from 5 September 2017",
+      "population": "Canadian securities markets",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cibcm17"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Late capital call notices and same-day client requests arrive after the morning projection and force rework of funding and payments close to cut-offs.",
+      "steps": [
+        "s05",
+        "s06",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Named in the organisation file's process description."
+      }
+    },
+    {
+      "description": "The cash ladder is kept in spreadsheets across hundreds of pool, client and mandate accounts and many currencies, and payments are re-keyed into the custodian portal; pooling was expected to bring efficiencies in cash management.",
+      "steps": [
+        "s03",
+        "s04",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgr_ar21"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Payment fraud through compromised email and changed bank details is common, so call-backs and dual release add time to every new or changed payment.",
+      "steps": [
+        "s12",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "afp2021",
+          "latham_bec"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Failed settlements and late receipts create unexpected shortfalls and overdraft interest that must be chased afterwards.",
+      "steps": [
+        "s16",
+        "s17",
+        "s22"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "ct_cash",
+      "title": "Cash Management Overview (Office of the Treasurer, Connecticut)",
+      "publisher": "State of Connecticut",
+      "url": "https://portal.ct.gov/ott/cash-management/overview",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "A public-sector cash control unit works daily: forecasts available cash, funds disbursement accounts, concentrates cash, sweeps available cash into short-term investment vehicles and executes electronic transfers."
+    },
+    {
+      "id": "mgr_ar21",
+      "title": "The model manager 2021 Annual Report",
+      "publisher": "The model manager",
+      "url": "",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Enhanced quarterly risk reports for clients and the Board and a new Quarterly Risk Insights report in 2021; risk measured with sensitivities, historical and custom stress tests, total, active and factor risk and a liquidity coverage ratio; new risk and total portfolio management system selected in 2021 for delivery in 2022; investment risk support facilitates transaction reviews; private market risks assessed by a devoted team; Management Investment Committee co-chaired by the CIO and CRO and Investment Department Committees co-chaired by Investments and Investment Risk; three pools launched in 2021 and work begun on private equity and infrastructure pools; pooling brings efficiencies in pool activities and cash management; clean SOC 1 Type I report as at 30 September 2021. Read from a text copy saved under scratch/ by earlier work."
+    },
+    {
+      "id": "mgr_ar22",
+      "title": "The model manager 2022 Annual Report",
+      "publisher": "The model manager",
+      "url": "",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "More stress tests and scenario analysis in 2022 (historical, prospective single and combined shocks, inflation and rate scenarios); investment risk support facilitates transaction reviews and limit monitoring; Infrastructure Pool, the first private markets pool ($8.4 billion), needed legal structures and an asset transition plan, launched first phase October 2022 then transferred client holdings; new risk system partly live December 2022. Read from a text copy saved under scratch/ by earlier work."
+    },
+    {
+      "id": "ni24101",
+      "title": "National Instrument 24-101 Institutional Trade Matching and Settlement (consolidated to 5 September 2017)",
+      "publisher": "Canadian Securities Administrators (via Financial and Consumer Services Commission of New Brunswick)",
+      "url": "https://www.fcnb.ca/sites/default/files/2020-02/24-101-NI-CONS-2017-09-05-E.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Matching means trade details and settlement instructions are reported, verified, confirmed and affirmed among trade-matching parties; registered dealers and advisers must have policies to match DAP/RAP trades no later than noon Eastern Time on T+1; institutional investors sign a trade-matching agreement or statement; quarterly exception report if less than 90% matched on time. Read from a text copy saved under scratch/ by earlier work."
+    },
+    {
+      "id": "cibcm17",
+      "title": "Shortening the Settlement Cycle: Final CSA Amendments to NI 24-101",
+      "publisher": "CIBC Mellon",
+      "url": "https://www.cibcmellon.com/en/_locale-assets/pdf/our-thinking/2017/ot201707-csa-ni-24-101-en.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Canada moved to T+2 settlement on 5 September 2017; the institutional trade matching deadline became noon on T+1 for all trades because later matching leaves too little time to avoid fails. Read from a text copy saved under scratch/ by earlier work."
+    },
+    {
+      "id": "sifma_soc1",
+      "title": "Asset Manager's Guide to SOC 1 (June 2017)",
+      "publisher": "SIFMA Asset Management Group and Grant Thornton",
+      "url": "https://www.sifma.org/wp-content/uploads/2017/08/SIFMA_AMG_asset-managers-guide-soc-2017.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Baseline SOC 1 control objectives for asset managers: new account set-up authenticated and established accurately; trades properly authorized, allocated, settled and recorded accurately, completely and timely; contributions and distributions authorized; cash and positions reconciled to custodians; change management. Read from a text copy saved under scratch/ by earlier work."
+    },
+    {
+      "id": "afp2021",
+      "title": "Survey: Pandemic impact on payments fraud activity (2021 AFP Payments Fraud and Control Survey)",
+      "publisher": "Association for Financial Professionals",
+      "url": "https://www.financialprofessionals.org/about/learn-more/press-releases/Details/survey-pandemic-impact-on-payments-fraud-activity",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "74% of organizations were targets of payment scams in 2020; 76% were targeted by business email compromise; 39% reported wire transfers affected by fraud; more than 500 respondents."
+    },
+    {
+      "id": "latham_bec",
+      "title": "The Pervasive Threat of Business Email Compromise Fraud and How to Prevent It",
+      "publisher": "Latham & Watkins",
+      "url": "https://www.lw.com/en/insights/2020/02/the-pervasive-threat-of-business-email-compromise-fraud-and-how-to-prevent-it",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "The payer should always verify banking instructions by an outbound call to a known contact; treat any change of payment instructions with suspicion; require phone authorization for transactions over a threshold. Read from a text copy saved under scratch/ by earlier work."
+    },
+    {
+      "id": "fc_fraud",
+      "title": "8 Ways to Strengthen Protection Against Funds Transfer Fraud",
+      "publisher": "First Citizens Bank",
+      "url": "https://fundbanking.firstcitizens.com/insights/operating-best-practices/funds-transfer-fraud-prevention",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Verify all banking changes using a known, previously validated phone number; two people approve any change to standing payment instructions; no single person should initiate, approve and record transactions."
+    },
+    {
+      "id": "jobbank_11101",
+      "title": "Wages: Financial Analyst (NOC 11101) in the Toronto Region",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/12417/22437",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Toronto hourly wages for NOC 11101: low 27.97, median 41.60, high 73.57 (reference period 2023-2024)."
+    },
+    {
+      "id": "jobbank_10010",
+      "title": "Wages: Finance Director (NOC 10010) in the Toronto Region",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/1225/22437",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Toronto hourly wages for NOC 10010: low 41.21, median 62.37, high 96.15 (reference period 2023-2024)."
+    }
+  ],
+  "assumptions": [
+    "One case is one business day's cash cycle across all accounts. Individual payments are prepared and documented in the processes that trigger them (capital calls, client cash instructions, unit transactions, fees, margin); this process projects the day's cash, funds and releases payments and sweeps surplus.",
+    "interfaces.triggered_by shares describe the rough mix of the day's cash items by source; the cycle itself starts every business day.",
+    "The balance check and flow collection are done by two analysts at the same time (s02 and s03), and are listed in sequence with concurrent_with; the simulator adds both hands-on times to elapsed time, so the simulated median (about 0.95 days) is above the 0.75-day estimate.",
+    "Approval thresholds, the share of days with high-value payments and the call-back share are author estimates; the model manager's payment authority limits are not published. In the period CAD wires settled through LVTS, replaced by Lynx in 2021; cut-off times are not modelled step by step.",
+    "The trader and total portfolio manager take part although the process map lists only the cash team and the vice president; both roles exist in the organisation file.",
+    "Loaded costs come from the organisation file: Job Bank Toronto wages deflated 9% to 2021, plus variable pay, times a 1.35 loading.",
+    "Staffing: about 1.2 FTE stated (1.0 analyst); hands-on time times volume implies a similar figure. With 0.34 analyst FTE already claimed by other workflows, the three analysts keep about 1.3 FTE for collateral and margin work.",
+    "Times, waits and branch probabilities are author estimates (tier C)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

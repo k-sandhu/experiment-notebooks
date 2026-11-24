@@ -1,0 +1,1634 @@
+{
+  "schema_version": "0.3",
+  "org": "freight-carrier-co",
+  "sector": "trucking and freight transportation",
+  "currency": "CAD",
+  "cadence": "per_case",
+  "id": "frt-ltl-osd-exceptions",
+  "name": "Resolve overages, shortages and damage (OS&D)",
+  "process": "ltl-osd-exceptions",
+  "function": "LTL terminal operations",
+  "summary": "Every LTL shipment is handled several times across docks and trailers, and some pieces go missing, turn up where they do not belong, or arrive damaged. OS&D clerks at the terminals take each exception from the scan record, trace shortages through the network, match overages to their shipments, inspect and photograph damage, and get instructions from customers through customer service. Searches across several terminals, waiting for shippers to identify freight and thin documentation make cases slow, and unresolved ones become freight claims.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with 38 LTL terminals, five hub cross-docks, a TMS with handheld scanning and a separate document imaging system.",
+    "org_size_employees": 3000,
+    "notes": "One case is one exception (a shortage, an overage or a damaged shipment). Searches at other terminals are part of the case."
+  },
+  "unit_of_work": "one exception",
+  "trigger": "A scan discrepancy, a damage code, a delivery receipt exception or a trace request creates an OS&D exception in the TMS.",
+  "end_state": "The freight is recovered and forwarded, the exception is closed as a paperwork error, damaged freight is released or returned, or the file is sent to claims or cargo security.",
+  "volume": {
+    "cases_per_month": {
+      "low": 3000,
+      "mode": 3800,
+      "high": 5000
+    },
+    "seasonality": "Rises with dock volume in the autumn peak, when temporary dock staff are added; lowest in January.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "src-odfl-q422"
+      ],
+      "note": "Agrees with the organisation file: about 2.5% of 150,000 monthly shipments. Cross-check: Old Dominion reported a 0.1% cargo claims ratio, a best-in-class floor; common-practice carriers have several times more exceptions."
+    },
+    "surge": {
+      "cause": "Autumn shipping peak (September to mid-December retail and industrial restocking)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 50,
+        "mode": 70,
+        "high": 90
+      },
+      "volume_multiplier": {
+        "low": 1.2,
+        "mode": 1.35,
+        "high": 1.6
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Same estimate as the organisation file; more freight and more new dock workers raise exceptions faster than volume."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-origin-dock",
+        "object": "osd_report",
+        "share": 0.18
+      },
+      {
+        "from": "ltl-hub-crossdock",
+        "object": "osd_report",
+        "share": 0.27
+      },
+      {
+        "from": "ltl-dest-dock",
+        "object": "osd_report",
+        "share": 0.22
+      },
+      {
+        "from": "ltl-delivery-execution",
+        "object": "osd_report",
+        "share": 0.23
+      },
+      {
+        "from": "sls-shipment-tracing",
+        "object": "trace_request",
+        "share": 0.1
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "recovered",
+        "to": "ltl-delivery-execution",
+        "object": "recovered_freight"
+      },
+      {
+        "outcome": "damage_released",
+        "to": "ltl-delivery-execution",
+        "object": "recovered_freight"
+      },
+      {
+        "outcome": "damage_released",
+        "to": "sls-freight-claims",
+        "object": "osd_report"
+      },
+      {
+        "outcome": "referred_to_claims",
+        "to": "sls-freight-claims",
+        "object": "osd_report"
+      },
+      {
+        "outcome": "security_referral",
+        "to": "saf-cargo-security",
+        "object": "security_incident"
+      },
+      {
+        "outcome": "security_referral",
+        "to": "sls-freight-claims",
+        "object": "osd_report"
+      },
+      {
+        "outcome": "closed_no_loss",
+        "to": "sls-shipment-tracing",
+        "object": "trace_response"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "osd-clerk",
+      "title": "OS&D clerk",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 21,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 33,
+        "high": 39
+      },
+      "occupation_code": "NOC 14400",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "Most of the 22 OS&D clerks' time; the rest goes to refused freight. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "terminal-dock-worker",
+      "title": "Terminal dock worker",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 9,
+      "loaded_cost_per_hour": {
+        "low": 25,
+        "mode": 29,
+        "high": 34
+      },
+      "occupation_code": "NOC 75101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Searches, repacking and loading recovered freight, spread over many dock workers. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "dock-supervisor",
+      "title": "Dock supervisor",
+      "department": "LTL terminal network",
+      "layer": "supervisor",
+      "fte_on_process": 3,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 47,
+        "high": 56
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Search sign-off, disposal approval and theft referrals. Author's estimate."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "cs-rep",
+      "title": "Customer service representative",
+      "department": "Customer service centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 5,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": "NOC 64409",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Calls to shippers and consignees for identification and disposition. Author's estimate."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "dock-handheld",
+      "name": "Dock and driver handheld scanning",
+      "kind": "instrument"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "claims-module",
+      "name": "Freight claims module in the TMS",
+      "kind": "workflow"
+    }
+  ],
+  "resources": [
+    {
+      "id": "forklift",
+      "name": "Dock forklift",
+      "kind": "equipment",
+      "count": 420,
+      "cost_per_hour": {
+        "low": 6,
+        "mode": 9,
+        "high": 13
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Create the exception record from scans",
+      "description": "The TMS opens an OS&D exception when handheld scans do not match the manifest: pieces short or over at trailer unload, freight with no matching bill (a no-pro), a damage code keyed by a dock worker, a delivery receipt exception keyed at route closeout, or a trace request from customer service with no scan for days.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "scan discrepancies",
+        "exception codes",
+        "trace request"
+      ],
+      "outputs": [
+        "OS&D exception record"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "record created"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common TMS behaviour with handheld scanning in 2019-2022; author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review the exception queue and classify",
+      "description": "The OS&D clerk at the terminal works the exception list at the start of the shift, opens each record, checks the bill of lading image and scan history, and classifies it as a shortage, an overage or damage, assigning it to the right search or inspection path.",
+      "role": "osd-clerk",
+      "kind": "intake",
+      "inputs": [
+        "OS&D exception record"
+      ],
+      "outputs": [
+        "classified exception"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 300,
+        "high": 960
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Exception misclassified, for example a split shipment logged as a shortage.",
+        "typically_caught_at": "s03"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.48,
+          "condition": "shortage or trace with no recent scan"
+        },
+        {
+          "to": "s09",
+          "prob": 0.24,
+          "condition": "overage or no-pro freight"
+        },
+        {
+          "to": "s13",
+          "prob": 0.28,
+          "condition": "damage"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "Clerks work day shifts (07:00-15:30), so exceptions created overnight wait for the morning. OS&D clerk duties (tracing with POD and bill of lading, tracking shortages and no-pros, calling customers, camera checks) from a Canadian LTL job posting; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Check shipment history, scans and delivery receipt",
+      "description": "For a shortage the clerk follows the shipment through the TMS: piece count on the bill, every scan by terminal and trailer, the delivery receipt and any split-shipment notes. Many shortages turn out to be count errors on the bill, pieces delivered on another stop or a later trailer.",
+      "role": "osd-clerk",
+      "kind": "lookup",
+      "inputs": [
+        "classified exception",
+        "bill of lading image",
+        "scan history",
+        "POD"
+      ],
+      "outputs": [
+        "search plan or explanation"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Clerk misreads the scan history and closes a real shortage.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.25,
+          "condition": "paperwork or count error; freight accounted for"
+        },
+        {
+          "to": "s04",
+          "prob": 0.75,
+          "condition": "pieces missing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "OS&D clerk duties (tracing with POD and bill of lading, tracking shortages and no-pros, calling customers, camera checks) from a Canadian LTL job posting; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Send a search request to terminals",
+      "description": "The clerk sends a shortage notice through the TMS exception board and by email to every terminal and hub the shipment passed through, with the PRO number, piece description, labels and dimensions, asking them to check their docks, trailers and OS&D cages.",
+      "role": "osd-clerk",
+      "kind": "communication",
+      "inputs": [
+        "search plan"
+      ],
+      "outputs": [
+        "search request"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Search docks, trailers and the OS&D cage",
+      "description": "At each terminal a dock worker walks the dock, the OS&D cage and trailers loaded or unloaded around the same time, looking for freight that matches the description, and scans anything found. Searches are fitted between loading and unloading work.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "search request"
+      ],
+      "outputs": [
+        "search result"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 0,
+            "mode": 5,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.55,
+          "condition": "freight found"
+        },
+        {
+          "to": "s07",
+          "prob": 0.45,
+          "condition": "not found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share found on the first search is the author's estimate; freight is usually mis-loaded or left on a dock rather than lost."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Match found freight to its shipment and arrange forwarding",
+      "description": "The clerk relabels the found pieces, links them to the PRO in the TMS, closes the shortage and books the pieces onto the next linehaul or city route to the consignee, telling customer service the new delivery date.",
+      "role": "osd-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "found freight",
+        "shipment record"
+      ],
+      "outputs": [
+        "recovered freight booking"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Pieces matched to the wrong PRO.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "booked for forwarding"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "OS&D clerk duties (tracing with POD and bill of lading, tracking shortages and no-pros, calling customers, camera checks) from a Canadian LTL job posting; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Check overage lists and dock camera footage",
+      "description": "When the first search fails, the clerk compares the missing pieces with the network list of unmatched overages by description, labels and dimensions, and reviews dock camera footage of the unload and load times to see where the pieces went.",
+      "role": "osd-clerk",
+      "kind": "analysis",
+      "inputs": [
+        "shortage details",
+        "network overage list",
+        "camera footage"
+      ],
+      "outputs": [
+        "lead or no match"
+      ],
+      "systems": [
+        "tms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.3,
+          "condition": "matched to an overage or seen on camera"
+        },
+        {
+          "to": "s08",
+          "prob": 0.7,
+          "condition": "still missing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "Camera checks for missing freight are part of the clerk role. OS&D clerk duties (tracing with POD and bill of lading, tracking shortages and no-pros, calling customers, camera checks) from a Canadian LTL job posting; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Review the exhausted search and decide",
+      "description": "After a second round of searches over about a week, the dock supervisor reviews the file, decides that the search is exhausted, or that the pattern (high-value goods, cut shrink-wrap, repeated shortages on one lane) points to theft.",
+      "role": "dock-supervisor",
+      "kind": "review",
+      "inputs": [
+        "search history"
+      ],
+      "outputs": [
+        "search closed or theft suspected"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 7200,
+        "high": 14400
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Carrier OS&D procedure: supervisor sign-off before a shortage is declared and sent to claims",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.15,
+          "condition": "found in the second search"
+        },
+        {
+          "to": "s20",
+          "prob": 0.07,
+          "condition": "theft suspected"
+        },
+        {
+          "to": "s19",
+          "prob": 0.78,
+          "condition": "declared short"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Search periods of one to two weeks before declaring a loss; author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Inspect and photograph the overage freight",
+      "description": "For freight on the dock with no matching bill, the clerk reads every label, PRO sticker, purchase order and product marking, measures and weighs it and takes photos so it can be matched to a shipment that is short somewhere in the network.",
+      "role": "osd-clerk",
+      "kind": "physical",
+      "inputs": [
+        "overage freight"
+      ],
+      "outputs": [
+        "overage description",
+        "photos"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "described"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "No-pro and no-goods tracking is part of the clerk role. OS&D clerk duties (tracing with POD and bill of lading, tracking shortages and no-pros, calling customers, camera checks) from a Canadian LTL job posting; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Match the overage against open shortages",
+      "description": "The clerk searches the TMS for open shortages and recent shipments from the shipper or to the consignee named on any label, and compares descriptions, weights and dimensions.",
+      "role": "osd-clerk",
+      "kind": "lookup",
+      "inputs": [
+        "overage description",
+        "open shortage list"
+      ],
+      "outputs": [
+        "match or no match"
+      ],
+      "systems": [
+        "tms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Overage matched to the wrong shortage.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.72,
+          "condition": "matched to a shipment"
+        },
+        {
+          "to": "s11",
+          "prob": 0.28,
+          "condition": "no match"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Ask the shipper to identify the freight",
+      "description": "A customer service representative calls or emails the shipper or consignee named on the labels, sends the photos and asks whether the freight is theirs and which shipment it belongs to.",
+      "role": "cs-rep",
+      "kind": "communication",
+      "inputs": [
+        "photos",
+        "label details"
+      ],
+      "outputs": [
+        "identification or no answer"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.6,
+          "condition": "shipper identifies the freight"
+        },
+        {
+          "to": "s12",
+          "prob": 0.4,
+          "condition": "unidentified"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Hold unidentified freight and release it for disposal",
+      "description": "Unidentified freight stays in the OS&D cage; after the holding period the dock supervisor approves sale, donation or disposal and the record is closed.",
+      "role": "dock-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "unidentified overage"
+      ],
+      "outputs": [
+        "disposal approval"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 10080,
+        "mode": 30240,
+        "high": 43200
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Carrier unclaimed freight policy and bill of lading conditions on undeliverable goods",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "disposed after the holding period",
+          "outcome": "unclaimed_disposed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Holding period of about 30 days is the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Inspect and document the damage",
+      "description": "The clerk and a dock worker unwrap the damaged pallet or cartons, count damaged and sound units, look for the cause (forklift puncture, load shift, poor packaging, water) and photograph everything for the file.",
+      "role": "osd-clerk",
+      "kind": "physical",
+      "inputs": [
+        "damaged freight"
+      ],
+      "outputs": [
+        "damage description",
+        "photos"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Cause or extent recorded too vaguely to assign liability.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "inspected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Repack or rewrap salvageable freight",
+      "description": "A dock worker restacks sound cartons onto a new pallet, shrink-wraps and labels it, and separates units that cannot be delivered.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "damaged freight"
+      ],
+      "outputs": [
+        "repacked freight"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 3,
+            "mode": 8,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "repacked"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "Repacking damaged freight is part of OS&D work in Canadian LTL postings; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Notify customer service of the damage",
+      "description": "The clerk updates the exception in the TMS with photos and the damage count and emails customer service so the consignee and shipper can be asked what to do with the freight.",
+      "role": "osd-clerk",
+      "kind": "communication",
+      "inputs": [
+        "damage description",
+        "photos"
+      ],
+      "outputs": [
+        "damage notice"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "notified"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "Calling customers about damage is part of the role. OS&D clerk duties (tracing with POD and bill of lading, tracking shortages and no-pros, calling customers, camera checks) from a Canadian LTL job posting; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Get disposition from the consignee or shipper",
+      "description": "A customer service representative calls the consignee and shipper, sends the photos and asks whether to deliver as is with the exception noted, return the goods to the shipper or destroy them.",
+      "role": "cs-rep",
+      "kind": "communication",
+      "inputs": [
+        "damage notice"
+      ],
+      "outputs": [
+        "disposition"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.68,
+          "condition": "deliver as is with exception"
+        },
+        {
+          "to": "s18",
+          "prob": 0.32,
+          "condition": "return, salvage or destroy"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "Obtaining return authorisations and reroute or redelivery approvals is described in the OS&D role; shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Release damaged freight for delivery with the exception",
+      "description": "The clerk sets the shipment back to deliverable in the TMS with the exception code and photos attached, so the driver can note it on the receipt, and sends the file summary to claims for the expected claim.",
+      "role": "osd-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "disposition"
+      ],
+      "outputs": [
+        "released freight",
+        "OS&D report"
+      ],
+      "systems": [
+        "tms",
+        "claims-module"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "delivered with exception; file to claims",
+          "outcome": "damage_released"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Arrange return, salvage or destruction",
+      "description": "The clerk books a return shipment to the shipper or arranges salvage or destruction as instructed, and records the instruction in the TMS.",
+      "role": "osd-clerk",
+      "kind": "coordination",
+      "inputs": [
+        "disposition"
+      ],
+      "outputs": [
+        "return booking"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "arranged"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Compile the OS&D file for claims",
+      "description": "The clerk gathers the bill of lading, delivery receipt, scan history, photos, search notes and disposition into the OS&D file in the claims module, so the claims analyst can decide the claim the shipper is expected to file within the bill of lading limits.",
+      "role": "osd-clerk",
+      "kind": "drafting",
+      "inputs": [
+        "exception history",
+        "photos",
+        "documents"
+      ],
+      "outputs": [
+        "OS&D report"
+      ],
+      "systems": [
+        "claims-module",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Missing photos or search notes, so claims must ask the terminal again.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Evidence for freight claims: notice within 60 days of delivery and claim within 9 months of shipment under the bill of lading conditions",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "file sent to claims",
+          "outcome": "referred_to_claims"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dayross-bol",
+          "src-manitoulin-terms"
+        ],
+        "note": "Claim time limits from Canadian bill of lading conditions; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Refer suspected theft to cargo security",
+      "description": "The dock supervisor writes up the pattern, the camera footage and the shipment value and sends it to the cargo security coordinator, who decides whether to involve police or the insurer.",
+      "role": "dock-supervisor",
+      "kind": "communication",
+      "inputs": [
+        "search history",
+        "camera footage"
+      ],
+      "outputs": [
+        "security incident report"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Cargo security program: suspected theft reported to the security coordinator",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "referred to security and claims",
+          "outcome": "security_referral"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Close the exception with a cause code",
+      "description": "When the freight is accounted for (a count error on the bill, pieces delivered on another stop, a late scan), the clerk records the cause code, tells customer service if a trace is open and closes the exception.",
+      "role": "osd-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "explanation"
+      ],
+      "outputs": [
+        "closed exception"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "no loss",
+          "outcome": "closed_no_loss"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Load recovered freight for forwarding",
+      "description": "A dock worker moves the matched pieces to the right door and loads them on the next linehaul trailer or city route, scanning them so tracing shows the freight moving again.",
+      "role": "terminal-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "recovered freight booking"
+      ],
+      "outputs": [
+        "recovered freight on its way"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 360,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 3,
+            "mode": 6,
+            "high": 15
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "forwarded to the consignee",
+          "outcome": "recovered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait is for the next scheduled linehaul or route; author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Shortage not found",
+      "share_of_cases": 0.13,
+      "description": "Two rounds of searches and camera checks fail; the supervisor declares the pieces short and the file goes to claims.",
+      "path": [
+        "s03",
+        "s04",
+        "s05",
+        "s07",
+        "s08",
+        "s19"
+      ]
+    },
+    {
+      "name": "Unidentified overage",
+      "share_of_cases": 0.027,
+      "description": "Nobody claims the freight; it is held about 30 days and disposed of.",
+      "path": [
+        "s09",
+        "s10",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Damaged freight returned or destroyed",
+      "share_of_cases": 0.09,
+      "description": "The consignee will not take the freight; it is returned or salvaged and the file goes to claims.",
+      "path": [
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s18",
+        "s19"
+      ]
+    },
+    {
+      "name": "Suspected theft",
+      "share_of_cases": 0.01,
+      "description": "Search pattern points to theft and the case goes to cargo security.",
+      "path": [
+        "s08",
+        "s20"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 2.5,
+        "p90": 12
+      },
+      "unit": "calendar days from exception record to resolution or claims referral",
+      "population": "Canadian LTL terminal OS&D exceptions, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Most shortages are found within a day or two on the first search; unfound shortages take one to two weeks and unidentified overages about a month. Author's estimate."
+      }
+    },
+    {
+      "metric": "cargo_claims_ratio",
+      "value": 0.1,
+      "unit": "percent of revenue",
+      "population": "Old Dominion Freight Line, fourth quarter 2022 (best-in-class US LTL)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-odfl-q422"
+        ],
+        "note": "Floor for the industry; common-practice carriers are higher."
+      }
+    },
+    {
+      "metric": "claim_notice_limit",
+      "value": 60,
+      "unit": "days after delivery for written notice of claim",
+      "population": "Canadian LTL bill of lading conditions",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-dayross-bol",
+          "src-manitoulin-terms"
+        ],
+        "note": "Final claim within 9 months of shipment."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Searches depend on dock workers at other terminals fitting them between loading work, so requests wait and are repeated.",
+      "steps": [
+        "s04",
+        "s05",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "description": "Overage and shortage lists are kept per terminal or in spreadsheets, so matches across the network are found late or not at all.",
+      "steps": [
+        "s07",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    },
+    {
+      "description": "Waiting for shippers and consignees to identify freight or give disposition instructions holds cases for days.",
+      "steps": [
+        "s11",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-osd"
+        ],
+        "note": "Calling customers and obtaining return or redelivery approvals is a core part of the clerk role."
+      }
+    },
+    {
+      "description": "Thin photos and notes force claims analysts to come back to the terminal weeks later.",
+      "steps": [
+        "s13",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common Canadian LTL OS&D practice."
+      }
+    }
+  ],
+  "assumptions": [
+    "Exception mix is about 48% shortages (including traces with no recent scan), 24% overages and 28% damage; author's estimate.",
+    "About 15-20% of exceptions end in a file sent to claims; with about 3,800 exceptions a month this gives roughly 700 files, close to the 900 freight claims a month in the organisation file, the rest being claims for concealed damage found after delivery.",
+    "terminal-dock-worker is added to this process because dock workers do the searches, repacking and forwarding; the organisation file lists only osd-clerk, dock-supervisor and cs-rep.",
+    "Waits use the clerk's weekday day shift: exceptions raised by night shifts wait for the morning.",
+    "The simulated median (about 1.6 days) is below the 2.5-day estimate in the benchmarks because nearly half of exceptions are found on the first search within a day; the estimate was set before simulation and both are tier C.",
+    "Loaded costs come from the organisation file (wage times 1.30 for hourly staff, 1.35 for salaried)."
+  ],
+  "sources": [
+    {
+      "id": "src-dayross-bol",
+      "title": "Bill of Lading Terms & Conditions",
+      "publisher": "Day & Ross",
+      "url": "https://dayross.com/BOLTerms",
+      "year": "2026",
+      "supports": "Canadian LTL bill of lading conditions: written notice of claim within 60 days of delivery (9 months for non-delivery), final claim within 9 months of shipment, liability of CAD 4.41 per kg for Canadian origin, undisclosed dangerous goods may be warehoused at the consignor's expense. Current version; the claim limits match the long-standing provincial uniform conditions.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-manitoulin-terms",
+      "title": "Terms and Conditions",
+      "publisher": "Manitoulin Transport",
+      "url": "https://manitoulintransport.com/?page_id=88",
+      "year": "n.d.",
+      "supports": "Carrier may correct the weight on the bill of lading (III.19); right to open and inspect packages (B.5); notice to consignor and consignee when delivery cannot be made, storage, return after ten days without instructions (III.16-17); 60-day notice and 9-month claim limits; CAD 4.41 per kg liability.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-manitoulin-osd",
+      "title": "OS&D Clerk job posting (Regina, SK)",
+      "publisher": "Manitoulin Group of Companies (SmartRecruiters)",
+      "url": "https://jobs.smartrecruiters.com/ManitoulinGroupOfCompanies/744000085598685-os-d-clerk",
+      "year": "n.d.",
+      "supports": "OS&D clerk duties: trace missing freight using POD and bill of lading, track shortages, no-pros and no-goods, call customers about damage, shortages and reroutes, obtain return or redelivery approvals, camera checks for missing freight; weekday day shift 7:00 to 15:30; emails answered within 45 minutes.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-odfl-q422",
+      "title": "Old Dominion Freight Line Reports Fourth Quarter 2022 Earnings Per Diluted Share of $2.92",
+      "publisher": "Old Dominion Freight Line",
+      "url": "https://ir.odfl.com/news-events/press-releases/detail/280/old-dominion-freight-line-reports-fourth-quarter-2022/",
+      "year": "2023",
+      "supports": "99% on-time service in the fourth quarter of 2022 with a cargo claims ratio of 0.1%.",
+      "accessed": "2026-11-24"
+    }
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

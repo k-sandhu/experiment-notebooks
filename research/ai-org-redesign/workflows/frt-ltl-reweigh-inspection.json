@@ -1,0 +1,1380 @@
+{
+  "schema_version": "0.3",
+  "org": "freight-carrier-co",
+  "sector": "trucking and freight transportation",
+  "currency": "CAD",
+  "cadence": "per_case",
+  "id": "frt-ltl-reweigh-inspection",
+  "name": "Reweigh and inspect shipments (W&I)",
+  "process": "ltl-reweigh-inspection",
+  "function": "LTL terminal operations and revenue protection",
+  "summary": "Shippers write the weight, piece count and description on the bill of lading, and many understate weight or describe freight vaguely, which lowers the charges. Weight and inspection auditors at the hubs and large terminals pull flagged shipments, weigh and measure them on a dimensioner or scale, inspect the commodity, photograph it and enter corrections that billing then charges. The work has to fit before the outbound trailer closes, and customers often dispute corrections, so photos and certified readings matter.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with 38 LTL terminals, five hub cross-docks, a TMS with handheld scanning and a separate document imaging system.",
+    "org_size_employees": 3000,
+    "notes": "One case is one shipment flagged and physically inspected. Automatic dimensioner capture without a flag is part of the dock processes."
+  },
+  "unit_of_work": "one inspected shipment",
+  "trigger": "A dimensioner or scale reading, a vague description, a watch-listed shipper or a manual referral flags the shipment for inspection.",
+  "end_state": "The declared weight and description are confirmed, or a correction with a W&I certificate is sent to billing.",
+  "volume": {
+    "cases_per_month": {
+      "low": 10000,
+      "mode": 12000,
+      "high": 14500
+    },
+    "seasonality": "Follows dock volume, higher in the autumn peak.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "src-lm-2013"
+      ],
+      "note": "Agrees with the organisation file: about 8% of 150,000 monthly shipments physically inspected. Carriers were said to re-weigh about 80% of shipments in 2013, mostly by scale and dimensioner capture during normal handling rather than by an auditor."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-origin-dock",
+        "object": "wi_referral",
+        "share": 0.55
+      },
+      {
+        "from": "ltl-hub-crossdock",
+        "object": "wi_referral",
+        "share": 0.35
+      },
+      {
+        "from": "fin-freight-bill-entry",
+        "object": "wi_referral",
+        "share": 0.1
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "corrected",
+        "to": "fin-billing-corrections",
+        "object": "reweigh_correction"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "wi-inspector",
+      "title": "Weight and inspection auditor",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 12,
+      "loaded_cost_per_hour": {
+        "low": 29,
+        "mode": 34,
+        "high": 40
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "All 12 weight and inspection auditors in the organisation file. Author's estimate."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "hub-dock-worker",
+      "title": "Hub dock worker and forklift operator",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 8,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 30,
+        "high": 36
+      },
+      "occupation_code": "NOC 75101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Forklift moves to and from the dimensioner, spread over many dock workers. Author's estimate."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "dock-supervisor",
+      "title": "Dock supervisor",
+      "department": "LTL terminal network",
+      "layer": "supervisor",
+      "fte_on_process": 3,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 47,
+        "high": 56
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Door holds, approvals and inspections done by supervisors at terminals with no auditor. Author's estimate."
+      },
+      "shift_pattern": "shift_24x7"
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "dock-handheld",
+      "name": "Dock and driver handheld scanning",
+      "kind": "instrument"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "rating-engine",
+      "name": "Rating engine and tariff tables",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "dimensioner",
+      "name": "Freight dimensioning and weighing station",
+      "kind": "equipment",
+      "count": 14
+    },
+    {
+      "id": "forklift",
+      "name": "Dock forklift",
+      "kind": "equipment",
+      "count": 420,
+      "cost_per_hour": {
+        "low": 6,
+        "mode": 9,
+        "high": 13
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Create an inspection referral",
+      "description": "The TMS flags a shipment for weight and inspection when the dimensioner reading or forklift scale weight differs from the bill of lading by more than the tolerance, when the description is vague (freight all kinds, parts, general merchandise), when the shipper is on the watch list, or when a dock worker or billing clerk keys a referral.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "bill of lading data",
+        "dimensioner reading",
+        "watch list",
+        "manual referral"
+      ],
+      "outputs": [
+        "inspection referral"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "referral queued"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lm-2013"
+        ],
+        "note": "Carriers audit and correct more bills and capture weights to stop revenue leakage; rules are the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review the referral and decide to pull the shipment",
+      "description": "The weight and inspection auditor opens the referral, checks the declared weight, pieces and class, the customer's rating basis and the outbound trailer's departure time, and decides whether the shipment is worth pulling before the trailer closes.",
+      "role": "wi-inspector",
+      "kind": "judgment",
+      "inputs": [
+        "inspection referral",
+        "bill of lading image"
+      ],
+      "outputs": [
+        "pull decision"
+      ],
+      "systems": [
+        "tms",
+        "imaging",
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Auditor skips a shipment that was under-declared.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.72,
+          "condition": "pull now"
+        },
+        {
+          "to": "s03",
+          "prob": 0.25,
+          "condition": "outbound trailer closing soon"
+        },
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "rating not affected; referral closed",
+          "outcome": "not_inspected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Agree with the dock supervisor whether to hold the trailer",
+      "description": "The auditor asks the dock supervisor whether the outbound door can wait for the inspection. The supervisor weighs the linehaul departure against the revenue at stake and either holds the load or lets the shipment go to be inspected at the next terminal.",
+      "role": "dock-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "pull decision",
+        "linehaul schedule"
+      ],
+      "outputs": [
+        "hold or release decision"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 45
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.8,
+          "condition": "trailer held"
+        },
+        {
+          "to": "s18",
+          "prob": 0.2,
+          "condition": "trailer released; inspect downstream"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Locate and pull the shipment to the inspection area",
+      "description": "A dock worker finds the pallets at the inbound door, staging lane or partly loaded trailer and brings them by forklift to the dimensioner or scale area.",
+      "role": "hub-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "pull decision"
+      ],
+      "outputs": [
+        "shipment at inspection area"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 120
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 2,
+            "mode": 4,
+            "high": 10
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.85,
+          "condition": "fits the dimensioner"
+        },
+        {
+          "to": "s06",
+          "prob": 0.15,
+          "condition": "oversize, irregular, or dimensioner down"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Waits for a free forklift and driver at a busy dock; author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Weigh and measure on the dimensioner",
+      "description": "The forklift sets the pallet in the dimensioning station, which captures length, width, height, weight and an image and sends them to the TMS against the PRO number.",
+      "role": "hub-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "shipment at inspection area"
+      ],
+      "outputs": [
+        "certified dimensions and weight"
+      ],
+      "systems": [
+        "dock-handheld",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Weights and Measures Act: dimensioning devices used for freight charges are type-approved and inspected by Measurement Canada",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "dimensioner",
+          "occupied_min": {
+            "low": 1,
+            "mode": 2,
+            "high": 4
+          }
+        },
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 0.5,
+            "mode": 1,
+            "high": 3
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "captured"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mc-mdmd"
+        ],
+        "note": "Measurement Canada approval terms for multiple dimension measuring devices used to calculate freight charges; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Weigh on a floor scale and measure by hand",
+      "description": "For oversize or irregular freight, or when the dimensioner is down, the auditor weighs the shipment on a certified floor scale and measures each piece with a tape, writing the readings on the inspection form.",
+      "role": "wi-inspector",
+      "kind": "physical",
+      "inputs": [
+        "shipment at inspection area"
+      ],
+      "outputs": [
+        "weight and dimensions"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 45
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Measurement or transcription error.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 2,
+            "mode": 5,
+            "high": 12
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "measured"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Inspect commodity, packaging and labels",
+      "description": "The auditor reads product labels and markings, opens wrap where needed, counts pieces and compares what is there with the bill of lading description, the freight class claimed and any dangerous goods markings.",
+      "role": "wi-inspector",
+      "kind": "physical",
+      "inputs": [
+        "shipment",
+        "bill of lading"
+      ],
+      "outputs": [
+        "inspection findings"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Commodity misidentified, giving a wrong class.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Bill of lading conditions giving the carrier the right to open and inspect packages",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "inspected"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-terms"
+        ],
+        "note": "Carrier right to open and inspect packages (Manitoulin terms B.5); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Photograph the shipment, labels and readings",
+      "description": "The auditor photographs each side of the shipment, the labels and the scale or dimensioner display with the handheld so the correction can be defended when the customer disputes it.",
+      "role": "wi-inspector",
+      "kind": "data_entry",
+      "inputs": [
+        "inspection findings"
+      ],
+      "outputs": [
+        "photos"
+      ],
+      "systems": [
+        "dock-handheld",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s07"
+      ],
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "photos taken"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Rewrap and return the shipment to its door",
+      "description": "A dock worker rewraps any opened pallet, labels it as inspected and takes it back to its outbound door or trailer so the inspection does not make it miss its schedule.",
+      "role": "hub-dock-worker",
+      "kind": "physical",
+      "inputs": [
+        "inspected shipment"
+      ],
+      "outputs": [
+        "shipment back in flow"
+      ],
+      "systems": [
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Shipment returned to the wrong door and misloaded.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s10"
+      ],
+      "resources": [
+        {
+          "id": "forklift",
+          "occupied_min": {
+            "low": 1,
+            "mode": 2,
+            "high": 6
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "returned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Look up the customer's rating basis",
+      "description": "At the terminal PC the auditor checks how the customer is rated: by weight, by freight class, by density or under a pricing agreement with its own rules, because this decides whether the new weight or dimensions change the charges.",
+      "role": "wi-inspector",
+      "kind": "lookup",
+      "inputs": [
+        "customer account",
+        "rate agreement"
+      ],
+      "outputs": [
+        "applicable rating rule"
+      ],
+      "systems": [
+        "tms",
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s09"
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "rule found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Calculate the correction and decide",
+      "description": "The auditor computes density and rated weight from the measurements, compares them with the bill and decides whether the difference is beyond the tolerance and changes the charges.",
+      "role": "wi-inspector",
+      "kind": "analysis",
+      "inputs": [
+        "measurements",
+        "applicable rating rule"
+      ],
+      "outputs": [
+        "correction decision"
+      ],
+      "systems": [
+        "tms",
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Density or class calculated wrongly.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.55,
+          "condition": "correction needed"
+        },
+        {
+          "to": "s12",
+          "prob": 0.45,
+          "condition": "within tolerance"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lm-2013"
+        ],
+        "note": "An accuracy tolerance near 10 lb was described as reasonable; correction share is the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Record the inspection with no change",
+      "description": "The auditor saves the measurements and photos against the PRO with a no-change result, which also tells the watch list that this shipper declared correctly.",
+      "role": "wi-inspector",
+      "kind": "data_entry",
+      "inputs": [
+        "measurements",
+        "photos"
+      ],
+      "outputs": [
+        "inspection record"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "declared weight confirmed",
+          "outcome": "confirmed_no_change"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Enter the correction and issue the inspection certificate",
+      "description": "The auditor enters the corrected weight, dimensions or class in the TMS, attaches the photos and generates the weight and inspection certificate that will go to the customer with the corrected invoice.",
+      "role": "wi-inspector",
+      "kind": "data_entry",
+      "inputs": [
+        "correction decision",
+        "photos"
+      ],
+      "outputs": [
+        "W&I certificate",
+        "corrected bill data"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Corrected data keyed wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Bill of lading condition allowing the carrier to correct the weight shown on the bill",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.85,
+          "condition": "ordinary correction"
+        },
+        {
+          "to": "s14",
+          "prob": 0.15,
+          "condition": "large change or class change needs approval"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-manitoulin-terms"
+        ],
+        "note": "Weight may be corrected by the carrier (Manitoulin terms III.19); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Approve a large correction",
+      "description": "The dock supervisor reviews corrections above the approval threshold or that change the freight class, looks at the photos and readings and approves or rejects them.",
+      "role": "dock-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "W&I certificate",
+        "photos"
+      ],
+      "outputs": [
+        "approved correction"
+      ],
+      "systems": [
+        "tms",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Carrier approval limit for weight and class corrections",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.92,
+          "condition": "approved"
+        },
+        {
+          "to": "s12",
+          "prob": 0.08,
+          "condition": "rejected; recorded as no change"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Rerate the freight bill",
+      "description": "The rating engine reapplies the customer's tariff or agreement to the corrected weight, dimensions or class and calculates the new charges and the correction amount.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "corrected bill data"
+      ],
+      "outputs": [
+        "rerated freight bill"
+      ],
+      "systems": [
+        "rating-engine",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "rerated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Rerating runs in batches several times a day; author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Attach the certificate to the freight bill and send the correction",
+      "description": "The certificate and photos are filed with the freight bill image and the correction is queued for billing, which either adjusts the invoice before it goes out or issues a corrected invoice.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "rerated freight bill",
+        "W&I certificate"
+      ],
+      "outputs": [
+        "reweigh correction"
+      ],
+      "systems": [
+        "imaging",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Measurement records available to the customer for at least 30 days after invoicing when the customer is not present",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.8,
+          "condition": "correction sent to billing",
+          "outcome": "corrected"
+        },
+        {
+          "to": "s17",
+          "prob": 0.2,
+          "condition": "repeat under-declaration"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mc-mdmd"
+        ],
+        "note": "Measurement Canada record rule for dimension measuring devices."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Add the shipper to the inspection watch list",
+      "description": "For a shipper with repeated under-declarations the auditor adds the account to the watch list so future shipments are referred automatically, and emails the account executive.",
+      "role": "wi-inspector",
+      "kind": "data_entry",
+      "inputs": [
+        "inspection history"
+      ],
+      "outputs": [
+        "watch list entry"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "correction sent; shipper watched",
+          "outcome": "corrected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Pass the referral to the next terminal",
+      "description": "When the trailer leaves before inspection, the auditor forwards the referral to the hub or destination terminal with the reason, so it can be inspected when the trailer is unloaded there.",
+      "role": "wi-inspector",
+      "kind": "communication",
+      "inputs": [
+        "inspection referral"
+      ],
+      "outputs": [
+        "forwarded referral"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "referral forwarded"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Reopen the referral when the trailer is unloaded downstream",
+      "description": "The forwarded referral sits in the TMS until the linehaul trailer arrives and is unloaded at the hub or destination terminal; the unload scan puts it back into that terminal's inspection queue.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "forwarded referral",
+        "unload scan"
+      ],
+      "outputs": [
+        "inspection referral at next terminal"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "back in the inspection queue"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Linehaul transit between terminals of 4 to 24 hours; author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Trailer leaves before inspection",
+      "share_of_cases": 0.05,
+      "description": "The supervisor will not hold the outbound door; the referral is forwarded and inspected after linehaul transit at the next terminal.",
+      "path": [
+        "s02",
+        "s03",
+        "s18",
+        "s19",
+        "s02"
+      ]
+    },
+    {
+      "name": "Oversize or irregular freight",
+      "share_of_cases": 0.15,
+      "description": "The shipment does not fit the dimensioner and is weighed and measured by hand.",
+      "path": [
+        "s04",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Large correction needs approval",
+      "share_of_cases": 0.08,
+      "description": "The supervisor reviews the photos and readings before the correction goes to billing.",
+      "path": [
+        "s13",
+        "s14",
+        "s15"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.15,
+        "p90": 0.6
+      },
+      "unit": "calendar days from referral to correction sent or inspection closed",
+      "population": "Canadian LTL hub and terminal inspections, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Inspections must finish while the shipment is on the dock, usually within a few hours; forwarded referrals and supervisor approvals add up to a day. Author's estimate."
+      }
+    },
+    {
+      "metric": "share_of_shipments_reweighed",
+      "value": 80,
+      "unit": "percent of shipments",
+      "population": "US LTL carriers, 2013 (unattributed statement in a trade article)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lm-2013"
+        ],
+        "note": "Stated without a named source, so treated as a description rather than a measured figure."
+      }
+    },
+    {
+      "metric": "measurement_record_retention",
+      "value": 30,
+      "unit": "days after invoicing",
+      "population": "Dimension measuring devices used in trade in Canada",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-mc-mdmd"
+        ],
+        "note": "Records available at least 30 days after invoicing when the customer is not present."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Inspections compete with the linehaul schedule; shipments that cannot be pulled before the trailer closes are inspected later or not at all.",
+      "steps": [
+        "s02",
+        "s03",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    },
+    {
+      "description": "Corrections are disputed by customers, and weak photos or a missing certificate lead to the charge being reversed.",
+      "steps": [
+        "s08",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lm-2013"
+        ],
+        "note": "Carriers avoid rebilling for fear of losing customers and customers dispute corrections."
+      }
+    },
+    {
+      "description": "Customers rated under different agreements (weight, class, density) make it slow to tell whether a difference changes the charges.",
+      "steps": [
+        "s10",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL weight and inspection practice."
+      }
+    }
+  ],
+  "assumptions": [
+    "About 55% of inspections lead to a correction; author's estimate.",
+    "Inspections run mainly at the five hubs and the largest terminals, where the 12 auditors work; at smaller terminals dock supervisors inspect. The hands-on time implies about 20 FTE of auditor-type work for 12,000 inspections a month, more than the 12 auditors in the organisation file, so supervisors and dock workers carry part of it or the inspection count is lower.",
+    "Triggers from the hub cross-dock and from bill entry are added; the organisation file lists only the origin dock.",
+    "Rerating and billing the correction belong to fin-billing-corrections; this workflow ends when the correction is sent.",
+    "Loaded costs come from the organisation file (wage times 1.30 for hourly staff, 1.35 for salaried)."
+  ],
+  "sources": [
+    {
+      "id": "src-manitoulin-terms",
+      "title": "Terms and Conditions",
+      "publisher": "Manitoulin Transport",
+      "url": "https://manitoulintransport.com/?page_id=88",
+      "year": "n.d.",
+      "supports": "Carrier may correct the weight on the bill of lading (III.19); right to open and inspect packages (B.5); notice to consignor and consignee when delivery cannot be made, storage, return after ten days without instructions (III.16-17); 60-day notice and 9-month claim limits; CAD 4.41 per kg liability.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-lm-2013",
+      "title": "Transportation Best Practices/Trends: ABCs of improving less-than-truckload relations",
+      "publisher": "Logistics Management (John D. Schulz)",
+      "url": "https://www.logisticsmgmt.com/article/transportation_best_practices_trends_abcs_of_improving_less_than_truckload/Less-Than-Truckload",
+      "year": "2013",
+      "supports": "Unattributed statement that carriers re-weigh about 80 percent of shipments because of inaccuracies; analyst view that a 10-pound accuracy threshold is reasonable; carriers increasing the number of bills audited and corrected; customers dispute rebilling.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "src-mc-mdmd",
+      "title": "Terms and conditions for the approval of multiple dimension measuring devices",
+      "publisher": "Measurement Canada",
+      "url": "https://ised-isde.canada.ca/site/measurement-canada/en/laws-and-requirements/terms-and-conditions-approval-multiple-dimension-measuring-devices",
+      "year": "2017",
+      "supports": "Approval terms for devices that measure dimensions to calculate freight charges; records kept at least 30 days after invoicing when the customer is not present; sealing of adjustments; field tests within plus or minus one division.",
+      "accessed": "2026-11-24"
+    }
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

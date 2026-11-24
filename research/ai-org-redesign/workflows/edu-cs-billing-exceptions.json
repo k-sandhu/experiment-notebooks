@@ -1,0 +1,1398 @@
+{
+  "schema_version": "0.3",
+  "id": "edu-cs-billing-exceptions",
+  "name": "Resolve billing exceptions",
+  "org": "electric-distribution-utility",
+  "process": "cs-billing-exceptions",
+  "sector": "electricity distribution",
+  "function": "customer service (billing)",
+  "summary": "A distributor billing about 350,000 customers every month lets its billing system calculate almost all bills automatically, but a few percent fail validation and are held: unusual usage, missing or estimated reads, unrecorded meter changes, wrong rate classes, move date errors or retailer mismatches. Billing analysts work these held bills from a queue, using smart meter data, field orders and corrections in the CIS, then release them; some errors reach back to bills already sent, which must be cancelled and reissued. The regulator expects at least 98% of bills to be accurate and monthly billing, so held bills that wait for a field visit and month-end queues are the main sources of delay.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A municipally owned Ontario electricity distributor with about 350,000 smart-metered customers on monthly billing, a CIS with bill validation rules and a local meter data management tool linked to the provincial repository.",
+    "org_size_employees": 571,
+    "notes": "Billing accuracy reported at 99.88-99.90% in 2017-2021."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one held bill or billing investigation",
+  "trigger": "A bill fails validation in the billing run, or a contact centre agent, meter data analyst or field result raises a billing problem.",
+  "end_state": "The corrected or confirmed bill is released and issued, with any rebills and adjustments posted.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 4000,
+      "mode": 6000,
+      "high": 9000
+    },
+    "seasonality": "Higher after cold and hot spells (usage flags), at rate changes on November 1 and May 1, and after CIS releases.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file estimate of 1.5-2.5% of about 350,000 monthly bills. More than 4.2 million bills in 2021 at 99.88% accuracy (src-scorecard) implies about 5,000 inaccurate bills a year, so most exceptions are caught before issue."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cs-billing",
+        "object": "bill_exception",
+        "share": 0.72
+      },
+      {
+        "from": "cs-meter-data-management",
+        "object": "read_exception",
+        "share": 0.15
+      },
+      {
+        "from": "cs-contact-centre",
+        "object": "bill_exception",
+        "share": 0.1
+      },
+      {
+        "from": "ops-field-service-orders",
+        "object": "field_result",
+        "share": 0.03
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "bill_released",
+        "to": "residential-customer",
+        "object": "customer_bill"
+      },
+      {
+        "outcome": "bill_released",
+        "to": "business-customer",
+        "object": "customer_bill"
+      },
+      {
+        "outcome": "any",
+        "to": "ops-field-service-orders",
+        "object": "meter_order"
+      },
+      {
+        "outcome": "bill_released",
+        "to": "fin-month-end-close",
+        "object": "journal_entries"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "billing-analyst",
+      "title": "Billing analyst",
+      "department": "Billing and Settlement",
+      "layer": "individual_contributor",
+      "fte_on_process": 10.0,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 47,
+        "high": 56
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 10 of 16 billing analysts' FTE on exceptions; the rest run the billing cycle, new accounts and rebills from moves. Loaded cost = wage x 1.40."
+      }
+    },
+    {
+      "id": "meter-data-analyst",
+      "title": "Meter data analyst",
+      "department": "Metering Services",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 44,
+        "mode": 52,
+        "high": 62
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Read exceptions and field results that feed billing. Loaded cost = wage x 1.40."
+      }
+    },
+    {
+      "id": "billing-supervisor",
+      "title": "Billing supervisor",
+      "department": "Billing and Settlement",
+      "layer": "supervisor",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 52,
+        "mode": 60,
+        "high": 70
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approvals of estimates and large adjustments and quality sampling. Loaded cost = wage x 1.40."
+      }
+    },
+    {
+      "id": "settlement-analyst",
+      "title": "Settlement and retailer analyst",
+      "department": "Billing and Settlement",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 48,
+        "mode": 56,
+        "high": 66
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Retailer enrolment mismatches; not listed for this process in the organisation file. Loaded cost = wage x 1.40."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "cis",
+      "name": "Customer information and billing system (CIS)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mdm",
+      "name": "Local meter data management and validation tool",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mdmr",
+      "name": "Provincial Meter Data Management/Repository (IESO Smart Metering Entity) portal",
+      "kind": "external_portal"
+    },
+    {
+      "id": "ami",
+      "name": "Smart meter (AMI) head-end and network",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mwm",
+      "name": "Mobile workforce management and field tablets",
+      "kind": "workflow"
+    },
+    {
+      "id": "ebt-hub",
+      "name": "Electronic business transaction (EBT) hub for retailer transactions",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email",
+      "name": "Email, calendar and Teams",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "erp",
+      "name": "ERP: general ledger, work orders, purchasing, inventory, fixed assets",
+      "kind": "system_of_record"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Hold the bill in billing validation",
+      "description": "During the nightly billing run for a bill cycle, the CIS checks every calculated bill against validation rules (usage far above or below history, zero usage on an active account, estimated or missing reads, a meter change without readings, rate or retailer mismatches, overlapping accounts) and holds the bills that fail instead of printing them.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "calculated bill",
+        "validated reads"
+      ],
+      "outputs": [
+        "held bill"
+      ],
+      "systems": [
+        "cis",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.7.11: 98% of bills accurate; cancelled or adjusted bills count as inaccurate",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "bill held"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-dsc",
+          "src-scorecard"
+        ],
+        "note": "Billing accuracy 99.88-99.90% in 2017-2021 against the 98% standard (src-scorecard)."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Route the exception to a work queue",
+      "description": "The CIS places each held bill in an exception work queue by type and bill cycle, together with exceptions raised by contact centre agents, read exceptions from meter data management and field results that change a reading.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "held bill"
+      ],
+      "outputs": [
+        "queued exception"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Open the exception and review the account",
+      "description": "A billing analyst takes the oldest exception in the queue, opens the held bill, the account's last thirteen months of usage, the meter and read history and any notes, and sees what the validation rule flagged.",
+      "role": "billing-analyst",
+      "kind": "lookup",
+      "inputs": [
+        "queued exception"
+      ],
+      "outputs": [
+        "reviewed exception"
+      ],
+      "systems": [
+        "cis",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 1.5,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong account opened from a similar address.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022. Queue waits grow at month end and after system changes."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Decide what caused the exception",
+      "description": "The analyst decides whether the bill is right despite the flag or what kind of fix it needs: a read problem, a missing meter change, a wrong rate or account attribute, a move date error or a retailer enrolment mismatch.",
+      "role": "billing-analyst",
+      "kind": "judgment",
+      "inputs": [
+        "reviewed exception"
+      ],
+      "outputs": [
+        "cause"
+      ],
+      "systems": [
+        "cis",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Cause misjudged, so the wrong fix is applied.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.42,
+          "condition": "usage flag: possibly valid"
+        },
+        {
+          "to": "s06",
+          "prob": 0.2,
+          "condition": "read missing, estimated or failed validation"
+        },
+        {
+          "to": "s10",
+          "prob": 0.1,
+          "condition": "meter changed but not recorded"
+        },
+        {
+          "to": "s11",
+          "prob": 0.12,
+          "condition": "rate class, service attribute or credit wrong"
+        },
+        {
+          "to": "s12",
+          "prob": 0.1,
+          "condition": "move dates or account overlap"
+        },
+        {
+          "to": "s13",
+          "prob": 0.06,
+          "condition": "retailer enrolment mismatch"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Cause mix is the author's estimate; the organisation file lists these exception types."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Check whether unusual usage is real",
+      "description": "The analyst looks at the hourly smart meter data, the weather, past seasons and any change of occupant to decide whether the high or low usage is genuine. Genuine usage is released; a stuck, stopped or reversed meter needs a field check.",
+      "role": "billing-analyst",
+      "kind": "analysis",
+      "inputs": [
+        "cause",
+        "interval data"
+      ],
+      "outputs": [
+        "usage finding"
+      ],
+      "systems": [
+        "mdm",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Faulty meter accepted as genuine usage.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.8,
+          "condition": "usage genuine"
+        },
+        {
+          "to": "s06",
+          "prob": 0.12,
+          "condition": "reads need correction"
+        },
+        {
+          "to": "s07",
+          "prob": 0.08,
+          "condition": "meter may be faulty"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Correct or replace a missing or suspect read",
+      "description": "A meter data analyst checks the validation flags in the local meter data tool and the provincial repository, asks the AMI head-end for an on-demand read, and if none comes estimates the read under the validation, estimation and editing rules and notes the estimate.",
+      "role": "meter-data-analyst",
+      "kind": "lookup",
+      "inputs": [
+        "read exception"
+      ],
+      "outputs": [
+        "corrected read"
+      ],
+      "systems": [
+        "mdm",
+        "mdmr",
+        "ami"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Estimate replaces a read that was valid.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.78,
+          "condition": "read obtained or estimated"
+        },
+        {
+          "to": "s07",
+          "prob": 0.22,
+          "condition": "meter not communicating"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Order a field check of the meter",
+      "description": "The billing analyst creates a meter order for field services to read, test or replace the meter, with the reason and access notes, and puts the exception on hold until the field result comes back.",
+      "role": "billing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "usage finding or read exception"
+      ],
+      "outputs": [
+        "meter order"
+      ],
+      "systems": [
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Order lacks access notes, so the first visit fails.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.62,
+          "condition": "result expected before the bill window closes"
+        },
+        {
+          "to": "s08",
+          "prob": 0.38,
+          "condition": "bill window closing"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Approve releasing the bill on an estimate",
+      "description": "So that the customer still gets a monthly bill, the billing supervisor reviews the held bill and approves issuing it on an estimated read, knowing it will be trued up after the field visit; smart-metered customers may get only a few estimated bills a year.",
+      "role": "billing-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "held bill",
+        "meter order"
+      ],
+      "outputs": [
+        "estimated bill approval"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Estimate far from actual usage.",
+        "typically_caught_at": "s14"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.2.6.1A: monthly bills for residential and GS<50 kW customers",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "estimated bill issued; wait for field result"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": "Monthly billing rule from src-dsc; share released on estimate is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Apply the field result to the meter record",
+      "description": "When the field result comes back (read, test result or meter exchange), the meter data analyst updates the meter and read records so the bill can be recalculated. Field crews work these orders around other priorities.",
+      "role": "meter-data-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "field result"
+      ],
+      "outputs": [
+        "updated meter record"
+      ],
+      "systems": [
+        "cis",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 10080,
+        "high": 25920
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Reading keyed against the wrong register.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "record updated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Field turnaround of 3-18 days is the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Enter the missing meter change",
+      "description": "The analyst finds the meter exchange in the field records, enters the old meter's final read, the new meter's number, initial read and multiplier in the CIS, and links the new meter to the account.",
+      "role": "billing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "meter change record"
+      ],
+      "outputs": [
+        "corrected meter history"
+      ],
+      "systems": [
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Multiplier or initial read keyed wrongly.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "entered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Correct the rate class or account attributes",
+      "description": "The analyst checks the service against its rate class rules, time-of-use or tiered price choice, OESP credit and other bill attributes, and corrects the account set-up in the CIS.",
+      "role": "billing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "cause"
+      ],
+      "outputs": [
+        "corrected account"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong effective date on the change.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "corrected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Correct move dates or overlapping accounts",
+      "description": "The analyst compares the move orders with the reads and the customers' notes, corrects the move-in or move-out date and removes the overlap so each party is billed only for their own period.",
+      "role": "billing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "cause"
+      ],
+      "outputs": [
+        "corrected account periods"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Payment left on the wrong account.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "corrected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Resolve a retailer enrolment mismatch",
+      "description": "The settlement analyst compares the retailer enrolment in the CIS with the EBT transaction history, corrects the enrolment or billing option, and sends or requests the missing transaction through the EBT hub.",
+      "role": "settlement-analyst",
+      "kind": "coordination",
+      "inputs": [
+        "cause"
+      ],
+      "outputs": [
+        "corrected enrolment"
+      ],
+      "systems": [
+        "cis",
+        "ebt-hub"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Enrolment date set wrongly.",
+        "typically_caught_at": "s14"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Retail Settlement Code and EBT standards for retailer service transactions",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "corrected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Retail Settlement Code not opened; described from general knowledge."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Recalculate the bill and check it",
+      "description": "The analyst recalculates the held bill in the CIS, compares the result with the account's normal bill, and decides whether bills already issued for earlier periods were also wrong.",
+      "role": "billing-analyst",
+      "kind": "validation",
+      "inputs": [
+        "corrected data"
+      ],
+      "outputs": [
+        "recalculated bill"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Recalculation picks up a wrong start date.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.85,
+          "condition": "only the held bill affected"
+        },
+        {
+          "to": "s15",
+          "prob": 0.15,
+          "condition": "earlier bills also wrong"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Cancel and rebill earlier periods",
+      "description": "The analyst cancels the affected earlier bills, rebills them with the corrected data within the permitted look-back period, works out the net amount owed or refunded, and prepares an instalment plan for a large under-billing.",
+      "role": "billing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "recalculated bill",
+        "bill history"
+      ],
+      "outputs": [
+        "rebills",
+        "adjustment"
+      ],
+      "systems": [
+        "cis",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1440
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong periods cancelled or interest omitted.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Retail Settlement Code s.7.7 billing error correction periods and repayment terms",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.35,
+          "condition": "adjustment above analyst limit"
+        },
+        {
+          "to": "s17",
+          "prob": 0.65,
+          "condition": "within analyst limit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Retail Settlement Code s.7.7 not opened; look-back limits described from general knowledge. Rebill share is the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Approve a large adjustment",
+      "description": "The billing supervisor checks the cause, the periods and the amount of a large credit or back-bill, and approves it or sends it back with questions.",
+      "role": "billing-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "adjustment"
+      ],
+      "outputs": [
+        "approved adjustment"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Error not spotted.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Billing adjustment authority limits: adjustments above the analyst limit approved by the supervisor",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.93,
+          "condition": "approved"
+        },
+        {
+          "to": "s15",
+          "prob": 0.07,
+          "condition": "sent back for correction"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Explain the correction to the customer",
+      "description": "The analyst writes or phones the customer to explain what was wrong, the corrected amount, and for an under-billing the instalment option, using the standard letter templates for corrected bills.",
+      "role": "billing-analyst",
+      "kind": "drafting",
+      "inputs": [
+        "approved adjustment"
+      ],
+      "outputs": [
+        "customer letter"
+      ],
+      "systems": [
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1440
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Letter quotes the wrong amount.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code s.7.8: written response within 10 business days for customer enquiries",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-dsc"
+        ],
+        "note": "Response standard from src-dsc."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Release the bill",
+      "description": "The analyst clears the hold, adds a bill message where needed, and releases the bill into the next print and e-bill file, closing the exception with a cause code that feeds the billing accuracy report.",
+      "role": "billing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "recalculated or confirmed bill"
+      ],
+      "outputs": [
+        "released bill"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong cause code, so accuracy reporting is off.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.95,
+          "condition": "no sample check"
+        },
+        {
+          "to": "s19",
+          "prob": 0.05,
+          "condition": "picked for quality check"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Check a sample of released exceptions",
+      "description": "The billing supervisor reviews a sample of each analyst's released exceptions and adjustments each week, checks them against the account data, and returns any error for correction.",
+      "role": "billing-supervisor",
+      "kind": "review",
+      "inputs": [
+        "released bill"
+      ],
+      "outputs": [
+        "quality result"
+      ],
+      "systems": [
+        "cis",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over billing adjustments: periodic supervisory review",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "checked"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Issue the bill and post adjustments",
+      "description": "The CIS includes the released bill in the next nightly print and e-bill run and posts adjustments and rebills to the general ledger in the daily interface.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "released bill"
+      ],
+      "outputs": [
+        "customer bill",
+        "journal entries"
+      ],
+      "systems": [
+        "cis",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 360,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "bill issued",
+          "outcome": "bill_released"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for an Ontario distributor billing about 350,000 customers monthly from smart meter data in 2019-2022."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Field check of the meter",
+      "share_of_cases": 0.08,
+      "description": "The meter may be faulty or is not communicating, so a field order is raised and the bill waits for the result or goes out on an estimate.",
+      "path": [
+        "s07",
+        "s08",
+        "s09",
+        "s14"
+      ]
+    },
+    {
+      "name": "Cancel and rebill earlier periods",
+      "share_of_cases": 0.06,
+      "description": "The error also affected bills already sent, which are cancelled, reissued and explained to the customer.",
+      "path": [
+        "s14",
+        "s15",
+        "s16",
+        "s17"
+      ]
+    },
+    {
+      "name": "Retailer mismatch",
+      "share_of_cases": 0.06,
+      "description": "The CIS and the retailer disagree on enrolment, and the settlement analyst fixes it through the EBT hub.",
+      "path": [
+        "s13",
+        "s14"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 2,
+        "p90": 7
+      },
+      "unit": "calendar days from hold to bill issued",
+      "population": "Held bills",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: most holds are cleared within a day or two so the bill goes out in its cycle; field checks and rebills take one to three weeks."
+      }
+    },
+    {
+      "metric": "billing_accuracy",
+      "value": 0.9988,
+      "unit": "share of bills accurate, 2021",
+      "population": "Hydro Ottawa Limited, more than 4.2 million bills",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-scorecard"
+        ],
+        "note": "OEB standard 98% (src-dsc s.7.11)."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Meters that need a field visit hold the bill for one to three weeks, so the bill goes out on an estimate and is corrected later, counting twice against accuracy.",
+      "steps": [
+        "s07",
+        "s08",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Month-end and post-release spikes build queues; holds that age past the billing window break monthly billing and generate calls.",
+      "steps": [
+        "s03"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Mechanism named in the organisation file; size is the author's estimate."
+      }
+    },
+    {
+      "description": "Cancel-and-rebill work is manual, needs supervisor approval for large amounts and a letter to the customer.",
+      "steps": [
+        "s15",
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-scorecard",
+      "title": "Scorecard - Hydro Ottawa Limited (2017-2021) and 2021 Scorecard Management Discussion and Analysis",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/documents/scorecard/2021/Scorecard%20-%20Hydro%20Ottawa%20Limited.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Telephone calls answered on time 85.07% (2017), 88.74% (2018), 86.15% (2019), 74.60% (2020), 83.14% (2021) against a 65% standard; 186,632 calls to agents in 2021; first contact resolution 84.27-89.88 (2017-2021), 89.04% in 2021 from 3,176 surveyed callers of whom 2,828 said the issue was resolved; billing accuracy 99.88-99.90% against 98%; more than 4.2 million bills in 2021; 9,001 appointments; 95% overall satisfaction."
+    },
+    {
+      "id": "src-dsc",
+      "title": "Distribution System Code (consolidated, revised March 27, 2024)",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/sites/default/files/Distribution-System-Code_March_20240327.pdf",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "s.2.4.11-2.4.20A security deposit waivers, maximum (billing cycle factor x estimated bill) and instalments over at least 6 months for residential customers; s.2.6.1A monthly billing of residential and GS<50 kW customers (in force December 31, 2016); s.2.6.6.2B payment allocation; s.2.7 arrears payment agreements (down payment up to 15%, 10% for eligible low-income; terms of at least 5 or 10 months, 8, 12 or 16 months for eligible low-income); s.4.2.2.1 disconnection notice not in the bill envelope; s.4.2.2.6 21-day suspension while a LEAP intake agency assesses the customer; s.4.2.3.1 mailed notice deemed received on the fifth day; s.7.6 65% of calls answered in 30 s; s.7.7 abandon rate 10% or less; s.7.8 written response in 10 business days 80% of the time; s.7.10 reconnection within 2 business days 85% of the time; s.7.11 billing accuracy 98% and what counts as an inaccurate bill. Amendment history shows these sections were in force through 2019-2022 apart from the March 2020 changes."
+    }
+  ],
+  "assumptions": [
+    "One case is one held bill or one billing investigation raised by another team. About 80% of usage flags turn out to be genuine usage and are released after a check.",
+    "Volume keeps the organisation file's 6,000 a month (1.5-2.5% of bills); the published accuracy of 99.88% bounds only the bills issued wrongly, about 420 a month.",
+    "The settlement-analyst role is added for retailer mismatches although the organisation file lists only billing analysts, the billing supervisor and meter data analysts for this process.",
+    "Retail Settlement Code s.7.7 billing-error look-back and repayment rules are described from general knowledge; the source was not opened.",
+    "Staffing: hands-on time times volume implies about 15 FTE against 12.9 stated. With 10 billing-analyst FTE here and 2 on moves, only about 4 of the organisation file's 16 billing analysts are left for running the billing cycle, so either the exception volume (6,000 a month) is high or the billing team is larger than the organisation file shows.",
+    "Simulated median of about 2.7 days against an estimated 2 days: the nightly issue batch and a one-day queue at the start set the floor; the benchmark itself is an estimate.",
+    "Roles use the organisation file's ids and loaded costs (wage x 1.40)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

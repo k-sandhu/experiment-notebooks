@@ -1,0 +1,1549 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-mnt-preventive-maintenance",
+  "name": "Perform preventive maintenance on tractors, trucks and trailers",
+  "org": "freight-carrier-co",
+  "process": "mnt-preventive-maintenance",
+  "sector": "trucking and freight transportation",
+  "function": "fleet maintenance",
+  "summary": "Every company tractor, city truck and trailer gets a scheduled service when it reaches a mileage, engine-hour or calendar interval. The maintenance planner builds a weekly schedule from the due list, asks dispatch to release each unit, and a technician inspects the brakes, air system, steering, lights and tires, changes oil and filters where due, fixes small defects and records the readings. The work in the bay takes one to three hours; most of the elapsed time is spent waiting for operations to spare the unit and for a bay to come free, and readings typed from paper checklists are a common source of record errors.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with twelve company maintenance shops at its hubs and larger terminals, about 1,190 company power units and 4,120 trailers.",
+    "org_size_employees": 3000,
+    "notes": "Tractors are serviced by mileage (A service about every 8,000 to 16,000 km, oil changes on B services) and trailers on a three-, six- or twelve-month calendar. The C service is combined with the annual inspection, documented in a separate workflow."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one preventive maintenance service on one tractor, truck or trailer",
+  "trigger": "The fleet maintenance system puts a unit on the PM due list when its odometer, engine hours or the calendar reach the service interval.",
+  "end_state": "The service is done, the readings and parts are recorded, the unit is back in operation and the next interval is set; any defect beyond the PM has its own repair work order.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 950,
+      "mode": 1200,
+      "high": 1600
+    },
+    "seasonality": "Fairly even through the year. Planners push PMs ahead of the autumn freight peak and catch up in January and February, when freight is lighter and winter defects raise shop load.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "src-jjk-pm"
+      ],
+      "note": "About 1,190 company power units and 4,120 trailers (organisation file). Linehaul tractors (230) at about 7 services a year, truckload tractors (400) at about 6 and city trucks (560) at about 4 give about 6,200 tractor services a year; trailers on the six-month cycle in the guide give about 8,200. Total about 14,400 a year, or 1,200 a month; the high end allows for trailers on a three-month cycle. Mileages per unit are the author's estimate."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-linehaul-dispatch",
+        "object": "odometer_data",
+        "share": 0.3
+      },
+      {
+        "from": "ltl-pd-dispatch",
+        "object": "odometer_data",
+        "share": 0.3
+      },
+      {
+        "from": "tl-trip-execution",
+        "object": "odometer_data",
+        "share": 0.4
+      }
+    ],
+    "inputs": [
+      {
+        "from": "mnt-parts-inventory",
+        "object": "parts_issue"
+      },
+      {
+        "from": "mnt-fleet-acquisition",
+        "object": "equipment_unit"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "completed",
+        "to": "ltl-linehaul-dispatch",
+        "object": "equipment_availability"
+      },
+      {
+        "outcome": "completed",
+        "to": "ltl-pd-dispatch",
+        "object": "equipment_availability"
+      },
+      {
+        "outcome": "completed",
+        "to": "tl-load-planning",
+        "object": "equipment_availability"
+      },
+      {
+        "outcome": "completed",
+        "to": "mnt-annual-inspection",
+        "object": "pm_schedule"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-parts-inventory",
+        "object": "parts_requisition"
+      },
+      {
+        "outcome": "completed",
+        "to": "mnt-tire-program",
+        "object": "tire_record"
+      },
+      {
+        "outcome": "completed",
+        "to": "saf-facility-audit",
+        "object": "maintenance_record"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-defect-repair",
+        "object": "work_order"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "maintenance-planner",
+      "title": "Maintenance planner",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.4,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 44,
+        "high": 52
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 8); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Planners build the weekly PM schedule from the due list and chase units from operations; about 2.4 of 8 planners' time goes to PM scheduling."
+      }
+    },
+    {
+      "id": "linehaul-dispatcher",
+      "title": "Linehaul dispatcher",
+      "department": "LTL network planning and linehaul control",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 16); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Stands for the operations person who releases a unit to the shop: the linehaul dispatcher for linehaul tractors, the city dispatcher for P&D trucks and the driver manager for truckload tractors."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "shop-foreman",
+      "title": "Shop foreman",
+      "department": "Fleet maintenance",
+      "layer": "supervisor",
+      "fte_on_process": 2.6,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 57,
+        "high": 66
+      },
+      "occupation_code": "NOC 72010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 14); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Foremen assign bays, review PM checklists and release units."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "parts-person",
+      "title": "Partsperson",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.4,
+      "loaded_cost_per_hour": {
+        "low": 29,
+        "mode": 34,
+        "high": 40
+      },
+      "occupation_code": "NOC 14401",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 22); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Partspersons pick PM kits and issue parts for minor repairs found during the PM."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "yard-jockey",
+      "title": "Yard shunt driver",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.9,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": "NOC 73300",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 40); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Shunt drivers move trailers and tractors between the yard, the wash bay and the shop."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "technician",
+      "title": "Heavy-duty truck and trailer technician",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 26.0,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 46,
+        "high": 54
+      },
+      "occupation_code": "NOC 72410",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 165); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Technicians do the PM inspection, oil service and minor repairs; about 26 of 165 technicians' time goes to scheduled PM."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "resources": [
+    {
+      "id": "shop-bay",
+      "name": "Maintenance shop bay",
+      "kind": "facility",
+      "count": 96
+    },
+    {
+      "id": "wash-bay",
+      "name": "Truck and trailer wash bay",
+      "kind": "facility",
+      "count": 6
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Flag units due for service",
+      "description": "Each night the fleet maintenance system reads odometer and engine-hour readings passed from the telematics platform and the TMS, compares them and the calendar with each unit's PM interval, and adds units within the due window to the PM due list by shop.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "odometer data",
+        "PM intervals by unit class"
+      ],
+      "outputs": [
+        "PM due list"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Odometer feed missing or stale for a unit (telematics gap, replaced ECM), so the unit is flagged late or not at all.",
+        "typically_caught_at": "s02"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-jjk-pm"
+        ],
+        "note": "PM levels triggered by miles for tractors and by calendar for trailers follow the practitioner guide; the nightly batch is the author's estimate of 2019-2022 fleet software practice."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Build the PM schedule",
+      "description": "The maintenance planner opens the due list, looks up each unit's location and next assignment in the TMS and telematics map, groups units by home terminal and picks a day and shop for each so that bays are loaded evenly. Units overdue or close to their annual inspection are put first.",
+      "role": "maintenance-planner",
+      "kind": "coordination",
+      "inputs": [
+        "PM due list",
+        "unit locations",
+        "bay capacity"
+      ],
+      "outputs": [
+        "weekly PM schedule"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "tms",
+        "eld-telematics",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Unit scheduled at a shop it will not pass, or the PM level is wrong for its interval.",
+        "typically_caught_at": "s05"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Planner minutes per unit and the office-hours queue are the author's estimate for a carrier with eight planners and twelve shops."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Ask operations to release the unit",
+      "description": "The planner emails or phones the dispatcher or driver manager with the unit number, the shop and the time slot, and asks for the unit to be routed to the shop at the end of its run. For trailers, the planner asks for the trailer to be emptied and left at the terminal.",
+      "role": "maintenance-planner",
+      "kind": "communication",
+      "inputs": [
+        "weekly PM schedule"
+      ],
+      "outputs": [
+        "release request"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Agree a release window",
+      "description": "The dispatcher checks the unit's planned loads and driver hours in the TMS, decides whether the unit can be spared on the requested day, and either confirms the slot and routes the driver to the shop or proposes another day. Freight peaks and driver shortages are the usual reasons for refusing.",
+      "role": "linehaul-dispatcher",
+      "kind": "judgment",
+      "inputs": [
+        "release request",
+        "load plan"
+      ],
+      "outputs": [
+        "agreed release window"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.85,
+          "condition": "release agreed"
+        },
+        {
+          "to": "s02",
+          "prob": 0.15,
+          "condition": "unit cannot be spared; planner reschedules"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Getting units off the road when operations need them is the hard part of PM in the organisation file's process description; the wait and the 15% deferral share are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Assign bay and technician",
+      "description": "The shop foreman looks at the shift board, assigns the PM to a technician and a bay for the agreed slot, and prints the PM checklist for the unit class and level (A, B or C service for tractors, trailer service) from the fleet maintenance system as a work order.",
+      "role": "shop-foreman",
+      "kind": "coordination",
+      "inputs": [
+        "agreed release window",
+        "shift board"
+      ],
+      "outputs": [
+        "PM work order and checklist"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-jjk-pm"
+        ],
+        "note": "PM levels from the practitioner guide; minutes and bay wait are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Pick the PM kit",
+      "description": "The partsperson reads the work order, picks the filters, oil, grease and wear items listed for that engine and PM level, and charges them to the work order in the fleet maintenance system. Missing filters are substituted or ordered.",
+      "role": "parts-person",
+      "kind": "physical",
+      "inputs": [
+        "PM work order"
+      ],
+      "outputs": [
+        "PM kit",
+        "parts issue"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong filter for the engine model is picked.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Done while the foreman is still assigning the job; author's estimate."
+      },
+      "concurrent_with": [
+        "s05"
+      ]
+    },
+    {
+      "id": "s07",
+      "name": "Bring the unit to the shop",
+      "description": "At the agreed time the yard shunt driver collects the trailer or the tractor from the yard, or from a customer site where a trailer was dropped, and parks it at the shop door. Trailers dropped at customers wait until the customer releases them.",
+      "role": "yard-jockey",
+      "kind": "travel",
+      "inputs": [
+        "agreed release window"
+      ],
+      "outputs": [
+        "unit at shop"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.25,
+          "condition": "unit too dirty to inspect, washed first"
+        },
+        {
+          "to": "s09",
+          "prob": 0.75,
+          "condition": "unit clean enough"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; drop trailers held at customer docks are the common delay."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Wash the unit",
+      "description": "A technician or apprentice runs the unit through the wash bay, pressure-washing the chassis, brakes and wheel ends so that cracks, leaks and worn parts can be seen during the inspection. Winter salt and mud make this necessary for about a quarter of units.",
+      "role": "technician",
+      "kind": "physical",
+      "inputs": [
+        "unit at shop"
+      ],
+      "outputs": [
+        "washed unit"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Six wash bays for twelve shops in the organisation file; share and time are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "wash-bay",
+          "occupied_min": {
+            "low": 20,
+            "mode": 30,
+            "high": 60
+          }
+        }
+      ]
+    },
+    {
+      "id": "s09",
+      "name": "Lock out and download fault codes",
+      "description": "The technician moves the unit into the bay, chocks the wheels, applies lockout to the ignition, then connects a laptop to the engine computer, downloads active and stored fault codes and notes them on the work order.",
+      "role": "technician",
+      "kind": "physical",
+      "inputs": [
+        "unit at shop",
+        "PM work order"
+      ],
+      "outputs": [
+        "fault code list"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Shop lockout and wheel-chock procedure under provincial occupational health and safety rules",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-jjk-pm"
+        ],
+        "note": "ECM download and action on trouble codes are part of a B service in the guide; lockout practice and minutes are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "shop-bay",
+          "occupied_min": {
+            "low": 8,
+            "mode": 12,
+            "high": 25
+          }
+        }
+      ]
+    },
+    {
+      "id": "s10",
+      "name": "Do the PM inspection",
+      "description": "The technician works down the checklist: brake stroke and lining, slack adjusters, air system leaks, steering and suspension, lights, coupling devices, tires and tread depth, frame and body, and greases every fitting. Readings are written on the paper checklist.",
+      "role": "technician",
+      "kind": "physical",
+      "inputs": [
+        "PM checklist",
+        "PM kit"
+      ],
+      "outputs": [
+        "completed checklist with readings"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 30,
+        "mode": 50,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "A worn item is missed or a reading is not recorded.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.5,
+          "condition": "tractor or truck B or C service with oil change"
+        },
+        {
+          "to": "s12",
+          "prob": 0.5,
+          "condition": "trailer service or A service"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-jjk-pm"
+        ],
+        "note": "Checklist content follows the A, B and C levels in the guide; minutes (trailer services shorter than tractor services) are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "shop-bay",
+          "occupied_min": {
+            "low": 30,
+            "mode": 50,
+            "high": 120
+          }
+        }
+      ]
+    },
+    {
+      "id": "s11",
+      "name": "Change oil and filters",
+      "description": "For tractor and truck services due an oil change, the technician drains the engine oil, changes the oil, fuel and air filters as listed, takes an oil sample where the fleet runs oil analysis and refills to level.",
+      "role": "technician",
+      "kind": "physical",
+      "inputs": [
+        "PM kit"
+      ],
+      "outputs": [
+        "serviced engine",
+        "oil sample"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 80
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-jjk-pm"
+        ],
+        "note": "Oil and filter change belongs to the B service in the guide; minutes are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "shop-bay",
+          "occupied_min": {
+            "low": 30,
+            "mode": 45,
+            "high": 80
+          }
+        }
+      ]
+    },
+    {
+      "id": "s12",
+      "name": "Decide on findings",
+      "description": "The technician reviews what the inspection found and decides, under shop rules, which items can be fixed inside the PM (bulbs, mud flaps, air line fittings, brake adjustment) and which need parts or a separate repair order.",
+      "role": "technician",
+      "kind": "judgment",
+      "inputs": [
+        "completed checklist"
+      ],
+      "outputs": [
+        "list of repairs"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.66,
+          "condition": "nothing beyond the PM, or fixed with stock on the cart"
+        },
+        {
+          "to": "s13",
+          "prob": 0.34,
+          "condition": "minor repair needs parts from the counter"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of PMs needing extra parts is the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Issue parts for minor repairs",
+      "description": "The technician walks to the parts counter; the partsperson looks up part numbers for the unit in the fleet maintenance system, issues stock to the work order or raises a requisition when the part is not on the shelf.",
+      "role": "parts-person",
+      "kind": "lookup",
+      "inputs": [
+        "list of repairs"
+      ],
+      "outputs": [
+        "parts issue",
+        "parts requisition"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong part issued.",
+        "typically_caught_at": "s14"
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Complete minor repairs",
+      "description": "The technician replaces the worn items found during the inspection, re-checks the affected system, and notes the parts and time on the checklist.",
+      "role": "technician",
+      "kind": "physical",
+      "inputs": [
+        "parts issue"
+      ],
+      "outputs": [
+        "repaired items"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      },
+      "resources": [
+        {
+          "id": "shop-bay",
+          "occupied_min": {
+            "low": 15,
+            "mode": 35,
+            "high": 120
+          }
+        }
+      ]
+    },
+    {
+      "id": "s15",
+      "name": "Record the PM on the work order",
+      "description": "The technician types the checklist results, brake and tread readings, parts used and labour time into the fleet maintenance system, re-keying from the paper checklist, and flags any defect that needs a separate repair.",
+      "role": "technician",
+      "kind": "data_entry",
+      "inputs": [
+        "completed checklist"
+      ],
+      "outputs": [
+        "completed PM work order",
+        "tire readings"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Readings or parts mistyped or left out.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Paper checklists re-keyed into the maintenance system were common before tablets; author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Review and sign off the PM",
+      "description": "The shop foreman reads the completed work order against the checklist, checks that brake readings and defects are recorded and that repairs were done, and signs off. Incomplete items go back to the technician; serious defects get their own repair order.",
+      "role": "shop-foreman",
+      "kind": "review",
+      "inputs": [
+        "completed PM work order"
+      ],
+      "outputs": [
+        "signed-off PM"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "NSC Standard 11 Part A maintenance program records and provincial operator duty to keep records of repair (Ontario HTA Regulation 199/07)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.88,
+          "condition": "complete"
+        },
+        {
+          "to": "s14",
+          "prob": 0.05,
+          "condition": "item missed, back to technician"
+        },
+        {
+          "to": "s17",
+          "prob": 0.07,
+          "condition": "defect needs a separate repair"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mto21",
+          "src-tn-pmvi"
+        ],
+        "note": "Records of repair are required of the operator, and NSC Standard 11 Part A maintenance program criteria are used in carrier audits; review shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Open a repair work order",
+      "description": "The foreman opens a separate repair work order for the defect, sets the unit out of service if the defect is major, and hands it to the defect repair queue. The PM itself is closed as complete.",
+      "role": "shop-foreman",
+      "kind": "data_entry",
+      "inputs": [
+        "signed-off PM",
+        "defect"
+      ],
+      "outputs": [
+        "repair work order"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Reset the PM interval",
+      "description": "When the work order is signed off, the fleet maintenance system records the service, resets the mileage and calendar counters for the next PM, and updates the unit's annual inspection and tire history.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "signed-off PM"
+      ],
+      "outputs": [
+        "next PM due",
+        "PM schedule",
+        "tire record"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard behaviour of fleet maintenance software in the period; author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Release the unit to operations",
+      "description": "The foreman changes the unit status to available in the TMS or phones the dispatcher, and tells the driver or yard where the unit is parked.",
+      "role": "shop-foreman",
+      "kind": "communication",
+      "inputs": [
+        "signed-off PM"
+      ],
+      "outputs": [
+        "equipment availability"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Return the unit to the yard",
+      "description": "The shunt driver moves the serviced trailer or tractor from the shop door to the ready line or to the dock door where it is needed next.",
+      "role": "yard-jockey",
+      "kind": "travel",
+      "inputs": [
+        "equipment availability"
+      ],
+      "outputs": [
+        "unit on ready line"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Done while the foreman updates the status; author's estimate."
+      },
+      "concurrent_with": [
+        "s19"
+      ]
+    },
+    {
+      "id": "s21",
+      "name": "Close and file the work order",
+      "description": "Once a week the maintenance planner closes signed-off PM work orders, compares labour hours with the standard for the PM level, follows up overruns with the foreman and files the record in the unit history used for the facility audit.",
+      "role": "maintenance-planner",
+      "kind": "review",
+      "inputs": [
+        "closed PM work orders"
+      ],
+      "outputs": [
+        "maintenance record"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "work order closed",
+          "outcome": "completed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly close-out is the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Unit cannot be spared",
+      "share_of_cases": 0.15,
+      "description": "Dispatch refuses the slot because of freight or driver shortages and the planner reschedules; some units go past their interval.",
+      "path": [
+        "s04",
+        "s02",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Defect found that needs its own repair",
+      "share_of_cases": 0.07,
+      "description": "The inspection finds a defect beyond the PM (cracked brake drum, leaking wheel seal, worn kingpin) and the foreman opens a repair work order.",
+      "path": [
+        "s16",
+        "s17",
+        "s19"
+      ]
+    },
+    {
+      "name": "Trailer held at a customer",
+      "share_of_cases": 0.1,
+      "description": "A drop trailer due for service sits at a customer dock and cannot be collected until it is emptied and released.",
+      "path": [
+        "s07"
+      ]
+    },
+    {
+      "name": "Incomplete checklist",
+      "share_of_cases": 0.05,
+      "description": "The foreman finds a missed item or missing reading and sends the job back to the technician.",
+      "path": [
+        "s16",
+        "s14",
+        "s15",
+        "s16"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 6,
+        "p90": 12
+      },
+      "unit": "calendar days from unit flagged due to work order closed",
+      "population": "Company tractors and trailers at a Canadian LTL and truckload carrier, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: units are usually in the bay within about four days of coming due and the work order is closed at the next weekly close-out, about two days later on average; refused releases push some past twelve days. No published Canadian figure was found."
+      }
+    },
+    {
+      "metric": "pm_a_service_interval",
+      "value": {
+        "low": 5000,
+        "high": 10000
+      },
+      "unit": "miles between A services, medium and heavy vehicles",
+      "population": "US practitioner guidance",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-jjk-pm"
+        ],
+        "note": "Guide values; B service every 10,000 to 20,000 miles."
+      }
+    },
+    {
+      "metric": "miles_between_unscheduled_roadside_repairs",
+      "value": 42459,
+      "unit": "miles",
+      "population": "TMC/FleetNet benchmark fleets, Q4 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-hdt-fact22"
+        ],
+        "note": "Used as an outcome measure of PM quality."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Operations hold on to units during freight peaks and driver shortages, so PMs slip past their interval and bays sit empty on the planned day.",
+      "steps": [
+        "s04",
+        "s02"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Named in the organisation file's process description; size is the author's estimate."
+      }
+    },
+    {
+      "description": "Readings written on paper checklists are re-keyed into the maintenance system, which loses or mistypes brake and tread readings needed for audits.",
+      "steps": [
+        "s10",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for shops before tablet checklists were common."
+      }
+    },
+    {
+      "description": "Technician shortages leave bays unstaffed on some shifts, so scheduled units wait.",
+      "steps": [
+        "s05",
+        "s09"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hdt-fact22"
+        ],
+        "note": "Diesel technician shortage reported in 2022."
+      }
+    }
+  ],
+  "assumptions": [
+    "One step per role: s04 shows the linehaul dispatcher, but for truckload tractors the driver manager and for city trucks the city dispatcher do the same step at similar cost.",
+    "Touch times average tractor and trailer services: a trailer service takes about one hour in the bay, a tractor B or C service two to three hours.",
+    "The annual inspection is documented in frt-mnt-annual-inspection and is not counted here even when done in the same bay visit.",
+    "Defects found during the PM that need a separate job leave this workflow as a work order for mnt-defect-repair.",
+    "The workflow adds ltl-pd-dispatch as a source of odometer data and tl-load-planning, ltl-pd-dispatch and mnt-defect-repair as receivers; the organisation file lists only linehaul dispatch and truckload trip execution as triggers and only linehaul dispatch as a receiver of equipment availability.",
+    "Monthly volume is set at 950 to 1,600 (mode 1,200) from fleet counts and guide intervals, slightly above the organisation file's mode of 1,100.",
+    "Staffing check: stated FTE (about 34) is close to the 37 implied by hands-on time times volume; technicians also do defect repairs, annual inspections, tires and collision work outside this workflow."
+  ],
+  "sources": [
+    {
+      "id": "src-jjk-pm",
+      "title": "Elements of a Successful Preventive Maintenance (PM) Program",
+      "publisher": "J. J. Keller & Associates",
+      "url": "https://www.jjkeller.com/learn/preventive-maintenance-program",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "PM A service every 5,000 to 10,000 miles on medium and heavy vehicles (safety check, lubrication, key components), B service every 10,000 to 20,000 miles adding oil and filter change and an ECM download with action on trouble codes, C service normally annual and including the annual inspection; trailers on 3-month, 6-month and annual cycles; inspection lanes and yard checks feed the DVIR process; technicians escalate findings to the maintenance supervisor."
+    },
+    {
+      "id": "src-mto21",
+      "title": "Commercial vehicle safety requirements (archived copy of the MTO page, captured 28 August 2021)",
+      "publisher": "Ontario Ministry of Transportation, via Library and Archives Canada web archive",
+      "url": "https://bac-lac.wayback.archive-it.org/web/20210828184642/http://www.mto.gov.on.ca/english/trucks/commercial-vehicle-safety-requirements.shtml",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Annual inspection of trucks, trailers and converter dollies over 4,500 kg by a licensed motor vehicle inspection mechanic at an MTO-licensed inspection station to NSC Standard 11 Part B as modified by Regulation 611; an annual inspection is valid for 12 months and a sticker is applied; daily trip inspection within 24 hours before driving under Regulation 199/07 with a schedule and a report; minor defects reported to the operator as soon as possible; a vehicle with a major defect may not be driven until repaired; the operator must repair defects immediately or before the next dispatch and keep records of repair."
+    },
+    {
+      "id": "src-tn-pmvi",
+      "title": "You will be tested on this (revised NSC Standard 11 periodic motor vehicle inspection)",
+      "publisher": "Trucknews.com",
+      "url": "https://www.trucknews.com/transportation/you-will-be-tested-on-this/1003128806",
+      "year": 2015,
+      "accessed": "2026-11-24",
+      "supports": "Most provinces inspect commercial vehicles of 4,500 kg or more every 12 months; the revised standard requires brake stroke and drum and lining thickness to be recorded on the report and limits the time between wheel-off brake inspections (12 months for disc brakes, 24 months for a full drum-removed inspection); adds a visual emissions-system check; Part A gives maintenance program criteria used in carrier audits and Part B the inspection standard; inspections are done by authorized technicians at authorized facilities; US inspections are recognized only by the home province. The page did not show its publication date; the year given is approximate (the article describes adoption planned for late 2015)."
+    },
+    {
+      "id": "src-hdt-fact22",
+      "title": "HDT Fact Book 2022: Trucking fleets focus on preventive maintenance",
+      "publisher": "Heavy Duty Trucking (truckinginfo.com)",
+      "url": "https://www.truckinginfo.com/10180249/hdt-fact-book-2022-trucking-fleets-focus-on-preventive-maintenance",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "TMC/FleetNet Q4 2021: 42,459 miles between unscheduled repairs, the highest in two years; top five systems about 67% of roadside repairs; ATRI repair and maintenance cost 14.8 US cents per mile in 2020; shortage of diesel technicians."
+    }
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

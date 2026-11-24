@@ -1,0 +1,1678 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-ltl-linehaul-planning",
+  "name": "Plan linehaul loads and departures",
+  "org": "freight-carrier-co",
+  "process": "ltl-linehaul-planning",
+  "sector": "trucking (less-than-truckload freight)",
+  "function": "LTL network operations",
+  "summary": "Each evening linehaul planners decide how the day's pickups will travel between terminals: which trailers to open for which destination or hub, when to close them, and which to run light, hold for more freight or combine. They work from a load-to-ship projection in the TMS and from dock scans, while dock supervisors brief loaders and close trailers. The work is slow and error-prone because scan data lags the dock, empties are often in the wrong place, and every cut-off forces a trade between trailer fill and service.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL carrier of about 3,000 employees with 38 terminals, five hub cross-docks and a 24-hour linehaul planning desk.",
+    "org_size_employees": 3000,
+    "notes": "Planning desk in the LTL network unit; terminals open trailers in the afternoon and close them for departures from about 20:00 to 02:00."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one linehaul trailer departure",
+  "trigger": "Pickup scans and inbound arrivals put freight for a lane into the evening load-to-ship projection.",
+  "end_state": "The closed, sealed trailer with its manifest is assigned to a scheduled departure on the linehaul dispatch board.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 18000,
+      "mode": 21000,
+      "high": 25000
+    },
+    "seasonality": "Lower in January, February and July; highest from September to mid-December. Monday and Friday nights are lighter than mid-week.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Matches the organisation file. Cross-check by the author: about 150,000 shipments a month making about 1.7 linehaul legs each, at about 12 shipments per trailer, gives about 21,000 trailer departures."
+    },
+    "surge": {
+      "cause": "Autumn shipping peak (September to mid-December retail and industrial restocking)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 50,
+        "mode": 70,
+        "high": 90
+      },
+      "volume_multiplier": {
+        "low": 1.12,
+        "mode": 1.2,
+        "high": 1.35
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Same as the organisation file; author's estimate of the autumn LTL peak in Canada."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-origin-dock",
+        "object": "shipment_scan_data",
+        "share": 0.65
+      },
+      {
+        "from": "ltl-hub-crossdock",
+        "object": "shipment_scan_data",
+        "share": 0.35
+      }
+    ],
+    "inputs": [
+      {
+        "from": "fin-freight-bill-entry",
+        "object": "freight_bill"
+      },
+      {
+        "from": "ltl-network-planning",
+        "object": "network_plan"
+      },
+      {
+        "from": "ltl-dg-handling",
+        "object": "dg_shipping_document"
+      },
+      {
+        "from": "ltl-yard-management",
+        "object": "yard_status"
+      },
+      {
+        "from": "ltl-peak-capacity",
+        "object": "capacity_plan"
+      },
+      {
+        "from": "it-system-change",
+        "object": "system_release"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "ltl-linehaul-dispatch",
+        "object": "linehaul_load_plan"
+      },
+      {
+        "outcome": "any",
+        "to": "ltl-trailer-balancing",
+        "object": "empty_trailer_request"
+      },
+      {
+        "outcome": "released_and_reviewed",
+        "to": "ltl-network-planning",
+        "object": "terminal_kpi_data"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "linehaul-planner",
+      "title": "Linehaul load planner",
+      "department": "LTL network planning and linehaul control",
+      "layer": "individual_contributor",
+      "fte_on_process": 10.5,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 45,
+        "high": 55
+      },
+      "occupation_code": "NOC 14405",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-noc-14405"
+        ],
+        "note": "About 12 planners cover the network around the clock; most of their time goes to this process, the rest to trailer balancing. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff)."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "dock-supervisor",
+      "title": "Dock supervisor",
+      "department": "LTL terminal network",
+      "layer": "supervisor",
+      "fte_on_process": 7.0,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 47,
+        "high": 56
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Dock supervisors at the 38 terminals spend a small part of each evening on load-plan briefings, status calls and trailer closes; 60 supervisors in total. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff). This role is in the organisation file but not in this process's role list in the process map."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "network-manager",
+      "title": "Linehaul and network planning manager",
+      "department": "LTL network planning and linehaul control",
+      "layer": "manager",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 80,
+        "mode": 95,
+        "high": 115
+      },
+      "occupation_code": "NOC 70020",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves light runs and holds, usually several trailers per call; most time goes to network planning. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff)."
+      }
+    },
+    {
+      "id": "network-analyst",
+      "title": "Network and pricing-cost analyst",
+      "department": "LTL network planning and linehaul control",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 48,
+        "mode": 58,
+        "high": 72
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Morning exception review of about 4,000 flagged departures a month, read as report lines. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "linehaul-planner-tool",
+      "name": "Linehaul load planning tool and planning spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "dock-handheld",
+      "name": "Dock and driver handheld scanning",
+      "kind": "instrument"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "bi-reporting",
+      "name": "Business intelligence reporting",
+      "kind": "analytics"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "resources": [
+    {
+      "id": "ltl-trailer",
+      "name": "LTL trailer (53-foot van and 28-foot pup)",
+      "kind": "vehicle",
+      "count": 2400,
+      "cost_per_hour": {
+        "low": 1.5,
+        "mode": 2.5,
+        "high": 4
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Refresh load-to-ship projection",
+      "description": "The transportation management system adds the afternoon's pickup manifests, dock scans and inbound linehaul arrival times to a projection of weight and cube on hand and still to come for each outbound lane from the terminal. The projection refreshes on a timer, so new freight shows up in batches.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "shipment scan data",
+        "pickup manifests",
+        "inbound trailer arrival times"
+      ],
+      "outputs": [
+        "load-to-ship projection by lane"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-heilig"
+        ],
+        "note": "Heilig describes carrier planning systems that project linehaul trailer loads from tendered and picked-up shipments; refresh interval is the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review projection against the night's schedule",
+      "description": "The linehaul planner opens the projection for the terminal and compares the expected weight and cube on each lane with the standing departure schedule from the network plan. The planner notes lanes that will overflow one trailer, lanes that look light and any guaranteed or expedited shipments.",
+      "role": "linehaul-planner",
+      "kind": "lookup",
+      "inputs": [
+        "load-to-ship projection by lane",
+        "network plan schedule"
+      ],
+      "outputs": [
+        "lane notes for the night"
+      ],
+      "systems": [
+        "tms",
+        "linehaul-planner-tool"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.3,
+        "high": 0.8
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-noc-14405",
+          "src-erera"
+        ],
+        "note": "Schedulers set schedules from cargo volumes and travel times (NOC 14405); the load plan sets which freight shares a trailer (Erera et al.). Minutes per departure are the author's estimate from about 12 planners covering about 700 departures a night."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Choose routing and trailer configuration",
+      "description": "For each lane the planner decides whether freight goes direct to the destination terminal or to a hub, and whether it moves in a 53-foot van or in 28-foot pups that will run as a double. The decision weighs trailer fill against transit time and the cost of an extra handling at the hub.",
+      "role": "linehaul-planner",
+      "kind": "judgment",
+      "inputs": [
+        "lane notes for the night",
+        "network plan"
+      ],
+      "outputs": [
+        "lane routing and trailer type"
+      ],
+      "systems": [
+        "linehaul-planner-tool"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.3,
+        "high": 1.0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Freight sent through a hub when a direct trailer would have filled, or the reverse, adding a handling or a day.",
+        "typically_caught_at": "s23"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-erera",
+          "src-gardewine-drivers"
+        ],
+        "note": "Load plans route freight through breakbulk terminals (Erera et al.); Canadian linehaul runs tandem, Rocky Mountain and turnpike doubles (Gardewine). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Open the trailer on the lane",
+      "description": "The planner opens a trailer record for the lane in the TMS, gives it a trailer number and an origin door, and prints or posts the door sheet that tells dock workers which destination the door is loading.",
+      "role": "linehaul-planner",
+      "kind": "data_entry",
+      "inputs": [
+        "lane routing and trailer type"
+      ],
+      "outputs": [
+        "open trailer record",
+        "door sheet"
+      ],
+      "systems": [
+        "tms",
+        "linehaul-planner-tool"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.2,
+        "high": 0.6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong destination or door on the door sheet, causing misloaded freight.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common LTL practice; the door sheet and trailer record are standard in TMS products of the period. Author's estimate of time."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Check empty trailer availability",
+      "description": "The planner looks at the yard status to see whether an empty trailer of the right type and condition is on hand at the terminal for the lane, and whether pups are available to pair into a double.",
+      "role": "linehaul-planner",
+      "kind": "lookup",
+      "inputs": [
+        "yard status",
+        "open trailer record"
+      ],
+      "outputs": [
+        "trailer availability"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.15,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.85,
+          "condition": "empty trailer on hand"
+        },
+        {
+          "to": "s06",
+          "prob": 0.15,
+          "condition": "no suitable empty at the terminal"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of departures short of an empty is the author's estimate; terminals in freight-surplus regions run short of empties most nights."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Request an empty trailer",
+      "description": "The planner raises an empty trailer request to trailer balancing, asking for an empty to be repositioned from a nearby terminal or shunted from the far yard, and states the type and the time it is needed at the door.",
+      "role": "linehaul-planner",
+      "kind": "communication",
+      "inputs": [
+        "trailer availability"
+      ],
+      "outputs": [
+        "empty trailer request"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-erera"
+        ],
+        "note": "Loaded and empty trailer moves are planned together (Erera et al.). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Confirm the empty is spotted at the door",
+      "description": "The planner checks the yard status again, or calls the dock, to confirm that the empty has arrived and been spotted at the assigned door so loading can start.",
+      "role": "linehaul-planner",
+      "kind": "lookup",
+      "inputs": [
+        "empty trailer request",
+        "yard status"
+      ],
+      "outputs": [
+        "trailer spotted"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.5,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 30,
+            "mode": 120,
+            "high": 480
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait for a repositioned empty is the author's estimate: a shunt within the yard takes under an hour, a move from another terminal several hours."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Brief the dock crew on the load plan",
+      "description": "The dock supervisor goes through the door sheets with the evening loaders: which doors load which lanes, which large shipments to headload in the nose, and how to build the load with heavy freight on the floor. Changes to the plan are passed on by radio during the shift.",
+      "role": "dock-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "door sheet",
+        "lane notes for the night"
+      ],
+      "outputs": [
+        "crew briefed on doors and load sequence"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.88,
+          "condition": "no dangerous goods planned on the trailer"
+        },
+        {
+          "to": "s09",
+          "prob": 0.12,
+          "condition": "dangerous goods planned on the trailer"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-heilig",
+          "src-ttnews-dock"
+        ],
+        "note": "Headloading of large shipments (Heilig); dock work is only as good as the load plan (Transport Topics). Share with dangerous goods and minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Check dangerous goods on the planned load",
+      "description": "The planner reads the dangerous goods shipping documents for the shipments planned on the trailer, checks that incompatible classes are not loaded together and adds up gross mass to see whether the trailer will exceed 500 kg and need placards on each side and end. The trailer is flagged so the dock places placards before it closes.",
+      "role": "linehaul-planner",
+      "kind": "validation",
+      "inputs": [
+        "dangerous goods shipping documents",
+        "open trailer record"
+      ],
+      "outputs": [
+        "placard flag on the trailer"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Placard need missed because a shipping document was not keyed against the shipment.",
+        "typically_caught_at": "s20"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Transportation of Dangerous Goods Regulations, Part 4 (s. 4.15 placards, s. 4.16.1 500 kg exemption)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-tc-placards"
+        ],
+        "note": "Placards on each side and end, with the 500 kg exemption, are set by TDG Regulations s. 4.15 and 4.16.1. Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Monitor loading progress during the evening",
+      "description": "Through the evening the planner watches the loaded weight, cube and shipment count build on each open trailer from dock scans, as city trucks return with pickups in waves. The planner compares progress with the projection and looks for trailers that will cube out early or stay light.",
+      "role": "linehaul-planner",
+      "kind": "analysis",
+      "inputs": [
+        "dock scans",
+        "load-to-ship projection by lane"
+      ],
+      "outputs": [
+        "loading status by trailer"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld",
+        "linehaul-planner-tool"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 150,
+        "high": 300
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 180,
+            "mode": 360,
+            "high": 600
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-heilig"
+        ],
+        "note": "Scans record each dock move and trailer location (Heilig). The wait is the author's estimate of city pickups returning between about 16:00 and 20:00."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Report trailer status at the cut-off check",
+      "description": "At the planner's cut-off check the dock supervisor reports what is still on the floor for each lane, which trailers are full and which have room, often by radio or phone while walking the dock.",
+      "role": "dock-supervisor",
+      "kind": "communication",
+      "inputs": [
+        "loading status by trailer"
+      ],
+      "outputs": [
+        "dock status report"
+      ],
+      "systems": [
+        "email-phone",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s10"
+      ],
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice: scan data lags the physical dock, so planners confirm with the dock before cut-off. Author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Decide at cut-off: close, hold, add or re-plan",
+      "description": "The planner compares each trailer's fill and the freight still due with the departure time and decides whether to close it as planned, open an extra trailer for overflow, re-plan light lanes into one hub-bound trailer, or seek approval to run light or hold. The decision trades trailer fill against service on the shipments aboard.",
+      "role": "linehaul-planner",
+      "kind": "judgment",
+      "inputs": [
+        "loading status by trailer",
+        "dock status report"
+      ],
+      "outputs": [
+        "cut-off decision"
+      ],
+      "systems": [
+        "tms",
+        "linehaul-planner-tool"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.6,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Trailer closed too early, leaving freight behind on the dock for the next night.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.68,
+          "condition": "close as planned"
+        },
+        {
+          "to": "s13",
+          "prob": 0.14,
+          "condition": "trailer light: run or hold needs approval"
+        },
+        {
+          "to": "s14",
+          "prob": 0.1,
+          "condition": "overflow: extra trailer needed"
+        },
+        {
+          "to": "s15",
+          "prob": 0.08,
+          "condition": "re-plan light lanes through a hub"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Branch shares are the author's estimate for a regional Canadian LTL network; light trailers are common on thin lanes and on Monday and Friday nights."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Approve running light or holding",
+      "description": "The network manager, or by phone at night against standing rules, weighs the cost of running a half-empty trailer against the service failure of holding freight a day. Guaranteed and expedited freight is always run; other light trailers are often held to the next night.",
+      "role": "network-manager",
+      "kind": "approval",
+      "inputs": [
+        "cut-off decision",
+        "loading status by trailer"
+      ],
+      "outputs": [
+        "run-light or hold decision"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Carrier linehaul cost and service policy: manager approval to run below the minimum load factor or to hold freight",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.55,
+          "condition": "run light"
+        },
+        {
+          "to": "s17",
+          "prob": 0.45,
+          "condition": "hold to the next schedule"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approval level and split are the author's estimate of common practice; holding freight risks service claims while light runs raise cost per pound."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Open an overflow trailer",
+      "description": "The planner opens an extra trailer or pup on the lane, assigns a door, tells the dock which freight goes on it and adds it to the schedule as an extra section, which may need its own driver.",
+      "role": "linehaul-planner",
+      "kind": "data_entry",
+      "inputs": [
+        "cut-off decision"
+      ],
+      "outputs": [
+        "overflow trailer record"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Re-plan light lanes through a hub",
+      "description": "The planner combines freight from two or more light lanes into one trailer bound for the hub, changes the door sheets and tells the dock to move freight already loaded. The freight gains a handling at the hub but saves a light departure.",
+      "role": "linehaul-planner",
+      "kind": "analysis",
+      "inputs": [
+        "cut-off decision",
+        "network plan"
+      ],
+      "outputs": [
+        "revised door sheets"
+      ],
+      "systems": [
+        "tms",
+        "linehaul-planner-tool",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always: dock re-briefed and freight re-handled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-erera"
+        ],
+        "note": "Consolidating through breakbulks is a standard load-plan choice (Erera et al.); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Confirm trailer close and seal",
+      "description": "The dock supervisor checks that the last shipment for the trailer is scanned aboard, that load bars or decking hold the freight and that placards are on if flagged, then keys the seal number and close time into the TMS.",
+      "role": "dock-supervisor",
+      "kind": "validation",
+      "inputs": [
+        "loaded trailer",
+        "placard flag on the trailer"
+      ],
+      "outputs": [
+        "closed trailer with seal number"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.8,
+        "mode": 1.5,
+        "high": 3.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Unscanned shipment left aboard or seal number mistyped.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Carrier freight security policy: seal applied and recorded on every closed linehaul trailer",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 10,
+            "mode": 20,
+            "high": 40
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Hold the trailer and notify service",
+      "description": "The planner marks the trailer as held in the TMS, moves it to the next night's plan and tells customer service which guaranteed or time-critical shipments will miss their service date so customers can be warned.",
+      "role": "linehaul-planner",
+      "kind": "data_entry",
+      "inputs": [
+        "run-light or hold decision"
+      ],
+      "outputs": [
+        "held trailer record",
+        "service-failure notice"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Re-open the held trailer on the next schedule",
+      "description": "On the next operating night the planner re-opens the held trailer on that night's plan and continues loading it with the new day's freight. Trailers held on Friday wait for the Sunday or Monday departures.",
+      "role": "linehaul-planner",
+      "kind": "lookup",
+      "inputs": [
+        "held trailer record"
+      ],
+      "outputs": [
+        "re-opened trailer record"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.5,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 900,
+        "mode": 1300,
+        "high": 4200
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 900,
+            "mode": 1300,
+            "high": 4200
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait is one operating day, longer over a weekend; author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Generate the trailer manifest",
+      "description": "When the trailer is closed the TMS builds its manifest with each shipment, weight, pieces, dangerous goods and consignee, and sends an advance manifest to the hub or destination terminal so they can plan the strip.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "closed trailer with seal number"
+      ],
+      "outputs": [
+        "trailer manifest",
+        "advance manifest"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard TMS function of the period; author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Check the manifest for weight and misloads",
+      "description": "The planner scans the manifest for shipments that do not belong to the lane, gross weight above what the configuration allows, a heavy pup that should run as the lead trailer, and missing placards. A problem sends the trailer back to the dock to be re-handled.",
+      "role": "linehaul-planner",
+      "kind": "validation",
+      "inputs": [
+        "trailer manifest"
+      ],
+      "outputs": [
+        "checked manifest"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Carrier weight and loading policy: gross and axle weights within provincial limits before dispatch",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.96,
+          "condition": "manifest clean"
+        },
+        {
+          "to": "s16",
+          "prob": 0.04,
+          "condition": "misload or weight problem: dock re-handles"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Rework share is the author's estimate; handheld scanning made misloads uncommon but not rare in this period."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Pair trailers and assign them to departures",
+      "description": "The planner pairs closed pups into doubles, or two 53-foot trailers into a long combination where the route allows it, and assigns each set to a scheduled departure with its departure time and relay point in the linehaul load plan.",
+      "role": "linehaul-planner",
+      "kind": "data_entry",
+      "inputs": [
+        "checked manifest",
+        "network plan schedule"
+      ],
+      "outputs": [
+        "linehaul load plan"
+      ],
+      "systems": [
+        "linehaul-planner-tool",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1.2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario LCV program conditions and provincial vehicle weights and dimensions rules for doubles",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mto-lcv",
+          "src-gardewine-drivers"
+        ],
+        "note": "Two full-length trailers run only as permitted long combinations on designated highways (MTO); doubles are routine in Canadian linehaul (Gardewine). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Hand the load plan to linehaul dispatch",
+      "description": "The planner posts the departures to the dispatch board and tells the linehaul dispatcher about hot freight, late trailers and extra sections that need a driver. Departures flagged as light, held or overflow go on the next morning's exception list.",
+      "role": "linehaul-planner",
+      "kind": "communication",
+      "inputs": [
+        "linehaul load plan"
+      ],
+      "outputs": [
+        "departure on the dispatch board",
+        "exception list entry"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.3,
+        "high": 0.8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.8,
+          "condition": "released with no exception",
+          "outcome": "released_to_dispatch"
+        },
+        {
+          "to": "s23",
+          "prob": 0.2,
+          "condition": "flagged for review"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share flagged is the author's estimate, consistent with the light, hold and overflow branches."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Review flagged departures next morning",
+      "description": "The network analyst goes through the morning exception report of light, held and overflow departures, checks load factor and cost per pound against the lane's norm and recommends schedule changes for the network plan when a lane is light or overflowing night after night.",
+      "role": "network-analyst",
+      "kind": "analysis",
+      "inputs": [
+        "exception list entry",
+        "load factor report"
+      ],
+      "outputs": [
+        "lane recommendation"
+      ],
+      "systems": [
+        "bi-reporting",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 360,
+        "mode": 600,
+        "high": 900
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "released_and_reviewed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily review cycle is common practice; minutes are the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "No empty trailer at the terminal",
+      "share_of_cases": 0.15,
+      "description": "The terminal has no suitable empty for the lane; the planner requests one and loading waits until it is spotted.",
+      "path": [
+        "s05",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Light trailer held to the next night",
+      "share_of_cases": 0.063,
+      "description": "A light trailer is held with manager approval and re-opened on the next schedule, delaying its freight a day or over a weekend.",
+      "path": [
+        "s12",
+        "s13",
+        "s17",
+        "s18",
+        "s10"
+      ]
+    },
+    {
+      "name": "Re-plan through a hub",
+      "share_of_cases": 0.08,
+      "description": "Light lanes are combined into one hub-bound trailer and the dock re-handles freight already loaded.",
+      "path": [
+        "s12",
+        "s15",
+        "s08"
+      ]
+    },
+    {
+      "name": "Misload or overweight found on the manifest",
+      "share_of_cases": 0.04,
+      "description": "The manifest check finds a shipment for another lane or excess weight; the dock re-opens and re-handles the trailer.",
+      "path": [
+        "s20",
+        "s16"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.35,
+        "p90": 0.8
+      },
+      "unit": "calendar days from the lane's freight first appearing in the projection to the trailer released to dispatch",
+      "population": "Evening-loaded linehaul departures at a regional Canadian LTL carrier",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: trailers open in the afternoon and close for departures between about 20:00 and 02:00; held trailers add one to three days."
+      }
+    },
+    {
+      "metric": "trailer_departures_per_planner_shift",
+      "value": 60,
+      "unit": "departures planned per planner per 8-hour shift",
+      "population": "This carrier's network: about 700 departures a night across 3 to 4 planners on the evening and night shifts",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Derived from the organisation file's volume and planner headcount."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Scan data lags the physical dock, so planners confirm trailer status by phone and radio before cut-off and still close some trailers too early or too late.",
+      "steps": [
+        "s10",
+        "s11",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-ttnews-dock"
+        ],
+        "note": "Transport Topics reports dock work is only as good as the plan and that staging congestion delays loading."
+      }
+    },
+    {
+      "description": "Light trailers on thin lanes force a daily choice between running at high cost per pound and holding freight past its service date.",
+      "steps": [
+        "s12",
+        "s13",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common LTL practice."
+      }
+    },
+    {
+      "description": "Empty trailers are often in the wrong place in freight-surplus regions, so loading waits for repositioned equipment.",
+      "steps": [
+        "s05",
+        "s06",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-erera"
+        ],
+        "note": "Erera et al. plan loaded and empty trailer moves together because empties are a large share of linehaul cost."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-noc-14405",
+      "title": "NOC 2021 unit group 14405: Transportation route and crew schedulers",
+      "publisher": "Employment and Social Development Canada",
+      "url": "https://noc.esdc.gc.ca/Structure/NOCProfile?GocTemplateCulture=en-CA&code=14405&version=2021.0",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Schedulers at trucking companies set schedules from cargo volumes, travel times, distances and staff availability, adjust for peaks and roadwork, and assign staff and equipment to routes"
+    },
+    {
+      "id": "src-erera",
+      "title": "Improved load plan design through integer programming based local search (Transportation Science 47(3), 412-427; abstract)",
+      "publisher": "INFORMS, abstract via EconPapers",
+      "url": "https://econpapers.repec.org/RePEc:inm:ortrsc:v:47:y:2013:i:3:p:412-427",
+      "year": 2013,
+      "accessed": "2026-11-24",
+      "supports": "LTL load plans decide how freight is consolidated into trailers and routed through terminals; loaded and empty trailer moves are planned together; schedules can vary by day of week"
+    },
+    {
+      "id": "src-heilig",
+      "title": "A look at LTL carrier dock operations",
+      "publisher": "PARCEL Industry (Joe Heilig)",
+      "url": "https://parcelindustry.com/print-article-3642-permanent.html",
+      "year": null,
+      "accessed": "2026-11-24",
+      "supports": "Most shipments cross-docked from pickup unit to linehaul trailer; headloading of large shipments; planning systems project linehaul trailer loads; breakbulks often over 100 doors; unload doors assigned from each shipment's next scheduled door; inbound floor staging to sequence P&D loads; dock metrics such as shipments per hour; bar-code scans record each dock move. The page gives no publication date"
+    },
+    {
+      "id": "src-ttnews-dock",
+      "title": "Better planning, equipment maintenance are key to improved loading dock efficiency",
+      "publisher": "Transport Topics (Mindy Long)",
+      "url": "https://ttnews.com/articles/better-planning-equipment-maintenance-are-key-improved-loading-dock-efficiency",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "LTL carriers measure dock productivity in pounds per hour and feet travelled per shipment; dock work only as good as the load plan; staging congestion and understaffing cause delays; handheld scanning reduces misdirects; trailer creep, pop-up, landing-gear collapse and early departure are forklift hazards"
+    },
+    {
+      "id": "src-tc-placards",
+      "title": "Dangerous goods placards (placards flowchart)",
+      "publisher": "Transport Canada",
+      "url": "https://tc.canada.ca/en/dangerous-goods/dangerous-goods-placards",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Placards on each side and each end of a large means of containment (TDG Regulations s. 4.15); exemption when dangerous goods in small containers total 500 kg gross or less (s. 4.16.1), with listed exceptions such as goods needing an ERAP"
+    },
+    {
+      "id": "src-mto-lcv",
+      "title": "Long combination vehicles (archived Ontario Ministry of Transportation page, captured 27 August 2021)",
+      "publisher": "Ontario Ministry of Transportation, via Library and Archives Canada web archive",
+      "url": "https://bac-lac.wayback.archive-it.org/web/20210827055956/http://www.mto.gov.on.ca/english/trucks/long-combination-vehicles.shtml",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "LCVs up to 40 m pulling two full-length semitrailers; 90 km/h limit; must avoid bad weather or slippery conditions; certified experienced drivers; designated divided highways; terminals within 2 km of an interchange; no GTA or Ottawa rush-hour running"
+    },
+    {
+      "id": "src-gardewine-drivers",
+      "title": "Driving positions",
+      "publisher": "Gardewine (Mullen Group)",
+      "url": "https://gardewine.com/?p=11848",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Linehaul company and owner-operator drivers run mostly at night between terminals, usually within 800 km of the home terminal, with tandem, Rocky Mountain or turnpike double combinations, out in the evening and back the next morning or out one night"
+    }
+  ],
+  "assumptions": [
+    "The unit of work is one trailer departure. Planner minutes are per departure and assume planners handle lanes in batches, so a lane decision covering several trailers is spread across them.",
+    "The case starts when the lane's freight first appears in the evening projection and ends when the closed trailer is on the dispatch board; the morning review applies only to flagged departures.",
+    "About 35% of departures are built at the five hubs rather than at origin terminals, so this workflow adds ltl-hub-crossdock as a trigger; the organisation file lists only ltl-origin-dock.",
+    "Dock supervisors take part (briefing, status calls and trailer close) although the organisation file's process map lists only planners, the network manager and analysts.",
+    "Linehaul tractors are not tied up by planning; they are first occupied in ltl-linehaul-dispatch, so only trailers are listed as resources here.",
+    "Night approvals by the network manager are by phone against standing rules; the wait reflects reaching the manager after hours.",
+    "Planner time per departure averages about 7 minutes, or about 2,400 hours a month; 12 planners at about 160 paid hours a month provide about 1,900, so the organisation file's 12 planners is lean and 14 to 15 would be closer to this workload.",
+    "Loaded costs come from the organisation file: wage x 1.30 for hourly staff and x 1.35 for salaried staff."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

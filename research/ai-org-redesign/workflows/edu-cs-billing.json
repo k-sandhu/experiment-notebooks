@@ -1,0 +1,1423 @@
+{
+  "schema_version": "0.3",
+  "id": "edu-cs-billing",
+  "name": "Bill customers monthly",
+  "org": "electric-distribution-utility",
+  "process": "cs-billing",
+  "sector": "electricity distribution",
+  "function": "customer service (billing)",
+  "summary": "The utility bills about 350,000 customers every month in daily cycles: the customer information system (CIS) takes the billing quantities from the provincial meter data repository, prices them at the commodity, distribution, transmission and regulatory rates, adds rebates and HST, and sends an e-bill or a paper bill. Almost all bills pass without anyone touching them; billing analysts review the few percent that fail validation rules, check large commercial bills, work accounts without reads and reconcile each day's run. Delays and errors come from missing reads, meter changes and moves in the billing period, rate changes, and the limit of two estimated bills a year that the OEB sets.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A municipally owned Ontario distributor of about 350,000 customers billing monthly in daily cycles from a CIS fed by the provincial MDM/R.",
+    "org_size_employees": 571,
+    "notes": "One case is one customer bill, from the moment its validated reads are available to delivery to the customer. Complex holds leave to the separate billing exceptions process."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one customer bill",
+  "trigger": "Validated billing quantities for an account whose billing period has ended reach the CIS, or a move-out or account change needs a final bill.",
+  "end_state": "The bill is delivered by e-bill or mail and posted to the customer's account, or it is held and handed to billing exceptions.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 340000,
+      "mode": 350000,
+      "high": 360000
+    },
+    "seasonality": "Flat by month since monthly billing began in December 2016; bills fall on about 21 working-day cycles each month. Hold rates rise after May 1 and November 1 price changes and January 1 and May 1 rate changes, and in 2020 when COVID-19 relief prices were applied mid-cycle.",
+    "evidence": {
+      "tier": "A",
+      "sources": [
+        "scorecard",
+        "bg2015"
+      ],
+      "note": "More than 4.2 million bills in 2021 (scorecard); monthly billing required from 31 December 2016 (bg2015)."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cs-meter-data-management",
+        "object": "validated_reads",
+        "share": 0.984
+      },
+      {
+        "from": "cs-move-in-move-out",
+        "object": "account_change",
+        "share": 0.016
+      }
+    ],
+    "inputs": [
+      {
+        "from": "fin-annual-rate-update",
+        "object": "tariff"
+      },
+      {
+        "from": "cs-low-income-programs",
+        "object": "assistance_credit"
+      },
+      {
+        "from": "cs-retailer-ebt",
+        "object": "retailer_transaction"
+      },
+      {
+        "from": "ops-customer-isolations",
+        "object": "field_result"
+      },
+      {
+        "from": "corp-it-change",
+        "object": "system_change"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "delivered",
+        "to": "residential-customer",
+        "object": "customer_bill"
+      },
+      {
+        "outcome": "delivered",
+        "to": "business-customer",
+        "object": "customer_bill"
+      },
+      {
+        "outcome": "delivered",
+        "to": "key-account-customer",
+        "object": "customer_bill"
+      },
+      {
+        "outcome": "delivered",
+        "to": "fin-month-end-close",
+        "object": "journal_entries"
+      },
+      {
+        "outcome": "delivered",
+        "to": "cs-ieso-settlement",
+        "object": "customer_bill"
+      },
+      {
+        "outcome": "referred_to_exceptions",
+        "to": "cs-billing-exceptions",
+        "object": "bill_exception"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "billing-analyst",
+      "title": "Billing analyst",
+      "department": "Billing and Settlement",
+      "layer": "individual_contributor",
+      "fte_on_process": 8.5,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 47,
+        "high": 56
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Org file has 16 billing analysts; about 8 to 9 FTE on the daily run (holds, large accounts, missing reads, reconciliation, accuracy sample), the rest on billing exceptions, rebills and retailer work. Loaded cost from the organisation file (wage x 1.40)."
+      }
+    },
+    {
+      "id": "billing-supervisor",
+      "title": "Billing supervisor",
+      "department": "Billing and Settlement",
+      "layer": "supervisor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 52,
+        "mode": 60,
+        "high": 70
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approvals and daily oversight. Loaded cost from the organisation file (wage x 1.40)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "cis",
+      "name": "Customer information and billing system (CIS)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mdmr",
+      "name": "Provincial Meter Data Management/Repository (IESO Smart Metering Entity) portal",
+      "kind": "external_portal"
+    },
+    {
+      "id": "mdm",
+      "name": "Local meter data management and validation tool",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "ebt-hub",
+      "name": "Electronic business transaction (EBT) hub for retailer transactions",
+      "kind": "external_portal"
+    },
+    {
+      "id": "erp",
+      "name": "ERP: general ledger, work orders, purchasing, inventory, fixed assets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "web-portal",
+      "name": "Customer web portal, MyAccount, mobile app and outage map",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email",
+      "name": "Email, calendar and Teams",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Open bill window for the cycle",
+      "description": "The CIS bill run selects the accounts in the day's bill cycle whose billing period has ended, about 17,000 a working day, and queues them for calculation once their billing quantities are loaded.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "bill cycle schedule",
+        "validated reads"
+      ],
+      "outputs": [
+        "accounts queued for billing"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.984,
+          "condition": "regular cycle bill"
+        },
+        {
+          "to": "s02",
+          "prob": 0.016,
+          "condition": "move-out or account-change final bill"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "scorecard"
+        ],
+        "note": "More than 4.2 million bills a year in 2021 (scorecard), about 350,000 a month in about 21 working-day cycles."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check final bill read and mailing address",
+      "description": "For move-out and account-change bills a billing analyst checks that the move date read was taken from the interval data, the forwarding address is on file and any security deposit is applied, then releases the account to the bill run.",
+      "role": "billing-analyst",
+      "kind": "validation",
+      "inputs": [
+        "account change",
+        "interval read on move date"
+      ],
+      "outputs": [
+        "final bill parameters"
+      ],
+      "systems": [
+        "cis",
+        "mdmr"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong move date read or missing forwarding address.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022. Move-in/move-out volume from the organisation file (about 5,500 a month)."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Check billing quantities are complete",
+      "description": "The CIS confirms that a billing quantity response covers the whole period for every meter on the account, including generation channels for net-metered customers.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "billing quantity responses"
+      ],
+      "outputs": [
+        "complete or missing read flag"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.986,
+          "condition": "billing quantities complete"
+        },
+        {
+          "to": "s04",
+          "prob": 0.014,
+          "condition": "missing or partial billing quantities"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sme"
+        ],
+        "note": "'No Data' billing quantity responses impede distributor billing (sme); share is the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Work missing-read list",
+      "description": "A billing analyst looks up each account without billing quantities, checks whether metering has a fix in progress and the account's estimate history, and either waits for the re-request, lets the CIS estimate, or holds the bill for billing exceptions.",
+      "role": "billing-analyst",
+      "kind": "lookup",
+      "inputs": [
+        "missing read list",
+        "estimate history"
+      ],
+      "outputs": [
+        "decision per account"
+      ],
+      "systems": [
+        "cis",
+        "mdmr"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 300,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "An estimate is allowed on an account that already had two in 12 months.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Distribution System Code: at most two estimated bills to a customer in a 12-month period",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.55,
+          "condition": "reads arrive after re-request"
+        },
+        {
+          "to": "s05",
+          "prob": 0.25,
+          "condition": "estimate allowed"
+        },
+        {
+          "to": "END",
+          "prob": 0.2,
+          "condition": "held for billing exceptions",
+          "outcome": "referred_to_exceptions"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "bg2015"
+        ],
+        "note": "Estimate limit from the 2015 Distribution System Code amendments (bg2015); shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Estimate consumption from history",
+      "description": "The CIS estimates the period's use by time-of-use period from the account's own history for the same season and flags the bill as estimated so the next actual read trues it up.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "account history"
+      ],
+      "outputs": [
+        "estimated billing quantities"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.3,
+        "defect_description": "Estimate differs from actual use; trued up on the next actual bill.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "bg2015"
+        ],
+        "note": "Estimated bills remain allowed as an exception (bg2015)."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Calculate bill charges",
+      "description": "The CIS prices the billing quantities: commodity at Regulated Price Plan time-of-use or tiered prices, or the retailer's contract price, distribution fixed and volumetric charges from the OEB-approved tariff, transmission, wholesale market and regulatory charges, global adjustment for non-RPP customers, the Ontario Electricity Rebate and HST.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "billing quantities",
+        "tariff",
+        "assistance credits"
+      ],
+      "outputs": [
+        "calculated bill"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.001,
+        "defect_description": "Rate table set up wrong after a price change.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.04,
+          "condition": "account enrolled with a retailer"
+        },
+        {
+          "to": "s08",
+          "prob": 0.96,
+          "condition": "RPP or non-RPP utility supply"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022. Bill components follow the standard Ontario bill."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Apply retailer pricing and send usage",
+      "description": "For customers enrolled with a licensed retailer the CIS applies the retailer's price from the EBT enrolment, and sends the usage and charges to the retailer through the EBT hub for its settlement.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "retailer enrolment"
+      ],
+      "outputs": [
+        "retailer charges",
+        "usage transaction"
+      ],
+      "systems": [
+        "cis",
+        "ebt-hub"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Retailer price or enrolment date mismatch.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022. Retailer share of accounts assumed at 4%."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Run bill validation rules",
+      "description": "The CIS checks each bill against rules: consumption far above or below history, negative or very large amounts, long or short periods, a meter change in the period, zero use on an active account and demand values out of range. Failing bills are held on the exception worklist.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "calculated bill"
+      ],
+      "outputs": [
+        "passed bill",
+        "held bill"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Distribution System Code section 7.11 billing accuracy standard (98% of bills accurate)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.9685,
+          "condition": "passes all rules"
+        },
+        {
+          "to": "s09",
+          "prob": 0.0095,
+          "condition": "interval-metered account of 50 kW or more"
+        },
+        {
+          "to": "s10",
+          "prob": 0.022,
+          "condition": "fails a validation rule"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "scorecard",
+          "bg2015"
+        ],
+        "note": "98% accuracy standard (bg2015) and accuracy definition (scorecard). About 3,270 general service accounts of 50 kW or more and large users are in the organisation file; hold rate is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Review large interval-metered bill",
+      "description": "A billing analyst checks the bill of a general service customer of 50 kW or more: peak demand in kW or kVA against history, instrument transformer multiplier, loss factor, and for Class A customers the global adjustment share from their peak demand factor.",
+      "role": "billing-analyst",
+      "kind": "review",
+      "inputs": [
+        "calculated bill",
+        "interval data",
+        "Class A peak demand factor"
+      ],
+      "outputs": [
+        "reviewed bill"
+      ],
+      "systems": [
+        "cis",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 300,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong multiplier passed unnoticed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.93,
+          "condition": "bill correct"
+        },
+        {
+          "to": "s11",
+          "prob": 0.07,
+          "condition": "needs correction"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "qa2019"
+        ],
+        "note": "Class A customers pay global adjustment based on their peak demand factor (qa2019); review time is the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Review held bill",
+      "description": "A billing analyst opens the held bill in the exception worklist, compares the consumption with the interval profile and history and checks for a meter change, move or rate change in the period, and decides to release it, correct it, or send it to billing exceptions for investigation.",
+      "role": "billing-analyst",
+      "kind": "validation",
+      "inputs": [
+        "held bill",
+        "interval data",
+        "account history"
+      ],
+      "outputs": [
+        "released, corrected or referred bill"
+      ],
+      "systems": [
+        "cis",
+        "mdmr"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3.5,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A wrong bill is released.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.55,
+          "condition": "bill is right, release"
+        },
+        {
+          "to": "s11",
+          "prob": 0.15,
+          "condition": "simple correction"
+        },
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "needs investigation",
+          "outcome": "referred_to_exceptions"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022. Complex holds go to the separate billing exceptions process (about 6,000 a month in the organisation file)."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Correct account data and recalculate",
+      "description": "The analyst fixes the cause in the CIS (rate class, multiplier, meter change dates, retailer flag or a missing credit) and triggers a recalculation, which sends the bill back through validation.",
+      "role": "billing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "held bill",
+        "correct account data"
+      ],
+      "outputs": [
+        "corrected account"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Correction keyed wrong.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.15,
+          "condition": "adjustment above the approval limit"
+        },
+        {
+          "to": "s06",
+          "prob": 0.85,
+          "condition": "within analyst authority"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Approve high-value bill correction",
+      "description": "The billing supervisor checks the reason and the amount of a correction above the analyst's limit, for example a large credit or a multi-month adjustment on a commercial account, and approves it in the CIS.",
+      "role": "billing-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "corrected account",
+        "adjustment amount"
+      ],
+      "outputs": [
+        "approved adjustment"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Internal control over financial reporting: billing adjustments above a dollar limit need supervisor approval",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Finalise bill and post to accounts",
+      "description": "The CIS finalises the bill, posts the charges to the customer's receivable balance, sets the due date and adds the amounts to the daily billing register and the general ledger interface.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "passed bill"
+      ],
+      "outputs": [
+        "final bill",
+        "billing register line",
+        "journal entries"
+      ],
+      "systems": [
+        "cis",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Reconcile daily billing register",
+      "description": "Each morning a billing analyst reconciles the run: accounts selected against bills produced, held and estimated, and the register totals against the ledger interface, before releasing the print and e-bill files. The one-hour task is spread over about 17,000 bills.",
+      "role": "billing-analyst",
+      "kind": "validation",
+      "inputs": [
+        "billing register",
+        "ledger interface totals"
+      ],
+      "outputs": [
+        "released bill file"
+      ],
+      "systems": [
+        "cis",
+        "erp",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0.002,
+        "mode": 0.004,
+        "high": 0.008
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 300,
+        "high": 900
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: daily reconciliation of billed revenue to the general ledger",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.002,
+          "condition": "sampled for accuracy audit"
+        },
+        {
+          "to": "s16",
+          "prob": 0.998,
+          "condition": "not sampled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022. Touch is one hour divided by about 17,000 bills."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Audit sampled bill for accuracy",
+      "description": "For a daily sample of about 35 bills an analyst recalculates the bill by hand from the reads and the tariff, checks customer details, and records the result for the billing accuracy measure reported to the OEB.",
+      "role": "billing-analyst",
+      "kind": "review",
+      "inputs": [
+        "sampled bill",
+        "tariff"
+      ],
+      "outputs": [
+        "accuracy audit record"
+      ],
+      "systems": [
+        "cis",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Distribution System Code section 7.11 billing accuracy measurement and OEB scorecard reporting",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.97,
+          "condition": "accurate"
+        },
+        {
+          "to": "s11",
+          "prob": 0.03,
+          "condition": "error found before release"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "scorecard"
+        ],
+        "note": "The scorecard defines an accurate bill as correct customer information, meter reads and rates; sampling method is the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Generate bill output by delivery choice",
+      "description": "The CIS renders each bill and routes it by the customer's choice: an e-bill to the web portal or a paper bill to the print file sent to the print and mail vendor.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "released bill file"
+      ],
+      "outputs": [
+        "e-bill",
+        "print file"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.6,
+          "condition": "paperless customer"
+        },
+        {
+          "to": "s18",
+          "prob": 0.4,
+          "condition": "paper bill"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file reports more than 60% of customers paperless by 2021; share used here is 60%."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Post e-bill and email notice",
+      "description": "The web portal publishes the bill in MyAccount and the notification service emails the customer that the bill is ready, with the amount and due date.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "e-bill"
+      ],
+      "outputs": [
+        "posted e-bill",
+        "email notice"
+      ],
+      "systems": [
+        "web-portal",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.99,
+          "condition": "email delivered",
+          "outcome": "delivered"
+        },
+        {
+          "to": "s18",
+          "prob": 0.01,
+          "condition": "email bounces, paper copy mailed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Print, insert and mail paper bills",
+      "description": "The print and mail vendor receives the nightly print file, prints and inserts the bills with any regulatory inserts, presorts them and hands them to Canada Post.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "print file"
+      ],
+      "outputs": [
+        "mailed bills"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0005,
+        "defect_description": "Print file misaligned or bills lost in mail.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022. Outsourced print and mail is common practice."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Deliver paper bill by mail",
+      "description": "Canada Post delivers the bill to the customer's mailing address, usually within two to four business days within the city.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "mailed bills"
+      ],
+      "outputs": [
+        "delivered bill"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "delivered",
+          "outcome": "delivered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Typical local lettermail delivery times."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Held by validation rules",
+      "share_of_cases": 0.022,
+      "description": "Bills with unusual consumption, a meter change or a rate change in the period are held for an analyst, who releases most, corrects some and sends about a third to billing exceptions.",
+      "path": [
+        "s08",
+        "s10",
+        "s11",
+        "s06"
+      ]
+    },
+    {
+      "name": "No billing quantities",
+      "share_of_cases": 0.014,
+      "description": "The repository has not returned billable data; the bill waits, is estimated if the customer is under the two-estimate limit, or is held.",
+      "path": [
+        "s03",
+        "s04",
+        "s05",
+        "s06"
+      ]
+    },
+    {
+      "name": "Large account review",
+      "share_of_cases": 0.0095,
+      "description": "Interval-metered customers of 50 kW or more get a manual check of demand, multipliers and global adjustment before release.",
+      "path": [
+        "s08",
+        "s09",
+        "s13"
+      ]
+    },
+    {
+      "name": "Final bill on move-out",
+      "share_of_cases": 0.016,
+      "description": "A move-out bill needs the move date read, forwarding address and deposit applied before the run.",
+      "path": [
+        "s01",
+        "s02",
+        "s03"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.0,
+        "p90": 5.0
+      },
+      "unit": "calendar days from validated reads available to bill delivered",
+      "population": "Ontario distributor monthly bills, 2019-2022 (60% e-bill, 40% paper)",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: e-bills post the day after calculation; paper bills add one to two days of print and two to four days of mail."
+      }
+    },
+    {
+      "metric": "billing_accuracy",
+      "value": 99.88,
+      "unit": "percent of bills accurate, 2021",
+      "population": "The distributor this organisation is modelled on",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "scorecard"
+        ],
+        "note": "Read from the scorecard table: billing accuracy 99.88% in 2020 and 2021 and 99.89% to 99.90% in 2017-2019, against the 98% industry target."
+      }
+    },
+    {
+      "metric": "bills_issued_per_year",
+      "value": 4200000,
+      "unit": "bills, 2021",
+      "population": "The distributor this organisation is modelled on",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "scorecard"
+        ],
+        "note": "'More than 4.2 million bills' in 2021."
+      }
+    },
+    {
+      "metric": "billing_accuracy_standard",
+      "value": 98,
+      "unit": "percent of bills accurate (minimum)",
+      "population": "All Ontario electricity distributors",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "bg2015",
+          "scorecard"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Price and rate changes on May 1, November 1 and January 1, and the COVID-19 relief prices of 2020, split billing periods and produce bursts of held bills that analysts must clear before the cycle's due dates.",
+      "steps": [
+        "s06",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of daily-cycle CIS billing at an Ontario distributor of about 350,000 customers, 2019-2022."
+      }
+    },
+    {
+      "description": "Accounts without billing quantities sit between metering and billing; each team checks the other's queue, and the estimate limit forces hand tracking of estimate history.",
+      "steps": [
+        "s04",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "bg2015",
+          "sme"
+        ],
+        "note": "Estimate limit (bg2015); 'No Data' responses impede billing (sme)."
+      }
+    },
+    {
+      "description": "Large interval-metered bills are checked by hand because multipliers, demand and Class A global adjustment errors are expensive to rebill.",
+      "steps": [
+        "s09"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "qa2019"
+        ],
+        "note": "Class A global adjustment depends on each customer's peak demand factor (qa2019)."
+      }
+    },
+    {
+      "description": "Paper bills take up to a week longer to arrive than e-bills, which shortens the customer's time to pay before the due date.",
+      "steps": [
+        "s18",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Typical print vendor and mail times."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "scorecard",
+      "title": "Scorecard - Hydro Ottawa Limited (2017-2021) and 2021 Scorecard Management Discussion and Analysis",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/documents/scorecard/2021/Scorecard%20-%20Hydro%20Ottawa%20Limited.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "More than 4.2 million bills in 2021; billing accuracy 99.88% (2020, 2021); definition of an accurate bill under Distribution System Code section 7.1; 98% industry target."
+    },
+    {
+      "id": "bg2015",
+      "title": "Backgrounder: Monthly and Estimated Billing Changes to the Distribution System Code",
+      "publisher": "Ontario Energy Board",
+      "url": "https://oeb.ca/sites/default/files/bg_Billing_Practices_Code_Amendments_20150415.pdf",
+      "year": 2015,
+      "accessed": "2026-11-24",
+      "supports": "Monthly billing from 31 December 2016, bills based on actual reads, at most two estimated bills a year, 98% billing accuracy standard."
+    },
+    {
+      "id": "sme",
+      "title": "Quarterly SME MDM/R Report, Issue 32.0 (2nd quarter 2021)",
+      "publisher": "IESO Smart Metering Entity (report to the Ontario Energy Board)",
+      "url": "https://www.oeb.ca/sites/default/files/Quarterly%20SME%20MDMR%20Report%20-%20Issue%2032.0.pdf",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "'No Data' billing quantity responses that impede distributor billing."
+    },
+    {
+      "id": "qa2019",
+      "title": "Accounts 1588 and 1589 Q&As (accounting guidance questions and answers)",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/sites/default/files/Accounting-Guidance-on-Accounts-1588-1589-QA-20190711.pdf",
+      "year": 2019,
+      "accessed": "2026-11-24",
+      "supports": "Class A customers are charged global adjustment based on their peak demand factor."
+    }
+  ],
+  "assumptions": [
+    "Per-bill touch time is small because about 96% of bills pass without a person; the daily reconciliation hour is spread over about 17,000 bills a working day.",
+    "Validation hold rate of 2.2%, missing-read rate of 1.4% and the 30% of holds referred to billing exceptions are the author's estimates, chosen so that referrals (about 3,300 a month) plus customer-raised rebills match the organisation file's 6,000 billing exceptions a month.",
+    "E-bill share is 60%, taken from the organisation file's statement that more than 60% of customers were paperless by 2021.",
+    "The print and mail vendor and Canada Post are modelled as external steps; no external party for the print vendor exists in the organisation file.",
+    "The simulated median of about one day reflects the e-bill majority; paper bills take four to seven days.",
+    "Hands-on time implies more billing analyst FTE than stated because the hold review, large-account review and accuracy sampling all draw on the same 16-person team that also runs billing exceptions; the stated 9 FTE is 0.6 times the 14.6 FTE implied by hands-on time, so the 16-person team is tight once billing exceptions (about 6,000 cases a month) are added."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

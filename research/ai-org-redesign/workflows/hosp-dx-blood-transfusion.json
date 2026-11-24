@@ -1,0 +1,1737 @@
+{
+  "schema_version": "0.3",
+  "id": "hosp-dx-blood-transfusion",
+  "name": "Provide blood for transfusion",
+  "org": "community-hospital-corp",
+  "process": "dx-blood-transfusion",
+  "sector": "healthcare (acute care hospital)",
+  "function": "laboratory medicine (transfusion medicine) and nursing",
+  "summary": "This process gets a compatible blood component safely from the hospital's transfusion laboratory into the right patient. A nurse confirms the order and consent, a laboratory assistant draws a group and screen sample with strict bedside labelling, a technologist types and screens it, crossmatches a unit and issues it to a porter, and two nurses check it at the bedside before starting and monitoring the transfusion. Most delay comes from waiting for a new sample, positive antibody screens that need reference work, porter availability and scheduling around the patient. Wrong-blood-in-tube and bedside check failures are rare but can be fatal, so most steps carry fixed regulatory checks.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A three-site Ontario community hospital corporation of about 640 beds with a transfusion laboratory at each site, supplied by Canadian Blood Services and accredited through IQMH.",
+    "org_size_employees": 5790,
+    "notes": "One case is one component issued (red cells about 86%, platelets and plasma the rest). Daily inventory counts, standing orders with Canadian Blood Services and fridge monitoring are not case work and are left out of step minutes."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one blood component issued",
+  "trigger": "A prescriber orders a blood component for a patient.",
+  "end_state": "The component is transfused and documented, a reaction is investigated and reported, or the transfusion is cancelled and the unit returned.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 600,
+      "mode": 800,
+      "high": 1000
+    },
+    "seasonality": "Little seasonal pattern; elective surgery volume and the COVID-19 surgical slowdowns of 2020-2021 moved it up and down.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "orbcon2023"
+      ],
+      "note": "Author's estimate. Ontario hospitals transfused about 950 red cell units a day in 2021/22 (orbcon2023), about 28,900 a month; a 640-bed community hospital corporation with about 2.5% of the province's acute activity would transfuse about 700 red cell units a month, and red cells were 86% of audited components."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "med-inpatient-medical-care",
+        "object": "blood_order",
+        "share": 0.4
+      },
+      {
+        "from": "ed-physician-assessment",
+        "object": "blood_order",
+        "share": 0.15
+      },
+      {
+        "from": "sx-perioperative-case",
+        "object": "blood_order",
+        "share": 0.12
+      },
+      {
+        "from": "sx-surgical-inpatient-care",
+        "object": "blood_order",
+        "share": 0.08
+      },
+      {
+        "from": "med-icu-critical-care",
+        "object": "blood_order",
+        "share": 0.1
+      },
+      {
+        "from": "amb-systemic-therapy",
+        "object": "blood_order",
+        "share": 0.1
+      },
+      {
+        "from": "wc-labour-delivery",
+        "object": "blood_order",
+        "share": 0.05
+      }
+    ],
+    "inputs": [
+      {
+        "from": "blood_supplier",
+        "object": "blood_product"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "transfused",
+        "to": "med-inpatient-medical-care",
+        "object": "blood_product"
+      },
+      {
+        "outcome": "transfused",
+        "to": "sx-perioperative-case",
+        "object": "blood_product"
+      },
+      {
+        "outcome": "transfused",
+        "to": "wc-labour-delivery",
+        "object": "blood_product"
+      },
+      {
+        "outcome": "transfused",
+        "to": "amb-systemic-therapy",
+        "object": "blood_product"
+      },
+      {
+        "outcome": "any",
+        "to": "blood_supplier",
+        "object": "blood_order"
+      },
+      {
+        "outcome": "reaction_investigated",
+        "to": "blood_supplier",
+        "object": "incident_report"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "med_rn",
+      "title": "Inpatient registered nurse",
+      "department": "Inpatient medicine units",
+      "layer": "individual_contributor",
+      "fte_on_process": 6.0,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 61,
+        "high": 68
+      },
+      "occupation_code": "NOC 2016 3012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: about 70 minutes of nursing time per unit including the two-person check; stands for all transfusing nurses (inpatient, ED, ICU, OR and day medicine), not only medicine nurses."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "mlt",
+      "title": "Medical laboratory technologist",
+      "department": "Laboratory medicine",
+      "layer": "individual_contributor",
+      "fte_on_process": 5.0,
+      "loaded_cost_per_hour": {
+        "low": 45,
+        "mode": 58,
+        "high": 65
+      },
+      "occupation_code": "NOC 2016 3211",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: transfusion bench coverage across three sites; part of the 100 technologists in the organisation file."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "mla",
+      "title": "Medical laboratory assistant (phlebotomy and specimen processing)",
+      "department": "Laboratory medicine",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 34,
+        "high": 38
+      },
+      "occupation_code": "NOC 2016 3212",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: group and screen sample collection."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "porter",
+      "title": "Patient porter",
+      "department": "Portering and security",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 30,
+        "high": 32
+      },
+      "occupation_code": "NOC 2016 3413",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: two to three trips per unit issued or returned."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "pathologist",
+      "title": "Pathologist",
+      "department": "Medical, dental and midwifery staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 180,
+        "mode": 220,
+        "high": 270
+      },
+      "occupation_code": "NOC 2016 3111",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: reaction review and consultation."
+      },
+      "shift_pattern": "on_call"
+    }
+  ],
+  "systems": [
+    {
+      "id": "blood_bank_system",
+      "name": "Transfusion medicine module and blood fridge tracking",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "lis",
+      "name": "Laboratory information system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "his",
+      "name": "Hospital information system (electronic patient record with ADT, order entry, results, eMAR and clinical documentation)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email_phone",
+      "name": "Email, telephone, pagers and wireless phones",
+      "kind": "communication"
+    },
+    {
+      "id": "fax",
+      "name": "Fax (referrals, requisitions and reports to community physicians)",
+      "kind": "communication"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Confirm order and consent, request blood",
+      "description": "The patient's nurse checks that the prescriber's transfusion order names the component, dose and rate, confirms that informed consent is documented, and sends the request to the transfusion laboratory through order entry or by phone for urgent cases.",
+      "role": "med_rn",
+      "kind": "validation",
+      "inputs": [
+        "blood order",
+        "consent form"
+      ],
+      "outputs": [
+        "transfusion request"
+      ],
+      "systems": [
+        "his",
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 180
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Order lacks rate or dose, or consent not documented.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Health Care Consent Act, 1996 (Ontario) informed consent; CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): order content",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.97,
+          "condition": "routine or urgent request"
+        },
+        {
+          "to": "s22",
+          "prob": 0.03,
+          "condition": "massive bleeding; emergency release requested"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "Ontario 2023 bedside audit (309 transfusions in 72 hospitals): 100% ordered by an authorised prescriber, informed consent documented in 95%, rate or duration in 91%, volume or dose in 91%. Routine transfusions were 77% of audited cases and STAT about 4 to 8%; the 3% emergency release share is the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check history and valid sample on file",
+      "description": "The medical laboratory technologist on the transfusion bench looks up the patient in the transfusion system for blood group history, known antibodies, special requirements such as irradiated products, and whether a group and screen sample collected within the last 96 hours is on file.",
+      "role": "mlt",
+      "kind": "lookup",
+      "inputs": [
+        "transfusion request"
+      ],
+      "outputs": [
+        "sample status",
+        "patient transfusion history"
+      ],
+      "systems": [
+        "blood_bank_system",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.5,
+          "condition": "valid sample with negative screen on file"
+        },
+        {
+          "to": "s03",
+          "prob": 0.5,
+          "condition": "no valid sample; new group and screen needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cbs_ch8"
+        ],
+        "note": "A pre-transfusion sample may be used for crossmatching up to 96 hours after collection for patients recently transfused or pregnant (cbs_ch8). The 50/50 split is the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Collect group and screen sample at bedside",
+      "description": "The laboratory assistant asks the patient to state full name and date of birth, checks the wristband, draws the pink-top tube and labels it in the patient's presence with full name, hospital number, date, time and collector's identity before leaving the bedside.",
+      "role": "mla",
+      "kind": "physical",
+      "inputs": [
+        "transfusion request",
+        "patient wristband"
+      ],
+      "outputs": [
+        "labelled group and screen sample"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.012,
+        "defect_description": "Label incomplete or inconsistent with the requisition (about 1%) or wrong blood in tube (rare but dangerous).",
+        "typically_caught_at": "s04"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): sample identification and labelling at the bedside",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "sample sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cbs_ch8"
+        ],
+        "note": "Patient identity verified and sample labelled in the patient's presence with full name and a unique number; date, time and phlebotomist identity documented (cbs_ch8). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Receive and check transfusion sample",
+      "description": "The technologist compares every identifier on the tube with the requisition and the transfusion system record; any missing or mismatched detail means the sample is rejected and redrawn, since transfusion samples cannot be relabelled.",
+      "role": "mlt",
+      "kind": "validation",
+      "inputs": [
+        "labelled group and screen sample",
+        "requisition"
+      ],
+      "outputs": [
+        "accepted sample"
+      ],
+      "systems": [
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 3,
+        "mode": 10,
+        "high": 45
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): sample acceptance criteria",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.985,
+          "condition": "sample accepted"
+        },
+        {
+          "to": "s03",
+          "prob": 0.015,
+          "condition": "label error; sample rejected and redrawn"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Rejection share is the author's estimate; transfusion services apply zero-tolerance labelling rules."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Type ABO/RhD and screen for antibodies",
+      "description": "The technologist loads the sample on the automated gel or solid-phase analyser for forward and reverse ABO grouping, RhD typing and an antibody screen against reagent red cells, compares the group with any historical record and records results.",
+      "role": "mlt",
+      "kind": "analysis",
+      "inputs": [
+        "accepted sample"
+      ],
+      "outputs": [
+        "group and screen result"
+      ],
+      "systems": [
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.001,
+        "defect_description": "Grouping error not caught by the analyser or history check.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): ABO/RhD and antibody screen before red cell transfusion",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.94,
+          "condition": "group confirmed and screen negative"
+        },
+        {
+          "to": "s06",
+          "prob": 0.05,
+          "condition": "antibody screen positive"
+        },
+        {
+          "to": "s03",
+          "prob": 0.01,
+          "condition": "group discrepancy or no history; confirmatory sample needed"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cbs_ch8"
+        ],
+        "note": "Manual ABO and Rh typing takes about 15 minutes and the antibody screen 30 to 60 minutes (cbs_ch8). The 5% positive screen share is the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Identify antibody and find antigen-negative units",
+      "description": "For a positive screen, the technologist runs an antibody identification panel, interprets the pattern, selects donor units that lack the corresponding antigen and phenotypes them, consulting the pathologist on difficult cases.",
+      "role": "mlt",
+      "kind": "analysis",
+      "inputs": [
+        "positive screen"
+      ],
+      "outputs": [
+        "antibody identity",
+        "antigen-negative units"
+      ],
+      "systems": [
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 240
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.75,
+          "condition": "antibody identified and units found in house"
+        },
+        {
+          "to": "s16",
+          "prob": 0.25,
+          "condition": "complex antibody; sample sent to the Canadian Blood Services reference laboratory"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cbs_ch8"
+        ],
+        "note": "Antibody identification time is highly variable and some cases need reference laboratories and may take several days (cbs_ch8). Minutes and the referral share are the author's estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Crossmatch and tag the component",
+      "description": "The technologist performs an electronic crossmatch, or a serological crossmatch when an antibody is present, selects the unit, thaws plasma where needed, prints and attaches the compatibility tag with the patient's identifiers and places the unit in the issue fridge.",
+      "role": "mlt",
+      "kind": "analysis",
+      "inputs": [
+        "group and screen result",
+        "donor unit"
+      ],
+      "outputs": [
+        "tagged compatible unit"
+      ],
+      "systems": [
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 40
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0005,
+        "defect_description": "Unit tagged for the wrong patient.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): compatibility testing and labelling of issued units",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.93,
+          "condition": "component in stock"
+        },
+        {
+          "to": "s17",
+          "prob": 0.07,
+          "condition": "component or special product not in stock"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cbs_ch8"
+        ],
+        "note": "Electronic crossmatch is allowed only with a negative current screen and no history of antibodies and takes minutes; serological crossmatch is required once an antibody is identified (cbs_ch8). Stock-out share is the author's estimate; community sites often order platelets on demand."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Notify unit that blood is ready",
+      "description": "The technologist marks the unit ready in the transfusion system, which shows on the chart, or phones the unit for urgent cases; the unit stays in the laboratory until the patient is ready, so it is not left out of temperature control.",
+      "role": "mlt",
+      "kind": "communication",
+      "inputs": [
+        "tagged compatible unit"
+      ],
+      "outputs": [
+        "ready notice"
+      ],
+      "systems": [
+        "blood_bank_system",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "unit notified"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Prepare patient and send for unit",
+      "description": "The nurse confirms the IV is patent, takes baseline vital signs, primes the blood tubing with saline, completes the pickup slip with the patient's identifiers and asks for a porter, timing pickup so the unit can be started soon after it arrives.",
+      "role": "med_rn",
+      "kind": "coordination",
+      "inputs": [
+        "ready notice"
+      ],
+      "outputs": [
+        "pickup slip",
+        "patient ready"
+      ],
+      "systems": [
+        "his",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 45,
+        "high": 360
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital transfusion administration policy based on ORBCoN Bloody Easy Blood Administration",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "porter requested"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "The audit checks that the IV is established and patent before the component arrives, and that baseline vital signs are recorded. Waiting minutes are the author's estimate; routine transfusions are often scheduled for day shift or the next morning."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Porter travels to the blood bank",
+      "description": "A porter picks up the request from the dispatch system or phone, walks to the unit for the pickup slip if it was not sent electronically and then to the transfusion laboratory.",
+      "role": "porter",
+      "kind": "travel",
+      "inputs": [
+        "pickup slip"
+      ],
+      "outputs": [
+        "porter at blood bank"
+      ],
+      "systems": [
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "porter arrives"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; porter availability is the usual wait."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Issue unit against pickup slip",
+      "description": "The technologist matches the pickup slip with the compatibility tag and the unit label, inspects the bag for leaks, clots or discolouration, scans it out in the transfusion system to record issue time and hands it to the porter in a transport bag.",
+      "role": "mlt",
+      "kind": "validation",
+      "inputs": [
+        "pickup slip",
+        "tagged compatible unit"
+      ],
+      "outputs": [
+        "issued unit with issue time"
+      ],
+      "systems": [
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): issue checks and documentation of issue time",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "unit issued"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "The audit verifies the patient's and unit's identification before issue and documentation of issue time; 99% compliance for unit identification at issue."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Carry unit to clinical area",
+      "description": "The porter carries the unit directly to the nurse on the unit, ED, ICU or day medicine area without stopping, and hands it to a nurse rather than leaving it at the desk.",
+      "role": "porter",
+      "kind": "travel",
+      "inputs": [
+        "issued unit"
+      ],
+      "outputs": [
+        "unit on clinical area"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "unit handed over"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Two-person bedside check",
+      "description": "Two nurses at the bedside check the patient's wristband and stated name and date of birth against the compatibility tag and the unit label, compare the component, ABO and Rh compatibility, unit number and expiry with the order, and both sign.",
+      "role": "med_rn",
+      "kind": "validation",
+      "inputs": [
+        "unit on clinical area",
+        "order",
+        "patient wristband"
+      ],
+      "outputs": [
+        "verified unit"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.001,
+        "defect_description": "Checks done away from the bedside, so a tag or wristband mismatch is missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation) and ORBCoN blood administration practice: independent double check of patient and unit at the bedside",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "people": 2,
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.98,
+          "condition": "checks pass and transfusion starts"
+        },
+        {
+          "to": "s21",
+          "prob": 0.02,
+          "condition": "cannot start within the allowed time (patient off unit, IV lost) or a discrepancy found"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "Transfusionist checks at the bedside in the presence of the patient were done in 88% of 2023 audits (92% in 2011, 98% in 2018); patient identification checks 94% overall."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Start transfusion and watch first 15 minutes",
+      "description": "The nurse spikes the unit with a filtered blood set, starts at a slow rate for the first 15 minutes, stays nearby to watch for fever, chills, breathing difficulty or rash, then takes vital signs and increases to the ordered rate.",
+      "role": "med_rn",
+      "kind": "physical",
+      "inputs": [
+        "verified unit"
+      ],
+      "outputs": [
+        "transfusion running",
+        "15-minute vital signs"
+      ],
+      "systems": [
+        "his"
+      ],
+      "touch_min": {
+        "low": 12,
+        "mode": 18,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Transfusion administration procedure: slow initial rate and observation during the first 15 minutes",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.994,
+          "condition": "no reaction in the first 15 minutes"
+        },
+        {
+          "to": "s19",
+          "prob": 0.006,
+          "condition": "suspected reaction"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "Filtered tubing used in 100% of audits; slow initial rate in 92% of non-urgent transfusions; all five vital sign parameters recorded in 82%. Reaction share is the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Monitor infusion and complete transfusion",
+      "description": "While the unit runs the nurse checks the patient periodically; at the end the nurse takes final vital signs, records volume transfused, end time and any reaction on the transfusion record and discards or returns the bag per policy.",
+      "role": "med_rn",
+      "kind": "physical",
+      "inputs": [
+        "transfusion running"
+      ],
+      "outputs": [
+        "completed transfusion record"
+      ],
+      "systems": [
+        "his",
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 40,
+        "mode": 110,
+        "high": 200
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): completion within 4 hours of issue and documentation",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.994,
+          "condition": "transfusion completed",
+          "outcome": "transfused"
+        },
+        {
+          "to": "s19",
+          "prob": 0.006,
+          "condition": "suspected reaction during the infusion"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "Average time from issue to completion 2 hours 30 minutes (shortest 38 minutes, longest 4 hours 46 minutes); 3.3% exceeded the 4-hour limit; 96% documented vital signs and 89% volume at completion. The wait before this step is the infusion running."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Reference laboratory investigates antibody",
+      "description": "Canadian Blood Services' diagnostic laboratory receives the sample by courier, completes the antibody investigation and, where needed, finds and ships rare or antigen-negative units, reporting back by phone and written report.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "referred sample"
+      ],
+      "outputs": [
+        "reference report",
+        "antigen-negative units"
+      ],
+      "systems": [
+        "email_phone",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "report and units received"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cbs_ch8"
+        ],
+        "note": "Reference laboratory investigation may take several days (cbs_ch8)."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Order component from Canadian Blood Services",
+      "description": "The technologist phones or enters an order with the Canadian Blood Services distribution site for the missing component, often platelets or a special product, and arranges routine shipment or a stat taxi.",
+      "role": "mlt",
+      "kind": "communication",
+      "inputs": [
+        "stock shortfall"
+      ],
+      "outputs": [
+        "blood order to supplier"
+      ],
+      "systems": [
+        "blood_bank_system",
+        "email_phone",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "order placed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice in Ontario community hospitals."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Wait for supplier delivery",
+      "description": "The component travels from the Canadian Blood Services site by scheduled delivery or stat courier; on arrival the technologist checks the shipping temperature and enters the unit into inventory.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "blood order to supplier"
+      ],
+      "outputs": [
+        "received component"
+      ],
+      "systems": [
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "component received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for a suburban hospital near a Canadian Blood Services site."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Stop transfusion and report reaction",
+      "description": "The nurse stops the transfusion, keeps the IV open with saline, rechecks the tag against the patient, assesses and treats with the physician, notifies the transfusion laboratory and sends the bag, tubing and post-transfusion samples.",
+      "role": "med_rn",
+      "kind": "communication",
+      "inputs": [
+        "suspected reaction"
+      ],
+      "outputs": [
+        "reaction report",
+        "returned bag and samples"
+      ],
+      "systems": [
+        "his",
+        "blood_bank_system",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Hospital transfusion reaction procedure (stop, check, notify)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "reaction reported"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate based on standard reaction procedure."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Investigate transfusion reaction in the laboratory",
+      "description": "The technologist performs a clerical check of all labels and records, repeats ABO and Rh on pre- and post-transfusion samples, runs a direct antiglobulin test, checks for visible hemolysis and, for suspected bacterial contamination, arranges culture of the bag.",
+      "role": "mlt",
+      "kind": "analysis",
+      "inputs": [
+        "returned bag and samples"
+      ],
+      "outputs": [
+        "reaction investigation results"
+      ],
+      "systems": [
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): investigation of suspected transfusion reactions",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "results ready"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Return unit to the blood bank",
+      "description": "A porter returns the unused unit to the transfusion laboratory with a note of the time it left; units that cannot be started within the allowed time must not be kept on the ward.",
+      "role": "porter",
+      "kind": "travel",
+      "inputs": [
+        "unused unit"
+      ],
+      "outputs": [
+        "returned unit"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "unit returned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Release uncrossmatched emergency units",
+      "description": "On a physician's call for massive bleeding, the technologist issues group O red cells (O-negative for girls and women of childbearing potential) or group-specific units if the group is known, records the physician's emergency release signature and asks for a sample as soon as possible to crossmatch later units.",
+      "role": "mlt",
+      "kind": "physical",
+      "inputs": [
+        "emergency request"
+      ],
+      "outputs": [
+        "uncrossmatched units",
+        "emergency release record"
+      ],
+      "systems": [
+        "blood_bank_system",
+        "email_phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): emergency release authorised and signed by the physician",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "units handed to runner"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cbs_ch8"
+        ],
+        "note": "Group O or group-specific unmatched red cells are issued when testing is incomplete; O-negative is conserved for female children and women of childbearing potential; a sample is drawn as soon as possible (cbs_ch8)."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Pathologist reviews and reports the reaction",
+      "description": "The pathologist responsible for transfusion medicine reviews the clinical and laboratory findings, classifies the reaction, advises on future transfusions, signs the report to the chart and reports serious reactions to Canadian Blood Services and the provincial transfusion error and injury surveillance system.",
+      "role": "pathologist",
+      "kind": "review",
+      "inputs": [
+        "reaction investigation results"
+      ],
+      "outputs": [
+        "signed reaction report",
+        "supplier notification"
+      ],
+      "systems": [
+        "blood_bank_system",
+        "his",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "licensed_signoff",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): medical director review of transfusion reactions and reporting to the supplier",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "reaction reviewed",
+          "outcome": "reaction_investigated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Inspect returned unit and restock or discard",
+      "description": "The technologist checks how long the unit was out of controlled storage and whether the seal and temperature indicator are intact, returns acceptable units to inventory and discards the rest, logging the wastage in the transfusion system.",
+      "role": "mlt",
+      "kind": "validation",
+      "inputs": [
+        "returned unit"
+      ],
+      "outputs": [
+        "restocked or discarded unit"
+      ],
+      "systems": [
+        "blood_bank_system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CSA Z902 Blood and blood components (national standard for hospital transfusion services, applied in Ontario through IQMH laboratory accreditation): acceptance of returned components",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.6,
+          "condition": "unit restocked; patient still needs the transfusion later"
+        },
+        {
+          "to": "END",
+          "prob": 0.4,
+          "condition": "transfusion cancelled; unit restocked or wasted",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Positive antibody screen",
+      "share_of_cases": 0.025,
+      "description": "The screen finds an antibody; identification and antigen-negative units add hours, and complex cases go to the Canadian Blood Services reference laboratory for days.",
+      "path": [
+        "s05",
+        "s06",
+        "s16",
+        "s07"
+      ]
+    },
+    {
+      "name": "Rejected transfusion sample",
+      "share_of_cases": 0.008,
+      "description": "A label error means the sample is discarded and redrawn.",
+      "path": [
+        "s04",
+        "s03"
+      ]
+    },
+    {
+      "name": "Unit returned unused",
+      "share_of_cases": 0.02,
+      "description": "The patient is off the unit or the IV fails, so the unit goes back to the laboratory to be restocked or wasted.",
+      "path": [
+        "s13",
+        "s21",
+        "s24"
+      ]
+    },
+    {
+      "name": "Transfusion reaction",
+      "share_of_cases": 0.012,
+      "description": "The nurse stops the transfusion; the laboratory and pathologist investigate and report to the supplier.",
+      "path": [
+        "s19",
+        "s20",
+        "s23"
+      ]
+    },
+    {
+      "name": "Emergency release",
+      "share_of_cases": 0.03,
+      "description": "Uncrossmatched group O or group-specific units are issued on a physician's signature for massive bleeding.",
+      "path": [
+        "s22",
+        "s12",
+        "s13"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.3,
+        "p90": 0.8
+      },
+      "unit": "calendar days from order to completed transfusion",
+      "population": "All components issued in a community hospital",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "orbcon2023",
+          "cbs_ch8"
+        ],
+        "note": "Author's estimate: about 2.5 hours from issue to completion (orbcon2023) plus about 1 to 2 hours for sample, testing (screen 30 to 60 minutes, cbs_ch8) and crossmatch when no sample is on file, plus time waiting for the patient to be ready."
+      }
+    },
+    {
+      "metric": "issue_to_completion_hours",
+      "value": 2.5,
+      "unit": "hours (average)",
+      "population": "309 audited transfusions in 72 Ontario hospitals, 2023",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "Range 38 minutes to 4 hours 46 minutes; 3.3% over 4 hours."
+      }
+    },
+    {
+      "metric": "bedside_check_in_presence_of_patient",
+      "value": 0.88,
+      "unit": "share of audited transfusions",
+      "population": "Ontario hospitals, 2023 bedside audit",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "92% in 2011 and 98% in 2018."
+      }
+    },
+    {
+      "metric": "ontario_rbc_units_transfused_per_day",
+      "value": 950,
+      "unit": "red cell units per day, all Ontario hospitals",
+      "population": "Ontario, fiscal 2021/22",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "When no valid sample is on file, the patient waits for a draw, sample transit and a 30 to 60 minute screen before blood can be crossmatched.",
+      "steps": [
+        "s03",
+        "s04",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cbs_ch8"
+        ],
+        "note": "Screen time and the 96-hour sample rule."
+      }
+    },
+    {
+      "description": "Bedside checks are sometimes done away from the patient, the main defence against giving a unit to the wrong person.",
+      "steps": [
+        "s13"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "88% compliance in 2023, down from 98% in 2018."
+      }
+    },
+    {
+      "description": "Porter availability delays pickup and return, and units that cannot be started in time come back and may be wasted.",
+      "steps": [
+        "s10",
+        "s21",
+        "s24"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Orders and documentation are often incomplete: rate, dose and patient advice are missing in about one in ten transfusions.",
+      "steps": [
+        "s01",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "orbcon2023"
+        ],
+        "note": "Rate or duration in 91%, volume in 91%; patients advised of symptoms in 81%."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "orbcon2023",
+      "title": "Bedside Audit Report: 2023 provincial audit of blood administration practices (published December 2024)",
+      "publisher": "Ontario Regional Blood Coordinating Network (ORBCoN)",
+      "url": "https://transfusionontario.org/wp-content/uploads/2025/02/ORBCoN-Bedside-Audit-Report-Feb-2023-Final.pdf",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "2023 Ontario bedside audit: 309 audits in 72 hospitals; compliance for order, consent, bedside checks, vital signs; average issue-to-completion 2.5 hours; 950 red cell units transfused a day in Ontario in 2021/22; component mix."
+    },
+    {
+      "id": "cbs_ch8",
+      "title": "Clinical Guide to Transfusion, Chapter 8: Pre-transfusion testing (Duncan)",
+      "publisher": "Canadian Blood Services, Professional Education",
+      "url": "https://profedu.blood.ca/en/node/170",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "Sample labelling and identity rules, 96-hour sample validity, typing and screen times, electronic versus serological crossmatch, antibody identification and reference laboratories, emergency release."
+    }
+  ],
+  "assumptions": [
+    "One case is one component issued; a patient receiving two units in one episode is two cases, which overstates sample and order steps slightly for multi-unit orders.",
+    "Nursing steps use the inpatient registered nurse role and cost; ED, ICU, OR, labour and day-medicine nurses do the same work.",
+    "The two-person bedside check uses people = 2 in the same role.",
+    "The wait before s15 is the infusion running, not a queue.",
+    "Volume is scaled from the provincial red cell figure and is not a published count for this hospital.",
+    "Group and screen samples are drawn by laboratory assistants; on some units nurses draw them, with the same rules.",
+    "Simulated median cycle time (about 0.41 days) is above the estimated 0.3 days, mostly from waiting for the patient to be ready (s09) and for new samples; both figures are estimates.",
+    "Loaded costs come from the organisation file."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

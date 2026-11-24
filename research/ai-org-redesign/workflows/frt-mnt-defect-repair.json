@@ -1,0 +1,1494 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-mnt-defect-repair",
+  "name": "Repair defects found on trip inspections",
+  "org": "freight-carrier-co",
+  "process": "mnt-defect-repair",
+  "sector": "trucking and freight transportation",
+  "function": "fleet maintenance",
+  "summary": "Drivers must inspect their tractor or trailer before each day's driving and report any defect; a unit with a major defect may not be driven until it is fixed, and minor defects must be repaired before the next dispatch. The shop foreman triages each report, dispatch swaps equipment, a technician diagnoses and repairs the defect, and the foreman signs the repair off before the unit goes back to work. Most repairs are short, but units wait for a bay, for spare equipment so the defective one can be released, and above all for parts not in stock, which in 2021 and 2022 could take weeks.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with twelve company maintenance shops at its hubs and larger terminals, about 1,190 company power units and 4,120 trailers.",
+    "org_size_employees": 3000,
+    "notes": "Covers repair work orders raised from driver trip inspections, roadside inspections by enforcement officers, annual inspection findings, PM findings and towed-in breakdowns. Collision damage has its own process."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one repair work order",
+  "trigger": "A driver reports a defect on the daily trip inspection report, or another maintenance or safety process sends in a defect.",
+  "end_state": "The defect is repaired, recorded and signed off, the unit is back in service and the next driver has confirmed the repair; or a non-safety item is deferred to the next service.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2100,
+      "mode": 2500,
+      "high": 3100
+    },
+    "seasonality": "Higher in winter (December to March), when cold, salt and storms raise air system, lighting and brake defects, and in the autumn freight peak when units run harder.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file volume (about 0.46 repair work orders per fleet unit per month); no published Canadian figure was found."
+    },
+    "surge": {
+      "cause": "Winter storm or highway closure (snowstorms, freezing rain, mountain pass closures)",
+      "events_per_year": {
+        "low": 4,
+        "mode": 8,
+        "high": 14
+      },
+      "duration_days": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "volume_multiplier": {
+        "low": 1.2,
+        "mode": 1.4,
+        "high": 1.7
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Taken from the organisation file: storms close Highway 401, the Trans-Canada through the Rockies and the Coquihalla several times each winter and repairs back up over the following days."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-linehaul-dispatch",
+        "object": "dvir",
+        "share": 0.15
+      },
+      {
+        "from": "tl-trip-execution",
+        "object": "dvir",
+        "share": 0.25
+      },
+      {
+        "from": "mnt-annual-inspection",
+        "object": "work_order",
+        "share": 0.04
+      },
+      {
+        "from": "mnt-roadside-breakdown",
+        "object": "work_order",
+        "share": 0.08
+      },
+      {
+        "from": "saf-roadside-inspections",
+        "object": "roadside_inspection_report",
+        "share": 0.03
+      },
+      {
+        "from": "mnt-preventive-maintenance",
+        "object": "work_order",
+        "share": 0.15
+      },
+      {
+        "from": "ltl-pd-dispatch",
+        "object": "dvir",
+        "share": 0.3
+      }
+    ],
+    "inputs": [
+      {
+        "from": "mnt-parts-inventory",
+        "object": "parts_issue"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "repaired",
+        "to": "ltl-pd-dispatch",
+        "object": "equipment_availability"
+      },
+      {
+        "outcome": "repaired",
+        "to": "ltl-linehaul-dispatch",
+        "object": "equipment_availability"
+      },
+      {
+        "outcome": "repaired",
+        "to": "tl-load-planning",
+        "object": "equipment_availability"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-parts-inventory",
+        "object": "parts_requisition"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-warranty-claims",
+        "object": "warranty_claim"
+      },
+      {
+        "outcome": "any",
+        "to": "equipment-dealer",
+        "object": "purchase_order"
+      },
+      {
+        "outcome": "repaired",
+        "to": "saf-facility-audit",
+        "object": "maintenance_record"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "pd-driver",
+      "title": "Pickup and delivery driver",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.2,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 35,
+        "high": 42
+      },
+      "occupation_code": "NOC 73300",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 540); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Stands for every driver who reports a defect: city drivers, linehaul and truckload drivers write the same trip inspection report."
+      },
+      "shift_pattern": "office_hours",
+      "productive_hours_per_month": 195
+    },
+    {
+      "id": "city-dispatcher",
+      "title": "City pickup and delivery dispatcher",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 33,
+        "mode": 39,
+        "high": 47
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 70); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Stands for the dispatcher who swaps equipment and releases the defective unit (city dispatcher, linehaul dispatcher or truckload driver manager)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "shop-foreman",
+      "title": "Shop foreman",
+      "department": "Fleet maintenance",
+      "layer": "supervisor",
+      "fte_on_process": 6.0,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 57,
+        "high": 66
+      },
+      "occupation_code": "NOC 72010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 14); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Foremen triage defect reports, assign work, arrange dealer repairs and sign off repairs; about 6 of 14 foremen's time."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "technician",
+      "title": "Heavy-duty truck and trailer technician",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 44.0,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 46,
+        "high": 54
+      },
+      "occupation_code": "NOC 72410",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 165); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. About 44 of 165 technicians' time goes to defect repairs from trip inspections, roadside inspections, breakdowns and annual inspections."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "parts-person",
+      "title": "Partsperson",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.5,
+      "loaded_cost_per_hour": {
+        "low": 29,
+        "mode": 34,
+        "high": 40
+      },
+      "occupation_code": "NOC 14401",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 22); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Partspersons look up and issue parts and order non-stock parts for repair work orders."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "warranty-clerk",
+      "title": "Warranty and fuel clerk",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 35,
+        "high": 41
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 5); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Warranty clerks pick up repairs on units under warranty from the work order flag."
+      }
+    },
+    {
+      "id": "maintenance-planner",
+      "title": "Maintenance planner",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.4,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 44,
+        "high": 52
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 8); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Planners close and cost repair work orders weekly."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    }
+  ],
+  "resources": [
+    {
+      "id": "shop-bay",
+      "name": "Maintenance shop bay",
+      "kind": "facility",
+      "count": 96
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Record the defect on the trip inspection report",
+      "description": "During the pre-trip or post-trip inspection, or when a defect appears en route, the driver writes the defect on the daily inspection report (paper form or the electronic inspection screen on the handheld or ELD), marking it as major or minor against the inspection schedule.",
+      "role": "pd-driver",
+      "kind": "data_entry",
+      "inputs": [
+        "inspection schedule",
+        "unit"
+      ],
+      "outputs": [
+        "inspection report with defect"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.15,
+        "defect_description": "Defect described vaguely ('brakes feel off', 'light out') without location or symptom.",
+        "typically_caught_at": "s07"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "NSC Standard 13 daily trip inspection as adopted by provinces (Ontario HTA Regulation 199/07)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.4,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mto21"
+        ],
+        "note": "Daily trip inspection, the schedule and the report are required under Ontario Regulation 199/07 (the NSC Standard 13 scheme used across Canada); minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Report the defect and drop the unit",
+      "description": "The driver tells the dispatcher or shop about the defect: a major defect immediately by phone, a minor one at the end of the shift by handing in the report or leaving it in the shop box. A unit with a major defect is parked; a unit with a minor defect is dropped at the shop or terminal when the run ends.",
+      "role": "pd-driver",
+      "kind": "communication",
+      "inputs": [
+        "inspection report with defect"
+      ],
+      "outputs": [
+        "defect report at shop"
+      ],
+      "systems": [
+        "email-phone",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mto21"
+        ],
+        "note": "Major defects reported immediately and minor ones as soon as possible, per the MTO page; timing is the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Triage the defect and open a work order",
+      "description": "The shop foreman reads the report, opens a repair work order in the fleet maintenance system, and decides whether the defect is major (unit cannot be driven), a minor safety defect that must be fixed before the next dispatch, or a non-safety item that can wait for the next scheduled service. The foreman sets the priority from the unit's next planned departure.",
+      "role": "shop-foreman",
+      "kind": "judgment",
+      "inputs": [
+        "defect report",
+        "unit history"
+      ],
+      "outputs": [
+        "repair work order",
+        "priority"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Defect under-classified as minor, or work order opened against the wrong unit number.",
+        "typically_caught_at": "s07"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Operator must repair defects before the next dispatch; a vehicle with a major defect may not be driven (Ontario HTA Regulation 199/07, NSC Standard 13)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.28,
+          "condition": "major defect: unit out of service"
+        },
+        {
+          "to": "s05",
+          "prob": 0.66,
+          "condition": "minor defect to fix before next dispatch"
+        },
+        {
+          "to": "END",
+          "prob": 0.06,
+          "condition": "non-safety item deferred to the next PM",
+          "outcome": "deferred to next service"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mto21"
+        ],
+        "note": "Major and minor defect handling follows the MTO page; the shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Tag the unit out of service",
+      "description": "For a major defect the foreman marks the unit out of service in the fleet maintenance system and the TMS, hangs a red tag on the steering wheel, and phones dispatch so that the load is moved to another unit.",
+      "role": "shop-foreman",
+      "kind": "communication",
+      "inputs": [
+        "repair work order"
+      ],
+      "outputs": [
+        "out-of-service status"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Swap equipment and release the unit",
+      "description": "The dispatcher finds a spare tractor, truck or trailer for the next run, re-assigns the load or route in the TMS or route board, and releases the defective unit to the shop. A minor-defect unit waits until it returns from its run or until a spare is free.",
+      "role": "city-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "out-of-service status or work order"
+      ],
+      "outputs": [
+        "unit released to shop"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Spare equipment is short during peaks; wait is the author's estimate."
+      },
+      "concurrent_with": [
+        "s04"
+      ]
+    },
+    {
+      "id": "s06",
+      "name": "Assign a technician and bay",
+      "description": "The foreman puts the work order on the shift board, matching it to a technician with the right skills (electrical, brakes, engine, trailer) and a free bay, ahead of or behind scheduled PMs depending on priority.",
+      "role": "shop-foreman",
+      "kind": "coordination",
+      "inputs": [
+        "repair work order",
+        "shift board"
+      ],
+      "outputs": [
+        "assigned job"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Waiting for bay space is named in the organisation file's process description; wait is the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Diagnose the defect",
+      "description": "The technician brings the unit into the bay, locks it out, reproduces the defect, reads fault codes with the diagnostic laptop for engine and electrical faults, and looks up the repair procedure and parts in the service information. The technician notes the cause and parts needed on the work order.",
+      "role": "technician",
+      "kind": "analysis",
+      "inputs": [
+        "assigned job",
+        "fault codes"
+      ],
+      "outputs": [
+        "diagnosis",
+        "parts list"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Misdiagnosis leads to the wrong part being replaced.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Shop lockout, wheel chocks and support stands under provincial occupational health and safety rules",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.3,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.68,
+          "condition": "parts needed"
+        },
+        {
+          "to": "s11",
+          "prob": 0.24,
+          "condition": "no parts needed (adjustment, connection, reset)"
+        },
+        {
+          "to": "s13",
+          "prob": 0.08,
+          "condition": "beyond shop capability or under warranty: send to dealer"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shares and minutes are the author's estimate; the Mack figure of about 3.5 technician hours per dealer repair event (src-fo-mack16) is for larger repairs."
+      },
+      "resources": [
+        {
+          "id": "shop-bay",
+          "occupied_min": {
+            "low": 5,
+            "mode": 15,
+            "high": 75
+          }
+        }
+      ]
+    },
+    {
+      "id": "s08",
+      "name": "Look up and issue parts",
+      "description": "At the parts counter the partsperson looks up the part number for the unit's make and model, checks bin stock in the fleet maintenance system, and issues the part to the work order, or raises a requisition when it is not in stock.",
+      "role": "parts-person",
+      "kind": "lookup",
+      "inputs": [
+        "parts list"
+      ],
+      "outputs": [
+        "parts issue or requisition"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 7,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong part issued for the unit's specification.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 0.5,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.8,
+          "condition": "in stock"
+        },
+        {
+          "to": "s09",
+          "prob": 0.2,
+          "condition": "not in stock"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Stock-out share is the author's estimate for 2019-2022, higher in 2021-2022."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Order and expedite the part",
+      "description": "The partsperson phones dealers and distributors for availability, raises a purchase order with the one that can deliver soonest, asks for a same-day hot shot when the unit is out of service, and updates the work order with the expected date.",
+      "role": "parts-person",
+      "kind": "coordination",
+      "inputs": [
+        "requisition"
+      ],
+      "outputs": [
+        "purchase order",
+        "expected delivery"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Wait for the part to arrive",
+      "description": "The supplier ships the part on its next delivery run, by courier or by hot shot. In 2021 and 2022 sensors, turbo actuators, water pumps and aftertreatment parts often took weeks.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "purchase order"
+      ],
+      "outputs": [
+        "part delivered"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hdt-parts21"
+        ],
+        "note": "More than half of the fleets affected by the 2021 parts shortage reported delays beyond two weeks; the distribution is the author's estimate across 2019-2022."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Repair the defect",
+      "description": "The technician removes and replaces the failed part or makes the adjustment (brake chamber, slack adjuster, air line, light harness, wheel seal, suspension bushing), following the service procedure and torque values. Larger jobs run over more than one shift.",
+      "role": "technician",
+      "kind": "physical",
+      "inputs": [
+        "diagnosis",
+        "parts issue"
+      ],
+      "outputs": [
+        "repaired unit"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 40,
+        "high": 240
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 720
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Repair incomplete or the root cause not fixed.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Most trip-inspection defects (lights, air leaks, brake adjustment, tires) are short jobs; the long tail is the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "shop-bay",
+          "occupied_min": {
+            "low": 10,
+            "mode": 45,
+            "high": 300
+          }
+        }
+      ]
+    },
+    {
+      "id": "s12",
+      "name": "Test and record the repair",
+      "description": "The technician tests the repaired system (air leak-down, brake stroke, light check, short road test for drivability faults), then types the cause, repair, parts and labour time into the work order using the fleet's repair codes.",
+      "role": "technician",
+      "kind": "data_entry",
+      "inputs": [
+        "repaired unit"
+      ],
+      "outputs": [
+        "completed work order"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Repair codes or labour time entered wrongly.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Arrange a dealer repair",
+      "description": "For warranty work, engine and aftertreatment faults or jobs the shop cannot do, the foreman phones the dealer, books the repair, issues a purchase order or warranty authorisation, and has a driver or shunt take the unit to the dealer.",
+      "role": "shop-foreman",
+      "kind": "coordination",
+      "inputs": [
+        "diagnosis"
+      ],
+      "outputs": [
+        "dealer booking",
+        "purchase order"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Wait for the dealer repair",
+      "description": "The dealer diagnoses and repairs the unit, waiting for its own bay, technician and parts, and calls when the unit is ready to collect.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "dealer booking"
+      ],
+      "outputs": [
+        "repaired unit",
+        "dealer invoice"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 5760,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fo-mack16"
+        ],
+        "note": "Industry average of four days of downtime per dealer repair event (Mack, 2016); range is the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Review and sign off the repair",
+      "description": "The foreman checks the completed work order, confirms that a major defect is repaired before the unit can be dispatched, flags repairs on units still under warranty, and signs off. A repair that did not fix the problem goes back to the technician.",
+      "role": "shop-foreman",
+      "kind": "review",
+      "inputs": [
+        "completed work order"
+      ],
+      "outputs": [
+        "signed-off repair"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Records of repair of reported defects (Ontario HTA Regulation 199/07; NSC Standard 11 Part A maintenance records)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.89,
+          "condition": "repair accepted"
+        },
+        {
+          "to": "s11",
+          "prob": 0.05,
+          "condition": "defect not fixed, back to technician"
+        },
+        {
+          "to": "s17",
+          "prob": 0.06,
+          "condition": "unit under warranty: flag for claim"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mto21"
+        ],
+        "note": "The operator must repair defects and keep records of repair; shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Flag the repair for a warranty claim",
+      "description": "The warranty clerk is notified through the work order flag, keeps the failed part tagged with the work order number, and copies the fault codes and repair details into the claim file for the warranty claims process.",
+      "role": "warranty-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "signed-off repair",
+        "failed part"
+      ],
+      "outputs": [
+        "warranty claim file"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "imaging"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Return the unit to service",
+      "description": "The foreman clears the out-of-service status in the fleet maintenance system and the TMS and tells dispatch the unit is available, noting the repair on the driver's inspection report so the next driver can see it.",
+      "role": "shop-foreman",
+      "kind": "communication",
+      "inputs": [
+        "signed-off repair"
+      ],
+      "outputs": [
+        "equipment availability"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Close and cost the work order",
+      "description": "Each working day the maintenance planner closes signed-off repair work orders, checks that parts issued match the parts on the work order and that labour is coded, posts outside repair invoices against the work order and files the record in the unit history.",
+      "role": "maintenance-planner",
+      "kind": "review",
+      "inputs": [
+        "signed-off work orders",
+        "dealer invoices"
+      ],
+      "outputs": [
+        "maintenance record"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Check the repair on the next trip inspection",
+      "description": "The next driver to take the unit reads the repair note against the reported defect during the pre-trip inspection and confirms the defect is gone, or writes it up again if it is not.",
+      "role": "pd-driver",
+      "kind": "review",
+      "inputs": [
+        "unit",
+        "repair note"
+      ],
+      "outputs": [
+        "confirmed repair"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.97,
+          "condition": "defect cleared",
+          "outcome": "repaired"
+        },
+        {
+          "to": "s03",
+          "prob": 0.03,
+          "condition": "defect written up again"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Repeat write-ups are the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Part not in stock",
+      "share_of_cases": 0.14,
+      "description": "The partsperson orders and expedites a non-stock part and the unit waits; in 2021-2022 waits of two weeks or more were common for sensors, aftertreatment parts and water pumps.",
+      "path": [
+        "s08",
+        "s09",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Dealer repair",
+      "share_of_cases": 0.08,
+      "description": "Warranty work, engine and aftertreatment faults go to the dealer, adding days of downtime.",
+      "path": [
+        "s07",
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Comeback",
+      "share_of_cases": 0.05,
+      "description": "The repair did not fix the defect and goes back to the technician, or the next driver writes it up again.",
+      "path": [
+        "s15",
+        "s11",
+        "s12",
+        "s15"
+      ]
+    },
+    {
+      "name": "Non-safety defect deferred",
+      "share_of_cases": 0.06,
+      "description": "Items that do not affect safety or compliance (interior trim, a sticking cab door) are deferred to the next PM.",
+      "path": [
+        "s03"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 2,
+        "p90": 7
+      },
+      "unit": "calendar days from defect reported to repair confirmed on the next trip",
+      "population": "In-house fleet shops at a Canadian LTL and truckload carrier, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: a minor defect waits for the unit to come back from its run and for a bay, is fixed the same or next day, and the work order is closed within a working day; parts and dealer waits make up the tail. The unit itself is off the road for less time than this, because minor-defect units keep running until released."
+      }
+    },
+    {
+      "metric": "dealer_repair_downtime_days",
+      "value": 4,
+      "unit": "calendar days per repair event at a dealer",
+      "population": "US truck dealers, industry average quoted by Mack (2016)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fo-mack16"
+        ],
+        "note": "Vendor-quoted industry average; applies to the dealer branch only."
+      }
+    },
+    {
+      "metric": "share_of_parts_shortage_cases_delayed_over_two_weeks",
+      "value": 0.5,
+      "unit": "share of affected fleets reporting delays beyond two weeks",
+      "population": "TMC members surveyed, April 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-hdt-parts21"
+        ],
+        "note": "'More than half' of respondents affected by the shortage."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Parts not on the shelf keep units down for days, and for weeks during the 2021-2022 shortages.",
+      "steps": [
+        "s09",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hdt-parts21"
+        ],
+        "note": "Survey of TMC members, 2021."
+      }
+    },
+    {
+      "description": "Vague defect descriptions on trip inspection reports make technicians spend time reproducing the problem.",
+      "steps": [
+        "s01",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Operations are slow to release units with minor defects because spare equipment is short, so the repair waits for the unit to come back.",
+      "steps": [
+        "s05"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Named in the organisation file's process description (units kept down while operations ask for them); author's estimate."
+      }
+    },
+    {
+      "description": "Dealer repairs add days of downtime that the shop does not control.",
+      "steps": [
+        "s13",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fo-mack16"
+        ],
+        "note": "Four-day industry average per dealer repair event."
+      }
+    }
+  ],
+  "assumptions": [
+    "One step per role: the driver steps use the city P&D driver; linehaul and truckload drivers do the same steps at slightly higher cost. The dispatcher step uses the city dispatcher; linehaul dispatchers and truckload driver managers do the same.",
+    "Trigger shares: about 70% of work orders come from driver trip inspections and the rest from PM findings, breakdown tows, annual inspections and roadside inspections; the split is the author's estimate.",
+    "The workflow adds mnt-preventive-maintenance as a source of repair work orders and equipment-dealer as a receiver of sublet purchase orders; the organisation file has neither link.",
+    "The simulated cycle time includes the daily work order close-out (s18), which does not keep the unit off the road; the time the unit is unavailable is about half a day shorter.",
+    "Roadside inspection defects found by enforcement officers are a small share; most go through the same steps after the safety department passes the report to the shop.",
+    "Organisation file corrected on 2026-11-24: dvir now comes from ltl-pd-dispatch, once per driver-day, as the pickup and delivery workflows record; it previously came from each pickup and delivery stop."
+  ],
+  "sources": [
+    {
+      "id": "src-mto21",
+      "title": "Commercial vehicle safety requirements (archived copy of the MTO page, captured 28 August 2021)",
+      "publisher": "Ontario Ministry of Transportation, via Library and Archives Canada web archive",
+      "url": "https://bac-lac.wayback.archive-it.org/web/20210828184642/http://www.mto.gov.on.ca/english/trucks/commercial-vehicle-safety-requirements.shtml",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Annual inspection of trucks, trailers and converter dollies over 4,500 kg by a licensed motor vehicle inspection mechanic at an MTO-licensed inspection station to NSC Standard 11 Part B as modified by Regulation 611; an annual inspection is valid for 12 months and a sticker is applied; daily trip inspection within 24 hours before driving under Regulation 199/07 with a schedule and a report; minor defects reported to the operator as soon as possible; a vehicle with a major defect may not be driven until repaired; the operator must repair defects immediately or before the next dispatch and keep records of repair."
+    },
+    {
+      "id": "src-hdt-parts21",
+      "title": "Parts shortage hobbles new truck deliveries, worsens downtime",
+      "publisher": "Heavy Duty Trucking (truckinginfo.com)",
+      "url": "https://www.truckinginfo.com/10141744/parts-shortage-hobbles-new-truck-deliveries-worsens-downtime",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "April 2021: more than 43% of TMC members surveyed said parts shortages were affecting maintenance and repair, and more than half of those affected said downtime-related delays stretched beyond two weeks; fleets pre-stocked turbo actuators, water pumps, aftertreatment components and sensors to avoid downtime; tires, rubber parts and semiconductors were short."
+    },
+    {
+      "id": "src-fo-mack16",
+      "title": "Get you in, get you out: Mack targets quicker repairs, more uptime",
+      "publisher": "FleetOwner",
+      "url": "https://www.fleetowner.com/operations/maintenance/article/21694328/get-you-in-get-you-out-mack-targets-quicker-repairs-more-uptime",
+      "year": 2016,
+      "accessed": "2026-11-24",
+      "supports": "Repairs that take about 3.5 hours of technician time cost an industry average of four days of downtime at dealer service locations (Mack's figure)."
+    }
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

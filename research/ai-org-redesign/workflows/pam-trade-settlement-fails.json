@@ -1,0 +1,1576 @@
+{
+  "schema_version": "0.2",
+  "id": "pam-trade-settlement-fails",
+  "name": "Settle trades and resolve failed settlements",
+  "org": "public-asset-manager",
+  "process": "trade-settlement-fails",
+  "sector": "public-sector institutional asset management",
+  "function": "investment operations (trade support and settlements)",
+  "summary": "After a trade is captured and confirmed, the custodian settles it in the market two business days later (T+2 in the period). Most trades settle with no human touch; the trade support team watches pending settlements, repairs instructions the custodian rejects, fixes mismatches with brokers before settlement date, and chases fails until they settle, keeping the cash team informed and claiming interest when a counterparty's fail costs money. Fails cluster in emerging markets, securities on loan and wrong standing settlement instructions, and the work is concentrated in morning reviews of status reports.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A provincial not-for-profit asset manager of about 240 staff with internal public market strategies and about 120 external managers, settling through one global custodian.",
+    "org_size_employees": 242,
+    "notes": "T+2 settlement in Canada and the United States from September 2017 until May 2024; the emerging markets equity pool from 2021 adds markets with higher fail rates. Allocations include equities, bonds, FX and listed derivatives settled through the custodian."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one trade settlement",
+  "trigger": "The book of record releases a confirmed trade allocation's settlement instruction to the custodian.",
+  "end_state": "The trade has settled and the settlement status has been passed to reconciliations and cash management; for late settlements, the fail is closed and any interest claim resolved.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 1000,
+      "mode": 1600,
+      "high": 2600
+    },
+    "seasonality": "Higher at month and quarter ends with pool rebalancing, manager transitions and index changes; spikes in volatile markets such as March 2020.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file trades processed driver (tier C there): orders split into allocations across pools and client accounts plus FX and derivatives."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "trade-capture-confirmation",
+        "object": "settlement_instruction",
+        "share": 0.9
+      },
+      {
+        "from": "custodian",
+        "object": "settlement_status",
+        "share": 0.07
+      },
+      {
+        "from": "daily-reconciliation",
+        "object": "reconciliation_breaks",
+        "share": 0.03
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "custodian",
+        "object": "settlement_instruction"
+      },
+      {
+        "outcome": "any",
+        "to": "daily-reconciliation",
+        "object": "settlement_status"
+      },
+      {
+        "outcome": "any",
+        "to": "daily-cash-management",
+        "object": "settlement_status"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "trade_settlement_analyst",
+      "title": "Analyst, trade support and settlements",
+      "department": "Trade support and settlements",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.6,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 56,
+        "high": 95
+      },
+      "occupation_code": "NOC 11109",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jb11101"
+        ],
+        "note": "Five analysts share settlement fails, trade capture and confirmation and counterparty set-up; about 1.6 FTE on monitoring settlements and fails is an author estimate. Cost from the organisation file."
+      }
+    },
+    {
+      "id": "mgr_trade_settlement",
+      "title": "Manager, trade support and settlements",
+      "department": "Trade support and settlements",
+      "layer": "manager",
+      "fte_on_process": 0.12,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 90,
+        "high": 135
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jb10010"
+        ],
+        "note": "Escalations and claim approvals; author estimate. Cost from the organisation file."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "oms_ibor",
+      "name": "Order management, pre-trade compliance and investment book of record platform (vendor software as a service)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "trade_matching",
+      "name": "Trade confirmation matching and SWIFT messaging service",
+      "kind": "external_portal"
+    },
+    {
+      "id": "custodian_portal",
+      "name": "Custodian portal (custody, accounting records, net asset value reports, cash and corporate action notices)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Excel workbooks and models",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, video calls and collaboration suite",
+      "kind": "communication"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Transmit the settlement instruction to the custodian",
+      "description": "Once trade capture and confirmation are complete, the book of record sends the settlement instruction for each allocation to the custodian as a SWIFT receive or deliver message with the counterparty's standing settlement instructions, quantity, net amount and settlement date. No one touches a clean instruction.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "confirmed trade allocation"
+      ],
+      "outputs": [
+        "settlement instruction"
+      ],
+      "systems": [
+        "oms_ibor",
+        "trade_matching"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Instruction carries an outdated standing settlement instruction or wrong account.",
+        "typically_caught_at": "s02"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cibcm17"
+        ],
+        "note": "Custodian trade notification deadlines under T+2 (10:30 a.m. ET on settlement date minus one) are described; automated SWIFT transmission is common practice."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Custodian validates the instruction",
+      "description": "The custodian checks the message format, the security identifier, the safekeeping account and the place of settlement, and either accepts the instruction and forwards it to the local market or depository, or rejects it back with a reason.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "settlement instruction"
+      ],
+      "outputs": [
+        "accepted or rejected instruction"
+      ],
+      "systems": [
+        "custodian_portal",
+        "trade_matching"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Custodian's CSAE 3416 / SOC 1 controls over receipt, validation and settlement of client instructions, relied on by the model manager and its auditors",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.965,
+          "condition": "accepted"
+        },
+        {
+          "to": "s04",
+          "prob": 0.035,
+          "condition": "rejected for repair"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "csae"
+        ],
+        "note": "CSAE 3416 reports describe controls at service organisations such as custodians; validation time and the 3.5% repair rate are author estimates."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Market matching and status feed",
+      "description": "The custodian or its sub-custodian matches the model manager's instruction with the broker's instruction at the depository (CDS in Canada, DTC in the United States, local depositories elsewhere) and sends matched or unmatched status messages, which load into the settlement dashboard overnight.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "accepted instruction"
+      ],
+      "outputs": [
+        "settlement status"
+      ],
+      "systems": [
+        "custodian_portal",
+        "trade_matching",
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 900
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.92,
+          "condition": "matched"
+        },
+        {
+          "to": "s06",
+          "prob": 0.08,
+          "condition": "unmatched at the depository"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ni24101",
+          "cibcm22"
+        ],
+        "note": "Matching by noon on T+1 and a 90% matching threshold under NI 24-101 are described; the 8% unmatched share for a buy-side account across global markets is an author estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Repair a rejected instruction",
+      "description": "The trade support analyst reads the custodian's rejection reason, corrects the standing settlement instruction, account or security identifier in the book of record from the approved counterparty set-up, and resends the instruction.",
+      "role": "trade_settlement_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "rejected instruction"
+      ],
+      "outputs": [
+        "corrected instruction"
+      ],
+      "systems": [
+        "oms_ibor",
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Repair introduces a new error.",
+        "typically_caught_at": "s02"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Settlement instructions only from the approved counterparty set-up (standing settlement instruction database)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "resent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Review the pending settlements report",
+      "description": "Each morning the analyst scans the custodian's pending settlements report for trades due to settle today and tomorrow, looking for unmatched, partially matched or at-risk items and for large cash amounts the cash team needs to know about. A matched trade takes seconds of attention.",
+      "role": "trade_settlement_analyst",
+      "kind": "review",
+      "inputs": [
+        "pending settlements report"
+      ],
+      "outputs": [
+        "reviewed pending list"
+      ],
+      "systems": [
+        "custodian_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.6,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 300,
+        "mode": 600,
+        "high": 900
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.6,
+          "condition": "settlement date falls on the next business day"
+        },
+        {
+          "to": "s10",
+          "prob": 0.4,
+          "condition": "a weekend or holiday falls before settlement date"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Per-trade share of a daily review lasting about an hour; the 40% weekend share follows from trades on Thursdays and Fridays settling after the weekend under T+2."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Investigate an unmatched instruction",
+      "description": "The analyst compares the model manager's instruction with the counterparty's alleged instruction shown by the custodian: standing settlement instructions, quantity, price, net amount, trade and settlement dates and place of settlement. The analyst decides which side is wrong, using the trade ticket and broker confirmation.",
+      "role": "trade_settlement_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "unmatched status",
+        "trade ticket",
+        "broker confirmation"
+      ],
+      "outputs": [
+        "mismatch diagnosis"
+      ],
+      "systems": [
+        "custodian_portal",
+        "trade_matching",
+        "oms_ibor"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 480,
+        "high": 900
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong side blamed and the real mismatch persists.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.45,
+          "condition": "The model manager's instruction is wrong"
+        },
+        {
+          "to": "s08",
+          "prob": 0.55,
+          "condition": "counterparty's instruction is wrong"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cibcm17"
+        ],
+        "note": "Matching deadlines that leave time to solve problems and avoid failed trades are described; the split of causes is an author estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Amend or cancel and replace the model manager's instruction",
+      "description": "The analyst corrects the trade or allocation in the book of record, confirms the change with the trader or external manager where the economics change, and cancels and replaces the settlement instruction. A second analyst checks every amendment before it is released.",
+      "role": "trade_settlement_analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "mismatch diagnosis"
+      ],
+      "outputs": [
+        "amended instruction"
+      ],
+      "systems": [
+        "oms_ibor",
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Replacement instruction duplicates the original instead of cancelling it.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Trade support procedure: settlement instruction amendments checked by a second person before release",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "replacement sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Ask the broker to correct its instruction",
+      "description": "The analyst emails or phones the broker's settlement desk with the model manager's details and asks it to amend its instruction at the depository, quoting the trade reference.",
+      "role": "trade_settlement_analyst",
+      "kind": "communication",
+      "inputs": [
+        "mismatch diagnosis"
+      ],
+      "outputs": [
+        "broker query"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "broker asked"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Wait for the instruction to re-match",
+      "description": "The corrected instruction or the broker's amendment goes to the depository and the analyst waits for the matched status to come back.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "amended instruction or broker query"
+      ],
+      "outputs": [
+        "settlement status"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.85,
+          "condition": "matched"
+        },
+        {
+          "to": "s06",
+          "prob": 0.15,
+          "condition": "still unmatched"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Hold over the weekend or holiday",
+      "description": "Trades executed on a Thursday or Friday, or before a holiday, have a settlement window that spans non-business days, so they wait until settlement date with nothing done.",
+      "role": "system",
+      "kind": "external_wait",
+      "inputs": [
+        "reviewed pending list"
+      ],
+      "outputs": [
+        "trade due to settle"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2880,
+        "mode": 2880,
+        "high": 4320
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "settlement date approaches"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Two days for a weekend, three for a long weekend."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Custodian settles on the settlement date",
+      "description": "On settlement date the depository exchanges securities against cash between the custodian and the broker's agent. Most trades settle on time two business days after trade date; a few fail because a party lacks securities or cash or the instructions never matched.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "matched instruction"
+      ],
+      "outputs": [
+        "settled trade or fail status"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1200,
+        "mode": 1440,
+        "high": 1800
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "T+2 standard settlement cycle for Canadian and US equities and long-term debt from 5 September 2017 (market and depository rules), with NI 24-101 trade matching",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.96,
+          "condition": "settled on time",
+          "outcome": "settled_on_time"
+        },
+        {
+          "to": "s12",
+          "prob": 0.04,
+          "condition": "failed"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cibcm17",
+          "cds_t1",
+          "esma_trv"
+        ],
+        "note": "T+2 cycle stated by CIBC Mellon; the 4% fail rate by count is an author blend of Canadian fail rates below 2% (CDS), EU equity fails of 7 to 9% by value (ESMA) and the model manager's emerging markets pool from 2021."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Log the failed trade and identify the cause",
+      "description": "The analyst records the fail in the fails tracker from the custodian's fail report with the counterparty, market, amount and reason code, such as counterparty lacking securities, the model manager lacking securities on loan, insufficient cash or an unmatched instruction.",
+      "role": "trade_settlement_analyst",
+      "kind": "analysis",
+      "inputs": [
+        "fail status"
+      ],
+      "outputs": [
+        "fails tracker entry"
+      ],
+      "systems": [
+        "custodian_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Fail logged with the wrong cause.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "logged"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Tell cash management and the portfolio manager",
+      "description": "The analyst emails the cash team the cash that will not arrive or leave today so the account funding and overdraft forecast can be changed, and tells the portfolio manager or external manager liaison when the fail affects a position they plan to trade.",
+      "role": "trade_settlement_analyst",
+      "kind": "communication",
+      "inputs": [
+        "fails tracker entry"
+      ],
+      "outputs": [
+        "settlement status update"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.7,
+          "condition": "counterparty caused the fail"
+        },
+        {
+          "to": "s15",
+          "prob": 0.3,
+          "condition": "cause on the model manager's side"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Chase the counterparty",
+      "description": "The analyst contacts the broker's settlement desk for an expected delivery or payment date, asks whether a partial delivery is possible and records the answer in the tracker.",
+      "role": "trade_settlement_analyst",
+      "kind": "communication",
+      "inputs": [
+        "fails tracker entry"
+      ],
+      "outputs": [
+        "expected settlement date"
+      ],
+      "systems": [
+        "email_collab",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "chased"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Resolve the cause on the model manager's side",
+      "description": "The analyst works with the securities lending agent to recall lent securities, with the cash team to cover a cash or currency shortfall, or with the custodian to move securities between accounts, so the model manager can deliver or pay.",
+      "role": "trade_settlement_analyst",
+      "kind": "coordination",
+      "inputs": [
+        "fails tracker entry"
+      ],
+      "outputs": [
+        "resolution actions"
+      ],
+      "systems": [
+        "email_collab",
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "actions taken"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Wait for the fail to settle",
+      "description": "The failed trade stays open at the depository and is retried each settlement cycle until the missing securities or cash arrive.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "failed trade"
+      ],
+      "outputs": [
+        "settled or still failing trade"
+      ],
+      "systems": [
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.72,
+          "condition": "settled"
+        },
+        {
+          "to": "s17",
+          "prob": 0.28,
+          "condition": "still failing"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; most fails clear within one to three days."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Re-chase and review fail ageing",
+      "description": "The analyst re-chases open fails each morning, updates the ageing in the tracker and flags fails older than the escalation trigger, or in markets with forced buy-in rules, to the manager.",
+      "role": "trade_settlement_analyst",
+      "kind": "communication",
+      "inputs": [
+        "fails tracker"
+      ],
+      "outputs": [
+        "updated ageing"
+      ],
+      "systems": [
+        "email_collab",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.35,
+          "condition": "past the escalation trigger"
+        },
+        {
+          "to": "s16",
+          "prob": 0.65,
+          "condition": "keep chasing"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Manager escalates an aged fail",
+      "description": "The manager of trade support raises the fail with the broker's operations management and the model manager's head of trading, considers a buy-in or cancellation, and decides whether the trading desk should stop routing orders to a persistently failing broker.",
+      "role": "mgr_trade_settlement",
+      "kind": "judgment",
+      "inputs": [
+        "aged fail"
+      ],
+      "outputs": [
+        "escalation decision"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Trade support fails escalation procedure and counterparty performance review",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "escalated"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "icma"
+        ],
+        "note": "Buy-in processes for failing deliveries are described in the source; escalation practice and times are author estimates."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Confirm settlement and close the fail",
+      "description": "The analyst confirms settlement on the custodian statement, closes the tracker entry with the number of days failed, and decides whether the cost of the fail justifies an interest claim against the counterparty.",
+      "role": "trade_settlement_analyst",
+      "kind": "validation",
+      "inputs": [
+        "settlement confirmation"
+      ],
+      "outputs": [
+        "closed fail"
+      ],
+      "systems": [
+        "custodian_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 0.3,
+          "condition": "claim warranted (large amount or long fail caused by the counterparty)"
+        },
+        {
+          "to": "END",
+          "prob": 0.7,
+          "condition": "closed without a claim",
+          "outcome": "settled_late"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Calculate and submit a late settlement claim",
+      "description": "The analyst calculates the interest cost of the late cash at the overnight rate for the days failed, or passes through any depository cash penalty, prepares the claim with the trade details and emails it to the counterparty in the weekly or monthly claims batch.",
+      "role": "trade_settlement_analyst",
+      "kind": "drafting",
+      "inputs": [
+        "closed fail",
+        "overnight rates"
+      ],
+      "outputs": [
+        "interest claim"
+      ],
+      "systems": [
+        "spreadsheets",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 10080
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Claim amount miscalculated.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "claim prepared"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "icma"
+        ],
+        "note": "Interest claims by the failed-to party and the design of CSDR daily cash penalties are described; times are author estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Manager approves the claim",
+      "description": "The manager reviews the claim amount and support and approves it for sending, or drops claims below the minimum worth pursuing.",
+      "role": "mgr_trade_settlement",
+      "kind": "approval",
+      "inputs": [
+        "interest claim"
+      ],
+      "outputs": [
+        "approved claim"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Trade support procedure: claims approved by the manager with a minimum claim amount",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Counterparty pays or disputes the claim",
+      "description": "The broker checks the claim against its own records and pays it, nets it against claims it has on the model manager, or disputes it; the analyst follows up until it is paid or written off.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "approved claim"
+      ],
+      "outputs": [
+        "claim payment or dispute"
+      ],
+      "systems": [
+        "email_collab",
+        "custodian_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 14400,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "claim resolved",
+          "outcome": "claim_settled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Instruction rejected by the custodian",
+      "share_of_cases": 0.035,
+      "description": "Format, security, account or standing instruction problem; repaired and resent.",
+      "path": [
+        "s02",
+        "s04",
+        "s02"
+      ]
+    },
+    {
+      "name": "Unmatched at the depository",
+      "share_of_cases": 0.08,
+      "description": "The model manager's and the broker's instructions disagree; the wrong side amends and the trade re-matches.",
+      "path": [
+        "s03",
+        "s06",
+        "s07",
+        "s09",
+        "s05"
+      ]
+    },
+    {
+      "name": "Failed settlement caused by the counterparty",
+      "share_of_cases": 0.028,
+      "description": "Broker lacks securities or cash; chased daily until it delivers.",
+      "path": [
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s16",
+        "s19"
+      ]
+    },
+    {
+      "name": "Failed settlement caused on the model manager's side",
+      "share_of_cases": 0.012,
+      "description": "Securities on loan not recalled, cash or currency shortfall or wrong account.",
+      "path": [
+        "s11",
+        "s12",
+        "s13",
+        "s15",
+        "s16",
+        "s19"
+      ]
+    },
+    {
+      "name": "Aged fail escalated",
+      "share_of_cases": 0.004,
+      "description": "A fail past the escalation trigger goes to the manager and the trading desk, with a buy-in considered.",
+      "path": [
+        "s16",
+        "s17",
+        "s18",
+        "s16"
+      ]
+    },
+    {
+      "name": "Late settlement interest claim",
+      "share_of_cases": 0.012,
+      "description": "The model manager claims the interest cost of a counterparty fail.",
+      "path": [
+        "s19",
+        "s20",
+        "s21",
+        "s22"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 2,
+        "p90": 4
+      },
+      "unit": "calendar days from settlement instruction to settlement",
+      "population": "Canadian and US equities and long-term debt under the T+2 standard settlement cycle (5 September 2017 to May 2024)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cibcm17"
+        ],
+        "note": "T+2 stated by the source; p90 of four calendar days reflects trades whose settlement window spans a weekend (author estimate)."
+      }
+    },
+    {
+      "metric": "settlement_fail_rate",
+      "value": {
+        "low": 0.02,
+        "mode": 0.04,
+        "high": 0.09
+      },
+      "unit": "share of trades failing on settlement date",
+      "population": "Low: Canadian dollar settlement through CDS (below 2%, comparable to T+2 levels); high: EU equities by value (7% in 2H19, 8% in 2H20, 9% in 1H21); mode: author blend for a global institutional account",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cds_t1",
+          "esma_trv"
+        ],
+        "note": "Low and high values are stated in the sources; the mode is an author estimate."
+      }
+    },
+    {
+      "metric": "institutional_trade_matching_threshold",
+      "value": 0.9,
+      "unit": "share of DAP/RAP trades by value and volume matched by noon on T+1, below which a registered firm files a quarterly exception report",
+      "population": "Canadian registered dealers and advisers under NI 24-101",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ni24101",
+          "cibcm17"
+        ],
+        "note": "Stated in the instrument."
+      }
+    },
+    {
+      "metric": "csdr_cash_penalty_liquid_shares",
+      "value": 1.0,
+      "unit": "basis points of the failed trade value per day of fail (EU CSDR penalty regime)",
+      "population": "EU central securities depositories under CSDR",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "icma"
+        ],
+        "note": "Rate stated in the source; the regime started in February 2022 (author knowledge, not from the source)."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Standing settlement instructions held in several places (book of record, custodian, brokers, external managers) drift apart, so rejections and mismatches recur for the same counterparties.",
+      "steps": [
+        "s04",
+        "s06",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author judgment from common practice."
+      }
+    },
+    {
+      "description": "Status arrives in batches and the team works the pending report each morning, so a mismatch found late on settlement date minus one often cannot be fixed before settlement.",
+      "steps": [
+        "s03",
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cibcm17"
+        ],
+        "note": "The custodian deadline of 10:30 a.m. on settlement date minus one exists to leave time to fix problems."
+      }
+    },
+    {
+      "description": "Fails in emerging markets and on lent securities take days of repeated chasing by email and phone, tracked in a spreadsheet.",
+      "steps": [
+        "s14",
+        "s15",
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author judgment; the fails tracker is a spreadsheet in this baseline."
+      }
+    },
+    {
+      "description": "Interest claims are small and slow to collect, so many are not pursued and the cost of counterparty fails is absorbed by the pools.",
+      "steps": [
+        "s19",
+        "s20",
+        "s21",
+        "s22"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "icma"
+        ],
+        "note": "The source describes weak economic incentives against failing when rates are low."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "cibcm17",
+      "title": "Shortening the Settlement Cycle: Final CSA Amendments to NI 24-101",
+      "publisher": "CIBC Mellon",
+      "url": "https://www.cibcmellon.com/en/_locale-assets/pdf/our-thinking/2017/ot201707-csa-ni-24-101-en.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Canada's move from T+3 to T+2 settlement set for 5 September 2017, aligned with the United States; institutional trade matching deadline of noon on T+1 and 90 per cent exception threshold kept; custodian trade notification deadline of 10:30 a.m. ET on settlement date minus one under T+2, to leave time to solve problems and avoid failed trades."
+    },
+    {
+      "id": "cibcm22",
+      "title": "T+1 Settlement Efforts (Our Thinking, September 2022)",
+      "publisher": "CIBC Mellon",
+      "url": "https://www.cibcmellon.com/en/_locale-assets/pdf/our-thinking/2022/ot202209-t+1-settlement-efforts.pdf",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "In 2022 Canada still settled on T+2 with an NI 24-101 matching deadline of noon on T+1; the move to T+1 would require allocation, matching and confirmation on trade date."
+    },
+    {
+      "id": "ni24101",
+      "title": "National Instrument 24-101 Institutional Trade Matching and Settlement (consolidated to 5 September 2017)",
+      "publisher": "Financial and Consumer Services Commission (New Brunswick)",
+      "url": "https://www.fcnb.ca/sites/default/files/2020-02/24-101-NI-CONS-2017-09-05-E.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Registered dealers and advisers must match delivery-against-payment and receipt-against-payment institutional trades no later than noon Eastern Time on T+1; institutional investors sign a trade-matching agreement or statement; quarterly exception report when less than 90 per cent of trades by value or volume are matched by the deadline."
+    },
+    {
+      "id": "cds_t1",
+      "title": "T+1: One Day to Settle (CDS key initiatives page)",
+      "publisher": "CDS Clearing and Depository Services (TMX Group)",
+      "url": "https://cds.ca/solutions/cds-key-initiatives/t-1",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Canada moved to T+1 settlement on 27 May 2024; after the move the Canadian dollar settlement fail rate is typically below 2%, comparable to T+2 levels."
+    },
+    {
+      "id": "esma_trv",
+      "title": "ESMA Report on Trends, Risks and Vulnerabilities No. 2, 2021",
+      "publisher": "European Securities and Markets Authority",
+      "url": "https://www.esma.europa.eu/sites/default/files/library/esma50-165-1842_trv2-2021.pdf",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Settlement fail rates at EU central securities depositories by value: equities 9% in the first half of 2021, 8% in the second half of 2020, a 14% peak in the COVID-19 stress and 7% in the second half of 2019; sovereign bonds 3% and corporate bonds 1.8% in the first half of 2021."
+    },
+    {
+      "id": "icma",
+      "title": "CSDR framework for late settlement penalties (ICMA briefing note)",
+      "publisher": "International Capital Market Association",
+      "url": "https://www.icmagroup.org/assets/documents/Regulatory/Secondary-markets/ICMA_CSDR-Late-settlement-penalties_brifing-note_Mar-2017-(updated-033017).pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Economics of failing; failed-to parties make interest claims against the failing party; the US Treasury fails charge of 3% less the federal funds rate; CSDR daily cash penalty rates such as 1.0 basis point a day for liquid shares and 0.1 to 0.2 basis point for bonds."
+    },
+    {
+      "id": "csae",
+      "title": "Reports on Controls at Service Organizations FAQs",
+      "publisher": "Chartered Professional Accountants of British Columbia",
+      "url": "https://www.bccpa.ca/kbase/kbase-search/assurance-standards/audit/guidance/reports-on-controls-at-service-organizations-faqs/",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "CSAE 3416 (SOC 1 equivalent) reports on controls at a service organization relevant to user entities' financial reporting; Type 1 covers design at a date and Type 2 covers operating effectiveness over a period; used by user entities and their auditors."
+    },
+    {
+      "id": "jb11101",
+      "title": "Wages: Financial analyst (NOC 11101) in the Toronto region",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/12417/22437",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Toronto hourly wages low 27.97, median 41.60, high 73.57 dollars (reference period 2023-2024); the organisation file uses it as the proxy for operations analysts."
+    },
+    {
+      "id": "jb10010",
+      "title": "Wages: Finance director (NOC 10010) in the Toronto region",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/1225/22437",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Toronto hourly wages low 41.21, median 62.37, high 96.15 dollars (reference period 2023-2024); the organisation file uses it for operations managers."
+    }
+  ],
+  "assumptions": [
+    "The unit of work is one trade allocation's settlement, so the median case is a clean trade with only the morning pending review as hands-on time; mean hands-on time is a few minutes per trade.",
+    "The settlement cycle is T+2 throughout the reference period; non-North American markets with T+3 and FX spot are folded into the ranges.",
+    "Fail and mismatch rates are author estimates bounded by published Canadian (below 2%) and EU (7% to 9% by value for equities) rates; the model manager publishes no settlement statistics.",
+    "CSDR cash penalties applied only to EU settlements from February 2022; for most of the period late settlement costs were recovered, if at all, through bilateral interest claims.",
+    "Cases start when the instruction is released after confirmation; matching and affirmation work before that belongs to the trade capture and confirmation process.",
+    "Loaded costs come from the organisation file (Job Bank Toronto wages deflated to 2021, plus variable pay, times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

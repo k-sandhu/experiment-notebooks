@@ -1,0 +1,1529 @@
+{
+  "schema_version": "0.3",
+  "id": "edu-ops-system-monitoring",
+  "name": "Monitor and operate the distribution grid",
+  "org": "electric-distribution-utility",
+  "process": "ops-system-monitoring",
+  "sector": "electric utilities: power distribution",
+  "function": "distribution operations: system control",
+  "summary": "The system control centre watches and operates the distribution grid around the clock in two 12-hour shifts. Operators watch SCADA alarms, feeder loading and the outage management system, respond to feeder lockouts by switching remotely, coordinate with the transmitter Hydro One, keep outage records and estimates current, and hand over open work protection and abnormal devices at every shift change. The job is hard because the same desk must handle quiet nights and storms with hundreds of events, errors in permits or switching can injure crews, and outage records written in a hurry drive the utility's reliability statistics.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A city-owned Ontario electricity distributor with about 350,000 customers, a 24-hour system control centre, overhead and underground line crews and single-person trouble trucks, using SCADA, an outage management system, smart meters and mobile workforce tablets.",
+    "org_size_employees": 571,
+    "notes": "Modelled on Hydro Ottawa Limited's published major event reports, scorecard and news releases for 2019-2022; the organisation chart, headcounts and wages come from the organisation file."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one control room shift",
+  "trigger": "The start of a 12-hour control room shift at 07:00 or 19:00.",
+  "end_state": "The shift's alarms, outages and permits are handled or handed over, the operating log and outage records are complete, and the incoming supervisor has signed the shift change.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 60,
+      "mode": 61,
+      "high": 62
+    },
+    "seasonality": "Every day has two shifts; workload per shift peaks in summer thunderstorms and peak loading, and in winter storms.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "ho-blog-2022"
+      ],
+      "note": "Control centre staffed 24/7 (source); two 12-hour shifts a day (organisation file assumption)."
+    },
+    "surge": {
+      "cause": "major storm or transmission supply loss",
+      "events_per_year": {
+        "low": 1,
+        "mode": 2,
+        "high": 3
+      },
+      "duration_days": {
+        "low": 1,
+        "mode": 1,
+        "high": 8
+      },
+      "volume_multiplier": {
+        "low": 1.1,
+        "mode": 1.3,
+        "high": 2.0
+      },
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "me-index",
+          "me-2019-07",
+          "me-2022-12"
+        ],
+        "note": "Nine major events in 2019-2022, most under a day; operators were held past shift and a storm desk added. The multiplier is the author's estimate of extra operator-shifts: the number of shifts does not change, but extended and overlapping shifts add 10% to 100% more desk hours."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cs-contact-centre",
+        "object": "outage_report",
+        "share": 0.6
+      },
+      {
+        "from": "emergency-services",
+        "object": "outage_report",
+        "share": 0.05
+      },
+      {
+        "from": "hydro-one",
+        "object": "outage_report",
+        "share": 0.05
+      },
+      {
+        "from": "ops-trouble-response",
+        "object": "outage_event",
+        "share": 0.2
+      },
+      {
+        "from": "ops-outage-restoration",
+        "object": "outage_event",
+        "share": 0.1
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ae-records-gis",
+        "object": "asset_register"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "ops-trouble-response",
+        "object": "trouble_order"
+      },
+      {
+        "outcome": "any",
+        "to": "ops-outage-restoration",
+        "object": "outage_event"
+      },
+      {
+        "outcome": "handed_over_in_storm_mode",
+        "to": "ops-major-event-response",
+        "object": "outage_event"
+      },
+      {
+        "outcome": "any",
+        "to": "corp-outage-communications",
+        "object": "outage_event"
+      },
+      {
+        "outcome": "shift_handed_over",
+        "to": "ae-reliability-analysis",
+        "object": "interruption_data"
+      },
+      {
+        "outcome": "any",
+        "to": "corp-ot-systems",
+        "object": "ot_ticket"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "system-operator",
+      "title": "Distribution system operator (control room)",
+      "department": "System Control Centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 11.0,
+      "loaded_cost_per_hour": {
+        "low": 62,
+        "mode": 72,
+        "high": 85
+      },
+      "occupation_code": "NOC 92100",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro",
+          "ho-blog-2022"
+        ],
+        "note": "Organisation file: 20 operators on rotating 24/7 shifts. About 11 FTE is counted here; the other workflows of this organisation count about 9.5 operator FTE (planned switching 4.5, trouble orders 2, crew outages 1, construction, station, cable and other work about 2), all done from the same seats."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "control-shift-supervisor",
+      "title": "Control room shift supervisor",
+      "department": "System Control Centre",
+      "layer": "supervisor",
+      "fte_on_process": 4.0,
+      "loaded_cost_per_hour": {
+        "low": 75,
+        "mode": 85,
+        "high": 98
+      },
+      "occupation_code": "NOC 92100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file: 4 shift supervisors, one per shift. Covering one seat 8,760 hours a year with about 1,800 worked hours each needs about 5 people, so 4 relies on overtime or senior operators acting up."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "control-manager",
+      "title": "Manager, system control centre",
+      "department": "System Control Centre",
+      "layer": "manager",
+      "fte_on_process": 0.15,
+      "loaded_cost_per_hour": {
+        "low": 90,
+        "mode": 105,
+        "high": 120
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role; daily operations call and escalations."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "scada",
+      "name": "SCADA for stations and feeder devices",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "oms",
+      "name": "Outage management system",
+      "kind": "workflow"
+    },
+    {
+      "id": "ami",
+      "name": "Smart meter (AMI) head-end and network",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "gis",
+      "name": "Geographic information system (asset and network model)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mwm",
+      "name": "Mobile workforce management and field tablets",
+      "kind": "workflow"
+    },
+    {
+      "id": "web-portal",
+      "name": "Customer web portal, MyAccount, mobile app and outage map",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email",
+      "name": "Email, calendar and Teams",
+      "kind": "communication"
+    },
+    {
+      "id": "itsm",
+      "name": "IT service management ticketing",
+      "kind": "workflow"
+    },
+    {
+      "id": "bi-reporting",
+      "name": "Business intelligence and regulatory reporting",
+      "kind": "analytics"
+    }
+  ],
+  "resources": [
+    {
+      "id": "control-console",
+      "name": "Control room operator console",
+      "kind": "facility",
+      "count": 6
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Read the logs before the shift",
+      "description": "The incoming shift supervisor reads the operating log, the list of open work protection permits, abnormal switching states, outages in progress, planned work for the shift and the weather outlook before taking the desk.",
+      "role": "control-shift-supervisor",
+      "kind": "lookup",
+      "inputs": [
+        "operating log",
+        "open permits",
+        "planned work list",
+        "weather outlook"
+      ],
+      "outputs": [
+        "shift picture"
+      ],
+      "systems": [
+        "oms",
+        "scada",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.5,
+          "condition": "day shift (07:00-19:00)"
+        },
+        {
+          "to": "s03",
+          "prob": 0.5,
+          "condition": "night shift (19:00-07:00)"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro"
+        ],
+        "note": "Daily reporting and work protection duties of an Ontario control room (posting); 12-hour shifts follow the organisation file's two-shift assumption."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Hand over the consoles (day shift)",
+      "description": "Each incoming operator sits with the outgoing operator at the console and goes through open permits, devices left in abnormal positions, events in progress and crews in the field, then signs on in the log.",
+      "role": "system-operator",
+      "kind": "communication",
+      "inputs": [
+        "shift picture",
+        "handover notes"
+      ],
+      "outputs": [
+        "accepted desk"
+      ],
+      "systems": [
+        "oms",
+        "scada"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s01"
+      ],
+      "people": 4,
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; four operators on day shift from 20 operators on 24/7 rotation (organisation file)."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Hand over the consoles (night shift)",
+      "description": "The smaller night crew takes over the consoles in the same way, paying particular attention to permits that will stay open overnight and to on-call crews already called out.",
+      "role": "system-operator",
+      "kind": "communication",
+      "inputs": [
+        "shift picture",
+        "handover notes"
+      ],
+      "outputs": [
+        "accepted desk"
+      ],
+      "systems": [
+        "oms",
+        "scada"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s01"
+      ],
+      "people": 3,
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the process map notes night and weekend shifts carry the same desk with fewer people."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Watch the grid (day shift)",
+      "description": "Operators watch SCADA alarms, breaker status, feeder loading and voltage, and the OMS queue of predicted outages through the shift, acknowledge and classify alarms, and answer radio calls from crews; individual trouble orders and switching jobs are counted in their own workflows.",
+      "role": "system-operator",
+      "kind": "analysis",
+      "inputs": [
+        "accepted desk",
+        "SCADA alarms",
+        "OMS queue"
+      ],
+      "outputs": [
+        "acknowledged alarms",
+        "operating log entries"
+      ],
+      "systems": [
+        "scada",
+        "oms",
+        "ami"
+      ],
+      "touch_min": {
+        "low": 600,
+        "mode": 650,
+        "high": 690
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "people": 4,
+      "resources": [
+        {
+          "id": "control-console",
+          "occupied_min": {
+            "low": 2400,
+            "mode": 2600,
+            "high": 2760
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-blog-2022",
+          "oakville-cro"
+        ],
+        "note": "System operators on duty 24/7 monitoring the grid (Hydro Ottawa); SCADA/ADMS operation (posting). Desk time is the shift length less handover and logs."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Watch the grid (night shift)",
+      "description": "Night operators watch the same alarms and OMS queue with one console less, cover trouble dispatch and on-call crew call-outs themselves, and run end-of-day checks such as clearing nuisance alarms.",
+      "role": "system-operator",
+      "kind": "analysis",
+      "inputs": [
+        "accepted desk",
+        "SCADA alarms",
+        "OMS queue"
+      ],
+      "outputs": [
+        "acknowledged alarms",
+        "operating log entries"
+      ],
+      "systems": [
+        "scada",
+        "oms",
+        "ami"
+      ],
+      "touch_min": {
+        "low": 600,
+        "mode": 650,
+        "high": 690
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "people": 3,
+      "resources": [
+        {
+          "id": "control-console",
+          "occupied_min": {
+            "low": 1800,
+            "mode": 1950,
+            "high": 2070
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of night staffing (three of the four day consoles)."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Supervise the desk",
+      "description": "The shift supervisor balances events between consoles, approves switching orders and permits, tracks crews' hours of work and call-outs, and keeps the on-call manager informed of anything unusual.",
+      "role": "control-shift-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "acknowledged alarms",
+        "permit requests"
+      ],
+      "outputs": [
+        "approved switching",
+        "desk assignments"
+      ],
+      "systems": [
+        "oms",
+        "scada",
+        "email"
+      ],
+      "touch_min": {
+        "low": 600,
+        "mode": 660,
+        "high": 690
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility Work Protection Code and Electrical Utility Safety Rules (IHSA), required for work on or near distribution lines under the Occupational Health and Safety Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s04",
+        "s05"
+      ],
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.35,
+          "condition": "a feeder breaker locks out during the shift"
+        },
+        {
+          "to": "s08",
+          "prob": 0.65,
+          "condition": "no feeder lockout"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro"
+        ],
+        "note": "Approval and delivery of switching and work protection; the 35% lockout share is the author's estimate (about 20 feeder-level events a month across 61 shifts)."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Respond to a feeder lockout",
+      "description": "When a feeder breaker trips and locks out, an operator reads relay targets and fault indicators, opens the sectionalizing switches it can reach remotely, re-closes to pick up the healthy part of the feeder and opens an outage event for a crew.",
+      "role": "system-operator",
+      "kind": "analysis",
+      "inputs": [
+        "breaker lockout alarm",
+        "fault indications"
+      ],
+      "outputs": [
+        "outage event",
+        "customers restored by switching"
+      ],
+      "systems": [
+        "scada",
+        "oms",
+        "gis"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Re-close onto a fault that was not isolated, causing a second trip.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility Work Protection Code and Electrical Utility Safety Rules (IHSA), required for work on or near distribution lines under the Occupational Health and Safety Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s06"
+      ],
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-600",
+          "ho-blog-2022"
+        ],
+        "note": "Remote switching from the System Office and automated field devices restore part of an outage (sources); times are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Coordinate with Hydro One and the IESO",
+      "description": "An operator calls or takes calls from the transmitter's grid control centre about station breaker operations, supply circuit outages and voltage, and from the IESO about outage requests or system conditions, and logs what was agreed.",
+      "role": "system-operator",
+      "kind": "communication",
+      "inputs": [
+        "station alarms",
+        "transmitter requests"
+      ],
+      "outputs": [
+        "agreed transmission actions"
+      ],
+      "systems": [
+        "scada",
+        "email"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s06",
+        "s07"
+      ],
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro"
+        ],
+        "note": "Liaison with Hydro One and the IESO on outage planning and restoration (posting); the organisation file's process entry names transmitter coordination. Minutes per shift are the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Manage feeder loading and voltage",
+      "description": "On hot or very cold days an operator watches feeders and station transformers approaching their limits, transfers load between feeders and asks Hydro One to adjust station voltage when customers report low voltage.",
+      "role": "system-operator",
+      "kind": "analysis",
+      "inputs": [
+        "feeder loading",
+        "temperature forecast"
+      ],
+      "outputs": [
+        "load transfers"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s08"
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; summer peak of 1.44 GW (organisation file) makes loading work seasonal."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Check on lone workers",
+      "description": "An operator tracks single-person trouble responders and other lone workers in the field, calls any who miss a scheduled check-in or stay silent past the expected job time, and starts the emergency procedure if they cannot be reached.",
+      "role": "system-operator",
+      "kind": "communication",
+      "inputs": [
+        "crew locations",
+        "check-in times"
+      ],
+      "outputs": [
+        "check-in log"
+      ],
+      "systems": [
+        "mwm",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Occupational Health and Safety Act general duty and the utility's working-alone procedure for single-person trouble trucks",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s09"
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice for single-person trouble trucks (organisation file resource trouble-truck) under employer working-alone procedures."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Check planned work for the coming shifts",
+      "description": "The operator reads the switching orders and work protection requests prepared by the switching planners for the next shifts, checks them against the current abnormal state of the grid and flags any order that no longer fits.",
+      "role": "system-operator",
+      "kind": "review",
+      "inputs": [
+        "prepared switching orders",
+        "abnormal device list"
+      ],
+      "outputs": [
+        "checked switching orders",
+        "flagged conflicts"
+      ],
+      "systems": [
+        "oms",
+        "scada",
+        "gis"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A switching order that conflicts with a device left abnormal is not flagged.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s10"
+      ],
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.25,
+          "condition": "SCADA, RTU, telecom or OMS problem found"
+        },
+        {
+          "to": "s13",
+          "prob": 0.75,
+          "condition": "systems healthy"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro"
+        ],
+        "note": "Operators prepare for and direct scheduled switching and work protection (posting); minutes per shift are the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Raise an OT ticket",
+      "description": "When a remote terminal unit stops reporting, a telemetry point freezes, a radio link drops or the OMS slows, the operator logs a ticket for the on-call OT specialist, marks the affected devices as suspect and arranges field checks if needed.",
+      "role": "system-operator",
+      "kind": "communication",
+      "inputs": [
+        "failed telemetry or system fault"
+      ],
+      "outputs": [
+        "OT ticket",
+        "suspect device list"
+      ],
+      "systems": [
+        "itsm",
+        "scada",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s11"
+      ],
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the organisation file's process map sends OT tickets to corp-ot-systems."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Update outage records and estimates",
+      "description": "Through the shift operators correct predicted outages, merge duplicate events, update restoration estimates shown on the outage map and complete restoration times and cause codes for events closed in the field.",
+      "role": "system-operator",
+      "kind": "data_entry",
+      "inputs": [
+        "outage events",
+        "crew updates"
+      ],
+      "outputs": [
+        "updated outage records",
+        "estimated restoration times"
+      ],
+      "systems": [
+        "oms",
+        "web-portal"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Duplicate or wrongly timed outage records left in the OMS.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s11",
+        "s12"
+      ],
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.04,
+          "condition": "severe weather or many outages building"
+        },
+        {
+          "to": "s16",
+          "prob": 0.96,
+          "condition": "ordinary shift"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-blog-2020",
+          "scorecard-2021"
+        ],
+        "note": "Outage map updated every 15 minutes; closed records feed the reliability measures on the OEB scorecard. Minutes per shift are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Escalate to the on-call manager",
+      "description": "When alarms and outages build faster than the desk can handle, the supervisor calls the on-call control manager, opens the storm desk console, extends operators past the end of shift and asks for trouble trucks and crews to be held.",
+      "role": "control-shift-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "outage picture",
+        "weather warnings"
+      ],
+      "outputs": [
+        "escalation",
+        "storm desk staffing"
+      ],
+      "systems": [
+        "oms",
+        "email"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s13"
+      ],
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "me-2019-07",
+          "me-2022-12"
+        ],
+        "note": "Control room staff held past the end of the day (July 2019) and on-call staff called in ahead of a storm (December 2022); the 4% share is the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Hand over in storm mode",
+      "description": "The shift ends with extended or overlapping operators, the storm desk open and the event handed to the major event process; the supervisor briefs the incoming supervisor and the on-call manager together.",
+      "role": "control-shift-supervisor",
+      "kind": "communication",
+      "inputs": [
+        "escalation",
+        "operating log"
+      ],
+      "outputs": [
+        "storm-mode handover"
+      ],
+      "systems": [
+        "oms",
+        "email"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "handed_over_in_storm_mode"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Review the shift's outage records",
+      "description": "Before the end of the shift the supervisor checks that every outage event closed during the shift has times, customer counts and a cause code, and that open permits and abnormal devices are listed for handover.",
+      "role": "control-shift-supervisor",
+      "kind": "review",
+      "inputs": [
+        "updated outage records",
+        "operating log"
+      ],
+      "outputs": [
+        "clean outage records",
+        "shift report"
+      ],
+      "systems": [
+        "oms",
+        "bi-reporting"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.36,
+          "condition": "weekday day shift"
+        },
+        {
+          "to": "s18",
+          "prob": 0.64,
+          "condition": "night or weekend shift"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; 36% is the share of shifts that are weekday days (10 of 28 a fortnight)."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Hold the daily operations call",
+      "description": "On weekday mornings the control centre manager reviews the previous 24 hours with the shift supervisor and line and underground supervisors: major outages, near misses, outstanding repairs and the day's planned outages.",
+      "role": "control-manager",
+      "kind": "review",
+      "inputs": [
+        "shift report",
+        "outage summary"
+      ],
+      "outputs": [
+        "action list"
+      ],
+      "systems": [
+        "oms",
+        "email",
+        "bi-reporting"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s16"
+      ],
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro"
+        ],
+        "note": "Daily, weekly and monthly KPI reporting and post-event analysis (posting); meeting format is the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Write the shift log and handover notes",
+      "description": "Each operator completes the log entries for the shift, lists open permits, abnormal devices, crews still working and events in progress, and saves the handover notes for the incoming operator.",
+      "role": "system-operator",
+      "kind": "drafting",
+      "inputs": [
+        "operating log entries"
+      ],
+      "outputs": [
+        "handover notes"
+      ],
+      "systems": [
+        "oms",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "An open permit or abnormal device left off the handover notes.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "people": 3,
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; three to four operators each write their own entries."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Hand over to the next supervisor",
+      "description": "The supervisor briefs the incoming supervisor on the shift's events, open permits, crews in the field and anything escalated, and both sign the log at the change of shift.",
+      "role": "control-shift-supervisor",
+      "kind": "communication",
+      "inputs": [
+        "shift report",
+        "handover notes"
+      ],
+      "outputs": [
+        "signed shift change"
+      ],
+      "systems": [
+        "oms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "shift_handed_over"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common control room practice."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Storm escalation",
+      "share_of_cases": 0.04,
+      "description": "Alarms and outages build beyond the desk; the supervisor calls the on-call manager, opens the storm desk and hands over in storm mode to the major event process.",
+      "path": [
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Feeder lockout",
+      "share_of_cases": 0.35,
+      "description": "A feeder breaker locks out and an operator isolates and restores what remote switching can before a crew is sent.",
+      "path": [
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Telemetry or system failure",
+      "share_of_cases": 0.25,
+      "description": "A remote terminal unit, radio link or OMS fault leaves devices unmonitored until OT fixes it.",
+      "path": [
+        "s09",
+        "s12"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.5,
+        "p90": 0.53
+      },
+      "unit": "calendar days per shift including handover",
+      "population": "Distribution control rooms on 12-hour shifts",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "A 12-hour shift is 0.5 days; handover overlap adds about 15-30 minutes (author's estimate)."
+      }
+    },
+    {
+      "metric": "average_interruption_duration_hours",
+      "value": 1.34,
+      "unit": "hours per customer interrupted, 2021, excluding loss of supply and major events",
+      "population": "Hydro Ottawa Limited customers",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "scorecard-2021"
+        ],
+        "note": "SAIDI 0.83 / SAIFI 0.62 from the scorecard; remote switching from the control room shortens this average."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Night shifts run the same desk with one console fewer, so a storm at night overloads the operators before help arrives.",
+      "steps": [
+        "s05",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the organisation file's process entry notes fewer people on nights and weekends."
+      }
+    },
+    {
+      "description": "Open permits and abnormal devices must be carried across every shift change by hand; a missed item is a crew safety risk.",
+      "steps": [
+        "s02",
+        "s03",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ihsa-uwpc",
+          "oakville-cro"
+        ],
+        "note": "Utility Work Protection Code permits and tags; flawless delivery of work protection processes demanded in the posting."
+      }
+    },
+    {
+      "description": "Outage records are corrected by hand during busy shifts, and errors flow into reliability statistics.",
+      "steps": [
+        "s13",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Failed telemetry leaves operators blind to devices until OT specialists or field staff check them.",
+      "steps": [
+        "s12"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oakville-cro",
+      "title": "Control Room Operator (job posting, closed February 13, 2022)",
+      "publisher": "Oakville Hydro, via The MEARIE Group careers site",
+      "url": "https://mearie.talentnest.com/en/posting/82564",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Ontario distribution control room duties: operate SCADA/ADMS and automated field devices, prepare and direct scheduled and emergency switching and load transfers, deliver Utility Work Protection Code processes, liaise with Hydro One and the IESO on outages and restoration, daily KPI reporting and post-event analysis; MEARIE operator training."
+    },
+    {
+      "id": "ho-blog-2022",
+      "title": "How utilities prepare for emergencies",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/blog/how-utilities-prepare-emergencies",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Emergency Response Plan with year-round simulations; priorities set by health and safety risk, essential services such as hospitals and schools, then densely populated areas; system operators in the control centre on duty 24/7; field operators handle emergency response, outage restoration and single-customer calls; on-call staff, contractors and arborists after hours; automated field devices restore some customers automatically."
+    },
+    {
+      "id": "ho-600",
+      "title": "600 skilled field workers dispersed across city to restore remaining 29,000 customers - 3:00 PM update",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/news-releases/600-skilled-field-workers-dispersed-across-city-restore-remaining-29000-customers-300",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "About 600 employees and crews working around the clock; 151,000 restored six days after the storm; switching largely done remotely by the System Office; homes with damaged electrical equipment need repairs before reconnection; stay 10 metres from downed lines and call the outage line."
+    },
+    {
+      "id": "ho-blog-2020",
+      "title": "How Hydro Ottawa powers through summer storm season",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/blog/how-hydro-ottawa-powers-through-summer-storm-season",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "Additional staff put on standby and resources relocated when severe weather is forecast; outages reported through the 24/7 outage line, app and MyAccount; outage map updated every 15 minutes; restoration estimates posted when available."
+    },
+    {
+      "id": "scorecard-2021",
+      "title": "Scorecard - Hydro Ottawa Limited (2017-2021) and 2021 Scorecard MD&A",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/documents/scorecard/2021/Scorecard%20-%20Hydro%20Ottawa%20Limited.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Average hours of interruption per customer 0.83 in 2020 and 2021; average interruptions per customer 0.72 in 2020 and 0.62 in 2021 (both excluding loss of supply and major events); one major event in 2021; top outage causes loss of supply, defective equipment and foreign interference; emergency (unplanned) capital $8.57M against a $6.73M budget in 2021."
+    },
+    {
+      "id": "me-2019-07",
+      "title": "Hydro Ottawa Limited Major Event: July 5, 2019",
+      "publisher": "Hydro Ottawa",
+      "url": "https://www.hydroottawa.com/en/about-us/regulatory-affairs/major-events/July-5-2019",
+      "year": 2019,
+      "accessed": "2026-11-24",
+      "supports": "Lightning and loss of supply at four stations; 70,069 customers (21%); longest outage 6 h 35 min; on-call staff, four extra PLTs and control room staff held past end of day; standing service agreements with forestry, civil and lines contractors (not used); Electrical Emergency Response Plan activated with an Incident Command Centre staffed 7:30 pm to 2:00 am; daily SAIDI 12.11 against 5.3."
+    },
+    {
+      "id": "me-2022-12",
+      "title": "Hydro Ottawa Limited Major Event: December 23, 2022",
+      "publisher": "Hydro Ottawa",
+      "url": "https://www.hydroottawa.com/en/about-us/regulatory-affairs/major-events/December-23-2022",
+      "year": 2023,
+      "accessed": "2026-11-24",
+      "supports": "Winter storm with a Hydro One supply circuit trip and loss of supply to four stations; 67,710 customers interrupted (19%); 90% restored in 12 h 30 min; weather statement, watch and warning issued days ahead; on-call staff reported at 18:00 the evening before and all line and underground staff at 06:00; Incident Command Centre activated; no mutual aid; ETRs on outage map, outage line and email alerts."
+    },
+    {
+      "id": "me-index",
+      "title": "Major events (list of Hydro Ottawa major event reports)",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/about-us/regulatory-affairs/major-events",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Major events listed by date: three in 2019 (April 15, July 5, November 1), two in 2020 (March 7, October 18), one in 2021 (June 14), three in 2022 (May 21, June 18, December 23); after a major event the utility files a report with the OEB normally within 60 days of occurrence."
+    },
+    {
+      "id": "ihsa-uwpc",
+      "title": "Keys to the Utility Work Protection Code (IHSA Health and Safety Magazine)",
+      "publisher": "Infrastructure Health and Safety Association",
+      "url": "https://www.ihsa.ca/IHSA-Health-Safety-Magazine/IHSAV232/Keys-to-the-Utility-Work-Protection-Code.aspx",
+      "year": null,
+      "accessed": "2026-11-24",
+      "supports": "The Electrical Utility Safety Rules govern how workers act near hazards and the Utility Work Protection Code uses permits and tags to show when lines are isolated and safe to work on; permit issuers and workers need training and certification. Publication year not stated on the page."
+    }
+  ],
+  "assumptions": [
+    "A case is one 12-hour shift (61 a month). Day shifts have four operators and nights three; the organisation file does not state the split.",
+    "Desk time is counted here as continuous monitoring. Minutes on individual trouble orders (about 2 FTE), crew outages (about 1 FTE), planned switching and work protection (about 4.5 FTE in ops-control-room-switching) and other workflows (about 2 FTE) are counted there, so this file states 11 FTE to keep the organisation total near its 20 operators. The simulated hands-on time here is seat presence, during which that other work is also done, which is why it implies more FTE than stated.",
+    "Steps during the shift run alongside the monitoring step (concurrent_with), so the simulated cycle time stays close to 12 hours.",
+    "The organisation file's surge multiplier for this process (3 to 12) describes events, not shifts; for a shift-based unit the surge adds extended and overlapping shifts, not more shifts.",
+    "Four shift supervisors are not enough to staff one 24/7 seat without overtime (about 4.9 needed at 1,800 worked hours a year).",
+    "Hands-on time times volume implies about 26 FTE at the validator's 130 productive hours a month, against 15 stated: a control room seat is occupied for whole shifts, and shift workers spend about 140-150 hours a month on the desk, and part of the seat time is counted in other workflows (see above).",
+    "Loaded costs come from the organisation file (wage x 1.40)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

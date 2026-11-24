@@ -1,0 +1,1491 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-cs-critical-result-notification",
+  "name": "Phone critical results to clinicians",
+  "org": "diagnostic-lab-services-co",
+  "process": "cs-critical-result-notification",
+  "sector": "medical laboratory services",
+  "function": "client services",
+  "summary": "When a technologist confirms that a community patient's result is beyond a Level I critical limit, a call attendant on the results call desk must phone the ordering clinician or a delegate, have the result read back and document who took it and when. Because most community specimens are tested in the evening and overnight, many calls go to after-hours lines and answering services, and some clinicians cannot be reached. Failed attempts are escalated to a team lead, then to the on-call medical director, who may have the patient called directly. Waiting for call backs and the overnight gap make up most of the elapsed time.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A large Canadian community laboratory company with a central results call desk that phones critical results from regional laboratories to community clinicians around the clock.",
+    "org_size_employees": 3300,
+    "notes": "Starts when a confirmed critical result reaches the call queue; confirmation of the value is part of the testing processes."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one critical result",
+  "trigger": "A technologist releases a confirmed Level I critical result and it appears on the call desk's critical call list.",
+  "end_state": "A responsible clinician, a delegate or (on the medical director's instruction) the patient has received the result with read-back and the notification is documented in the LIS, or a failed notification is recorded as a nonconformance and the result goes out in the routine report.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 1800,
+      "mode": 2500,
+      "high": 3200
+    },
+    "seasonality": "Follows testing volume; daily peak in the evening and overnight as community specimens are tested; heavier on Mondays and after long weekends.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "From the organisation file process map, which assumes about 0.35% of requisitions are critical; seasonality is the author's estimate."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cl-core-testing",
+        "object": "critical_result",
+        "share": 0.8
+      },
+      {
+        "from": "cl-microbiology-testing",
+        "object": "critical_result",
+        "share": 0.15
+      },
+      {
+        "from": "hs-reference-testing",
+        "object": "critical_result",
+        "share": 0.05
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "cl-result-reporting",
+        "object": "notification_record"
+      },
+      {
+        "outcome": "notified",
+        "to": "ordering_physician",
+        "object": "critical_result"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "call_attendant",
+      "title": "Call attendant (results and after-hours line)",
+      "department": "Results and after-hours call desk",
+      "layer": "individual_contributor",
+      "fte_on_process": 5,
+      "loaded_cost_per_hour": {
+        "low": 24,
+        "mode": 29,
+        "high": 40
+      },
+      "occupation_code": "NOC 64409",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_jobbank_csr"
+        ],
+        "note": "Cost from the organisation file (Job Bank NOC 64409 times 1.35). Use of call attendants for critical calls is the organisation file's assumption; about 5 FTE of the 18 attendants, who also cover the after-hours line and other calls; author's estimate."
+      }
+    },
+    {
+      "id": "cs_team_lead",
+      "title": "Contact centre team lead",
+      "department": "Customer care contact centre",
+      "layer": "supervisor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 38,
+        "high": 46
+      },
+      "occupation_code": "NOC 12010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Escalations, audits and failed-notification records; author's estimate."
+      }
+    },
+    {
+      "id": "mlt_core",
+      "title": "Medical laboratory technologist, chemistry and haematology",
+      "department": "Core laboratory (chemistry, immunoassay, haematology, urinalysis)",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 47,
+        "mode": 52,
+        "high": 68
+      },
+      "occupation_code": "NOC 32120",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Technical questions transferred from the call desk; author's estimate."
+      }
+    },
+    {
+      "id": "medical_director",
+      "title": "Laboratory medical director or clinical scientist (clinical pathologist, biochemist, microbiologist)",
+      "department": "Community laboratory testing (The model laboratory Laboratories)",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 180,
+        "mode": 230,
+        "high": 300
+      },
+      "occupation_code": "NOC 31100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "On-call medical director escalations, mostly after hours; author's estimate."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lis",
+      "name": "Laboratory information system (orders, accessioning, results, autoverification rules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "telephony",
+      "name": "Contact centre telephony with IVR, queues and call recording",
+      "kind": "communication"
+    },
+    {
+      "id": "crm",
+      "name": "CRM for client accounts, sales pipeline and service cases",
+      "kind": "workflow"
+    },
+    {
+      "id": "qms",
+      "name": "Quality management system software (document control, CAPA, training records)",
+      "kind": "workflow"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive the critical result in the call queue",
+      "description": "The LIS places the released critical result on the call desk's critical call list with patient identifiers, test, value, critical limit, ordering clinician, contact numbers on file and the time released, and the call desk screen alerts the attendants.",
+      "role": "system",
+      "kind": "intake",
+      "inputs": [
+        "critical result"
+      ],
+      "outputs": [
+        "call list entry"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Hand-off from the testing processes to a call desk is the organisation file's assumption; timing is the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Claim the call and look up contact details",
+      "description": "A call attendant takes the next critical on the list, opens the ordering clinician's client account for office hours, the after-hours or answering service number and any written exemptions, checks earlier call notes for the patient, and decides whom to call first.",
+      "role": "call_attendant",
+      "kind": "lookup",
+      "inputs": [
+        "call list entry",
+        "client account"
+      ],
+      "outputs": [
+        "call plan"
+      ],
+      "systems": [
+        "lis",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Outdated number used.",
+        "typically_caught_at": "s09"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "OAML Guideline for Reporting Laboratory Test Results: Level I results phoned 24 hours a day; clinicians must provide 24-hour contact information",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.95,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.4,
+          "condition": "clinic open (weekday business hours)"
+        },
+        {
+          "to": "s05",
+          "prob": 0.5,
+          "condition": "after hours; on-call or answering service number on file"
+        },
+        {
+          "to": "s09",
+          "prob": 0.1,
+          "condition": "no usable contact number on file"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "c_oaml",
+          "c_alpha"
+        ],
+        "note": "24-hour calling and the clinician's duty to provide contact information from c_oaml and c_alpha. The after-hours share is the author's estimate: most community specimens are tested from late afternoon to the early morning, so many criticals are found after clinics close."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Phone the clinician's office",
+      "description": "The attendant calls the clinic, asks for the ordering clinician or a nurse or physician the clinician has delegated, gives the patient's name with two identifiers, the test, value and units, and asks the receiver to read the result back.",
+      "role": "call_attendant",
+      "kind": "communication",
+      "inputs": [
+        "call plan"
+      ],
+      "outputs": [
+        "result given with read-back"
+      ],
+      "systems": [
+        "telephony",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Read-back skipped or result given to unauthorized staff.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Laboratory critical result procedure: communication to a responsible clinician with read-back (CLSI GP47 practice)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.72,
+          "condition": "clinician or delegate took the result and read it back"
+        },
+        {
+          "to": "s08",
+          "prob": 0.03,
+          "condition": "clinician asks a technical question"
+        },
+        {
+          "to": "s04",
+          "prob": 0.2,
+          "condition": "message left; clinician to call back"
+        },
+        {
+          "to": "s05",
+          "prob": 0.05,
+          "condition": "no answer or office closed early"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "c_qp_sidebar",
+          "c_qp_article"
+        ],
+        "note": "Read-back on 96% of calls and calls mostly to licensed caregivers (c_qp_sidebar); clerks less reliable (c_qp_article). Branch shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Wait for a call back and call again",
+      "description": "If the office has not called back within the laboratory's interval, the attendant calls again and asks for any clinician in the practice who can take the result.",
+      "role": "call_attendant",
+      "kind": "communication",
+      "inputs": [
+        "open call"
+      ],
+      "outputs": [
+        "result given or escalation"
+      ],
+      "systems": [
+        "telephony",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.65,
+          "condition": "clinician reached on call back or retry"
+        },
+        {
+          "to": "s03",
+          "prob": 0.2,
+          "condition": "another try at the office"
+        },
+        {
+          "to": "s09",
+          "prob": 0.15,
+          "condition": "no response after repeated tries"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Retry interval of about 15 to 30 minutes follows common call centre practice described in c_liebow; author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Call the after-hours number or answering service",
+      "description": "The attendant dials the clinician's after-hours line, cell or answering service, leaves the patient name, a call-back number and the fact that a critical laboratory result is waiting, and asks the service to page the clinician on call.",
+      "role": "call_attendant",
+      "kind": "communication",
+      "inputs": [
+        "call plan"
+      ],
+      "outputs": [
+        "page or message left"
+      ],
+      "systems": [
+        "telephony",
+        "lis",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "OAML guideline: critical results communicated at all times; laboratory escalation procedure",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.2,
+          "condition": "on-call clinician answers and reads the result back"
+        },
+        {
+          "to": "s06",
+          "prob": 0.65,
+          "condition": "message left with the service or voicemail"
+        },
+        {
+          "to": "s09",
+          "prob": 0.15,
+          "condition": "number invalid, no answer or no on-call coverage"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_oaml",
+          "c_cv2006"
+        ],
+        "note": "Escalation through after-hours contacts described in c_cv2006; shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Wait for the on-call clinician to call back",
+      "description": "The on-call clinician receives the page or message and phones the call desk; nobody at the laboratory works on the call while waiting, but the attendant watches the time against the escalation limit.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "page or message left"
+      ],
+      "outputs": [
+        "call back"
+      ],
+      "systems": [
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 20,
+        "high": 90
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.8,
+          "condition": "clinician calls back"
+        },
+        {
+          "to": "s05",
+          "prob": 0.1,
+          "condition": "no call back; page again"
+        },
+        {
+          "to": "s09",
+          "prob": 0.1,
+          "condition": "no call back within the escalation limit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for community after-hours coverage."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Give the result to the returning clinician with read-back",
+      "description": "The attendant confirms who is calling and their role, reads the patient identifiers and result, has the clinician read it back and answers questions about the specimen or offers a transfer to the technologist.",
+      "role": "call_attendant",
+      "kind": "communication",
+      "inputs": [
+        "call back"
+      ],
+      "outputs": [
+        "result given with read-back"
+      ],
+      "systems": [
+        "telephony",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.003,
+        "defect_description": "Read-back not completed.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Laboratory critical result procedure: read-back by the recipient",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.95,
+          "condition": "result accepted"
+        },
+        {
+          "to": "s08",
+          "prob": 0.05,
+          "condition": "technical question"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_qp_sidebar"
+        ],
+        "note": "Read-back practice from c_qp_sidebar; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Technologist answers the clinician's technical question",
+      "description": "The call is transferred to a technologist on the bench, who explains specimen quality, whether the test was repeated, previous values and the reference interval, without giving medical advice.",
+      "role": "mlt_core",
+      "kind": "communication",
+      "inputs": [
+        "clinician question"
+      ],
+      "outputs": [
+        "technical answer"
+      ],
+      "systems": [
+        "telephony",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "question answered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Try alternate contacts",
+      "description": "The team lead reviews the failed attempts and tries other routes: a covering or partner physician in the same practice, the clinic group's main line, a hospital switchboard where the clinician has privileges, or the clinician's mobile number from earlier calls.",
+      "role": "cs_team_lead",
+      "kind": "coordination",
+      "inputs": [
+        "failed attempts log"
+      ],
+      "outputs": [
+        "clinician reached or escalation"
+      ],
+      "systems": [
+        "telephony",
+        "crm",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Laboratory critical result escalation procedure (no give-up point for Level I results)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.6,
+          "condition": "a responsible clinician is reached"
+        },
+        {
+          "to": "s10",
+          "prob": 0.4,
+          "condition": "no clinician reachable"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_cv2006"
+        ],
+        "note": "Escalation routes and the no-give-up principle from c_cv2006; shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Escalate to the on-call medical director",
+      "description": "The team lead phones the on-call medical director, who reviews the value, the patient's history and the risk and decides whether to keep trying physicians (for example the hospital emergency physician), have the patient called directly, or, for a lower-risk or known recurrent value, wait for the clinic to open.",
+      "role": "medical_director",
+      "kind": "judgment",
+      "inputs": [
+        "escalation summary",
+        "patient history"
+      ],
+      "outputs": [
+        "medical decision"
+      ],
+      "systems": [
+        "telephony",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Laboratory critical result escalation procedure approved by the laboratory director",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.3,
+          "condition": "medical director reaches a physician and gives the result"
+        },
+        {
+          "to": "s11",
+          "prob": 0.45,
+          "condition": "call the patient directly"
+        },
+        {
+          "to": "s13",
+          "prob": 0.2,
+          "condition": "hold until the clinic opens"
+        },
+        {
+          "to": "s16",
+          "prob": 0.05,
+          "condition": "accept routine delivery and record a failed notification"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; c_cv2006 describes the gap that leads laboratories to escalate to patients."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Phone the patient on the medical director's instruction",
+      "description": "The attendant calls the patient using the numbers on the requisition, confirms identity, and reads the medical director's script advising the patient to go to an emergency department or contact their physician now, without discussing the diagnosis.",
+      "role": "call_attendant",
+      "kind": "communication",
+      "inputs": [
+        "medical decision",
+        "patient contact details"
+      ],
+      "outputs": [
+        "patient advised"
+      ],
+      "systems": [
+        "telephony",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Message given to someone other than the patient.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Laboratory escalation procedure; Personal Health Information Protection Act, 2004 disclosure for the patient's own care",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.75,
+          "condition": "patient reached and advised"
+        },
+        {
+          "to": "s13",
+          "prob": 0.2,
+          "condition": "patient not reached; try the clinic first thing"
+        },
+        {
+          "to": "s12",
+          "prob": 0.05,
+          "condition": "patient not reached and the value is life-threatening"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_cv2006"
+        ],
+        "note": "Contacting the patient directly is described in c_cv2006; shares and times are the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Request a police wellness check",
+      "description": "For an unreachable patient with a life-threatening value the medical director asks the local police service to check on the patient at the address on the requisition and documents the request.",
+      "role": "medical_director",
+      "kind": "communication",
+      "inputs": [
+        "patient address"
+      ],
+      "outputs": [
+        "wellness check request"
+      ],
+      "systems": [
+        "telephony",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "outcome recorded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_cv2006"
+        ],
+        "note": "Police involvement mentioned in c_cv2006 as a last resort; author's estimate of frequency and time."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Place the call on the morning handover list",
+      "description": "The attendant records the attempts made and the medical director's instruction on the open call and adds it to the morning handover list so the day shift calls the clinic as soon as it opens.",
+      "role": "call_attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "open call"
+      ],
+      "outputs": [
+        "handover list entry"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Open call left off the handover list.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Document the notification in the LIS",
+      "description": "The attendant records the name and role of the person who received the result, the date and time, that the result was read back, and every failed attempt; the LIS adds a notification note to the patient report.",
+      "role": "call_attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "call outcome"
+      ],
+      "outputs": [
+        "notification record"
+      ],
+      "systems": [
+        "lis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Incomplete record (missing time or receiver).",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189:2012 clause 5.9.1: records of critical result notification (date, time, staff member, person notified, result, difficulties)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.85,
+          "condition": "record complete",
+          "outcome": "notified"
+        },
+        {
+          "to": "s15",
+          "prob": 0.05,
+          "condition": "record selected for audit"
+        },
+        {
+          "to": "s17",
+          "prob": 0.1,
+          "condition": "contact details on file were wrong or missing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_cv2006",
+          "c_krasowski",
+          "c_csmls"
+        ],
+        "note": "Call log contents from c_cv2006; phone and document duty from c_krasowski. Audit and correction shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Audit the call record",
+      "description": "The team lead reviews a sample of the day's critical calls against the call recording and LIS record for read-back, recipient role, timing and complete documentation, and coaches the attendant when something is missing.",
+      "role": "cs_team_lead",
+      "kind": "review",
+      "inputs": [
+        "notification record",
+        "call recording"
+      ],
+      "outputs": [
+        "audit result"
+      ],
+      "systems": [
+        "lis",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Monitoring of critical result notification (quality indicator under ISO 15189)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "audit filed",
+          "outcome": "notified"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Record a failed notification as a nonconformance",
+      "description": "The team lead opens a nonconformance for a critical result that could not be phoned before routine delivery, with the attempts made and the medical director's decision, so quality can follow up with the clinic.",
+      "role": "cs_team_lead",
+      "kind": "drafting",
+      "inputs": [
+        "failed attempts log",
+        "medical decision"
+      ],
+      "outputs": [
+        "nonconformance"
+      ],
+      "systems": [
+        "qms",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "ISO 15189 control of nonconformities",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "recorded; result goes out in the routine report",
+          "outcome": "not_reached_reported_routinely"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_cv2006"
+        ],
+        "note": "Failure to notify occurred in 5% of cases in the 2002 Q-Probes study (c_cv2006); this model gives about 1% because of 24-hour escalation; author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Update the clinician's contact information",
+      "description": "The attendant sends the corrected or newly found after-hours number to client services so the client account is updated, and flags clinicians with no 24-hour contact for a follow-up letter.",
+      "role": "call_attendant",
+      "kind": "data_entry",
+      "inputs": [
+        "call outcome"
+      ],
+      "outputs": [
+        "account update request"
+      ],
+      "systems": [
+        "crm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Number entered on the wrong account.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "update requested",
+          "outcome": "notified"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_oaml",
+          "c_alpha"
+        ],
+        "note": "Clinicians' duty to give contact information (c_oaml, c_alpha); author's estimate of frequency."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Review the handover list and assign morning calls",
+      "description": "At the start of the day shift the team lead reviews the open critical calls handed over from the night, checks each against the LIS for any call back received overnight, and assigns them so the clinics are called when they open at about 08:00.",
+      "role": "cs_team_lead",
+      "kind": "coordination",
+      "inputs": [
+        "handover list"
+      ],
+      "outputs": [
+        "assigned morning calls"
+      ],
+      "systems": [
+        "lis",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 480,
+        "high": 720
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Call desk shift handover procedure for open critical calls",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "clinic open"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Overnight wait until clinics open; author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Message left during office hours",
+      "share_of_cases": 0.08,
+      "description": "The clinician is with patients or away; the attendant waits for a call back and calls again before escalating.",
+      "path": [
+        "s03",
+        "s04",
+        "s14"
+      ]
+    },
+    {
+      "name": "After-hours answering service",
+      "share_of_cases": 0.33,
+      "description": "The attendant pages the on-call clinician through an answering service and waits for the call back.",
+      "path": [
+        "s05",
+        "s06",
+        "s07",
+        "s14"
+      ]
+    },
+    {
+      "name": "No usable contact",
+      "share_of_cases": 0.2,
+      "description": "No number on file, wrong numbers or no on-call coverage send the call to the team lead for alternate contacts.",
+      "path": [
+        "s02",
+        "s09",
+        "s07"
+      ]
+    },
+    {
+      "name": "Medical director escalation",
+      "share_of_cases": 0.08,
+      "description": "No clinician can be found; the on-call medical director decides to call the patient, request a wellness check, wait for the clinic to open, or accept routine delivery.",
+      "path": [
+        "s09",
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s18",
+        "s16"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.035,
+        "p90": 0.2
+      },
+      "unit": "calendar days from the critical result reaching the call queue to documented notification",
+      "population": "Community outpatient critical results phoned by a laboratory call desk",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "c_liebow",
+          "c_qp_sidebar"
+        ],
+        "note": "Author's estimate: hospital call centres reach 92% to 100% of critical values within one hour (c_liebow) and the median hospital laboratory calls within 4 minutes of the result (c_qp_sidebar); community after-hours calls through answering services take longer, so the median is set near 50 minutes and the 90th percentile near 5 hours."
+      }
+    },
+    {
+      "metric": "critical_calls_within_60_min_call_centre",
+      "value": {
+        "before": 76.7,
+        "after": 95.7
+      },
+      "unit": "percent of critical values",
+      "population": "University of Maryland, before and after a call centre",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "c_liebow"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "median_minutes_result_to_notification",
+      "value": 4,
+      "unit": "minutes",
+      "population": "121 hospital laboratories, inpatient and emergency results",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "c_qp_sidebar"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "calls_with_read_back",
+      "value": 96,
+      "unit": "percent of notification calls",
+      "population": "121 hospital laboratories",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "c_qp_sidebar"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "notification_abandoned",
+      "value": 5,
+      "unit": "percent of critical values (2002 Q-Probes)",
+      "population": "Q-Probes participants",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "c_cv2006"
+        ],
+        "note": "Older practice; modern call desks escalate instead."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Community specimens are tested after clinics close, so many critical calls go through answering services and wait for call backs.",
+      "steps": [
+        "s05",
+        "s06"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_dyn_oaml",
+          "c_cv2006"
+        ],
+        "note": "Outpatients are hardest to reach after hours (c_cv2006)."
+      }
+    },
+    {
+      "description": "Missing or outdated after-hours numbers force team lead searches and medical director escalations.",
+      "steps": [
+        "s02",
+        "s09",
+        "s10",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_qp_article",
+          "c_oaml"
+        ],
+        "note": "Wrong numbers prevent results reaching caregivers (c_qp_article)."
+      }
+    },
+    {
+      "description": "When no clinician can be reached the laboratory has to contact the patient or wait for the clinic to open, which takes medical director time and can leave a critical value unacted on overnight.",
+      "steps": [
+        "s10",
+        "s11",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "c_cv2006"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Calls taken by clinic clerks rather than clinicians are less reliable and may lack read-back.",
+      "steps": [
+        "s03"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "c_qp_article"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "c_oaml",
+      "title": "Guideline for Reporting Laboratory Test Results (CLP-025), revised September 2009",
+      "publisher": "Ontario Association of Medical Laboratories (copy hosted by the model laboratory)",
+      "url": "",
+      "year": "2009",
+      "accessed": "2026-11-17",
+      "supports": "Level I critical results are phoned to clinicians 24 hours a day, 7 days a week; the ordering clinician must give the laboratory contact information that allows direct communication at all times; recurrent marked results within four months are called only in business hours; specialists may request written exemptions; Level II alerts are phoned or faxed 08:00 to 20:00."
+    },
+    {
+      "id": "c_dyn_oaml",
+      "title": "OAML alert reporting",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "The company publishes the OAML guideline as its reporting protocol, aimed at patient safety while preventing unnecessary calls outside office hours."
+    },
+    {
+      "id": "c_alpha",
+      "title": "Test reporting",
+      "publisher": "Alpha Laboratories (Ontario community laboratory)",
+      "url": "https://testdirectory.alphalabs.ca/Labs/TestReporting",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Peer Ontario community laboratory: Level I critical results called as soon as available, 24 hours a day, to the ordering clinician or delegate; physicians must provide contact information for critical results on a form; blanket exemptions are not honoured."
+    },
+    {
+      "id": "c_liebow",
+      "title": "Effectiveness of automated notification and customer service call centers for timely and accurate reporting of critical values: a Laboratory Medicine Best Practices systematic review and meta-analysis (Liebow et al.)",
+      "publisher": "Clinical Biochemistry (PubMed Central)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4518392/",
+      "year": "2012",
+      "accessed": "2026-11-17",
+      "supports": "Call centres raised the share of critical values reported within the target: within 1 hour from 76.7% to 95.7% (University of Maryland), 76.7% to 92.1%, 49.2% to 100% (routine outpatient work); within 30 minutes from 50% to 95.5% (Geisinger); average notification time 38 to 10 minutes (Saxena); outpatients about 14% of notifications in one study; 10.9% unsuccessful within 1 hour after automated notification (Piva)."
+    },
+    {
+      "id": "c_qp_sidebar",
+      "title": "Study findings in brief: Q-Probes notification of critical results",
+      "publisher": "CAP Today (College of American Pathologists)",
+      "url": "https://www.captodayonline.com/Archives/feature_stories/0208_Qprobe_sidebar.html",
+      "year": "2008",
+      "accessed": "2026-11-17",
+      "supports": "121 institutions, 3,545 critical reports: median 4 minutes from result to notification and 56 minutes from collection; 96% of calls included read-back; 89% first called to a licensed caregiver; 51.3% used a defined script."
+    },
+    {
+      "id": "c_qp_article",
+      "title": "Good news on critical values, says Q-Probes audit",
+      "publisher": "CAP Today (College of American Pathologists)",
+      "url": "https://www.captodayonline.com/Archives/feature_stories/0208_Qprobe.html",
+      "year": "2008",
+      "accessed": "2026-11-17",
+      "supports": "Suggests making the call within 15 minutes of the result being reported; calls to secretaries and clerks saved little time and were less reliable; a small percentage of calls were abandoned; wrong numbers and paging failures prevent results reaching caregivers."
+    },
+    {
+      "id": "c_cv2006",
+      "title": "Critical thinking on critical values",
+      "publisher": "CAP Today (College of American Pathologists)",
+      "url": "https://www.captodayonline.com/Archives/cover_stories/0906Critical_Values.html",
+      "year": "2006",
+      "accessed": "2026-11-17",
+      "supports": "In the 2002 Q-Probes study laboratories gave up contacting the physician in 5% of cases; notification standards of 30 to 40 minutes; escalation from practice to pager to other contacts, outpatients hardest; a reference laboratory hand-off to customer service can delay notification 12 to 24 hours; call logs record recipient, read-back and time; staff should keep trying to reach the patient, even via police."
+    },
+    {
+      "id": "c_krasowski",
+      "title": "Autoverification in a core clinical chemistry laboratory at an academic medical center (Krasowski et al.)",
+      "publisher": "Journal of Pathology Informatics (PubMed Central)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4023033",
+      "year": "2014",
+      "accessed": "2026-11-17",
+      "supports": "Critical values can autoverify, but staff must still notify the provider by phone and document the call."
+    },
+    {
+      "id": "c_jobbank_csr",
+      "title": "Wages: Customer Service Representative - Call Centre in Ontario (NOC 64409)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/15201/ON",
+      "year": "2025",
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low $17.95, median $21.50, high $33.17 (2023-2024)."
+    },
+    {
+      "id": "c_csmls",
+      "title": "Standards of practice",
+      "publisher": "Canadian Society for Medical Laboratory Science",
+      "url": "https://csmls.org/about-us/our-members/standards-of-practice/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Laboratory professionals document, protect and maintain confidential information."
+    }
+  ],
+  "assumptions": [
+    "About half of critical results are assumed to be found after clinic hours because community testing peaks in the evening; this is the main driver of elapsed time and is the author's estimate.",
+    "Critical calls are made by call attendants on the results call desk, following the organisation file; in some laboratories technologists make these calls themselves.",
+    "The share of critical results that end with no notification before routine delivery is set near 1%, below the 5% reported in the 2002 Q-Probes study, because of around-the-clock escalation to a medical director.",
+    "Recurrent critical values that the OAML guideline allows to wait for business hours are filtered out in the testing process before they reach the call desk.",
+    "Loaded costs come from the organisation file (hourly wage times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

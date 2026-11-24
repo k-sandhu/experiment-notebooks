@@ -1,0 +1,2233 @@
+{
+  "schema_version": "0.2",
+  "id": "dls-fin-patient-billing",
+  "name": "Bill and collect from patients",
+  "org": "diagnostic-lab-services-co",
+  "process": "fin-patient-billing",
+  "sector": "medical laboratory services",
+  "function": "finance (billing and revenue cycle)",
+  "summary": "Patients pay the company for tests their provincial plan does not cover: most Quebec community tests, uninsured tests in Ontario and Manitoba, house calls, private genetic tests, self-pay tests bought online and portal subscriptions. Almost all charges are paid by card at the collection centre counter or online, so the main work is closing each centre's card batch every day and reconciling it to the processor deposit and the billing system. A small share of charges is invoiced, and those need statements, payment posting, calls, disputes, refunds, agency referral and write-offs, which take most of the clerks' time per charge and most of the elapsed time.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A large Canadian community laboratory company with about 200 collection centres in Ontario, Quebec and Manitoba and a central billing department in Brampton.",
+    "org_size_employees": 3300,
+    "notes": "COVID-19 testing revenue in 2020-2022 is not modelled. The point-of-sale payment itself is taken during registration and belongs to the registration workflow; this workflow starts when the charge reaches the billing system."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one patient charge",
+  "trigger": "A patient charge reaches the billing system from a centre registration, an online order, a portal subscription, a house call booking, a private genetic test or a claim transferred from provincial billing.",
+  "end_state": "The charge is paid and reconciled to the bank deposit and posted to the ledger, or credited, refunded or written off.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 110000,
+      "mode": 140000,
+      "high": 170000
+    },
+    "seasonality": "Follows collection centre visits: lower in late December and summer weeks, higher on weekday mornings and in January; portal subscriptions peaked in 2020-2021.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "pb_ag17"
+      ],
+      "note": "Volume from the organisation file's process map. Ontario uninsured tests were about 1.1 million a year industry-wide in 2015/16 (pb_ag17); most charges are Quebec centre visits, which the organisation file assumes are patient-paid."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cl-psc-registration",
+        "object": "patient_invoice",
+        "share": 0.88
+      },
+      {
+        "from": "fin-provincial-billing",
+        "object": "billable_order",
+        "share": 0.03
+      },
+      {
+        "from": "cd-self-pay-order",
+        "object": "patient_payment",
+        "share": 0.035
+      },
+      {
+        "from": "cd-portal-registration",
+        "object": "patient_invoice",
+        "share": 0.02
+      },
+      {
+        "from": "mb-house-call",
+        "object": "patient_invoice",
+        "share": 0.018
+      },
+      {
+        "from": "gs-genetic-testing",
+        "object": "patient_invoice",
+        "share": 0.007
+      },
+      {
+        "from": "patient",
+        "object": "patient_payment",
+        "share": 0.01
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "patient",
+        "object": "patient_invoice"
+      },
+      {
+        "outcome": "paid",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      },
+      {
+        "outcome": "written_off",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      },
+      {
+        "outcome": "refunded",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      },
+      {
+        "outcome": "credited",
+        "to": "fin-month-end-close",
+        "object": "ledger_postings"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "billing_clerk",
+      "title": "Billing clerk",
+      "department": "Billing and revenue cycle",
+      "layer": "individual_contributor",
+      "fte_on_process": 9.0,
+      "loaded_cost_per_hour": {
+        "low": 29,
+        "mode": 33,
+        "high": 42
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_job"
+        ],
+        "note": "Duties from the company's billing clerk posting; FTE share is the author's estimate within the 32 FTE of billing clerks not already used by provincial billing."
+      }
+    },
+    {
+      "id": "ar_collections_clerk",
+      "title": "Accounts receivable and collections clerk",
+      "department": "Billing and revenue cycle",
+      "layer": "individual_contributor",
+      "fte_on_process": 5.5,
+      "loaded_cost_per_hour": {
+        "low": 29,
+        "mode": 33,
+        "high": 42
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_job"
+        ],
+        "note": "Payment posting, billing calls and delinquent account follow-up from the company's posting; FTE share is an estimate."
+      }
+    },
+    {
+      "id": "billing_supervisor",
+      "title": "Senior billing clerk and billing supervisor",
+      "department": "Billing and revenue cycle",
+      "layer": "supervisor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 33,
+        "mode": 38,
+        "high": 46
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_job"
+        ],
+        "note": "Write-off recommendations go to supervision in the posting; approval role and FTE are estimates."
+      }
+    },
+    {
+      "id": "billing_manager",
+      "title": "Billing manager",
+      "department": "Billing and revenue cycle",
+      "layer": "manager",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 66,
+        "high": 80
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Monthly write-off approval above the supervisor's authority; estimate."
+      }
+    },
+    {
+      "id": "lab_assistant_psc_on",
+      "title": "Laboratory assistant, collection centre (Ontario)",
+      "department": "Ontario collection centres",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 24,
+        "mode": 31,
+        "high": 41
+      },
+      "occupation_code": "NOC 33101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily terminal batch close at Ontario and Manitoba centres; the role is about 99 per cent claimed by other workflows, so the share kept here is small and the same people do it at the end of a shift."
+      }
+    },
+    {
+      "id": "auxiliary_nurse_qc",
+      "title": "Auxiliary nurse, collection centre (Quebec)",
+      "department": "Quebec collection centres",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.2,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 35,
+        "high": 44
+      },
+      "occupation_code": "NOC 32101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily terminal batch close at Quebec centres, where most patient charges arise; estimate within the 5 FTE left after registration and collection."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "billing_system",
+      "name": "Laboratory billing and accounts receivable system (provincial claims, patient, client invoices)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "lis",
+      "name": "Laboratory information system (orders, accessioning, results, autoverification rules)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "pos_terminal",
+      "name": "Debit and credit card payment terminal at the counter",
+      "kind": "other"
+    },
+    {
+      "id": "requisition_imaging",
+      "name": "Requisition scanning and document imaging",
+      "kind": "document_store"
+    },
+    {
+      "id": "erp",
+      "name": "ERP for general ledger, payables, procurement and inventory",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "consumer_health_service",
+      "name": "The consumer health service patient portal and online test shop",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email_office",
+      "name": "Email and office suite",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "processor_portal",
+      "name": "Card processor and bank online reporting (settlement, deposits, chargebacks)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "payment_gateway",
+      "name": "Hosted online card payment page and gateway",
+      "kind": "external_portal"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Create the patient charge in the billing system",
+      "description": "The billing system receives the charge from the LIS registration, the online test shop, the portal subscription, the house call booking or a claim moved over from provincial billing, priced from the patient price list, and records whether it was already paid by card or still needs an invoice.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "registered visit with uninsured or Quebec tests",
+        "online order",
+        "transferred claim"
+      ],
+      "outputs": [
+        "patient charge"
+      ],
+      "systems": [
+        "billing_system",
+        "lis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Wrong price-list amount or charge created twice from a re-registered visit.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.65,
+          "condition": "paid by card at a Quebec centre"
+        },
+        {
+          "to": "s03",
+          "prob": 0.21,
+          "condition": "paid by card at an Ontario or Manitoba centre"
+        },
+        {
+          "to": "s04",
+          "prob": 0.08,
+          "condition": "paid online or by phone in advance"
+        },
+        {
+          "to": "s10",
+          "prob": 0.03,
+          "condition": "unpaid, needs review before invoicing"
+        },
+        {
+          "to": "s12",
+          "prob": 0.03,
+          "condition": "unpaid, invoiced automatically"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "pb_ag17",
+          "pb_dynqc",
+          "pb_plus"
+        ],
+        "note": "Mix of charges is the author's estimate: Quebec centre visits from the registration workflow's 17 per cent Quebec share of 560,000 visits, about 7 per cent of Ontario visits with an uninsured test, online shop and portal volumes from the organisation file, and transfers from the provincial billing workflow."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Close the day's terminal batch at a Quebec centre",
+      "description": "At closing the auxiliary nurse prints the day's payment report from the LIS and the terminal's end-of-day totals, compares card counts and totals, settles the batch, notes any voided or re-run transactions on the daily close sheet, signs it and scans it to billing. The time shown is one charge's share of the daily close.",
+      "role": "auxiliary_nurse_qc",
+      "kind": "validation",
+      "inputs": [
+        "terminal end-of-day report",
+        "LIS daily payment report"
+      ],
+      "outputs": [
+        "settled batch",
+        "signed close sheet"
+      ],
+      "systems": [
+        "pos_terminal",
+        "lis",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0.04,
+        "mode": 0.08,
+        "high": 0.2
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 300,
+        "high": 660
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.004,
+        "defect_description": "Batch left open or a void not recorded, so the deposit does not match the billing system.",
+        "typically_caught_at": "s07"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Company cash handling and point-of-sale controls: terminal batch settled daily and the close sheet signed and sent to billing",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_td",
+          "pb_shift4",
+          "pb_dynqc"
+        ],
+        "note": "Daily batch close is standard card practice (pb_td, pb_shift4); per-charge time assumes about 10 minutes a day spread over roughly 100 charges at each of about 35 Quebec centres."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Close the day's terminal batch at an Ontario or Manitoba centre",
+      "description": "The lab assistant closing the centre compares the terminal's end-of-day totals with the LIS payment report for the few uninsured-test payments taken that day, settles the batch, records any void or refund on the close sheet and scans the signed sheet to billing.",
+      "role": "lab_assistant_psc_on",
+      "kind": "validation",
+      "inputs": [
+        "terminal end-of-day report",
+        "LIS daily payment report"
+      ],
+      "outputs": [
+        "settled batch",
+        "signed close sheet"
+      ],
+      "systems": [
+        "pos_terminal",
+        "lis",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0.1,
+        "mode": 0.3,
+        "high": 0.8
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 300,
+        "high": 660
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.006,
+        "defect_description": "Batch not closed or payment keyed against the wrong visit.",
+        "typically_caught_at": "s07"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Company cash handling and point-of-sale controls: terminal batch settled daily and the close sheet signed and sent to billing",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_td",
+          "pb_ag17"
+        ],
+        "note": "Uninsured tests paid at the centre (pb_ag17); per-charge time assumes about 5 minutes a day over 7 to 10 uninsured-test payments at a typical Ontario centre."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Settle the online card payment through the gateway",
+      "description": "Payments taken on the online shop, the portal, the hosted invoice payment page or by phone through the virtual terminal are authorised in real time and the gateway closes its batch automatically each night; the billing system marks the order paid from the gateway's confirmation.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "online card authorisation"
+      ],
+      "outputs": [
+        "settled online batch"
+      ],
+      "systems": [
+        "payment_gateway",
+        "consumer_health_service",
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Order marked paid although the authorisation later failed or was reversed.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_pay",
+          "pb_shift4"
+        ],
+        "note": "Hosted card payment through TD Merchant Services and online bill payment are described on the company's payment page; nightly batch timing from processor documentation."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Card processor funds the batch to the bank account",
+      "description": "The processor clears the settled batch with the card networks and deposits the net amount in the company's bank account, usually the next business day; batches closed Friday to Sunday are funded on Monday and late batches a day later.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "settled batch"
+      ],
+      "outputs": [
+        "bank deposit",
+        "settlement report"
+      ],
+      "systems": [
+        "processor_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 600,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.9995,
+          "condition": "funded"
+        },
+        {
+          "to": "s27",
+          "prob": 0.0005,
+          "condition": "cardholder later disputes the charge"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "pb_shift4"
+        ],
+        "note": "Next-day funding and Monday funding of weekend batches are stated for Canadian merchants."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Load the settlement file and bank statement and auto-match deposits",
+      "description": "Overnight the billing system imports the processor's settlement report and the bank statement, matches each deposit to a centre's batch by merchant number and amount, posts card fees and lists every unmatched batch and centre that did not close on an exception report.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "settlement report",
+        "bank statement"
+      ],
+      "outputs": [
+        "matched deposits",
+        "exception report"
+      ],
+      "systems": [
+        "billing_system",
+        "processor_portal",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 360,
+        "high": 900
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Automated bank and settlement matching was common in laboratory billing systems by 2019; the overnight timing is the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Reconcile each centre's daily close to the deposit and the billing system",
+      "description": "A billing clerk works the reconciliation exception report: compares each centre's payments in the billing system with the processor batch and bank deposit, checks the scanned close sheet, chases centres that did not close their batch and records the day as reconciled in the reconciliation workbook. The time shown is one charge's share.",
+      "role": "billing_clerk",
+      "kind": "validation",
+      "inputs": [
+        "exception report",
+        "close sheets",
+        "settlement report"
+      ],
+      "outputs": [
+        "reconciled day",
+        "variance list"
+      ],
+      "systems": [
+        "billing_system",
+        "processor_portal",
+        "spreadsheets",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.15,
+        "high": 0.5
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "A small variance is cleared without finding its cause.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting under the parent company's Sarbanes-Oxley section 404 program: daily reconciliation of point-of-sale and online receipts to processor settlements and bank deposits",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.996,
+          "condition": "matched"
+        },
+        {
+          "to": "s08",
+          "prob": 0.004,
+          "condition": "variance traced to this charge"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_job"
+        ],
+        "note": "Cash handling, bank deposits and balance reconciliation are listed duties (pb_job); backlog of a few hours to three days and per-charge share of about 4 minutes per centre-day are estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Investigate a payment variance with the centre",
+      "description": "The clerk pulls the terminal receipt copies, the LIS payment entries and the close sheet, phones the centre team lead, finds the cause (payment keyed to the wrong visit, void not recorded, batch closed twice, duplicate charge) and posts a correcting entry or opens a refund.",
+      "role": "billing_clerk",
+      "kind": "analysis",
+      "inputs": [
+        "variance list",
+        "receipt copies",
+        "close sheet"
+      ],
+      "outputs": [
+        "correcting entry or refund request"
+      ],
+      "systems": [
+        "billing_system",
+        "lis",
+        "processor_portal",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Correction posted to the wrong visit.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.8,
+          "condition": "corrected"
+        },
+        {
+          "to": "s24",
+          "prob": 0.15,
+          "condition": "patient was charged twice, refund due"
+        },
+        {
+          "to": "s26",
+          "prob": 0.05,
+          "condition": "small unexplained difference written off"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_job"
+        ],
+        "note": "Investigating delinquent or incomplete payments is a listed duty; causes, times and branch shares are estimates."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Export the day's payments and revenue to the general ledger",
+      "description": "Each night the billing system summarises the day's patient charges, payments, card fees, refunds and write-offs by business line and province and posts a journal to the ERP general ledger for the monthly close.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "posted payments and charges"
+      ],
+      "outputs": [
+        "ledger postings"
+      ],
+      "systems": [
+        "billing_system",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 600,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.975,
+          "condition": "posted and closed",
+          "outcome": "paid"
+        },
+        {
+          "to": "s28",
+          "prob": 0.015,
+          "condition": "patient later asks for a receipt copy"
+        },
+        {
+          "to": "s24",
+          "prob": 0.01,
+          "condition": "test cancelled or found insured after payment, refund due"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Nightly summary journal from a subledger to the ERP is the author's estimate of common practice."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Review the unpaid charge in the billing work queue",
+      "description": "A billing clerk opens the charge with the requisition image, checks the patient's name and mailing address, the price-list amount and that the test really is uninsured or that the provincial rejection cannot be fixed, and decides whether the patient, an employer or another third party should be billed.",
+      "role": "billing_clerk",
+      "kind": "validation",
+      "inputs": [
+        "patient charge",
+        "requisition image",
+        "price list"
+      ],
+      "outputs": [
+        "invoice-ready charge"
+      ],
+      "systems": [
+        "billing_system",
+        "lis",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong address or a charge for a test the province would have paid.",
+        "typically_caught_at": "s16"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Health Insurance Act and Commitment to the Future of Medicare Act: insured services may not be charged to insured patients; only uninsured tests are billed",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.85,
+          "condition": "ready to invoice"
+        },
+        {
+          "to": "s11",
+          "prob": 0.1,
+          "condition": "address or payer missing"
+        },
+        {
+          "to": "END",
+          "prob": 0.05,
+          "condition": "not billable to the patient",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_ag17",
+          "pb_job"
+        ],
+        "note": "Patients pay for uninsured tests (pb_ag17); analysing patient invoices against requirements is a listed duty (pb_job). The legal rule is named from general knowledge; times and shares are estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Find the missing address or payer details",
+      "description": "The clerk searches the LIS demographic record, the requisition image and earlier invoices for a mailing address or email, phones the patient or the collection centre when nothing is on file, and updates the patient record.",
+      "role": "billing_clerk",
+      "kind": "lookup",
+      "inputs": [
+        "charge with missing details"
+      ],
+      "outputs": [
+        "completed billing details"
+      ],
+      "systems": [
+        "billing_system",
+        "lis",
+        "requisition_imaging"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Address keyed incorrectly, so the invoice is returned by mail.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.88,
+          "condition": "details found"
+        },
+        {
+          "to": "s26",
+          "prob": 0.12,
+          "condition": "patient cannot be traced"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common billing practice; times and shares are estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Print and send the invoice in the statement run",
+      "description": "The billing system includes the charge in the next statement run; invoices go by email where the patient gave an address and otherwise to a print-and-mail run, each showing the invoice number patients need to pay online or through their bank.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "invoice-ready charge"
+      ],
+      "outputs": [
+        "patient invoice"
+      ],
+      "systems": [
+        "billing_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_pay"
+        ],
+        "note": "The invoice number on the invoice is used for online and bank payments (pb_pay); run frequency is an estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Wait for the patient to pay the invoice",
+      "description": "The patient receives the invoice and pays online by card, through online banking with the invoice number as the account number, by phone or by cheque, or calls with a question, or does nothing.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "patient invoice"
+      ],
+      "outputs": [
+        "payment or inquiry"
+      ],
+      "systems": [
+        "payment_gateway"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 14400,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Patient pays through online banking with a previous invoice number.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.6,
+          "condition": "paid"
+        },
+        {
+          "to": "s16",
+          "prob": 0.08,
+          "condition": "patient calls with a question or dispute"
+        },
+        {
+          "to": "s18",
+          "prob": 0.32,
+          "condition": "unpaid after 30 days"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_pay"
+        ],
+        "note": "Payment channels from pb_pay; the payment share and timing are estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Post the patient's payment to the invoice",
+      "description": "Hosted card payments arrive already matched by invoice number; an accounts receivable clerk posts bank bill payments from the bank file and cheques from the mail, checks the amount against the balance and closes the invoice.",
+      "role": "ar_collections_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "bank file",
+        "cheques",
+        "gateway report"
+      ],
+      "outputs": [
+        "posted payment"
+      ],
+      "systems": [
+        "billing_system",
+        "processor_portal"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Payment posted to the wrong invoice.",
+        "typically_caught_at": "s15"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.94,
+          "condition": "applied"
+        },
+        {
+          "to": "s15",
+          "prob": 0.04,
+          "condition": "payment cannot be matched"
+        },
+        {
+          "to": "s24",
+          "prob": 0.02,
+          "condition": "overpaid or paid twice"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_job",
+          "pb_pay"
+        ],
+        "note": "Posting payments and allocating cheques are listed duties; times and shares are estimates."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Research an unidentified or misdirected payment",
+      "description": "The clerk works the unapplied cash list: bill payments made with an old invoice number, cheques without a stub and payments in a different name; she searches by name and amount, calls the patient and applies or refunds the money.",
+      "role": "ar_collections_clerk",
+      "kind": "analysis",
+      "inputs": [
+        "unapplied cash list"
+      ],
+      "outputs": [
+        "applied payment or refund request"
+      ],
+      "systems": [
+        "billing_system",
+        "processor_portal",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Money applied to the wrong patient.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.85,
+          "condition": "applied"
+        },
+        {
+          "to": "s24",
+          "prob": 0.15,
+          "condition": "cannot be applied, refund"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_pay",
+          "pb_job"
+        ],
+        "note": "Bank payments must use the current invoice number as the account number (pb_pay), which produces misdirected payments; times are estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Answer the patient's billing question or dispute",
+      "description": "On the billing line an accounts receivable clerk explains why a test was not covered, checks the requisition and price list, sends an itemised receipt for the patient's insurer, agrees a payment plan or records the patient's reason for a credit.",
+      "role": "ar_collections_clerk",
+      "kind": "communication",
+      "inputs": [
+        "patient call or email",
+        "invoice",
+        "requisition image"
+      ],
+      "outputs": [
+        "explanation, payment plan or credit request"
+      ],
+      "systems": [
+        "billing_system",
+        "lis",
+        "requisition_imaging",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Credit promised that policy does not allow.",
+        "typically_caught_at": "s17"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.55,
+          "condition": "explained, patient will pay"
+        },
+        {
+          "to": "s17",
+          "prob": 0.4,
+          "condition": "adjustment or credit requested"
+        },
+        {
+          "to": "s24",
+          "prob": 0.05,
+          "condition": "already paid, refund due"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_job",
+          "pb_cra"
+        ],
+        "note": "Answering billing queue calls is a listed duty; receipts for insurers and tax claims (pb_cra); shares are estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Approve the adjustment or credit note",
+      "description": "The billing supervisor reads the clerk's note and evidence (a valid health card for the date of service, a price error, a test not performed, a goodwill request), approves or rejects the credit in the billing system and records the reason code.",
+      "role": "billing_supervisor",
+      "kind": "approval",
+      "inputs": [
+        "credit request",
+        "evidence"
+      ],
+      "outputs": [
+        "approved or rejected credit"
+      ],
+      "systems": [
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Billing adjustment authority matrix: credits above a clerk's limit approved by a supervisor",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.55,
+          "condition": "balance fully credited",
+          "outcome": "credited"
+        },
+        {
+          "to": "s13",
+          "prob": 0.45,
+          "condition": "balance reduced or credit refused"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approval thresholds for adjustments are common practice; the shares are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Send a past-due reminder statement",
+      "description": "When the invoice is 30 days old the billing system prints or emails a past-due reminder showing the balance, the payment options and a request to call the billing department.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "aged invoice"
+      ],
+      "outputs": [
+        "reminder statement"
+      ],
+      "systems": [
+        "billing_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 10080,
+        "high": 20160
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_aapc"
+        ],
+        "note": "Two statements before in-house collection follow-up is a common practice recommendation; timing is an estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Wait for payment after the reminder",
+      "description": "The patient may pay after the reminder, call to dispute or arrange a plan, or not respond; most patient balances that are still unpaid at this point are small.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "reminder statement"
+      ],
+      "outputs": [
+        "payment or inquiry"
+      ],
+      "systems": [
+        "payment_gateway"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.45,
+          "condition": "paid"
+        },
+        {
+          "to": "s16",
+          "prob": 0.07,
+          "condition": "calls with a question"
+        },
+        {
+          "to": "s20",
+          "prob": 0.48,
+          "condition": "still unpaid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Response shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Phone the patient and send the final notice",
+      "description": "An accounts receivable clerk reviews the aged account, phones the patient (often reaching voicemail), offers a payment plan and sends a final notice that names the date the account will go to a collection agency.",
+      "role": "ar_collections_clerk",
+      "kind": "communication",
+      "inputs": [
+        "aged trial balance",
+        "account history"
+      ],
+      "outputs": [
+        "call note",
+        "final notice"
+      ],
+      "systems": [
+        "billing_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 20160
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Final notice sent to an outdated address.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company credit and collection policy: final notice and a contact attempt before agency referral",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_aapc",
+          "pb_job"
+        ],
+        "note": "One phone call and a payment plan offer before collections (pb_aapc); following up delinquent accounts is a listed duty (pb_job)."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Wait for payment after the final notice",
+      "description": "The patient has until the date on the final notice to pay or arrange a plan before the account is listed for referral to the agency.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "final notice"
+      ],
+      "outputs": [
+        "payment or no response"
+      ],
+      "systems": [
+        "payment_gateway"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 10080,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.35,
+          "condition": "paid"
+        },
+        {
+          "to": "s16",
+          "prob": 0.05,
+          "condition": "calls with a question"
+        },
+        {
+          "to": "s22",
+          "prob": 0.6,
+          "condition": "no payment"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Response shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Review the aged account for agency referral or small-balance write-off",
+      "description": "Once a month the billing supervisor reviews accounts older than about 90 to 120 days on the aged trial balance, lists balances under the small-balance threshold for write-off and approves the rest for the collection agency file.",
+      "role": "billing_supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "aged trial balance"
+      ],
+      "outputs": [
+        "agency referral list",
+        "write-off list"
+      ],
+      "systems": [
+        "billing_system",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Account with an open dispute sent to the agency.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company credit and collection policy: aging thresholds for agency referral and small-balance write-off",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 0.6,
+          "condition": "referred to the agency"
+        },
+        {
+          "to": "s26",
+          "prob": 0.4,
+          "condition": "below the threshold, write off"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_job",
+          "pb_hfma"
+        ],
+        "note": "Aging reports and write-off recommendations are listed duties (pb_job); self-pay balances are costly to collect (pb_hfma). Monthly cycle and shares are estimates."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Collection agency works the account",
+      "description": "A registered collection agency receives the account file, sends the patient a written notice, waits the required days before calling, contacts the patient within the legal limits and remits what it collects net of its commission, returning uncollectible accounts after its work period.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "agency referral file"
+      ],
+      "outputs": [
+        "agency remittance or returned account"
+      ],
+      "systems": [
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 20160,
+        "mode": 60480,
+        "high": 129600
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Collection and Debt Settlement Services Act (registered agency, written notice and 6-day wait, at most 3 contacts a week) and the Quebec Act respecting the collection of certain debts",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.2,
+          "condition": "agency collects"
+        },
+        {
+          "to": "s26",
+          "prob": 0.8,
+          "condition": "returned as uncollectible"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_s2j"
+        ],
+        "note": "Ontario agency rules from pb_s2j; recovery share and duration are estimates."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Prepare a refund to the patient",
+      "description": "A billing clerk confirms the overpayment, duplicate charge or cancelled test, refunds the original card through the terminal or gateway, or raises a cheque request to accounts payable when the card cannot be refunded, and records the reason.",
+      "role": "billing_clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "refund reason",
+        "original payment"
+      ],
+      "outputs": [
+        "refund request"
+      ],
+      "systems": [
+        "billing_system",
+        "payment_gateway",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Refund amount or card wrong.",
+        "typically_caught_at": "s25"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s25",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are estimates. Refund rate of about 1 to 2 per cent of charges is an estimate."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Approve and release the refund",
+      "description": "The billing supervisor checks the refund against the original payment and the reason, approves it in the billing system or signs the cheque request, and the refund is released to the card or mailed.",
+      "role": "billing_supervisor",
+      "kind": "approval",
+      "inputs": [
+        "refund request"
+      ],
+      "outputs": [
+        "released refund"
+      ],
+      "systems": [
+        "billing_system",
+        "payment_gateway"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Cash disbursement control: the person who prepares a refund does not approve it",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "refund released",
+          "outcome": "refunded"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common internal control; times are estimates."
+      }
+    },
+    {
+      "id": "s26",
+      "name": "Approve the write-off",
+      "description": "Each month the billing manager reviews the list of small balances, untraceable patients, agency returns and unexplained variances recommended for write-off, approves those within delegated authority and the billing system posts them to bad debt.",
+      "role": "billing_manager",
+      "kind": "approval",
+      "inputs": [
+        "write-off list"
+      ],
+      "outputs": [
+        "approved write-offs",
+        "ledger postings"
+      ],
+      "systems": [
+        "billing_system",
+        "erp"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 10080,
+        "high": 30240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Delegated write-off authority and bad debt review under internal control over financial reporting",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "written off",
+          "outcome": "written_off"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_job"
+        ],
+        "note": "Recommending write-offs is a listed clerk duty, implying approval above; monthly cycle and per-account time are estimates."
+      }
+    },
+    {
+      "id": "s27",
+      "name": "Respond to a card chargeback",
+      "description": "When the processor reports that a patient disputed a card payment, a billing clerk retrieves the terminal receipt, the registration record and the requisition showing the service was given, uploads the evidence to the processor portal before the deadline and records the outcome.",
+      "role": "billing_clerk",
+      "kind": "drafting",
+      "inputs": [
+        "chargeback notice"
+      ],
+      "outputs": [
+        "chargeback response"
+      ],
+      "systems": [
+        "processor_portal",
+        "lis",
+        "requisition_imaging",
+        "billing_system"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 10080,
+        "mode": 30240,
+        "high": 86400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Card network dispute rules in the merchant agreement: evidence within the response deadline",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.6,
+          "condition": "chargeback reversed"
+        },
+        {
+          "to": "s26",
+          "prob": 0.4,
+          "condition": "chargeback lost"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "pb_pci"
+        ],
+        "note": "Chargeback handling is common merchant practice; rate, times and win share are estimates."
+      }
+    },
+    {
+      "id": "s28",
+      "name": "Reissue a receipt for an insurance or tax claim",
+      "description": "A billing clerk finds the paid charge and emails or mails a duplicate itemised receipt showing the company name, tests, amounts and date, which the patient needs for a private insurance claim or the medical expense tax credit.",
+      "role": "billing_clerk",
+      "kind": "communication",
+      "inputs": [
+        "receipt request"
+      ],
+      "outputs": [
+        "duplicate receipt"
+      ],
+      "systems": [
+        "billing_system",
+        "email_office"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 10080,
+        "high": 43200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "receipt sent",
+          "outcome": "paid"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_cra"
+        ],
+        "note": "Receipts must show the company paid (pb_cra); request share and timing are estimates."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Card batch variance",
+      "share_of_cases": 0.004,
+      "description": "A centre's card batch does not match its payments in the billing system and the clerk traces the difference to the charge.",
+      "path": [
+        "s07",
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Invoice not paid on time",
+      "share_of_cases": 0.02,
+      "description": "An invoiced charge passes the reminder, the phone call and the final notice and goes to the agency or is written off.",
+      "path": [
+        "s13",
+        "s18",
+        "s19",
+        "s20",
+        "s21",
+        "s22",
+        "s23",
+        "s26"
+      ]
+    },
+    {
+      "name": "Billing dispute",
+      "share_of_cases": 0.007,
+      "description": "The patient disputes an invoice, often saying the test should have been covered, and a supervisor approves a credit.",
+      "path": [
+        "s16",
+        "s17"
+      ]
+    },
+    {
+      "name": "Refund after payment",
+      "share_of_cases": 0.013,
+      "description": "A test is cancelled or found insured after the patient paid, or the patient paid twice, and the card is refunded.",
+      "path": [
+        "s24",
+        "s25"
+      ]
+    },
+    {
+      "name": "Misdirected bank payment",
+      "share_of_cases": 0.002,
+      "description": "The patient pays through online banking with an earlier invoice number and the clerk has to find the right invoice.",
+      "path": [
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Card chargeback",
+      "share_of_cases": 0.0005,
+      "description": "A patient disputes the card charge with the bank weeks later and billing must send evidence.",
+      "path": [
+        "s05",
+        "s27"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 3.5,
+        "p90": 8
+      },
+      "unit": "calendar days from charge creation to payment reconciled and posted, or other closure",
+      "population": "Author's derivation for this company's charge mix",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_shift4",
+          "pb_td"
+        ],
+        "note": "Derived: card batches are closed daily and funded the next business day (Monday for weekend batches), and reconciliation runs one to three business days later; the invoiced 6 per cent take one to four months and set the tail beyond p90."
+      }
+    },
+    {
+      "metric": "ontario_uninsured_community_tests_per_year",
+      "value": 1100000,
+      "unit": "tests (2015/16, all Ontario community laboratories)",
+      "population": "Ontario community laboratory sector",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "pb_ag17"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "uninsured_test_price_range",
+      "value": {
+        "low": 20,
+        "high": 160
+      },
+      "unit": "CAD per test, sample of five tests at three providers",
+      "population": "Ontario and British Columbia community laboratories, 2017",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "pb_ag17"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "quebec_sample_transport_fee_cap",
+      "value": {
+        "blood": 15,
+        "other": 5
+      },
+      "unit": "CAD per transport to a laboratory",
+      "population": "Quebec private facilities",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "pb_cmq"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "portal_subscription_price",
+      "value": 9.99,
+      "unit": "CAD per year",
+      "population": "Company patient portal, 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "pb_plus"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Reconciliation of about 200 centres' card batches is done by hand from an exception report and a workbook, and centres that forget to close their batch create variances that take a clerk's time days later.",
+      "steps": [
+        "s02",
+        "s03",
+        "s07",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_td",
+          "pb_job"
+        ],
+        "note": "Daily batch close advice (pb_td) and reconciliation duties (pb_job); the backlog is an estimate."
+      }
+    },
+    {
+      "description": "Patients paying through online banking must change the account number to each new invoice number, so payments land on old invoices and need research.",
+      "steps": [
+        "s13",
+        "s14",
+        "s15"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_pay"
+        ],
+        "note": "The payment page states the account number must change for each invoice."
+      }
+    },
+    {
+      "description": "Small invoiced balances cost more to chase than they are worth; statements, calls and agency referral stretch over months and many end in write-off.",
+      "steps": [
+        "s18",
+        "s20",
+        "s22",
+        "s23",
+        "s26"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "pb_hfma",
+          "pb_aapc"
+        ],
+        "note": "Self-pay collection costs up to three times commercial collection (pb_hfma)."
+      }
+    },
+    {
+      "description": "Disputes often turn on whether a test was insured, which needs the requisition image and the provincial rules and ends in credits and transfers.",
+      "steps": [
+        "s10",
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from the uninsured test rules described in the Ontario Auditor General report."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "pb_ag17",
+      "title": "2017 Annual Report, Volume 1, Section 3.07: Laboratory Services in the Health Sector",
+      "publisher": "Office of the Auditor General of Ontario",
+      "url": "https://www.auditor.on.ca/en/content/annualreports/arreports/en17/v1_307en17.pdf",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Ontario community laboratories performed about 1.1 million uninsured tests in 2015/16, generally paid by patients out of pocket or through private insurance; the Ministry does not set or monitor the prices; a sample of uninsured test prices ranged from CAD 20 to CAD 160 and varied between laboratories. Read from a text copy saved under scratch by earlier work."
+    },
+    {
+      "id": "pb_cmq",
+      "title": "Learn about medical fees",
+      "publisher": "Collège des médecins du Québec",
+      "url": "https://form.cmq.org/en/protect-the-public/contester-des-honoraires-médicaux/contester-honoraires-medicaux",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "A fee not covered by the RAMQ may be charged to an insured person for transporting biological samples collected at a private facility: at most CAD 15 for a blood sample and CAD 5 for other samples, once per laboratory."
+    },
+    {
+      "id": "pb_dynqc",
+      "title": "Serving Quebec",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "30+ the model laboratory locations in Montreal, Quebec City and Gatineau."
+    },
+    {
+      "id": "pb_pay",
+      "title": "Make a payment",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Patients pay invoices online by credit card through TD Merchant Services using the invoice number from the top right corner of the invoice, by online banking with the invoice number as the account number (changed for each invoice), by phone to the billing department or by mail to the Brampton billing department; a separate link takes payment for Harmony NIPT."
+    },
+    {
+      "id": "pb_plus",
+      "title": "The consumer health service expands digital offerings with access to mental health therapy and virtual care",
+      "publisher": "The model laboratory",
+      "url": "",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "The consumer health service portal available at CAD 9.99 per year."
+    },
+    {
+      "id": "pb_shift4",
+      "title": "Deposit Schedules Overview",
+      "publisher": "Shift4 (merchant processor help centre)",
+      "url": "https://shift4.zendesk.com/hc/en-us/articles/30446670804627-Deposit-Schedules-Overview",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Canadian next-day funding: Ontario and Quebec merchants should close the batch by 11:30 pm Eastern; a Monday batch closed in time is funded Tuesday, a late one Wednesday; Friday to Sunday batches are funded Monday."
+    },
+    {
+      "id": "pb_td",
+      "title": "Fee change summary",
+      "publisher": "TD Merchant Solutions",
+      "url": "https://www.td.com/ca/en/business-banking/merchant-solutions/fee-change-summary",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Merchants are advised to close their card batch daily; TD closes a batch after 48 hours where possible. The fee change described is from 2026 and is used only for the daily batch practice."
+    },
+    {
+      "id": "pb_pci",
+      "title": "PCI Data Security Standard (PCI DSS)",
+      "publisher": "PCI Security Standards Council",
+      "url": "https://www.pcisecuritystandards.org/standards/pci-dss/",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "PCI DSS is a baseline of technical and operational requirements to protect payment account data and applies to entities that store, process or transmit cardholder data, including merchants."
+    },
+    {
+      "id": "pb_cra",
+      "title": "Lines 33099 and 33199: Eligible medical expenses you can claim on your tax return",
+      "publisher": "Canada Revenue Agency",
+      "url": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/lines-33099-33199-eligible-medical-expenses-you-claim-on-your-tax-return.html",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Laboratory procedures or services are eligible medical expenses; receipts must show the name of the company paid and should be kept in case the CRA asks for them."
+    },
+    {
+      "id": "pb_job",
+      "title": "Senior Billing Clerk, Winnipeg (job posting)",
+      "publisher": "The model laboratory via Jobvite",
+      "url": "",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Reports to the Manager of Billing; analyses client and patient invoices, posts payments, adjustments and transfers, answers billing queue calls on invoicing and collections, generates aging reports, follows up delinquent accounts, recommends write-offs, handles cash and bank deposits and reconciles balances, investigates delinquent or incomplete payments; pays CAD 40,000 to 46,000 a year."
+    },
+    {
+      "id": "pb_s2j",
+      "title": "What rules do collection agencies have to follow and what are my rights?",
+      "publisher": "Steps to Justice (CLEO)",
+      "url": "https://stepstojustice.ca/questions/debt-and-consumer-rights/what-rules-do-collection-agencies-have-follow-and-what-are-my/",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Ontario collection agencies must be registered, must usually send a written notice and wait at least 6 days before contacting the debtor, and may contact no more than 3 times a week."
+    },
+    {
+      "id": "pb_aapc",
+      "title": "Collections countdown",
+      "publisher": "AAPC Practice Management Alert",
+      "url": "https://www.aapc.com/codes/coding-newsletters/my-practice-management-alert/collections-countdown-article",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Practice guidance: send two statements before in-house collections, make one phone call offering help, offer a signed payment plan and act promptly on past-due accounts; when to refer to an agency varies by practice."
+    },
+    {
+      "id": "pb_hfma",
+      "title": "Managing self-pay with a patient satisfaction mindset: 4 tips",
+      "publisher": "Healthcare Financial Management Association",
+      "url": "https://www.hfma.org/revenue-cycle/self-payment-collection/managing-self-pay-with-a-patient-satisfaction-mindset-4-tips-fo/",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Collecting self-pay balances can cost up to three times as much as collecting commercial insurance accounts; unpaid self-pay balances can sit on the books for months or years."
+    }
+  ],
+  "assumptions": [
+    "The card payment at the counter is taken during registration (cl-psc-registration steps s17 and s20) and its hands-on time is not repeated here. This workflow starts when the charge reaches the billing system.",
+    "Charge mix is estimated: 65 per cent paid at Quebec centres, 21 per cent uninsured tests paid at Ontario and Manitoba centres, 8 per cent paid online or by phone in advance (self-pay shop, portal subscriptions, house calls, NIPT), 6 per cent invoiced (claims moved from provincial billing, house calls and genetics billed later, office-collected uninsured tests), half of which a clerk reviews before invoicing and half of which are invoiced automatically because the address and price are already on file.",
+    "That patients pay for most Quebec community testing at private centres is taken from the organisation file and is not confirmed by an opened source; the Quebec regulator page opened only confirms that sample transport fees not covered by the RAMQ may be charged.",
+    "Daily batch close and reconciliation are done once for many charges; their hands-on time is spread across charges as fractions of a minute.",
+    "Collection centre staff time for the daily close is kept small because lab assistants and auxiliary nurses are almost fully used by registration and collection in the existing workflows; the close happens at the end of a shift.",
+    "The parent company is listed in the United States, so the group's Sarbanes-Oxley internal control program is assumed to cover cash reconciliation and write-off approvals in the Canadian subsidiary.",
+    "Interfaces: the patient invoice to the patient is produced for any outcome because every charge gives the patient an invoice or receipt. Credits that reverse a charge the province should pay are closed here as credited; the organisation file does not list a link back to provincial billing.",
+    "Roles: billing manager and billing supervisor are added for approvals; they are in the organisation file but not in this process's role list there.",
+    "Loaded costs are from the organisation file (hourly wage times 1.35)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

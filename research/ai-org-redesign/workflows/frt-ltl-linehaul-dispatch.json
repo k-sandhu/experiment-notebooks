@@ -1,0 +1,1939 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-ltl-linehaul-dispatch",
+  "name": "Dispatch linehaul drivers and trailers",
+  "org": "freight-carrier-co",
+  "process": "ltl-linehaul-dispatch",
+  "sector": "trucking (less-than-truckload freight)",
+  "function": "LTL network operations",
+  "summary": "Linehaul dispatchers put a driver and tractor on every scheduled departure between terminals and hubs, checking hours remaining under the hours-of-service rules, licences and equipment, and then follow the trucks through the night. Drivers inspect and hook the trailers, drive the leg, drop the trailers and close out the trip on the ELD. Work slows when no driver is free, when a trip inspection finds a defect, and when storms close highways or bar long combinations, and every late trip delays the dock that receives it.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL carrier of about 3,000 employees with 38 terminals, five hubs, about 240 company linehaul drivers and about 90 owner-operators on LTL linehaul.",
+    "org_size_employees": 3000,
+    "notes": "Dispatch desk in the LTL network unit, staffed around the clock; most trips run overnight on relay legs so drivers return home."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one linehaul trip",
+  "trigger": "The planner releases a departure (closed trailers assigned to a schedule) to the dispatch board.",
+  "end_state": "The trailers are dropped at the hub, destination terminal or relay point and the trip record is reconciled for pay and hours.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 12000,
+      "mode": 14000,
+      "high": 16500
+    },
+    "seasonality": "Highest from September to mid-December; lowest in January and July. Monday to Friday nights carry most trips, with Sunday-night departures for Monday delivery.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Matches the organisation file: about 21,000 trailer departures a month at about 1.5 trailers per trip. Author's estimate."
+    },
+    "surge": {
+      "cause": "Winter storm or highway closure (snowstorms, freezing rain, mountain pass closures)",
+      "events_per_year": {
+        "low": 4,
+        "mode": 8,
+        "high": 14
+      },
+      "duration_days": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "volume_multiplier": {
+        "low": 1.3,
+        "mode": 1.6,
+        "high": 2.2
+      },
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mto-lcv"
+        ],
+        "note": "Long combinations must avoid bad weather, so storms force split runs and extra trips (MTO); event counts and size are the organisation file's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-linehaul-planning",
+        "object": "linehaul_load_plan",
+        "share": 0.93
+      },
+      {
+        "from": "ltl-trailer-balancing",
+        "object": "empty_trailer_move",
+        "share": 0.05
+      },
+      {
+        "from": "tl-customs-emanifest",
+        "object": "customs_release",
+        "share": 0.02
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ltl-origin-dock",
+        "object": "loaded_trailer"
+      },
+      {
+        "from": "ltl-hub-crossdock",
+        "object": "loaded_trailer"
+      },
+      {
+        "from": "mnt-defect-repair",
+        "object": "equipment_availability"
+      },
+      {
+        "from": "mnt-preventive-maintenance",
+        "object": "equipment_availability"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "ltl-hub-crossdock",
+        "object": "loaded_trailer"
+      },
+      {
+        "outcome": "any",
+        "to": "ltl-dest-dock",
+        "object": "loaded_trailer"
+      },
+      {
+        "outcome": "any",
+        "to": "ltl-yard-management",
+        "object": "trailer_move_request"
+      },
+      {
+        "outcome": "any",
+        "to": "fin-driver-pay",
+        "object": "trip_record"
+      },
+      {
+        "outcome": "any",
+        "to": "fin-oo-settlements",
+        "object": "trip_record"
+      },
+      {
+        "outcome": "any",
+        "to": "saf-hos-log-audit",
+        "object": "hos_record"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-preventive-maintenance",
+        "object": "odometer_data"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-defect-repair",
+        "object": "dvir"
+      },
+      {
+        "outcome": "any",
+        "to": "mnt-roadside-breakdown",
+        "object": "breakdown_call"
+      },
+      {
+        "outcome": "any",
+        "to": "saf-collision-management",
+        "object": "collision_report"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "linehaul-dispatcher",
+      "title": "Linehaul dispatcher",
+      "department": "LTL network planning and linehaul control",
+      "layer": "individual_contributor",
+      "fte_on_process": 14.0,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-noc-14404"
+        ],
+        "note": "About 16 dispatchers cover the network around the clock; the rest of their time goes to trailer balancing and empty moves. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff)."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "linehaul-driver",
+      "title": "Linehaul driver",
+      "department": "Linehaul driver pool",
+      "layer": "individual_contributor",
+      "fte_on_process": 235.0,
+      "loaded_cost_per_hour": {
+        "low": 34,
+        "mode": 39,
+        "high": 46
+      },
+      "occupation_code": "NOC 73300",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-gardewine-drivers",
+          "src-hos"
+        ],
+        "note": "Company drivers run about three quarters of trips. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff)."
+      },
+      "shift_pattern": "shift_24x7",
+      "productive_hours_per_month": 210
+    },
+    {
+      "id": "owner-operator",
+      "title": "Owner-operator, truckload (contracted, not an employee)",
+      "department": "Truckload fleet operations",
+      "layer": "external_party",
+      "fte_on_process": 70.0,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 65,
+        "high": 78
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-gardewine-drivers"
+        ],
+        "note": "About 90 contracted owner-operators pull LTL linehaul and run about a fifth of trips; contractors, not employees. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff)."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "linehaul-supervisor",
+      "title": "Linehaul driver supervisor",
+      "department": "Linehaul driver pool",
+      "layer": "supervisor",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 58,
+        "high": 68
+      },
+      "occupation_code": "NOC 72024",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Reviews hours, pay and service exceptions; the rest of the time goes to driver coaching and hiring. Headcount, title and loaded cost from the organisation file, where they are the author's estimate (loaded cost = wage x 1.30 for hourly staff, x 1.35 for salaried staff)."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "safety-system",
+      "name": "Safety management system (driver files, collisions, roadside inspections)",
+      "kind": "system_of_record"
+    }
+  ],
+  "resources": [
+    {
+      "id": "linehaul-tractor",
+      "name": "Linehaul tractor (company)",
+      "kind": "vehicle",
+      "count": 230,
+      "cost_per_hour": {
+        "low": 45,
+        "mode": 56,
+        "high": 70
+      }
+    },
+    {
+      "id": "ltl-trailer",
+      "name": "LTL trailer (53-foot van and 28-foot pup)",
+      "kind": "vehicle",
+      "count": 2400,
+      "cost_per_hour": {
+        "low": 1.5,
+        "mode": 2.5,
+        "high": 4
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Departure appears on the dispatch board",
+      "description": "When the planner releases a departure, the TMS puts it on the linehaul dispatch board with its schedule number, trailers, departure time, relay point and any hot freight notes. Boards refresh every few minutes.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "linehaul load plan",
+        "closed trailer manifests"
+      ],
+      "outputs": [
+        "departure on the dispatch board"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard TMS dispatch board of the period; author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check driver availability and hours",
+      "description": "The linehaul dispatcher opens the driver board and the ELD hours view and lists drivers at the terminal who are rested and have enough driving and on-duty time left for the run and the return leg. The check covers the 13-hour driving, 14-hour on-duty and 16-hour elapsed limits and the 70-hour cycle.",
+      "role": "linehaul-dispatcher",
+      "kind": "lookup",
+      "inputs": [
+        "departure on the dispatch board",
+        "driver hours remaining"
+      ],
+      "outputs": [
+        "eligible drivers"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Driver assigned without enough hours for the return leg, forcing a layover or relay change.",
+        "typically_caught_at": "s24"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Commercial Vehicle Drivers Hours of Service Regulations (SOR/2005-313), ss. 12, 13 and 26",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-hos",
+          "src-tc-eld"
+        ],
+        "note": "Daily, elapsed and cycle limits from SOR/2005-313 ss. 12, 13 and 26; ELDs mandatory from June 2021 with penalties from January 2023. Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Assign driver and tractor",
+      "description": "The dispatcher matches the run to a driver by seniority bid or rotation, checks that the driver holds any certificate the configuration needs, such as an LCV driver certificate, and assigns a tractor. If no company driver is free the run goes to a contracted owner-operator or to the extra board.",
+      "role": "linehaul-dispatcher",
+      "kind": "judgment",
+      "inputs": [
+        "eligible drivers",
+        "tractor availability"
+      ],
+      "outputs": [
+        "trip assignment"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.8,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario LCV program conditions: only drivers holding an LCV driver certificate may operate an LCV",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.72,
+          "condition": "company driver on the board"
+        },
+        {
+          "to": "s04",
+          "prob": 0.2,
+          "condition": "contracted owner-operator run"
+        },
+        {
+          "to": "s05",
+          "prob": 0.08,
+          "condition": "no driver free: call the extra board"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-noc-14404",
+          "src-mto-lcv",
+          "src-gardewine-drivers"
+        ],
+        "note": "Dispatchers assign drivers to schedules (NOC 14404); LCVs need certified drivers (MTO); company and owner-operator drivers share linehaul runs (Gardewine). Shares are the author's estimate from about 90 owner-operators on LTL linehaul."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Owner-operator accepts the run",
+      "description": "The contracted owner-operator receives the run by phone or the ELD tablet message, checks it fits his own hours and truck, and accepts it at the contracted rate per kilometre or per trip.",
+      "role": "owner-operator",
+      "kind": "communication",
+      "inputs": [
+        "trip assignment"
+      ],
+      "outputs": [
+        "accepted run"
+      ],
+      "systems": [
+        "email-phone",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-gardewine-drivers"
+        ],
+        "note": "Owner-operators run linehaul alongside company drivers (Gardewine). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Call in an extra-board driver",
+      "description": "The dispatcher phones drivers on the extra board, or a P&D driver with a Class 1 or AZ licence, until one accepts the run, and records the call-out. Late in the evening this can take several calls.",
+      "role": "linehaul-dispatcher",
+      "kind": "communication",
+      "inputs": [
+        "trip assignment"
+      ],
+      "outputs": [
+        "called-in driver"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes and share are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Confirm start time with the driver",
+      "description": "The dispatcher tells the driver the start time, trailers, route, relay point and any hot freight or dangerous goods aboard, by phone or tablet message, and gets a confirmation.",
+      "role": "linehaul-dispatcher",
+      "kind": "communication",
+      "inputs": [
+        "trip assignment"
+      ],
+      "outputs": [
+        "confirmed start time"
+      ],
+      "systems": [
+        "email-phone",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.8,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-noc-14404"
+        ],
+        "note": "Dispatchers process and transmit instructions to drivers (NOC 14404). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Report for duty and collect paperwork",
+      "description": "The driver arrives at the terminal at the start time, logs on duty on the ELD, picks up the manifests and any dangerous goods shipping documents for the trailers and checks the run details with the dispatcher.",
+      "role": "linehaul-driver",
+      "kind": "data_entry",
+      "inputs": [
+        "confirmed start time",
+        "trailer manifests",
+        "dangerous goods shipping documents"
+      ],
+      "outputs": [
+        "driver on duty"
+      ],
+      "systems": [
+        "eld-telematics",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-tc-eld",
+          "src-gardewine-drivers"
+        ],
+        "note": "Drivers log duty status on ELDs (Transport Canada); runs start in the evening (Gardewine). The wait for the driver's start time is the author's estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Do the trip inspection",
+      "description": "The driver walks around the tractor, converter dolly and trailers against Schedule 1: brakes, air lines, tires, lights, coupling devices, load securement and placards, and records the result on the trip inspection report in the ELD or on paper. A major defect means the unit cannot leave until it is repaired.",
+      "role": "linehaul-driver",
+      "kind": "physical",
+      "inputs": [
+        "assigned tractor and trailers"
+      ],
+      "outputs": [
+        "trip inspection report"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "NSC Standard 13 trip inspection, Schedule 1, as adopted in provincial trip inspection regulations",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "linehaul-tractor",
+          "occupied_min": {
+            "low": 5,
+            "mode": 10,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.93,
+          "condition": "no major defect"
+        },
+        {
+          "to": "s09",
+          "prob": 0.07,
+          "condition": "major defect found"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-sgi-trip"
+        ],
+        "note": "Schedule 1 inspection every 24 hours, report contents and the major-defect rule (SGI, from NSC Standard 13). The defect share is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Arrange a replacement unit or repair",
+      "description": "The dispatcher takes the defect report, sends it to the shop as a work order request and finds a spare tractor, dolly or trailer, or asks the shop to repair the unit on the spot. Hot freight may be transferred to another trailer.",
+      "role": "linehaul-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "trip inspection report"
+      ],
+      "outputs": [
+        "defect report to maintenance",
+        "replacement unit"
+      ],
+      "systems": [
+        "tms",
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Swap to the replacement unit",
+      "description": "Once the shop releases a spare or repaired unit, the driver inspects it, moves the trailers or dolly across and updates the unit numbers on the ELD and trip sheet.",
+      "role": "linehaul-driver",
+      "kind": "physical",
+      "inputs": [
+        "replacement unit"
+      ],
+      "outputs": [
+        "inspected replacement unit"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 300
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "linehaul-tractor",
+          "occupied_min": {
+            "low": 40,
+            "mode": 110,
+            "high": 340
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait for a spare or a shop repair at night is the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Hook the trailers",
+      "description": "The driver couples the lead trailer, the converter dolly and the second trailer, connects air and electrical lines, checks seals against the manifests and that placards are on when required, and pulls the set out of the door.",
+      "role": "linehaul-driver",
+      "kind": "physical",
+      "inputs": [
+        "closed trailers",
+        "trailer manifests"
+      ],
+      "outputs": [
+        "hooked combination"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Wrong trailer hooked, sending freight to the wrong terminal.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "linehaul-tractor",
+          "occupied_min": {
+            "low": 8,
+            "mode": 15,
+            "high": 30
+          }
+        },
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 12,
+            "mode": 22,
+            "high": 45
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-gardewine-drivers",
+          "src-tc-placards"
+        ],
+        "note": "Doubles are the normal linehaul combination (Gardewine); placards on each side and end when required (TDG s. 4.15). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Dispatch the trip in the TMS",
+      "description": "While the driver hooks, the dispatcher links driver, tractor and trailers to the schedule in the TMS, which starts the trip and sends an arrival estimate to the destination terminal or hub.",
+      "role": "linehaul-dispatcher",
+      "kind": "data_entry",
+      "inputs": [
+        "trip assignment",
+        "hooked combination"
+      ],
+      "outputs": [
+        "dispatched trip"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1.5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s11"
+      ],
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-noc-14404"
+        ],
+        "note": "Dispatchers keep computer records of driver work (NOC 14404). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Check road and weather conditions",
+      "description": "Before release the dispatcher checks road reports and forecasts for the route, highway closures and, for long combinations, whether weather or time-of-day rules bar the run. Most nights the trip leaves as planned; in winter storms it is held, rerouted or split into singles.",
+      "role": "linehaul-dispatcher",
+      "kind": "judgment",
+      "inputs": [
+        "dispatched trip",
+        "road and weather reports"
+      ],
+      "outputs": [
+        "release decision"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.6,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Ontario LCV program conditions (no LCV operation in bad weather or slippery conditions) and carrier severe-weather policy",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.92,
+          "condition": "release as planned: solo driver"
+        },
+        {
+          "to": "s17",
+          "prob": 0.02,
+          "condition": "release as planned: team run on a long leg"
+        },
+        {
+          "to": "s14",
+          "prob": 0.06,
+          "condition": "storm, closure or LCV restriction"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mto-lcv",
+          "src-noc-14404"
+        ],
+        "note": "LCVs must avoid bad weather or slippery conditions and may not run in GTA or Ottawa rush hours or at the start and end of long weekends (MTO); dispatchers advise drivers of weather and road problems (NOC 14404). Shares are the author's annual average estimate, much higher in winter."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Hold, reroute or split the run",
+      "description": "The dispatcher holds the departure, reroutes it around a closed highway, or splits a long combination into single trailers that need extra drivers. The destination terminal and the next relay point are told the new arrival time.",
+      "role": "linehaul-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "release decision"
+      ],
+      "outputs": [
+        "revised trip plan",
+        "late arrival notice"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common winter practice on Highway 401, the Trans-Canada and mountain passes; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Wait out the closure and depart",
+      "description": "The driver waits at the terminal or a safe stop, on or off duty depending on the hold, until the road reopens or conditions improve, then confirms departure with the dispatcher.",
+      "role": "linehaul-driver",
+      "kind": "communication",
+      "inputs": [
+        "revised trip plan"
+      ],
+      "outputs": [
+        "departure confirmed"
+      ],
+      "systems": [
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 300,
+        "high": 1440
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Highway closures for storms typically last a few hours to a day; author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Drive the leg (solo)",
+      "description": "The driver drives the combination to the hub, destination terminal or relay point, usually overnight, within the daily driving limits recorded by the ELD. Relay legs are planned so the driver can return home on a turn the same night.",
+      "role": "linehaul-driver",
+      "kind": "travel",
+      "inputs": [
+        "hooked combination",
+        "dispatched trip"
+      ],
+      "outputs": [
+        "trailers at the next terminal"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 100,
+        "mode": 180,
+        "high": 360
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.002,
+        "defect_description": "Collision or securement failure damaging freight or equipment.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "linehaul-tractor",
+          "occupied_min": {
+            "low": 100,
+            "mode": 180,
+            "high": 360
+          }
+        },
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 150,
+            "mode": 270,
+            "high": 540
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.88,
+          "condition": "arrives without incident"
+        },
+        {
+          "to": "s18",
+          "prob": 0.03,
+          "condition": "breakdown or incident on the road"
+        },
+        {
+          "to": "s20",
+          "prob": 0.09,
+          "condition": "running late: traffic, weather or a late start"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-gardewine-drivers",
+          "src-hos"
+        ],
+        "note": "Night runs between terminals within about 800 km of home, out and back (Gardewine), within the 13-hour driving limit (SOR/2005-313). Leg length of about 200 to 250 km (about 3 hours of driving) on average is the author's estimate consistent with 14,000 trips a month for about 330 drivers."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Drive the leg (team)",
+      "description": "On the few long legs that cannot be relayed overnight, such as Winnipeg to Calgary, two drivers share the tractor and swap at the wheel so the trailers keep moving while each stays within the hours-of-service limits.",
+      "role": "linehaul-driver",
+      "kind": "travel",
+      "inputs": [
+        "hooked combination",
+        "dispatched trip"
+      ],
+      "outputs": [
+        "trailers at the next terminal"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 480,
+        "mode": 720,
+        "high": 1080
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "people": 2,
+      "resources": [
+        {
+          "id": "linehaul-tractor",
+          "occupied_min": {
+            "low": 480,
+            "mode": 720,
+            "high": 1080
+          }
+        },
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 720,
+            "mode": 1080,
+            "high": 1620
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.9,
+          "condition": "arrives without incident"
+        },
+        {
+          "to": "s18",
+          "prob": 0.03,
+          "condition": "breakdown or incident on the road"
+        },
+        {
+          "to": "s20",
+          "prob": 0.07,
+          "condition": "running late"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hos"
+        ],
+        "note": "Team driving keeps each driver within the 13-hour driving and 14-hour on-duty limits (SOR/2005-313). Share of team runs is the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Handle a breakdown or incident",
+      "description": "The driver calls in; the dispatcher logs the location and problem, calls road service or a tow, tells the destination terminal the trailers will be late and, for a collision, starts the collision report and calls the safety department.",
+      "role": "linehaul-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "breakdown call"
+      ],
+      "outputs": [
+        "road service request",
+        "late arrival notice"
+      ],
+      "systems": [
+        "tms",
+        "email-phone",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Resume the trip after road service",
+      "description": "After the road technician repairs the unit, or a rescue tractor arrives, the driver completes the leg and updates the ELD and the dispatcher.",
+      "role": "linehaul-driver",
+      "kind": "travel",
+      "inputs": [
+        "road service request"
+      ],
+      "outputs": [
+        "trailers at the next terminal"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 200
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 150,
+        "high": 360
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "linehaul-tractor",
+          "occupied_min": {
+            "low": 90,
+            "mode": 240,
+            "high": 560
+          }
+        },
+        {
+          "id": "ltl-trailer",
+          "occupied_min": {
+            "low": 90,
+            "mode": 240,
+            "high": 560
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait for a road service truck at night is the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Recover a late-running trip",
+      "description": "The dispatcher watches the trip's GPS position, updates the arrival estimate, warns the hub or destination dock so they can re-sequence the strip, and moves the return leg to another driver if the delay would push the driver past the hours limits.",
+      "role": "linehaul-dispatcher",
+      "kind": "communication",
+      "inputs": [
+        "vehicle position",
+        "dispatched trip"
+      ],
+      "outputs": [
+        "late arrival notice",
+        "revised relay plan"
+      ],
+      "systems": [
+        "eld-telematics",
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-noc-14404",
+          "src-hos"
+        ],
+        "note": "Dispatchers monitor locations (NOC 14404) and must keep drivers within the hours limits (SOR/2005-313). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Arrive and drop the trailers",
+      "description": "The driver checks in at the gate, drops the trailers at the assigned door or yard spot, unhooks the dolly and, on a relay, hooks the return set. At satellite terminals closed overnight and at partner docks the driver may wait for the gate or a door.",
+      "role": "linehaul-driver",
+      "kind": "physical",
+      "inputs": [
+        "trailers at the next terminal"
+      ],
+      "outputs": [
+        "loaded trailers dropped"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "linehaul-tractor",
+          "occupied_min": {
+            "low": 8,
+            "mode": 15,
+            "high": 30
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; minutes and wait are the author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Close out the trip on the ELD and trip sheet",
+      "description": "The driver records arrival time, trailers dropped and any delay or defect on the trip sheet and the ELD, notes defects for the shop and changes duty status for the next leg or the end of the shift.",
+      "role": "linehaul-driver",
+      "kind": "data_entry",
+      "inputs": [
+        "loaded trailers dropped"
+      ],
+      "outputs": [
+        "trip sheet",
+        "hours-of-service record",
+        "defect notes"
+      ],
+      "systems": [
+        "eld-telematics",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-tc-eld",
+          "src-sgi-trip"
+        ],
+        "note": "ELD duty status (Transport Canada) and defect reporting (SGI). Minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Close the trip record",
+      "description": "The ELD platform sends the duty-status record and odometer reading; the TMS closes the trip and passes the trip record to driver pay or owner-operator settlement.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "trip sheet",
+        "hours-of-service record"
+      ],
+      "outputs": [
+        "trip record",
+        "odometer data"
+      ],
+      "systems": [
+        "eld-telematics",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard ELD and TMS integration of the period; author's estimate."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Reconcile the trip",
+      "description": "The dispatcher checks the closed trip: departure and arrival against schedule, the late code and cause for terminal performance, unassigned driving on the ELD, and pay items such as delay time. Most trips close without change.",
+      "role": "linehaul-dispatcher",
+      "kind": "validation",
+      "inputs": [
+        "trip record",
+        "hours-of-service record"
+      ],
+      "outputs": [
+        "reconciled trip"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.92,
+          "condition": "clean",
+          "outcome": "trip_closed"
+        },
+        {
+          "to": "s25",
+          "prob": 0.08,
+          "condition": "hours, pay or service exception"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-noc-14404"
+        ],
+        "note": "Dispatchers keep driver work records and check time sheets (NOC 14404). Exception share is the author's estimate."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Review the exception",
+      "description": "The linehaul driver supervisor reviews the exception: an hours-of-service edit or unassigned driving, a late departure the driver caused, a delay-pay claim or a defect not reported. The supervisor approves the pay item, edits the record with the driver's agreement or schedules coaching.",
+      "role": "linehaul-supervisor",
+      "kind": "review",
+      "inputs": [
+        "reconciled trip"
+      ],
+      "outputs": [
+        "supervisor decision",
+        "coaching note"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics",
+        "safety-system"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Commercial Vehicle Drivers Hours of Service Regulations (SOR/2005-313): carrier monitoring of driver records",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "closed_after_review"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hos"
+        ],
+        "note": "Carriers are accountable for drivers' hours under SOR/2005-313. Minutes and wait are the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Major defect at the trip inspection",
+      "share_of_cases": 0.07,
+      "description": "The driver finds a major defect; the dispatcher arranges a spare or a shop repair and the trip leaves late.",
+      "path": [
+        "s08",
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "name": "No driver free",
+      "share_of_cases": 0.08,
+      "description": "The dispatcher calls the extra board or a Class 1 P&D driver to cover the run.",
+      "path": [
+        "s03",
+        "s05"
+      ]
+    },
+    {
+      "name": "Storm hold or LCV restriction",
+      "share_of_cases": 0.06,
+      "description": "Weather, a closure or LCV time rules hold or split the run; much more common from December to March.",
+      "path": [
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "name": "Breakdown on the road",
+      "share_of_cases": 0.03,
+      "description": "Road service or a rescue tractor is needed before the trailers can complete the leg.",
+      "path": [
+        "s16",
+        "s18",
+        "s19"
+      ]
+    },
+    {
+      "name": "Hours or pay exception",
+      "share_of_cases": 0.08,
+      "description": "The closed trip has unassigned driving, a delay-pay claim or a late departure that the supervisor reviews.",
+      "path": [
+        "s24",
+        "s25"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.4,
+        "p90": 0.8
+      },
+      "unit": "calendar days from release to dispatch to the trip record reconciled",
+      "population": "Overnight linehaul legs of a regional Canadian LTL carrier",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: a 1 to 3 hour wait for the driver's start, a 3 to 5 hour leg and same-night trip close; team runs and storm holds make up the tail."
+      }
+    },
+    {
+      "metric": "max_driving_hours_per_day",
+      "value": 13,
+      "unit": "hours of driving before 8 consecutive hours off",
+      "population": "Commercial vehicle drivers south of 60 degrees N in Canada",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-hos"
+        ],
+        "note": "SOR/2005-313 s. 12(1)."
+      }
+    },
+    {
+      "metric": "typical_linehaul_radius",
+      "value": 800,
+      "unit": "km from the driver's home terminal",
+      "population": "Gardewine linehaul drivers (Mullen Group LTL)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-gardewine-drivers"
+        ],
+        "note": "Stated on the carrier's current recruiting page; assumed to describe 2019-2022 practice."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Matching drivers to runs depends on hours remaining, seniority rules and certificates, and late call-outs to the extra board delay departures.",
+      "steps": [
+        "s02",
+        "s03",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-hos",
+          "src-mto-lcv"
+        ],
+        "note": "Hours limits (SOR/2005-313) and LCV driver certification (MTO) constrain who can take a run."
+      }
+    },
+    {
+      "description": "Winter storms and highway closures hold or split runs and leave trailers late at hubs and destination terminals for days.",
+      "steps": [
+        "s13",
+        "s14",
+        "s15",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mto-lcv"
+        ],
+        "note": "LCVs must avoid bad weather or slippery conditions (MTO); closure frequency is the organisation file's estimate."
+      }
+    },
+    {
+      "description": "Defects found at the trip inspection at night wait for a spare unit or a shop repair.",
+      "steps": [
+        "s08",
+        "s09",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-sgi-trip"
+        ],
+        "note": "A vehicle with a major defect cannot be driven until repaired (SGI, NSC Standard 13)."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-hos",
+      "title": "Commercial Vehicle Drivers Hours of Service Regulations (SOR/2005-313), full text",
+      "publisher": "Justice Laws Website, Government of Canada",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2005-313/FullText.html",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "13 h driving and 14 h on-duty daily limits (s. 12), 8 consecutive hours off before driving again and the 16 h elapsed limit (s. 13), 10 h off-duty a day (s. 14), cycle 1 of 70 h in 7 days (s. 26), ELD requirement (s. 77) and the 160 km local exemption (s. 77(3))"
+    },
+    {
+      "id": "src-tc-eld",
+      "title": "What's an ELD? Handout for motor carriers and drivers",
+      "publisher": "Transport Canada",
+      "url": "https://tc.canada.ca/en/road-transportation/electronic-logging-devices/eld-handout-motor-carriers-drivers",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "ELDs mandatory for federally regulated drivers keeping records of duty status from 12 June 2021, with progressive enforcement without penalties until 1 January 2023; drivers within 160 km of the home terminal exempt"
+    },
+    {
+      "id": "src-sgi-trip",
+      "title": "Professional Driver's Handbook: trip inspection standards",
+      "publisher": "Saskatchewan Government Insurance (SGI)",
+      "url": "https://sgi.sk.ca/pro-driver/-/knowledge_base/pro-drivers/trip-inspection-standards",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Trucks, tractors and trailers over 11,794 kg inspected under Schedule 1 once every 24 hours in use; report contents; minor defects repaired before the next trip inspection, vehicle with a major defect not driven until repaired; schedules from NSC Standard 13"
+    },
+    {
+      "id": "src-mto-lcv",
+      "title": "Long combination vehicles (archived Ontario Ministry of Transportation page, captured 27 August 2021)",
+      "publisher": "Ontario Ministry of Transportation, via Library and Archives Canada web archive",
+      "url": "https://bac-lac.wayback.archive-it.org/web/20210827055956/http://www.mto.gov.on.ca/english/trucks/long-combination-vehicles.shtml",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "LCVs up to 40 m pulling two full-length semitrailers; 90 km/h limit; must avoid bad weather or slippery conditions; certified experienced drivers; designated divided highways; terminals within 2 km of an interchange; no GTA or Ottawa rush-hour running"
+    },
+    {
+      "id": "src-gardewine-drivers",
+      "title": "Driving positions",
+      "publisher": "Gardewine (Mullen Group)",
+      "url": "https://gardewine.com/?p=11848",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Linehaul company and owner-operator drivers run mostly at night between terminals, usually within 800 km of the home terminal, with tandem, Rocky Mountain or turnpike double combinations, out in the evening and back the next morning or out one night"
+    },
+    {
+      "id": "src-noc-14404",
+      "title": "NOC 2021 unit group 14404: Dispatchers",
+      "publisher": "Employment and Social Development Canada",
+      "url": "https://noc.esdc.gc.ca/Structure/NOCProfile?GocTemplateCulture=en-CA&code=14404&version=2021.0",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Truck dispatchers coordinate drivers and equipment, dispatch to schedules, advise drivers of route, weather and traffic problems, monitor workloads and locations and keep driver work records"
+    },
+    {
+      "id": "src-tc-placards",
+      "title": "Dangerous goods placards (placards flowchart)",
+      "publisher": "Transport Canada",
+      "url": "https://tc.canada.ca/en/dangerous-goods/dangerous-goods-placards",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Placards on each side and each end of a large means of containment (TDG Regulations s. 4.15); exemption when dangerous goods in small containers total 500 kg gross or less (s. 4.16.1), with listed exceptions such as goods needing an ERAP"
+    }
+  ],
+  "assumptions": [
+    "One trip is one tractor moving one set of trailers from one terminal to the next stop (hub, destination or relay point). A relay turn is two trips.",
+    "Owner-operator trips follow the same driving steps as company trips; the driving steps name the company driver role, so labour cost per trip is slightly understated for the fifth of trips run by owner-operators (CAD 65 an hour, truck included, against CAD 39).",
+    "Average leg length of about 200 to 250 km (about 3 hours of driving, 2 to 6 in the ordinary range) is the author's estimate; it is what the organisation file's 14,000 trips a month and about 330 drivers allow.",
+    "The staffing check is expected to show more FTE implied than stated: the validator assumes 130 productive hours a month, while linehaul drivers are on duty about 200 to 240 hours a month within the 70-hour weekly cycle, and owner-operator hours count in hands-on time but not in stated FTE. Even so, 240 company drivers at about 5 on-duty hours per trip and three quarters of 14,000 trips work about 220 hours a month each, which is high; the organisation file may understate linehaul drivers by 15 to 25%.",
+    "A trip starts when the planner releases the departure, so the load plan is the trigger; loaded trailers from origin terminals and hubs, which the organisation file lists as triggers, are recorded here as inputs that the load plan points to.",
+    "Owner-operator tractors are listed under the company linehaul-tractor resource in the steps; the organisation file's oo-tractor resource carries no running cost to the carrier.",
+    "Loaded costs come from the organisation file: wage x 1.30 for hourly staff and x 1.35 for salaried staff."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

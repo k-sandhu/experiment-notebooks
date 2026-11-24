@@ -1,0 +1,1404 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-sls-shipment-tracing",
+  "name": "Answer shipment trace and status questions",
+  "org": "freight-carrier-co",
+  "process": "sls-shipment-tracing",
+  "sector": "trucking (less-than-truckload and truckload freight)",
+  "function": "customer service",
+  "summary": "Shippers and consignees call or email the customer service centre to ask where their freight is, when it will arrive, or for proof of delivery. A representative finds the shipment in the TMS by PRO, bill of lading or purchase order number, reads its scan history and answers most questions in a few minutes. Late or unscanned shipments need a check by the terminal or a network-wide trace by the OS&D clerks, and the customer is called back hours or days later. The work is slowed by wrong reference numbers, missing delivery receipt images and storm days when calls nearly double.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL carrier of about 3,000 employees moving about 150,000 LTL shipments a month, with a central customer service centre of 60 representatives working extended hours.",
+    "org_size_employees": 3000,
+    "notes": "Describes LTL traces; truckload customers ask their truckload customer service representative or driver manager and are not included. In 2019-2022 customers could also track on the web portal, so the calls here are those the portal did not answer."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one trace inquiry",
+  "trigger": "A shipper or consignee calls, emails or sends a portal message asking about a shipment's status or for proof of delivery.",
+  "end_state": "The customer has the status, expected delivery date or proof of delivery, or has been told the freight is lost and how to claim.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 24000,
+      "mode": 30000,
+      "high": 38000
+    },
+    "seasonality": "Highest from October to mid-December with the shipping peak and in January and February storms; lowest in July and August.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Volume from the organisation file: about one trace inquiry for every five LTL shipments. Author's estimate; no published Canadian figure was found."
+    },
+    "surge": {
+      "cause": "Winter storm or highway closure (snowstorms, freezing rain, mountain pass closures)",
+      "events_per_year": {
+        "low": 4,
+        "mode": 8,
+        "high": 14
+      },
+      "duration_days": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "volume_multiplier": {
+        "low": 1.4,
+        "mode": 1.8,
+        "high": 2.5
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Storms close Highway 401, the Trans-Canada through the Rockies and the Coquihalla several times each winter; backlog clears over the following days. Author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "shipper",
+        "object": "trace_inquiry",
+        "share": 0.65
+      },
+      {
+        "from": "consignee",
+        "object": "trace_inquiry",
+        "share": 0.35
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ltl-pod-capture",
+        "object": "delivery_receipt"
+      },
+      {
+        "from": "tl-border-holds",
+        "object": "border_hold"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "shipper",
+        "object": "trace_response"
+      },
+      {
+        "outcome": "any",
+        "to": "consignee",
+        "object": "trace_response"
+      },
+      {
+        "outcome": "pod_sent",
+        "to": "shipper",
+        "object": "delivery_receipt"
+      },
+      {
+        "outcome": "referred_to_claims",
+        "to": "ltl-osd-exceptions",
+        "object": "trace_request"
+      },
+      {
+        "outcome": "located_and_answered",
+        "to": "ltl-osd-exceptions",
+        "object": "trace_request"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "cs-rep",
+      "title": "Customer service representative",
+      "department": "Customer service centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 32.0,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": "NOC 64409",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Just over half of the 60 representatives' time; the rest is pickup requests, appointments and billing questions. Loaded cost from the organisation file (wage x 1.30 for hourly staff)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "cs-supervisor",
+      "title": "Customer service supervisor",
+      "department": "Customer service centre",
+      "layer": "supervisor",
+      "fte_on_process": 0.6,
+      "loaded_cost_per_hour": {
+        "low": 42,
+        "mode": 48,
+        "high": 56
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Escalated complaints and queue management. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "terminal-service-clerk",
+      "title": "Terminal service clerk",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 4.0,
+      "loaded_cost_per_hour": {
+        "low": 27,
+        "mode": 32,
+        "high": 38
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Dock checks and missing delivery receipts for customer service; not listed on this process in the organisation file. Loaded cost from the organisation file (wage x 1.30 for hourly staff)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "osd-clerk",
+      "title": "OS&D clerk",
+      "department": "LTL terminal network",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 33,
+        "high": 39
+      },
+      "occupation_code": "NOC 14400",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Network traces for unlocated freight; not listed on this process in the organisation file (the work belongs to OS&D exceptions). Loaded cost from the organisation file (wage x 1.30 for hourly staff)."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "dock-handheld",
+      "name": "Dock and driver handheld scanning",
+      "kind": "instrument"
+    },
+    {
+      "id": "imaging",
+      "name": "Document imaging for bills of lading and delivery receipts",
+      "kind": "document_store"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "customer-portal",
+      "name": "Customer web portal (pickup requests, tracing, documents)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "claims-module",
+      "name": "Freight claims module in the TMS",
+      "kind": "workflow"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Route the inquiry to the service queue",
+      "description": "The contact centre software routes incoming calls to the next free customer service representative and puts emails and portal messages into the shared service inbox. Callers who choose the automated tracking option and get an answer never reach this process.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "trace inquiry"
+      ],
+      "outputs": [
+        "queued call or email"
+      ],
+      "systems": [
+        "email-phone",
+        "customer-portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.6,
+          "condition": "phone call"
+        },
+        {
+          "to": "s03",
+          "prob": 0.4,
+          "condition": "email or portal message"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Channel split of 60% phone and 40% email is the author's estimate for 2019-2022."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Answer the call and take the reference",
+      "description": "The representative answers, identifies the caller as shipper, consignee or third party, and asks for the PRO number, bill of lading or purchase order number. Callers often have only a purchase order number or the shipper's name.",
+      "role": "cs-rep",
+      "kind": "intake",
+      "inputs": [
+        "queued call"
+      ],
+      "outputs": [
+        "shipment reference"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0.2,
+        "mode": 2,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Reference number mis-heard or mis-typed.",
+        "typically_caught_at": "s04"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Customer privacy practice: shipment details and delivery receipts given only to the shipper, consignee or a party named on the bill of lading",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Answer times of seconds to 15 minutes are the author's estimate for a contact centre staffed for typical service levels; longer during storms."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Open the email inquiry",
+      "description": "The representative takes the next email or portal message from the shared inbox, reads which shipments are asked about (some emails list several) and copies the references into the TMS search.",
+      "role": "cs-rep",
+      "kind": "intake",
+      "inputs": [
+        "queued email"
+      ],
+      "outputs": [
+        "shipment reference"
+      ],
+      "systems": [
+        "email-phone",
+        "customer-portal"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 120,
+        "high": 900
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "One of several shipments in the email overlooked.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Email queue of 15 minutes to overnight reflects the extended-hours shift pattern; author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Look up the shipment by reference",
+      "description": "The representative searches the TMS by PRO, bill of lading or purchase order number. Shipments booked by a broker or with a wrong number do not come up.",
+      "role": "cs-rep",
+      "kind": "lookup",
+      "inputs": [
+        "shipment reference"
+      ],
+      "outputs": [
+        "shipment record"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.9,
+          "condition": "shipment found"
+        },
+        {
+          "to": "s05",
+          "prob": 0.1,
+          "condition": "no match on the reference"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-lsp44"
+        ],
+        "note": "FreightWaves describes LTL tracking depending on a valid PRO number and failing when the shipper or broker lacks it; the 10% miss rate is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Search by shipper, consignee and date",
+      "description": "The representative searches the TMS by shipper and consignee names, postal codes and pickup dates over the past week, compares weights and piece counts with what the caller describes, and picks the likely match.",
+      "role": "cs-rep",
+      "kind": "lookup",
+      "inputs": [
+        "caller description"
+      ],
+      "outputs": [
+        "shipment record or no match"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong shipment matched, so the caller gets another shipment's status.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.8,
+          "condition": "match found"
+        },
+        {
+          "to": "s20",
+          "prob": 0.2,
+          "condition": "no match"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-lsp44"
+        ],
+        "note": "FreightWaves describes staff searching manually by origin, destination, postal codes, company names and description over about a week of records; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Read the scan history and status",
+      "description": "The representative reads the shipment's scan history from the dock and driver handhelds: picked up, loaded to linehaul, arrived at destination terminal, out for delivery or delivered. The status decides the answer.",
+      "role": "cs-rep",
+      "kind": "lookup",
+      "inputs": [
+        "shipment record"
+      ],
+      "outputs": [
+        "shipment status"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A stale scan read as current, giving a wrong location.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.45,
+          "condition": "delivered"
+        },
+        {
+          "to": "s09",
+          "prob": 0.33,
+          "condition": "in transit on schedule"
+        },
+        {
+          "to": "s10",
+          "prob": 0.05,
+          "condition": "with an interline or US partner"
+        },
+        {
+          "to": "s11",
+          "prob": 0.17,
+          "condition": "late, exception or no recent scan"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Status mix is the author's estimate: proof-of-delivery requests and on-schedule status checks are the bulk of trace calls."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Retrieve and send proof of delivery",
+      "description": "The representative opens the delivery receipt image in the imaging system, checks the signature and any exceptions noted, and emails or faxes it to the customer, or reads the signer and time over the phone.",
+      "role": "cs-rep",
+      "kind": "communication",
+      "inputs": [
+        "shipment status"
+      ],
+      "outputs": [
+        "proof of delivery"
+      ],
+      "systems": [
+        "imaging",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.95,
+          "condition": "POD sent",
+          "outcome": "pod_sent"
+        },
+        {
+          "to": "s08",
+          "prob": 0.05,
+          "condition": "image missing or unreadable"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Missing-image share is the author's estimate; paper delivery receipts were still scanned at terminals in 2019-2022."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Terminal finds and scans the missing delivery receipt",
+      "description": "A terminal service clerk receives the request by email, finds the paper delivery receipt in the day's driver paperwork, scans it into the imaging system and replies to customer service.",
+      "role": "terminal-service-clerk",
+      "kind": "lookup",
+      "inputs": [
+        "POD request"
+      ],
+      "outputs": [
+        "scanned delivery receipt"
+      ],
+      "systems": [
+        "imaging",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Times are the author's estimate; terminal-service-clerk is not listed on this process in the organisation file."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Give the expected delivery date",
+      "description": "The representative works out the expected delivery date from the last scan and the standard transit time for the lane, tells the customer, and notes the call in the shipment's TMS notes.",
+      "role": "cs-rep",
+      "kind": "communication",
+      "inputs": [
+        "shipment status"
+      ],
+      "outputs": [
+        "trace response"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1.5,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "ETA given from the standard transit time although the freight missed its linehaul.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "status given",
+          "outcome": "status_given"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Get status from the interline or US partner carrier",
+      "description": "For freight handed to a partner carrier beyond the network, the representative looks up the partner's PRO number in the TMS and checks the partner's tracking website or calls its service desk. Some partners reply later by email.",
+      "role": "cs-rep",
+      "kind": "lookup",
+      "inputs": [
+        "interline PRO number"
+      ],
+      "outputs": [
+        "partner status"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.8,
+          "condition": "status given",
+          "outcome": "status_given"
+        },
+        {
+          "to": "s17",
+          "prob": 0.2,
+          "condition": "partner replies later"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice for interline shipments; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Check the exception details",
+      "description": "The representative reads the OS&D notes, the linehaul dispatch status, the truck's position on the telematics map, road closure and weather notices and any border hold for cross-border freight, to find out why the shipment is late.",
+      "role": "cs-rep",
+      "kind": "lookup",
+      "inputs": [
+        "shipment status",
+        "border hold notices"
+      ],
+      "outputs": [
+        "exception explanation or open question"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.55,
+          "condition": "delay explained by the records"
+        },
+        {
+          "to": "s13",
+          "prob": 0.45,
+          "condition": "needs a terminal check"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share explained from records is the author's estimate; delays from storms and highway closures are common in winter."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Explain the delay and give a revised date",
+      "description": "The representative explains the cause, such as a missed linehaul, weather closure, appointment or border hold, gives a revised delivery date and notes the call. Upset callers are passed to the supervisor.",
+      "role": "cs-rep",
+      "kind": "communication",
+      "inputs": [
+        "exception explanation"
+      ],
+      "outputs": [
+        "trace response"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.93,
+          "condition": "status given",
+          "outcome": "status_given"
+        },
+        {
+          "to": "s19",
+          "prob": 0.07,
+          "condition": "complaint escalated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Escalation share is the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Open a trace and ask the terminal to check",
+      "description": "The representative opens a trace ticket in the TMS and emails or calls the terminal that last scanned the freight, giving the PRO, pieces and description. The customer is told someone will call back.",
+      "role": "cs-rep",
+      "kind": "coordination",
+      "inputs": [
+        "open question"
+      ],
+      "outputs": [
+        "trace ticket"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Terminal checks the dock, trailers and yard",
+      "description": "A terminal service clerk checks the dock and the trailer manifests, walks the dock or asks the dock supervisor to look in loaded trailers and the yard, and replies with the location or a not-found answer. Freight left on the dock or loaded to the wrong trailer is the common finding.",
+      "role": "terminal-service-clerk",
+      "kind": "physical",
+      "inputs": [
+        "trace ticket"
+      ],
+      "outputs": [
+        "terminal reply"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 180,
+        "high": 960
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.72,
+          "condition": "freight located"
+        },
+        {
+          "to": "s15",
+          "prob": 0.28,
+          "condition": "not found at the terminal"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Times and find rate are the author's estimates; terminal-service-clerk is not listed on this process in the organisation file."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Refer the shipment to OS&D",
+      "description": "The representative sends a trace request to the OS&D clerks with the shipment details and the terminal's reply, and tells the customer the freight is being traced across the network.",
+      "role": "cs-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "terminal reply"
+      ],
+      "outputs": [
+        "trace request"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "OS&D clerk traces the freight across the network",
+      "description": "An OS&D clerk compares the missing freight with overage reports from other terminals, checks unmatched freight photos and asks hubs to search. Found freight is re-routed and the clerk replies to customer service.",
+      "role": "osd-clerk",
+      "kind": "lookup",
+      "inputs": [
+        "trace request",
+        "overage reports"
+      ],
+      "outputs": [
+        "trace result"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.6,
+          "condition": "freight found"
+        },
+        {
+          "to": "s18",
+          "prob": 0.4,
+          "condition": "not found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shown here for continuity; the work belongs to OS&D exceptions. Find rate and times are the author's estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Call the customer back with the answer",
+      "description": "The representative picks up the terminal's or OS&D's reply from the trace ticket, calls or emails the customer with the location and new delivery date, and closes the ticket.",
+      "role": "cs-rep",
+      "kind": "communication",
+      "inputs": [
+        "terminal reply or trace result"
+      ],
+      "outputs": [
+        "trace response"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 120,
+        "high": 600
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.95,
+          "condition": "answered",
+          "outcome": "located_and_answered"
+        },
+        {
+          "to": "s19",
+          "prob": 0.05,
+          "condition": "complaint escalated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Callback delay is the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Advise the customer of the loss and the claim procedure",
+      "description": "The representative tells the customer the freight cannot be found, explains how and by when to file a claim (written notice within 60 days of delivery, or nine months from shipment if never delivered) and sends the claim form.",
+      "role": "cs-rep",
+      "kind": "communication",
+      "inputs": [
+        "trace result"
+      ],
+      "outputs": [
+        "claim instructions"
+      ],
+      "systems": [
+        "email-phone",
+        "claims-module"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 120,
+        "high": 600
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "customer told to claim",
+          "outcome": "referred_to_claims"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-freightcom"
+        ],
+        "note": "Freightcom gives 60 days from delivery as the usual Canadian LTL claim window; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Supervisor handles an escalated complaint",
+      "description": "The customer service supervisor calls the customer back, reviews what went wrong with the terminal manager and decides on a remedy such as expedited delivery or waiving a charge.",
+      "role": "cs-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "complaint notes"
+      ],
+      "outputs": [
+        "complaint resolution"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "resolved",
+          "outcome": "escalation_resolved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Times are the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Ask the customer for a correct reference",
+      "description": "The representative tells the customer no matching shipment was found, asks for the PRO number from the shipper's bill of lading or confirms the freight has not yet been picked up, and notes the inquiry.",
+      "role": "cs-rep",
+      "kind": "communication",
+      "inputs": [
+        "no match"
+      ],
+      "outputs": [
+        "trace response"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "customer to call back",
+          "outcome": "reference_not_found"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-lsp44"
+        ],
+        "note": "FreightWaves describes failed lookups when the PRO number is unknown; times are the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Reference not found",
+      "share_of_cases": 0.1,
+      "description": "The customer's number does not match; the representative searches by names and dates, and about one in five such searches fails.",
+      "path": [
+        "s04",
+        "s05",
+        "s20"
+      ]
+    },
+    {
+      "name": "Terminal check",
+      "share_of_cases": 0.08,
+      "description": "The records do not explain a late shipment, so the terminal checks the dock and trailers and the customer is called back.",
+      "path": [
+        "s11",
+        "s13",
+        "s14",
+        "s17"
+      ]
+    },
+    {
+      "name": "Network trace",
+      "share_of_cases": 0.02,
+      "description": "The terminal cannot find the freight and OS&D traces it across the network; four in ten are not found and the customer is told to claim.",
+      "path": [
+        "s14",
+        "s15",
+        "s16",
+        "s18"
+      ]
+    },
+    {
+      "name": "Missing proof of delivery image",
+      "share_of_cases": 0.02,
+      "description": "The delivery receipt was not scanned or is unreadable, so the terminal has to find the paper copy.",
+      "path": [
+        "s07",
+        "s08",
+        "s17"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.015,
+        "p90": 0.4
+      },
+      "unit": "calendar days from the inquiry reaching the queue to the customer having an answer",
+      "population": "Canadian LTL carrier customer service centre, trace inquiries",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: most phone traces are answered in one call within about 20 minutes of reaching the queue, emails within a few hours, and terminal checks within a day. No published figure was found."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Customers quote purchase order or broker numbers instead of the PRO, so representatives search by names and dates.",
+      "steps": [
+        "s04",
+        "s05",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-lsp44"
+        ],
+        "note": "FreightWaves describes manual searches when the PRO number is unknown and says every LTL carrier runs a customer service team absorbing this cost."
+      }
+    },
+    {
+      "description": "Freight without a recent scan needs a terminal dock check, and the customer waits hours for a callback.",
+      "steps": [
+        "s13",
+        "s14",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice."
+      }
+    },
+    {
+      "description": "On storm days call volume nearly doubles while answers depend on linehaul status that dispatch has not yet updated.",
+      "steps": [
+        "s02",
+        "s11",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Surge from the organisation file; author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-fw-lsp44",
+      "title": "Carrier Logistics, LSP44 announce partnership to automate LTL shipment identification",
+      "publisher": "FreightWaves (Patrick Hatzis)",
+      "url": "https://freightwaves.com/news/carrier-logistics-lsp44-announce-partnership-to-automate-ltl-shipment-identification",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "LTL tracking relies on a valid PRO number; when the shipper or broker lacks it the carrier's system cannot find the shipment and the customer must call or email so an employee searches manually by origin, destination, postal codes, names and description; every LTL carrier runs a customer service team absorbing this cost."
+    },
+    {
+      "id": "src-freightcom",
+      "title": "LTL claims",
+      "publisher": "Freightcom",
+      "url": "https://www.freightcom.com/ltl-claims",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "Canadian LTL carriers mostly require concealed damage to be reported within 24 hours and claims for noted loss or damage within 60 days of delivery; documents: invoice, photos, description and claim value; freight charges must be paid; liability from 10 cents per pound for used goods to $2 per pound for new goods; some carriers set minimum claim amounts of $50 to $100; carriers take 30 to 90 days to settle courier claims."
+    }
+  ],
+  "assumptions": [
+    "60% of inquiries arrive by phone and 40% by email or portal message; 45% ask for proof of delivery, 33% are on-schedule status checks, 5% are with partner carriers and 17% are late or exceptions.",
+    "Terminal service clerks and OS&D clerks take part although the organisation file lists only customer service representatives and supervisors on this process.",
+    "The FreightWaves source is from 2026 but describes manual tracing work that it says the industry has done for decades, so it is used for the 2019-2022 description.",
+    "The simulated median is set by phone calls answered within a few minutes; the 90th percentile is set by emails waiting overnight and terminal callbacks.",
+    "No step ties up vehicles, equipment or crews, so no resources are listed; weather appears as the cause of the volume surge rather than as a wait inside a case."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

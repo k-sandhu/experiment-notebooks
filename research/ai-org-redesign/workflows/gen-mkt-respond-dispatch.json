@@ -1,0 +1,1445 @@
+{
+  "schema_version": "0.3",
+  "id": "gen-mkt-respond-dispatch",
+  "name": "Follow AESO dispatches and directives",
+  "org": "power-generation-co",
+  "process": "mkt-respond-dispatch",
+  "sector": "electric power generation",
+  "function": "energy marketing and trading",
+  "summary": "The AESO tells each offered asset how much to generate by issuing dispatches in its ADaMS system whenever the system price crosses the asset's offer blocks, so the company's real-time desk receives thousands of dispatches a month. The trader on shift acknowledges each one, checks it against the offer, and passes it to the gas control room, the hydro control centre or the renewables operations centre, whose operators ramp the unit, hold it inside the allowed variance and report problems. The work is minutes long but continuous, bunches up in volatile and cold-weather hours, and late acknowledgements or poor delivery are among the most frequent ISO rule matters reviewed by the market surveillance administrator.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "An Alberta merchant generator with three converted gas units, partner unit shares, about ten offered hydro assets and a 10 MW battery, dispatched through a 24-hour real-time desk.",
+    "org_size_employees": 1300,
+    "notes": "Rules as in force in 2019-2022: section 201.7 acknowledgement, section 203.4 (2020 text) delivery, operating reserve directives under division 205. ADaMS was the dispatch system."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one dispatch instruction",
+  "trigger": "The AESO system controller issues a dispatch or directive for one of the company's assets in ADaMS.",
+  "end_state": "The dispatch is acknowledged, the asset is delivering the dispatched MW inside the allowable variance (or a restatement or start-up has been handed on), and the dispatch is logged.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 1500,
+      "mode": 3000,
+      "high": 6000
+    },
+    "seasonality": "Highest in winter and on high-wind, high-volatility days when prices cross many offer blocks; lowest in mild shoulder months.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file driver dd_dispatches: about 15 dispatchable offered assets each receiving several dispatches a day. Not checked against AESO data."
+    },
+    "surge": {
+      "cause": "winter cold snaps with tight supply",
+      "events_per_year": {
+        "low": 1,
+        "mode": 3,
+        "high": 5
+      },
+      "duration_days": {
+        "low": 2,
+        "mode": 5,
+        "high": 10
+      },
+      "volume_multiplier": {
+        "low": 1.5,
+        "mode": 2.2,
+        "high": 3.5
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Taken from the organisation file: cold snaps raise demand and price volatility, so assets move up and down the merit order more often; estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "aeso",
+        "object": "dispatch_instruction",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "mkt-offer-ancillary",
+        "object": "ancillary_award"
+      },
+      {
+        "from": "gas-start-stop-units",
+        "object": "unit_status"
+      },
+      {
+        "from": "aeso",
+        "object": "iso_rules"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "aeso",
+        "object": "dispatch_confirmation"
+      },
+      {
+        "outcome": "dispatch_followed",
+        "to": "gas-operate-units",
+        "object": "dispatch_instruction"
+      },
+      {
+        "outcome": "dispatch_followed",
+        "to": "gas-start-stop-units",
+        "object": "dispatch_instruction"
+      },
+      {
+        "outcome": "dispatch_followed",
+        "to": "hyd-operate-plants",
+        "object": "dispatch_instruction"
+      },
+      {
+        "outcome": "dispatch_followed",
+        "to": "wnd-operate-battery",
+        "object": "dispatch_instruction"
+      },
+      {
+        "outcome": "restatement_raised",
+        "to": "mkt-restate-offers",
+        "object": "availability_change"
+      },
+      {
+        "outcome": "any",
+        "to": "mkt-settle-aeso",
+        "object": "dispatch_log"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "realtime_trader",
+      "title": "Real-time trader",
+      "department": "Real-time desk",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.6,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 90,
+        "high": 120
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 100 dispatches a day at about 5 minutes of desk time each; roughly one of the two staffed desk seats."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "control_room_operator_gas",
+      "title": "Control room operator (second-class power engineer)",
+      "department": "Wabamun-area converted units",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 70,
+        "high": 90
+      },
+      "occupation_code": "NOC 92100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Ramping and holding converted units on target."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "hydro_control_operator",
+      "title": "Hydro control centre operator",
+      "department": "Hydro control centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.5,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 68,
+        "high": 86
+      },
+      "occupation_code": "NOC 92100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Allocating and monitoring hydro output."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "roc_operator",
+      "title": "Renewables operations centre operator",
+      "department": "Renewables operations centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 62,
+        "high": 78
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Battery setpoints and occasional wind curtailments."
+      },
+      "shift_pattern": "shift_24x7"
+    }
+  ],
+  "systems": [
+    {
+      "id": "adams",
+      "name": "AESO Automated Dispatch and Messaging System (ADaMS)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "ets",
+      "name": "AESO Energy Trading System (offers, declarations and dispatch)",
+      "kind": "external_portal"
+    },
+    {
+      "id": "etrm",
+      "name": "Energy trading and risk management system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "dcs",
+      "name": "Plant distributed control system",
+      "kind": "instrument"
+    },
+    {
+      "id": "scada",
+      "name": "Hydro, wind and battery SCADA and remote control",
+      "kind": "instrument"
+    },
+    {
+      "id": "historian",
+      "name": "Plant data historian",
+      "kind": "analytics"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "phone",
+      "name": "Recorded desk and control room phone lines",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "converted_gas_unit",
+      "name": "Gas-fired steam unit converted from coal (about 400 to 460 MW)",
+      "kind": "plant",
+      "count": 3
+    },
+    {
+      "id": "hydro_plant",
+      "name": "Hydro plant with dam and reservoir",
+      "kind": "plant",
+      "count": 17
+    },
+    {
+      "id": "battery",
+      "name": "Battery storage facility (10 MW / 20 MWh)",
+      "kind": "plant",
+      "count": 1
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "AESO issues a dispatch",
+      "description": "The AESO system controller issues a dispatch to one of the company's assets in ADaMS, naming the asset, Dispatch On or Off, the MW level and the time it takes effect, as the system marginal price moves through the asset's offer blocks.",
+      "role": "external",
+      "kind": "intake",
+      "inputs": [
+        "merit order",
+        "energy offer"
+      ],
+      "outputs": [
+        "dispatch instruction"
+      ],
+      "systems": [
+        "adams"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "id2012005"
+        ],
+        "note": "Dispatch content as listed in 2012-005R section 2."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "ADaMS alerts the desk",
+      "description": "The ADaMS dispatch pane on the real-time desk flashes and sounds an alert for the new dispatch, and the dispatch is time-stamped in the AESO system and in the desk's dispatch history for later settlement and compliance checks.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "dispatch instruction"
+      ],
+      "outputs": [
+        "dispatch alert"
+      ],
+      "systems": [
+        "adams"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 1
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "id2012005"
+        ],
+        "note": "ADaMS dispatch pane described in 2012-005R; alert behaviour is an estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Acknowledge the dispatch",
+      "description": "The real-time trader on shift reads the dispatch and clicks the Ack Disp button in the ADaMS dispatch pane, which tells the AESO the dispatch was received; during busy hours several dispatches may be waiting at once.",
+      "role": "realtime_trader",
+      "kind": "data_entry",
+      "inputs": [
+        "dispatch alert"
+      ],
+      "outputs": [
+        "dispatch acknowledgement"
+      ],
+      "systems": [
+        "adams"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.5,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 4
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.004,
+        "defect_description": "Dispatch acknowledged late or not at all during a busy period.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 201.7 s.5: acknowledge receipt of a dispatch",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "id2012005",
+          "msacr2021"
+        ],
+        "note": "Acknowledgement duty in 201.7 s.5 as cited in 2012-005R; 67 section 201.7 matters market-wide in 2021 (MSA). The error rate is an estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check the dispatch against the offer",
+      "description": "The trader compares the dispatch MW and time with the asset's current offer blocks, available capability, ramp rate and any reserve award, to spot a dispatch that the asset cannot follow or that conflicts with a pending restatement.",
+      "role": "realtime_trader",
+      "kind": "validation",
+      "inputs": [
+        "dispatch instruction",
+        "current offer",
+        "ancillary award"
+      ],
+      "outputs": [
+        "checked dispatch"
+      ],
+      "systems": [
+        "adams",
+        "ets",
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.36,
+          "condition": "energy dispatch to a converted gas or cogeneration unit"
+        },
+        {
+          "to": "s08",
+          "prob": 0.47,
+          "condition": "energy dispatch to a hydro asset"
+        },
+        {
+          "to": "s11",
+          "prob": 0.06,
+          "condition": "dispatch to the battery or a wind farm curtailment"
+        },
+        {
+          "to": "s12",
+          "prob": 0.05,
+          "condition": "operating reserve directive"
+        },
+        {
+          "to": "s13",
+          "prob": 0.03,
+          "condition": "dispatch needs a unit start or shutdown"
+        },
+        {
+          "to": "s14",
+          "prob": 0.03,
+          "condition": "dispatch looks inconsistent with the offer or capability"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Branch shares follow the organisation file's dispatchable assets (more hydro assets than gas units); estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Relay the dispatch to the gas control room",
+      "description": "The trader phones the converted unit's control room on the recorded line, or confirms the operator has seen the dispatch on the ADaMS display there, and gives the MW target, the effective time and any reserve the unit must keep.",
+      "role": "realtime_trader",
+      "kind": "communication",
+      "inputs": [
+        "checked dispatch"
+      ],
+      "outputs": [
+        "dispatch passed to plant"
+      ],
+      "systems": [
+        "phone",
+        "adams"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0.5,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "MW target misheard or wrong unit named.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Relay practice is an estimate for 2019-2022."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Ramp the gas unit",
+      "description": "The control room operator enters the new load target in the distributed control system, adjusts burners, fans and feedwater as the unit moves at its offered ramp rate, and starts the move within ten minutes of the dispatch time but not before it.",
+      "role": "control_room_operator_gas",
+      "kind": "physical",
+      "inputs": [
+        "dispatch passed to plant"
+      ],
+      "outputs": [
+        "unit at new load"
+      ],
+      "systems": [
+        "dcs"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 8
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Ramp started late or overshoots the target.",
+        "typically_caught_at": "s07"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Plant operating procedures and boiler and turbine limits under a certificated shift engineer: dispatch is followed only within safe ramp rates and equipment limits",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "converted_gas_unit",
+          "occupied_min": {
+            "low": 10,
+            "mode": 20,
+            "high": 45
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2034"
+        ],
+        "note": "Start within 10 minutes and ramp-time limits from 203.4 s.4; operator times and unit occupancy are estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Hold the gas unit on target",
+      "description": "The operator watches the unit settle at the dispatched MW and keeps the 10-minute average output inside the allowable dispatch variance, telling the desk at once if a mill, pump or burner problem stops the unit from reaching or holding the target.",
+      "role": "control_room_operator_gas",
+      "kind": "validation",
+      "inputs": [
+        "unit at new load"
+      ],
+      "outputs": [
+        "steady-state output"
+      ],
+      "systems": [
+        "dcs",
+        "historian"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 203.4 s.3 and s.4: start moving within 10 minutes of the dispatch time, reach steady state within the ramp-time limit and stay inside the allowable dispatch variance",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2034"
+        ],
+        "note": "Steady-state and variance obligations from 203.4 s.3 and s.4(2); times are estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Relay the dispatch to hydro control",
+      "description": "The trader passes the dispatch to the hydro control centre by phone or by the shared ADaMS display, with the plant or river system, the MW target and the effective time.",
+      "role": "realtime_trader",
+      "kind": "communication",
+      "inputs": [
+        "checked dispatch"
+      ],
+      "outputs": [
+        "dispatch passed to plant"
+      ],
+      "systems": [
+        "phone",
+        "adams"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0.5,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Target given for the wrong plant.",
+        "typically_caught_at": "s10"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Set hydro units to the target",
+      "description": "The hydro control centre operator spreads the MW across units and plants in the river system on SCADA, keeping within the water schedule, licence minimum flows and forebay limits, and starts or stops units remotely where needed.",
+      "role": "hydro_control_operator",
+      "kind": "physical",
+      "inputs": [
+        "dispatch passed to plant",
+        "water schedule"
+      ],
+      "outputs": [
+        "plants at new output"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Allocation breaks a flow limit downstream.",
+        "typically_caught_at": "s10"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 203.4 s.3 and s.4: start moving within 10 minutes of the dispatch time, reach steady state within the ramp-time limit and stay inside the allowable dispatch variance",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "resources": [
+        {
+          "id": "hydro_plant",
+          "occupied_min": {
+            "low": 5,
+            "mode": 15,
+            "high": 30
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "iso2034"
+        ],
+        "note": "Delivery obligations from 203.4; hydro allocation practice and times are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Monitor hydro output and river flows",
+      "description": "The operator watches plant output against the dispatch and the downstream flows and levels, correcting unit loadings when a plant drifts outside the dispatch variance or a river limit is approached.",
+      "role": "hydro_control_operator",
+      "kind": "validation",
+      "inputs": [
+        "plants at new output",
+        "flow and level data"
+      ],
+      "outputs": [
+        "steady-state output"
+      ],
+      "systems": [
+        "scada",
+        "historian"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Set the battery or wind farm setpoint",
+      "description": "The renewables operations centre operator sets the battery's charge or discharge setpoint, or a wind farm's curtailment limit, in SCADA to match the dispatch, and checks the battery's state of charge can sustain the instruction.",
+      "role": "roc_operator",
+      "kind": "physical",
+      "inputs": [
+        "checked dispatch"
+      ],
+      "outputs": [
+        "setpoint applied"
+      ],
+      "systems": [
+        "scada"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Setpoint applied to the wrong asset or not released after the dispatch ends.",
+        "typically_caught_at": "s16"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 203.4 s.3 and s.4: start moving within 10 minutes of the dispatch time, reach steady state within the ramp-time limit and stay inside the allowable dispatch variance",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "battery",
+          "occupied_min": {
+            "low": 5,
+            "mode": 20,
+            "high": 60
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "id2012005"
+        ],
+        "note": "Storage must meet the 203.4 ramping and plus or minus 5 MW tolerance (2012-005R section 6); times and the battery occupancy are estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Relay an operating reserve directive",
+      "description": "The trader receives an AESO directive to convert awarded spinning or supplemental reserve into energy after a system contingency, passes it to the plant holding the reserve and tracks that the MW are delivered within the required time.",
+      "role": "realtime_trader",
+      "kind": "communication",
+      "inputs": [
+        "reserve directive",
+        "ancillary award"
+      ],
+      "outputs": [
+        "directive passed to plant"
+      ],
+      "systems": [
+        "adams",
+        "phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0.5,
+        "high": 2
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Directive relayed late.",
+        "typically_caught_at": "s16"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 205.2 directives and sections 205.5 and 205.6 spinning and supplemental reserve performance standards",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.7,
+          "condition": "reserve held on hydro"
+        },
+        {
+          "to": "s06",
+          "prob": 0.3,
+          "condition": "reserve held on a gas unit"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "iso2034",
+          "msacr2021"
+        ],
+        "note": "Concurrent energy and reserve directives in 203.4 s.7; reserve delivery rules 205.5 and 205.6 had 69 matters in 2021. Shares are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Hand a start or shutdown to the plant",
+      "description": "When a dispatch requires a converted unit to start, synchronise or come off line, the trader calls the plant shift supervisor, agrees the start-up plan and verbal plan to the AESO, and hands the case to the plant's start and stop procedure.",
+      "role": "realtime_trader",
+      "kind": "coordination",
+      "inputs": [
+        "checked dispatch"
+      ],
+      "outputs": [
+        "start or stop request"
+      ],
+      "systems": [
+        "phone",
+        "adams"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 203.4 s.6(1)(b): verbal plan to the ISO when ramping to minimum stable generation",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2034",
+          "id2012005"
+        ],
+        "note": "Verbal plan rule in 203.4 s.6(1)(b)(iii) and 2012-005R section 5; times are estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Query the dispatch with the AESO",
+      "description": "The trader phones the AESO system controller about a dispatch that does not match the asset's offer or restated capability, explains the asset's position and asks whether the dispatch stands or will be reissued.",
+      "role": "realtime_trader",
+      "kind": "communication",
+      "inputs": [
+        "checked dispatch"
+      ],
+      "outputs": [
+        "dispatch query"
+      ],
+      "systems": [
+        "phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "AESO confirms or reissues",
+      "description": "The AESO system controller checks the merit order and either confirms the dispatch or issues a corrected one in ADaMS, after which the desk checks it again before passing it on.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "dispatch query"
+      ],
+      "outputs": [
+        "confirmed or reissued dispatch"
+      ],
+      "systems": [
+        "adams"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Check delivery against the dispatch",
+      "description": "The trader watches the asset's real-time output on the historian and the AESO display and confirms it reached the dispatched MW within the ramp-time limit and is holding inside the allowable dispatch variance.",
+      "role": "realtime_trader",
+      "kind": "validation",
+      "inputs": [
+        "steady-state output",
+        "dispatch instruction"
+      ],
+      "outputs": [
+        "delivery check"
+      ],
+      "systems": [
+        "historian",
+        "ets"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A slow drift outside the variance is not noticed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 203.4 s.2(2): dispatch protocols, personnel and software able to detect and address errors in a timely fashion",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.94,
+          "condition": "delivered as dispatched"
+        },
+        {
+          "to": "s17",
+          "prob": 0.06,
+          "condition": "output deviates from the dispatch"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2034"
+        ],
+        "note": "203.4 s.2(2) requires such protocols; the deviation share is an estimate set against 83 section 203.4 matters market-wide in 2021 (MSA)."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Resolve a delivery deviation",
+      "description": "The trader calls the plant for the cause of the deviation; if the asset cannot recover within 20 minutes the trader starts a restatement of its capability, otherwise the trader records the cause and time the asset returned to target.",
+      "role": "realtime_trader",
+      "kind": "judgment",
+      "inputs": [
+        "delivery check"
+      ],
+      "outputs": [
+        "deviation record or restatement request"
+      ],
+      "systems": [
+        "phone",
+        "historian"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 8
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "ISO Rules section 203.4 s.5(1): restate within 20 minutes when an operational deviation lasts 20 minutes or more",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.55,
+          "condition": "capability lost, restatement started",
+          "outcome": "restatement_raised"
+        },
+        {
+          "to": "s18",
+          "prob": 0.45,
+          "condition": "recovered to target"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2034"
+        ],
+        "note": "20-minute rule in 203.4 s.5(1); shares are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Log the dispatch",
+      "description": "The trader records the dispatch, acknowledgement time, ramp completion and any deviation or start-up hand-off in the desk dispatch log, which feeds the settlement check and the compliance file.",
+      "role": "realtime_trader",
+      "kind": "data_entry",
+      "inputs": [
+        "dispatch acknowledgement",
+        "delivery check"
+      ],
+      "outputs": [
+        "dispatch log entry"
+      ],
+      "systems": [
+        "spreadsheets",
+        "etrm"
+      ],
+      "touch_min": {
+        "low": 0.3,
+        "mode": 0.5,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Entry missing or wrong time.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "dispatch_followed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate; many desks captured ADaMS history automatically and logged only exceptions by hand."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Delivery deviation",
+      "share_of_cases": 0.06,
+      "description": "The asset does not reach or hold the dispatched MW; the trader finds the cause and restates capability if it will last 20 minutes or more.",
+      "path": [
+        "s16",
+        "s17"
+      ]
+    },
+    {
+      "name": "Dispatch queried with the AESO",
+      "share_of_cases": 0.03,
+      "description": "The dispatch conflicts with the offer or a pending restatement and the trader calls the system controller, who confirms or reissues it.",
+      "path": [
+        "s04",
+        "s14",
+        "s15",
+        "s04"
+      ]
+    },
+    {
+      "name": "Start or shutdown required",
+      "share_of_cases": 0.03,
+      "description": "The dispatch needs a converted unit to start or come off line, which is handed to the plant's start and stop procedure.",
+      "path": [
+        "s04",
+        "s13",
+        "s18"
+      ]
+    },
+    {
+      "name": "Reserve directive after a contingency",
+      "share_of_cases": 0.05,
+      "description": "The AESO directs awarded spinning or supplemental reserve to deliver energy; the plant holding it must respond within the reserve performance standard.",
+      "path": [
+        "s04",
+        "s12",
+        "s09",
+        "s10",
+        "s16"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.02,
+        "p90": 0.04
+      },
+      "unit": "calendar days from dispatch issue to logged delivery",
+      "population": "Energy dispatches to an Alberta generator, 2019-2022",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "iso2034"
+        ],
+        "note": "Derived from 203.4 s.4(2): up to 10 minutes to start plus ramp time plus 40 percent (at least 5 minutes); a 50 MW move at 5 to 10 MW a minute reaches steady state in about 20 to 30 minutes. Not a measured figure."
+      }
+    },
+    {
+      "metric": "ramp_start_limit",
+      "value": 10,
+      "unit": "minutes after the dispatch time",
+      "population": "AESO generating source assets",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "iso2034"
+        ],
+        "note": "203.4 s.4(1)."
+      }
+    },
+    {
+      "metric": "dispatch_tolerance_storage",
+      "value": 5,
+      "unit": "MW either side of the dispatch (assets of 200 MW or less)",
+      "population": "AESO stand-alone storage and generating units",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "id2012005"
+        ],
+        "note": "10 MW for assets above 200 MW."
+      }
+    },
+    {
+      "metric": "dispatch_related_matters_2021",
+      "value": {
+        "section_201_7": 67,
+        "section_203_4": 83
+      },
+      "unit": "ISO rules compliance matters addressed, all Alberta participants",
+      "population": "Alberta electricity market, 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "msacr2021"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Dispatches arrive continuously and bunch up in volatile hours, when the same trader is also taking restatement calls, so acknowledgements and deviation checks slip.",
+      "steps": [
+        "s03",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "msacr2021"
+        ],
+        "note": "Dispatch acknowledgement (201.7) and delivery (203.4) were among the most frequent ISO rule matters in 2020 and 2021."
+      }
+    },
+    {
+      "description": "Each dispatch is relayed by phone from the desk to a separate control room, adding a hand-off and a chance of mishearing the MW or the unit.",
+      "steps": [
+        "s05",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate of 2019-2022 practice."
+      }
+    },
+    {
+      "description": "Converted coal-to-gas units ramp more slowly and less predictably than purpose-built gas plants, so holding them inside the variance takes close operator attention.",
+      "steps": [
+        "s06",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "iso2034",
+      "title": "ISO Rules Section 203.4, Delivery Requirements for Energy (2023-03-31 administrative version; substantive text from 2020-09-16)",
+      "publisher": "Alberta Electric System Operator",
+      "url": "https://www.aeso.ca/assets/documents/203.4-Delivery-Requirements-for-Energy-Admin-Amendments-2023-03-31.pdf",
+      "year": 2023,
+      "supports": "Respond to dispatches with reasonable dispatch protocols, personnel and software; start moving toward the dispatched MW within 10 minutes of the dispatch time; reach steady state within the ramp time plus 40 percent (at least 5 minutes) plus 10 minutes; stay inside the allowable dispatch variance over 10-minute periods; restate within 20 minutes if an operational deviation lasts 20 minutes or longer. The revision history shows the 2023 version only aligned drafting with the 2020 text.",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "id2012005",
+      "title": "Information Document 2012-005R, Dispatches (posted 2025-03-12; acknowledgement section unchanged since 2016)",
+      "publisher": "Alberta Electric System Operator",
+      "url": "https://www.aeso.ca/assets/Information-Documents/2012-005R-Dispatches-2025-03-12.pdf",
+      "year": 2025,
+      "supports": "Dispatches are issued in the Automated Dispatch and Messaging System (ADaMS) with asset, Dispatch On or Off, MW and effective time; Section 201.7 subsection 5 requires acknowledgement, done with the Ack Disp button; stand-alone storage and generating assets must hold output within plus or minus 5 MW (200 MW or less) or 10 MW (above 200 MW).",
+      "accessed": "2026-11-24"
+    },
+    {
+      "id": "msacr2021",
+      "title": "MSA Compliance Review 2021 (April 5, 2022)",
+      "publisher": "Market Surveillance Administrator (Alberta)",
+      "url": "https://www.albertamsa.ca/assets/Documents/Compliance-Review-2021.pdf",
+      "year": 2022,
+      "supports": "462 ISO rules matters addressed in 2021 (437 in 2020), 91 percent self-reported; 75 notices of specified penalty totalling 129,250 CAD; 114 matters under section 203.3 (restatements), 83 under 203.4 (dispatch delivery), 67 under 201.7 (dispatch acknowledgement), 43 under 205.6 and 26 under 205.5 (reserves); 74 percent of matters closed with forbearance; TransAlta entities among those penalised.",
+      "accessed": "2026-11-24"
+    }
+  ],
+  "assumptions": [
+    "One case is one dispatch or directive for one asset. Dispatches to the partner-operated unit shares are acknowledged by the desk but delivered by the partner's control room, and are counted in the gas branch without separate partner steps.",
+    "The volume of 3,000 a month is the organisation file's estimate; it is the number most worth checking against ADaMS history.",
+    "Branch shares (36 percent gas, 47 percent hydro, 6 percent battery or wind, 5 percent reserve directives, 3 percent starts, 3 percent queries) are estimates.",
+    "Step resources show the plant being moved during the ramp: the converted unit for 10 to 45 minutes, a hydro plant for 5 to 30 minutes, the battery for 5 to 60 minutes. The plant keeps running afterwards; this only marks the period it is tied to the dispatch change.",
+    "Desk relay of dispatches by phone is assumed for 2019-2022; where control rooms watched ADaMS directly the relay step is shorter but still includes a confirmation.",
+    "The converted_gas_unit resource is listed without its running cost per hour (14,000 CAD in the organisation file), because fuel and carbon burned during a ramp are the cost of generating energy that the pool pays for, not a cost of handling the dispatch; including it would add about 2,200 CAD to every case.",
+    "Wind farm curtailments are rare and are included in the battery branch without a separate wind_farm resource.",
+    "The simulated cycle is about 25 to 50 minutes, close to the rule-derived benchmark.",
+    "Loaded costs come from the organisation file (wage x 1.40)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

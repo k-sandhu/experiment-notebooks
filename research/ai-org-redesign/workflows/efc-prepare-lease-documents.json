@@ -1,0 +1,1852 @@
+{
+  "schema_version": "0.2",
+  "id": "efc-prepare-lease-documents",
+  "name": "Prepare lease and loan documents",
+  "org": "equipment-finance-co",
+  "process": "prepare-lease-documents",
+  "sector": "equipment leasing and finance",
+  "function": "operations (documentation)",
+  "summary": "After a customer accepts a credit approval, a documentation specialist turns it into a signed lease or loan package: agreement, schedule, guarantees, pre-authorised debit form and delivery and acceptance certificate. The specialist checks the request against the approval, chases dealers and brokers for missing serial numbers and signer details, keys the deal into a document generator, adds approval conditions, sends Quebec customers French or express-wish English documents and releases the package for electronic or paper signature. Most elapsed time is spent waiting for partners and customers; keying errors, changes after documents go out and unsigned packages from shopped deals cause most rework.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A privately owned Canadian independent equipment lessor with 340 staff funding about 1,400 small- and mid-ticket contracts a month through dealers, brokers and direct sales.",
+    "org_size_employees": 340,
+    "notes": "Documentation team of 15 specialists and a supervisor in the Toronto-area head office, some bilingual for Quebec. Document generation runs in the origination portal, e-signature was used for a growing share of packages from 2020, and imaging holds the contract file."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one document package",
+  "trigger": "Sales marks an accepted credit approval as ready for documents in the origination portal, creating a document request.",
+  "end_state": "The fully signed package is checked and placed in the funding queue, or the request is closed because the deal was lost, cancelled or sent back for a new credit decision.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 1650,
+      "mode": 2000,
+      "high": 2400
+    },
+    "seasonality": "Higher at month and quarter end, when dealers and brokers push deals to close, and in spring for construction, agricultural and truck equipment; low in late December. The low end reflects the 2020 slowdown and the high end the 2022 recovery.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Taken from the organisation file's process map (driver: contracts funded, about 1,400 a month). Read as about 2,000 document requests a month, of which about 74% end signed and passed to funding; re-issued packages for the same deal are modelled as rework inside a case."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "communicate-credit-decisions",
+        "object": "document_request",
+        "share": 0.97
+      },
+      {
+        "from": "maintain-contracts-and-legal-review",
+        "object": "approved_template",
+        "share": 0.03
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "customer",
+        "object": "lease_document_package"
+      },
+      {
+        "outcome": "any",
+        "to": "search-and-register-security",
+        "object": "registration_request"
+      },
+      {
+        "outcome": "any",
+        "to": "maintain-contracts-and-legal-review",
+        "object": "legal_review_request"
+      },
+      {
+        "outcome": "any",
+        "to": "track-equipment-insurance",
+        "object": "insurance_requirement"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "doc_specialist",
+      "title": "Documentation specialist",
+      "department": "Documentation team",
+      "layer": "individual_contributor",
+      "fte_on_process": 14.0,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 33,
+        "high": 40
+      },
+      "occupation_code": "NOC 14201",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_eq_credit_coord",
+          "src_jobbank_14201"
+        ],
+        "note": "Title, cost and headcount (15) from the organisation file; duties match the posting; cost is consistent with the Job Bank NOC 14201 Ontario median of $25.48 loaded by 1.35 and scaled to 2019-2022. About 14 of 15 FTE work on this process; the rest goes to amendment documents for lease administration and partner calls."
+      }
+    },
+    {
+      "id": "doc_sup",
+      "title": "Documentation supervisor",
+      "department": "Documentation team",
+      "layer": "supervisor",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 42,
+        "mode": 49,
+        "high": 58
+      },
+      "occupation_code": "NOC 12011",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role and cost; share of time on sign-offs and escalations is an author estimate."
+      }
+    },
+    {
+      "id": "credit_coordinator",
+      "title": "Credit coordinator",
+      "department": "Credit support",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 30,
+        "high": 36
+      },
+      "occupation_code": "NOC 14201",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_eq_credit_coord"
+        ],
+        "note": "Organisation file role and cost; posting describes coordinators preparing documents and packages. Share of time on approval amendments for documentation is an author estimate."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "origination_portal",
+      "name": "Vendor and broker application portal with origination workflow and document generation",
+      "kind": "workflow"
+    },
+    {
+      "id": "lms",
+      "name": "Lease management system (contracts, schedules, billing, tax codes, asset records, servicing)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "esign",
+      "name": "Electronic signature service",
+      "kind": "workflow"
+    },
+    {
+      "id": "doc_imaging",
+      "name": "Document imaging and contract file store",
+      "kind": "document_store"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, calendars and team chat",
+      "kind": "communication"
+    },
+    {
+      "id": "contact_centre",
+      "name": "Contact centre telephony and shared mailboxes",
+      "kind": "communication"
+    },
+    {
+      "id": "insurance_tracker",
+      "name": "Insurance certificate tracking database",
+      "kind": "workflow"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Route document request to documentation queue",
+      "description": "When a vendor desk coordinator, broker desk coordinator or account executive marks an accepted approval as ready for documents, the origination portal creates a document request and places it in the documentation work queue by channel and region. No person touches it; the request carries the approval, conditions, equipment and vendor details keyed earlier.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "document request with accepted approval"
+      ],
+      "outputs": [
+        "queued document request"
+      ],
+      "systems": [
+        "origination_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors in the request pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Portal-based routing of document requests is common practice for lessors with origination portals in 2019-2022; author estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check request against the credit approval",
+      "description": "A documentation specialist takes the next request from the queue and opens the credit approval beside it. They compare customer, guarantors, equipment cost, term, payment, structure and end-of-term option with what was approved, check the approval has not expired and list the conditions that must appear in the documents. They decide whether the request is complete, needs details from the partner or differs from the approval.",
+      "role": "doc_specialist",
+      "kind": "validation",
+      "inputs": [
+        "queued document request",
+        "credit approval and conditions"
+      ],
+      "outputs": [
+        "checked request or list of gaps"
+      ],
+      "systems": [
+        "origination_portal",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 150,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A difference from the approval (for example a higher cost inside a bundle) is missed.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Credit policy: documents must match the approved structure and every approval condition",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.8,
+          "condition": "complete and matches approval"
+        },
+        {
+          "to": "s03",
+          "prob": 0.14,
+          "condition": "details missing (serial numbers, signer, guarantor address, vendor quote)"
+        },
+        {
+          "to": "s05",
+          "prob": 0.06,
+          "condition": "cost, term or structure differs from the approval"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_eq_credit_coord"
+        ],
+        "note": "Posting describes reviewing the credit approval to confirm all documents are generated. Shares and minutes are author estimates; the queue wait reflects same-day service for most requests and next-day for late or month-end requests."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Ask the partner for missing deal details",
+      "description": "The specialist emails or phones the dealer, broker or account executive with a list of what is missing: full equipment description and serial numbers, the vendor quote or invoice, the signing officer's name and title, guarantor home addresses, the delivery address and, for Quebec customers, the language the customer wants. They note the request in the portal and set the file to pending.",
+      "role": "doc_specialist",
+      "kind": "communication",
+      "inputs": [
+        "list of gaps"
+      ],
+      "outputs": [
+        "information request to partner"
+      ],
+      "systems": [
+        "origination_portal",
+        "email_collab",
+        "contact_centre"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "The request omits an item, so a second round is needed.",
+        "typically_caught_at": "s02"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_eq_credit_coord",
+          "src_pawnee_docusign"
+        ],
+        "note": "Communicating with brokers so documents are accurate is in the posting; incomplete broker submissions are described in the Pawnee case. Minutes are author estimates."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Partner supplies the missing details",
+      "description": "The dealer, broker or account executive collects the details from the customer or the vendor and replies by email or through the portal. Serial numbers often wait until the vendor has the unit in stock. Some deals go quiet because the customer chose another lender.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "information request to partner"
+      ],
+      "outputs": [
+        "missing details"
+      ],
+      "systems": [
+        "email_collab",
+        "origination_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 960,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Partner sends wrong serial numbers or a misspelled legal name.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.9,
+          "condition": "details received"
+        },
+        {
+          "to": "END",
+          "prob": 0.1,
+          "condition": "deal lost before documents were drawn",
+          "outcome": "lost_before_documents"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate: most partners answer the same or next business day; equipment not yet in stock stretches the high end to about three days."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Confirm the change with credit and amend the approval",
+      "description": "A credit coordinator compares the changed cost, term or structure with the approval and with the documentation tolerance in the credit policy. Small changes are recorded as an amended approval with the analyst's agreement by email; larger changes or a new guarantor go back to the analyst as a resubmission, which ends this request until a new approval arrives.",
+      "role": "credit_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "checked request",
+        "credit approval"
+      ],
+      "outputs": [
+        "amended approval or resubmission"
+      ],
+      "systems": [
+        "origination_portal",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 180,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Amendment recorded with a wrong amount.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Delegated credit authority: changes beyond the documentation tolerance need sign-off by an analyst with authority for the new amount",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.7,
+          "condition": "within tolerance, approval amended"
+        },
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "outside tolerance, returned for a new credit decision",
+          "outcome": "returned_for_reapproval"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_eq_credit_coord"
+        ],
+        "note": "Coordinators flag unusual items for the credit analyst per the posting; the tolerance rule, shares and times are author estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Look up legal names, signing officer and guarantors",
+      "description": "The specialist opens the corporate registry profile and bureau reports in the credit file and copies the customer's exact legal name, jurisdiction and operating names, the officer who will sign and each guarantor's full legal name and address. Exact names matter because the same names go on the registration and a wrong debtor name can make it invalid.",
+      "role": "doc_specialist",
+      "kind": "lookup",
+      "inputs": [
+        "checked request",
+        "credit file"
+      ],
+      "outputs": [
+        "confirmed party names and signer"
+      ],
+      "systems": [
+        "origination_portal",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Operating name used instead of legal name, or guarantor middle name dropped.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Provincial PPSA rules on the debtor name in a financing statement (a seriously misleading name error invalidates the registration); the lookup itself is company practice",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_cassels_name",
+          "src_eq_credit_coord"
+        ],
+        "note": "Name rule from the Cassels commentary; minutes are author estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Choose the document set by product, province and language",
+      "description": "The specialist picks the template set: lease or loan, master lease with schedule or single agreement, program forms for the vendor, a guarantee for each guarantor, the pre-authorised debit form and the delivery and acceptance certificate. For a customer in Quebec they use the French version, or the English version with the clause recording the parties' express wish to contract in English. Interim rent or deposit clauses are added when the approval needs them.",
+      "role": "doc_specialist",
+      "kind": "judgment",
+      "inputs": [
+        "confirmed party names",
+        "approval conditions"
+      ],
+      "outputs": [
+        "selected template set"
+      ],
+      "systems": [
+        "origination_portal"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong province or language version chosen.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Charter of the French Language, section 55: Quebec contracts of adhesion in French unless the parties expressly wish another language (rule in force 2019-2022)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_gowling_bill96",
+          "src_elfa_acceptance"
+        ],
+        "note": "Language rule from Gowling; the delivery and acceptance certificate in the package from ELFA. About 18% of packages are for Quebec customers (author estimate)."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Key deal data into the document generator",
+      "description": "The specialist fills the document generator in the origination portal: customer and guarantor details, each equipment line with make, model and serial number from the vendor quote, cost, payment, term, fees, tax status and end-of-term option. Items the portal did not carry from the application, such as serial numbers and guarantor addresses, are typed by hand from the quote and emails.",
+      "role": "doc_specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "selected template set",
+        "vendor quote",
+        "approval"
+      ],
+      "outputs": [
+        "draft document package"
+      ],
+      "systems": [
+        "origination_portal",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Serial number transposed, wrong payment amount or guarantor name misspelled.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_pawnee_docusign"
+        ],
+        "note": "Wrong amounts in agreements are described in the Pawnee case; minutes and error rate are author estimates for template-driven small-ticket documents."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Check payment, taxes and fees",
+      "description": "The specialist checks that the payment produced by the generator equals the approved payment for the cost, term and rate, that the right sales tax applies to the lease payments for the customer's province (GST or HST, plus QST in Quebec or PST in British Columbia, Saskatchewan or Manitoba) and that documentation fees and first and last payments match the program.",
+      "role": "doc_specialist",
+      "kind": "analysis",
+      "inputs": [
+        "draft document package",
+        "rate card"
+      ],
+      "outputs": [
+        "checked payment schedule"
+      ],
+      "systems": [
+        "origination_portal",
+        "lms"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Tax applied for the wrong province or tax-exempt status not applied.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Excise Tax Act (GST/HST) and provincial sales tax acts: tax is charged on each lease payment at the rate for the province where the equipment is located",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate based on lessor tax practice; tax rules are summarised in the organisation file's billing and tax processes."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Add approval conditions and special terms",
+      "description": "The specialist adds the clauses and documents that the approval conditions require: a security deposit, additional collateral, a corporate or personal guarantee, a vendor recourse or repurchase agreement, or a waiver drafted from registry search results. When a customer or partner asks for wording outside the templates, the specialist routes it to legal.",
+      "role": "doc_specialist",
+      "kind": "drafting",
+      "inputs": [
+        "draft document package",
+        "approval conditions"
+      ],
+      "outputs": [
+        "complete draft package"
+      ],
+      "systems": [
+        "origination_portal"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A condition such as a second guarantor is left out.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.39,
+          "condition": "sent for peer check (new staff, above $100,000, Quebec or a re-issue)"
+        },
+        {
+          "to": "s15",
+          "prob": 0.585,
+          "condition": "standard small-ticket package, released without a second check"
+        },
+        {
+          "to": "s11",
+          "prob": 0.025,
+          "condition": "non-standard wording requested"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_eq_credit_coord"
+        ],
+        "note": "Waivers from search results are in the posting; the share sent to legal (about 50 a month) is sized to the organisation file's legal review volume; the peer-check share is an author estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Send non-standard wording to legal",
+      "description": "The specialist writes a short legal review request with the deal size, the clause the customer or partner wants changed and the template wording, attaches the draft and sends it to legal counsel's queue.",
+      "role": "doc_specialist",
+      "kind": "communication",
+      "inputs": [
+        "complete draft package",
+        "requested wording"
+      ],
+      "outputs": [
+        "legal review request"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "request sent"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; the legal review process is a separate process in the organisation file."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Apply legal's approved wording",
+      "description": "When legal replies, the specialist inserts the approved clause or the legal-approved template into the package and regenerates the documents. If legal refuses the change, the specialist tells the partner that the standard wording applies.",
+      "role": "doc_specialist",
+      "kind": "drafting",
+      "inputs": [
+        "approved wording or refusal"
+      ],
+      "outputs": [
+        "revised draft package"
+      ],
+      "systems": [
+        "origination_portal",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 8640
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Approved clause inserted in only one of two language versions.",
+        "typically_caught_at": "s13"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Contract policy: only legal may approve departures from the approved lease and guarantee templates",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.88,
+          "condition": "approved wording applied"
+        },
+        {
+          "to": "s03",
+          "prob": 0.12,
+          "condition": "change refused, partner told standard terms apply"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate: legal turnaround of one to six business days for two counsel and two paralegals handling about 60 reviews a month."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Peer check of the package",
+      "description": "A second documentation specialist reads the package against the approval: names, addresses, equipment and serial numbers, cost, payment, taxes, term, conditions and signature blocks. They return it with a list of errors or pass it, and send mid-ticket and non-standard packages to the supervisor.",
+      "role": "doc_specialist",
+      "kind": "review",
+      "inputs": [
+        "complete draft package",
+        "credit approval"
+      ],
+      "outputs": [
+        "checked package or error list"
+      ],
+      "systems": [
+        "origination_portal",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 90,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "An error is passed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Documentation procedures: maker-checker review for higher-risk packages",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.72,
+          "condition": "passed"
+        },
+        {
+          "to": "s14",
+          "prob": 0.16,
+          "condition": "mid-ticket or non-standard, needs supervisor sign-off"
+        },
+        {
+          "to": "s08",
+          "prob": 0.12,
+          "condition": "errors found, back to the preparer"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate: second review of selected packages is common; the error-return rate is consistent with an 8% keying error rate concentrated in larger and non-standard packages."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Supervisor sign-off for mid-ticket and non-standard packages",
+      "description": "The documentation supervisor reviews mid-ticket packages above $250,000 and any package with legal-approved wording, checks the conditions and the guarantees once more and signs off in the portal before release.",
+      "role": "doc_sup",
+      "kind": "approval",
+      "inputs": [
+        "checked package"
+      ],
+      "outputs": [
+        "signed-off package"
+      ],
+      "systems": [
+        "origination_portal"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 180,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Documentation procedures: supervisor approval of large and non-standard packages",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.93,
+          "condition": "signed off"
+        },
+        {
+          "to": "s08",
+          "prob": 0.07,
+          "condition": "returned for correction"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; mid-ticket is about 13% of applications in the organisation file."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Set up the signing envelope",
+      "description": "The specialist decides how the package will be signed. For electronic signature they build an envelope with the signing order (customer officer, then each guarantor), required signature and initial fields and the pre-authorised debit form with its mandatory wording; for wet signature they produce a PDF and cover letter or a courier package.",
+      "role": "doc_specialist",
+      "kind": "coordination",
+      "inputs": [
+        "final package"
+      ],
+      "outputs": [
+        "signing envelope or paper package"
+      ],
+      "systems": [
+        "esign",
+        "origination_portal"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Guarantor routed to the wrong email address or a signature field missed on a paper package.",
+        "typically_caught_at": "s22"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Payments Canada Rule H1: the pre-authorised debit agreement must contain the mandatory Appendix II elements and be authorised by the payor",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_payments_pad",
+          "src_elfa_esign"
+        ],
+        "note": "PAD rule from Payments Canada; required-field behaviour of e-signing from ELFA. Minutes are author estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Release the package and notify the partner",
+      "description": "The specialist sends the e-signature envelope or emails the PDF package to the customer, copies the dealer or broker, and sets the portal status to documents out so the partner can see it.",
+      "role": "doc_specialist",
+      "kind": "communication",
+      "inputs": [
+        "signing envelope or paper package"
+      ],
+      "outputs": [
+        "lease document package sent"
+      ],
+      "systems": [
+        "esign",
+        "email_collab",
+        "origination_portal"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 1,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_newcap_toronto"
+        ],
+        "note": "Electronic signing once terms are chosen is described by a Canadian lessor; minutes are author estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Send the registration request",
+      "description": "The specialist fills the registration request for the funding team's registration clerks: debtor and guarantor names, province, collateral description and serial numbers, and whether a Quebec publication is needed. It is copied from the package, so a keying error in the package is carried into the registration.",
+      "role": "doc_specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "lease document package"
+      ],
+      "outputs": [
+        "registration request"
+      ],
+      "systems": [
+        "origination_portal"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Serial number or debtor name re-keyed wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s16"
+      ],
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; the organisation file has the documentation team send registration requests to search and registration."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Send the insurance requirement",
+      "description": "The specialist records the required property coverage, the equipment value and the loss payee wording in the insurance tracker and attaches the insurance request letter the customer passes to their insurance broker.",
+      "role": "doc_specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "lease document package"
+      ],
+      "outputs": [
+        "insurance requirement"
+      ],
+      "systems": [
+        "insurance_tracker",
+        "origination_portal"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Equipment value entered wrongly.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s16"
+      ],
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.6,
+          "condition": "electronic signature"
+        },
+        {
+          "to": "s20",
+          "prob": 0.4,
+          "condition": "wet signature on paper"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_pawnee_docusign",
+          "src_elfa_esign"
+        ],
+        "note": "E-signature share of 60% across 2019-2022 is an author estimate anchored on Pawnee's 55% of transactions and the pandemic shift ELFA describes."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Customer and guarantors sign electronically",
+      "description": "The customer's signing officer and each guarantor open the e-signature email, review the documents and sign. Many sign the same day; others wait for the equipment, for a partner to explain the terms or for a guarantor who is travelling. Some ask for a change instead of signing.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "lease document package"
+      ],
+      "outputs": [
+        "signed documents or change request"
+      ],
+      "systems": [
+        "esign"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 20,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.7,
+          "condition": "all parties signed"
+        },
+        {
+          "to": "s21",
+          "prob": 0.09,
+          "condition": "change requested (equipment, price, term or signer)"
+        },
+        {
+          "to": "s23",
+          "prob": 0.21,
+          "condition": "not signed after a few days"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_directcap_eoriginal",
+          "src_elfa_esign"
+        ],
+        "note": "Signing in minutes to hours with e-signature per the case studies; shares and the elapsed-time range are author estimates."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Customer signs on paper and returns the package",
+      "description": "The customer prints, signs and initials the documents, has guarantors sign, attaches a void cheque for the debit form and returns scans by email, by the dealer or by courier. Pages are often missed or initialled in the wrong place.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "lease document package"
+      ],
+      "outputs": [
+        "signed documents or change request"
+      ],
+      "systems": [
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Missing initials, unsigned guarantee page or no void cheque.",
+        "typically_caught_at": "s22"
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.64,
+          "condition": "returned"
+        },
+        {
+          "to": "s21",
+          "prob": 0.1,
+          "condition": "change requested"
+        },
+        {
+          "to": "s23",
+          "prob": 0.26,
+          "condition": "not returned after a few days"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_corcentric_eoriginal",
+          "src_directcap_eoriginal",
+          "src_pawnee_docusign"
+        ],
+        "note": "Paper signing took 5 days (Direct Capital) to 7 to 10 days (large fleet deals, Corcentric) and broker paper often arrived with missing signatures (Pawnee); shares and range for small-ticket deals are author estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Assess a change request and void the outstanding package",
+      "description": "When the partner or customer asks for a change after documents are out, such as a different unit, a higher price after vendor add-ons, another term or a new signer, the specialist voids the open envelope or marks the paper set void and decides whether the change is within documentation tolerance, needs credit or ends the deal.",
+      "role": "doc_specialist",
+      "kind": "judgment",
+      "inputs": [
+        "change request",
+        "credit approval"
+      ],
+      "outputs": [
+        "re-document decision"
+      ],
+      "systems": [
+        "origination_portal",
+        "esign",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Old envelope not voided, so two versions circulate.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.75,
+          "condition": "within tolerance, re-issue documents"
+        },
+        {
+          "to": "s05",
+          "prob": 0.2,
+          "condition": "needs credit sign-off"
+        },
+        {
+          "to": "s24",
+          "prob": 0.05,
+          "condition": "deal cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The organisation file says changes after documents are sent cause rework; shares and minutes are author estimates."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Check the returned package and pass it to funding",
+      "description": "The specialist opens the completed envelope or the scanned pages and checks that every signature, initial, date and guarantor page is present and that the debit form has banking details. Complete packages are indexed into the imaging system and moved to the funding queue, with paper originals sent to the file room and e-signed originals kept in the e-signature vault; missing pages go back to the customer.",
+      "role": "doc_specialist",
+      "kind": "validation",
+      "inputs": [
+        "signed documents"
+      ],
+      "outputs": [
+        "signed document package in funding queue"
+      ],
+      "systems": [
+        "doc_imaging",
+        "origination_portal",
+        "esign"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 120,
+        "high": 960
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A missing initial on a schedule is not noticed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Documentation procedures and funder eligibility criteria: a complete, fully signed contract file before funding",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.92,
+          "condition": "complete, sent to funding",
+          "outcome": "signed_returned"
+        },
+        {
+          "to": "s23",
+          "prob": 0.08,
+          "condition": "pages or signatures missing"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_elfa_acceptance",
+          "src_goodmans_ecp",
+          "src_elfa_esign"
+        ],
+        "note": "Lessors do not fund until signed documents are received (ELFA); originals matter because the lease is chattel paper, and Ontario added rules for electronic chattel paper only in May 2020 (Goodmans). Share incomplete and minutes are author estimates."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Chase unsigned or incomplete documents",
+      "description": "Each morning the specialist works the aging report of packages out for signature. For packages out more than two or three business days, or returned incomplete, they email or call the dealer, broker or customer and resend the envelope or the missing pages.",
+      "role": "doc_specialist",
+      "kind": "communication",
+      "inputs": [
+        "aging report",
+        "open package"
+      ],
+      "outputs": [
+        "reminder sent"
+      ],
+      "systems": [
+        "origination_portal",
+        "email_collab",
+        "esign",
+        "contact_centre"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.26,
+          "condition": "resent for e-signature"
+        },
+        {
+          "to": "s20",
+          "prob": 0.16,
+          "condition": "paper pages resent"
+        },
+        {
+          "to": "s24",
+          "prob": 0.58,
+          "condition": "partner confirms the deal is lost or approval expires"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate: daily aging-report follow-up is common; about a third of chased packages never sign because brokers and dealers shop deals to several lessors."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Close the file as not proceeding",
+      "description": "The specialist voids any open envelope, marks the request lost in the portal with a reason, cancels the registration request and insurance requirement and tells the sales contact. Files are often closed only when the approval expires or the partner confirms the loss.",
+      "role": "doc_specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "open package"
+      ],
+      "outputs": [
+        "closed request"
+      ],
+      "systems": [
+        "origination_portal",
+        "esign",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 14400
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Registration request not cancelled, leaving a registration against a customer who never leased.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "closed",
+          "outcome": "not_proceeding"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Missing deal details",
+      "share_of_cases": 0.14,
+      "description": "Serial numbers, signer details or guarantor addresses are missing, so the specialist asks the partner and waits, often until the vendor has the unit in stock.",
+      "path": [
+        "s02",
+        "s03",
+        "s04",
+        "s02"
+      ]
+    },
+    {
+      "name": "Structure differs from the approval",
+      "share_of_cases": 0.07,
+      "description": "The equipment cost, term or structure in the request or a later change is outside documentation tolerance; a credit coordinator gets it amended or sends it back for a new decision.",
+      "path": [
+        "s02",
+        "s05",
+        "s06"
+      ]
+    },
+    {
+      "name": "Non-standard wording",
+      "share_of_cases": 0.025,
+      "description": "The customer or partner wants clauses outside the templates; legal reviews them over several days and may refuse.",
+      "path": [
+        "s10",
+        "s11",
+        "s12",
+        "s13"
+      ]
+    },
+    {
+      "name": "Change after documents are out",
+      "share_of_cases": 0.07,
+      "description": "A different unit, price, term or signer after release voids the package and sends it back to keying or credit.",
+      "path": [
+        "s19",
+        "s21",
+        "s08"
+      ]
+    },
+    {
+      "name": "Unsigned package from a shopped deal",
+      "share_of_cases": 0.17,
+      "description": "The customer does not sign because a dealer or broker placed the deal elsewhere; the specialist chases and finally closes the file.",
+      "path": [
+        "s19",
+        "s23",
+        "s24"
+      ]
+    },
+    {
+      "name": "Incomplete paper package",
+      "share_of_cases": 0.03,
+      "description": "Paper documents come back with missing initials, guarantee pages or void cheque and are chased.",
+      "path": [
+        "s20",
+        "s22",
+        "s23",
+        "s20"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 3,
+        "p90": 14
+      },
+      "unit": "calendar days from document request to signed package in the funding queue or file closure, all outcomes",
+      "population": "Canadian small- and mid-ticket equipment lessor, 2019-2022 (composite estimate)",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_newcap_toronto",
+          "src_mhc_fullservice",
+          "src_directcap_eoriginal",
+          "src_corcentric_eoriginal",
+          "src_pawnee_docusign"
+        ],
+        "note": "Composite, not a measured figure: Canadian lessors advertise funding within 24 to 48 hours of signed documents, implying documents drawn within a day; paper signing took 5 to 10 days in the case studies and broker paper delays stretched from days into weeks. The p90 reflects chased and abandoned packages."
+      }
+    },
+    {
+      "metric": "e_signature_share_of_transactions",
+      "value": 0.55,
+      "unit": "share of transactions completed electronically",
+      "population": "One US small-ticket broker-channel lessor after adopting e-signature (undated case study)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_pawnee_docusign"
+        ],
+        "note": "Stated in the case study."
+      }
+    },
+    {
+      "metric": "paper_document_transfer_days",
+      "value": 5,
+      "unit": "days to move documents on paper before e-signature",
+      "population": "One US small-ticket equipment lender (undated case study)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_directcap_eoriginal"
+        ],
+        "note": "Stated in the case study; fell to 10 minutes with e-signing."
+      }
+    },
+    {
+      "metric": "paper_signing_days_large_fleet",
+      "value": {
+        "low": 7,
+        "high": 10
+      },
+      "unit": "days to sign and return a paper package",
+      "population": "Large fleet lease transactions with about 30 documents each (undated case study)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_corcentric_eoriginal"
+        ],
+        "note": "Stated in the case study; three days or less after digitisation."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Deal details such as serial numbers, signer names and guarantor addresses are missing from many requests, so specialists chase partners and work waits.",
+      "steps": [
+        "s02",
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_pawnee_docusign",
+          "src_eq_credit_coord"
+        ],
+        "note": "Incomplete broker submissions and broker communication are described; share is an author estimate."
+      }
+    },
+    {
+      "description": "Serial numbers and guarantor details are re-keyed from quotes and emails into the document generator and again into the registration request, and keying errors surface at the funding audit.",
+      "steps": [
+        "s08",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate based on portal data flows typical of the period."
+      }
+    },
+    {
+      "description": "Dealers and brokers shop deals to several lessors, so many packages are drawn, chased and closed without ever being signed.",
+      "steps": [
+        "s19",
+        "s23",
+        "s24"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file: about 62% of approvals fund; share of unsigned packages is an author estimate."
+      }
+    },
+    {
+      "description": "Paper packages take days to return and often come back with missing initials or pages; e-signature removed much of this delay from 2020.",
+      "steps": [
+        "s20",
+        "s22"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_directcap_eoriginal",
+          "src_corcentric_eoriginal",
+          "src_elfa_esign"
+        ],
+        "note": "Case studies and ELFA describe the paper delays."
+      }
+    },
+    {
+      "description": "Changes to equipment or price after documents are out void the package and repeat keying, checks and signing.",
+      "steps": [
+        "s21",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file description; frequency is an author estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src_eq_credit_coord",
+      "title": "Credit Coordinator, Bennington Financial Corp (job posting)",
+      "publisher": "EQ Bank / EQB Inc. on Lever",
+      "url": "https://jobs.lever.co/eqbank/c1b4e9a7-8406-44f8-b482-eaf231c17a11",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Canadian equipment lessor credit coordinator creates lease documents on broker request, reviews the credit approval to confirm all needed documents are generated, pulls and analyses searches, creates waivers from search results, communicates with brokers so documents are accurate and timely, and prepares preliminary credit packages for the funding review; salary $42,000 to $46,000."
+    },
+    {
+      "id": "src_elfa_acceptance",
+      "title": "Equipment acceptance is important",
+      "publisher": "Equipment Leasing and Finance Association (Equipment Leasing Today)",
+      "url": "https://www.elfaonline.org/communications/january-february-2020/equipment-acceptance-is-important",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "Lease forms require the lessee to sign and return a delivery and acceptance certificate after delivery; lessors generally do not fund until the signed certificate is received; a telephone verification call or follow-up signed certificate is prudent; some small-ticket lessors put the acceptance on the face of the lease."
+    },
+    {
+      "id": "src_elfa_esign",
+      "title": "5 takeaways from eSigning and eLeasing: what do you want to know?",
+      "publisher": "Equipment Leasing and Finance Association",
+      "url": "https://www.elfaonline.org/newsroom/2021/04/21/5-takeaways-from-esigning-and-eleasing-17f51d5d",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "The pandemic pushed equipment lessors from wet-ink paper documents to e-signatures; e-signing tools will not let signing proceed until required signature and initial fields are complete; signings can finish in minutes instead of hours; savings on overnight delivery offset e-signature costs; e-signed leases are stored in an e-vault as electronic chattel paper."
+    },
+    {
+      "id": "src_pawnee_docusign",
+      "title": "Pawnee Leasing Corporation achieves 50% faster access to capital with DocuSign eSignature (case study)",
+      "publisher": "DocuSign via casestudies.com",
+      "url": "https://www.casestudies.com/company/docusign/case-study/pawnee-leasing-customers-access-capital-50-faster-with-docusign-esignature",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "A US small-ticket lessor working through brokers: broker-submitted agreements often arrived with missing signatures or wrong amounts, causing back-and-forth and funding delays that stretched from days into weeks; e-signature moved 55% of transactions to electronic completion and cut average time to fund by about 50%."
+    },
+    {
+      "id": "src_directcap_eoriginal",
+      "title": "Direct Capital develops a seamless digital solution with eOriginal (case study)",
+      "publisher": "eOriginal via casestudies.com",
+      "url": "https://www.casestudies.com/company/eoriginal/case-study/direct-capital-develops-a-seamless-digital-solution-with-eoriginal",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "A small-ticket equipment lender's document transfer time fell from 5 days on paper to 10 minutes after moving to e-signing and e-vaulting."
+    },
+    {
+      "id": "src_corcentric_eoriginal",
+      "title": "Corcentric achieves faster, more cost-effective digital equipment leasing with eOriginal (case study)",
+      "publisher": "eOriginal via casestudies.com",
+      "url": "https://www.casestudies.com/company/eoriginal/case-study/how-corcentric-delivered-a-streamlined-more-cost-effective-customer-experience-by-digitizing-equipment-leasing",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "Large fleet lease transactions with often 30 documents per deal took a typical 7 to 10 days to sign and return on paper, three days or less after digitisation."
+    },
+    {
+      "id": "src_gowling_bill96",
+      "title": "Bill 96's French First rule takes effect",
+      "publisher": "Gowling WLG",
+      "url": "https://gowlingwlg.com/en-ca/insights-resources/articles/2023/bill-96-s-french-first-rule-takes-effect",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "Before 1 June 2023 a Quebec contract of adhesion could be drawn up in a language other than French at the express wish of the parties, and a language selection clause was generally enough; from 1 June 2023 a French version must first be given to the adhering party."
+    },
+    {
+      "id": "src_payments_pad",
+      "title": "Pre-authorized debit (business guide)",
+      "publisher": "Payments Canada",
+      "url": "https://www.payments.ca/resources/payment-guides/business-guides/pre-authorized-debit",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Rule H1: every PAD agreement must contain the mandatory elements in Appendix II (account, PAD category, amount, timing, cancellation, contact details and a recourse statement); it can be completed on paper with the payor's signature or electronically; changes are kept with the original agreement."
+    },
+    {
+      "id": "src_goodmans_ecp",
+      "title": "Ontario PPSA amended to incorporate rules relating to electronic chattel paper",
+      "publisher": "Goodmans LLP",
+      "url": "https://www.goodmans.ca/insights/article/Ontario_PPSA_Amended_to_Incorporate_Rules_Relating_to_Electronic_Chattel_Paper",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "Amendments in force 15 May 2020 let secured parties perfect an interest in electronic chattel paper by control; chattel paper is commonly used in vehicle and equipment sales and leases; a purchaser taking possession or control in the ordinary course for new value can have priority."
+    },
+    {
+      "id": "src_cassels_name",
+      "title": "Lessons learned, lesson one supplement: get the name right on the financing statement",
+      "publisher": "Cassels Brock & Blackwell LLP",
+      "url": "https://cassels.com/insights/lessons-learned-lesson-one-supplement-get-the-name-right-on-the-financing-statement/",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "A seriously misleading error in the debtor's name makes a PPSA registration invalid in Manitoba and most provinces even when the serial number is right; the lender would have known the correct name from the prescribed documentation."
+    },
+    {
+      "id": "src_jobbank_14201",
+      "title": "Wages: Financial clerk, financial sector in Ontario (NOC 14201)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/marketreport/wages-occupation/1674/ON",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Ontario hourly wages low $18.00, median $25.48, high $35.90; Toronto region median $25.00 (2023-2024 Labour Force Survey, updated November 2025)."
+    },
+    {
+      "id": "src_mhc_fullservice",
+      "title": "Dedication to Canadian companies with full-service financing",
+      "publisher": "Mitsubishi HC Capital Canada",
+      "url": "https://www.mhccna.com/en-ca/business-insights/articles/dedication-canadian-companies-full-service-financing",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "A Canadian equipment lessor with a dedicated documentation team states it can make same-day credit decisions and fund in as little as 24 to 28 hours."
+    },
+    {
+      "id": "src_newcap_toronto",
+      "title": "Toronto equipment financing",
+      "publisher": "NewCap Leasing",
+      "url": "https://newcapleasing.com/toronto-equipment-financing/",
+      "year": "undated",
+      "accessed": "2026-11-17",
+      "supports": "A Canadian lessor says customers sign lease documents electronically once terms are chosen and that funding and equipment release typically happen within 48 hours of signed documents for standard leases."
+    }
+  ],
+  "assumptions": [
+    "The organisation file's 2,000 document packages a month are read as document requests. In the simulation about 74% end signed and passed to funding (about 1,490, against about 1,400 fundings after funding-audit fallout), about 21% are closed unsigned and about 5% end before documents are drawn or go back to credit; re-issued packages for the same deal are modelled as rework loops, so about 2,200 package versions are generated a month.",
+    "The case ends when the signed package reaches the funding queue. The organisation file models the signed documents as flowing from the customer to audit-and-fund-contracts, so that hand-off is not listed under produces; the delivery and acceptance certificate and verbal verification belong to the funding audit.",
+    "Peer checks cover about 40% of packages (new staff, above $100,000, Quebec and re-issues) and the supervisor signs off mid-ticket and non-standard packages; standard small-ticket packages rely on self-check and the funding audit. This mirrors common small-ticket practice, where the funding audit is the main check.",
+    "E-signature share is set at 60% for the whole 2019-2022 period (lower before 2020, higher after). Quebec packages are about 18% of volume. Both are author estimates.",
+    "External steps have zero touch time so the staffing check counts only company staff; the elapsed time of customers and partners is in wait_before_min.",
+    "Legal review is a separate process; its turnaround appears as the wait before step s12.",
+    "Loaded costs are the organisation file's (2019-2022 wage times 1.35).",
+    "The pre-June 2023 Quebec language rule (express wish clause) is used because the reference period is 2019-2022."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

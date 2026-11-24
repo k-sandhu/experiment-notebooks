@@ -1,0 +1,1423 @@
+{
+  "schema_version": "0.3",
+  "id": "edu-ops-field-service-orders",
+  "name": "Carry out field service orders",
+  "org": "electric-distribution-utility",
+  "process": "ops-field-service-orders",
+  "sector": "electric power distribution",
+  "function": "distribution operations (field services)",
+  "summary": "Field service representatives visit customer premises to disconnect and reconnect service for non-payment and moves where the meter cannot be switched remotely, investigate high bills and voltage complaints, check suspected tampering and do service checks. A dispatcher triages orders from the customer system, checks disconnection orders against the account and OEB rules, books four-hour appointments where the customer must be present and builds daily routes. Work is slowed by travel across a large territory, no-access visits and last-minute payments that cancel disconnections; reconnections and appointments have regulatory time standards.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A municipally owned Ontario distributor with about 350,000 customers and a small field services group working from the customer system and a mobile workforce tool.",
+    "org_size_employees": 571,
+    "notes": "Smart meters were installed across Ontario, but many residential meters of this period could not be disconnected remotely, so most disconnections and reconnections needed a site visit."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one field service order",
+  "trigger": "Collections, move-in and move-out, billing, metering or the contact centre creates a field service order in the CIS.",
+  "end_state": "The field work is done and the result is posted to the customer account, or the order is cancelled or returned after failed access.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 900,
+      "mode": 1300,
+      "high": 1800
+    },
+    "seasonality": "Disconnections for arrears stop for residential customers from November 15 to April 30 and rise sharply in May and June; move orders peak in summer; high-bill investigations peak after winter bills.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "oeb-rules"
+      ],
+      "note": "Winter ban dates from the OEB; the order count is the organisation file's estimate."
+    },
+    "surge": {
+      "cause": "end of the winter disconnection ban releases a backlog of residential arrears disconnections",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 30,
+        "mode": 45,
+        "high": 60
+      },
+      "volume_multiplier": {
+        "low": 1.3,
+        "mode": 1.6,
+        "high": 2.2
+      },
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oeb-ban-2022",
+          "oeb-rules"
+        ],
+        "note": "The ban ends each April 30; the size of the backlog is the author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "cs-collections",
+        "object": "disconnect_order",
+        "share": 0.35
+      },
+      {
+        "from": "cs-move-in-move-out",
+        "object": "disconnect_order",
+        "share": 0.2
+      },
+      {
+        "from": "cs-contact-centre",
+        "object": "customer_inquiry",
+        "share": 0.2
+      },
+      {
+        "from": "cs-meter-data-management",
+        "object": "read_exception",
+        "share": 0.15
+      },
+      {
+        "from": "cs-billing-exceptions",
+        "object": "meter_order",
+        "share": 0.1
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "completed",
+        "to": "cs-collections",
+        "object": "field_result"
+      },
+      {
+        "outcome": "completed",
+        "to": "cs-billing-exceptions",
+        "object": "field_result"
+      },
+      {
+        "outcome": "completed",
+        "to": "cs-meter-data-management",
+        "object": "field_result"
+      },
+      {
+        "outcome": "returned_no_access",
+        "to": "cs-collections",
+        "object": "field_result"
+      },
+      {
+        "outcome": "any",
+        "to": "fin-payroll",
+        "object": "time_record"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "field-service-rep",
+      "title": "Field service representative",
+      "department": "Field Services",
+      "layer": "individual_contributor",
+      "fte_on_process": 8.0,
+      "loaded_cost_per_hour": {
+        "low": 42,
+        "mode": 50,
+        "high": 58
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "All eight representatives. At about an hour per visit including travel, access and recording, 1,300 orders a month need about 10 FTE, so either the order count is high or meter technicians and overtime cover the peak."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "field-dispatcher",
+      "title": "Field service dispatcher",
+      "department": "Work Planning and Dispatch",
+      "layer": "individual_contributor",
+      "fte_on_process": 2.0,
+      "loaded_cost_per_hour": {
+        "low": 42,
+        "mode": 50,
+        "high": 58
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Part of the six field dispatchers; the rest of their time goes to locates and other dispatch."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "field-services-supervisor",
+      "title": "Field services supervisor",
+      "department": "Field Services",
+      "layer": "supervisor",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 62,
+        "mode": 72,
+        "high": 84
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Tamper reviews and weekly sampling."
+      },
+      "shift_pattern": "extended_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "cis",
+      "name": "Customer information and billing system (CIS)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mwm",
+      "name": "Mobile workforce management and field tablets",
+      "kind": "workflow"
+    },
+    {
+      "id": "telephony",
+      "name": "Contact centre telephony, IVR and call recording",
+      "kind": "communication"
+    },
+    {
+      "id": "timesheets",
+      "name": "Time entry for crews and staff",
+      "kind": "workflow"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email",
+      "name": "Email, calendar and Teams",
+      "kind": "communication"
+    }
+  ],
+  "resources": [
+    {
+      "id": "light-vehicle",
+      "name": "Light vehicle (pickup or van) for locators, meter technicians, inspectors and field service",
+      "kind": "vehicle",
+      "count": 130,
+      "cost_per_hour": {
+        "low": 12,
+        "mode": 18,
+        "high": 25
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Create service order and send to mobile system",
+      "description": "An order raised in the customer information system by collections, move-in and move-out, billing or the contact centre is passed by the interface to the mobile workforce system with the account, meter number, order type and due date.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "disconnect order",
+        "meter order",
+        "customer inquiry",
+        "read exception"
+      ],
+      "outputs": [
+        "field service order"
+      ],
+      "systems": [
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Typical CIS to mobile workforce interface run several times a day."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Review and prioritise order",
+      "description": "The field service dispatcher opens new orders, checks the type, due date and any safety or access notes on the premise, and sorts them: reconnections due within two business days first, appointments next, then disconnections and investigations.",
+      "role": "field-dispatcher",
+      "kind": "intake",
+      "inputs": [
+        "field service order"
+      ],
+      "outputs": [
+        "prioritised order"
+      ],
+      "systems": [
+        "mwm",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Order given the wrong priority and missed its due date.",
+        "typically_caught_at": "s18"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.25,
+          "condition": "customer must be present"
+        },
+        {
+          "to": "s04",
+          "prob": 0.3,
+          "condition": "disconnection for non-payment"
+        },
+        {
+          "to": "s05",
+          "prob": 0.45,
+          "condition": "other orders"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oeb-rules"
+        ],
+        "note": "Reconnection within 2 business days after payment or an arrears agreement; order mix is the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Book four-hour appointment",
+      "description": "For orders where the customer must be present (meter access inside, high-bill investigation, reconnection that needs entry), the dispatcher calls the customer and books a four-hour window, recording it in the mobile system so the route respects it.",
+      "role": "field-dispatcher",
+      "kind": "communication",
+      "inputs": [
+        "prioritised order"
+      ],
+      "outputs": [
+        "appointment"
+      ],
+      "systems": [
+        "mwm",
+        "cis",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Appointments must be offered in a four-hour window under the Distribution System Code according to the organisation file; that page was not opened here, so call time and share are the author's estimates."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Check account before dispatch",
+      "description": "For disconnection orders the dispatcher checks the account in the CIS the evening before or morning of the visit: whether the customer has paid, made an arrears agreement, or has a social agency assessment or medical certificate pending, and whether the winter ban applies. Orders no longer valid are cancelled.",
+      "role": "field-dispatcher",
+      "kind": "lookup",
+      "inputs": [
+        "disconnect order"
+      ],
+      "outputs": [
+        "confirmed disconnect order"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB Distribution System Code disconnection rules (notice periods, winter ban, agency and medical holds)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.8,
+          "condition": "still valid"
+        },
+        {
+          "to": "END",
+          "prob": 0.2,
+          "condition": "paid, arrangement or hold",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oeb-rules"
+        ],
+        "note": "Disconnection may happen within 14 days after the notice period; delays of up to 21 days for agency assessment; residential winter ban November 15 to April 30. Cancellation share is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Build route and assign representative",
+      "description": "The dispatcher groups the day's orders by area in the mobile workforce system, fits appointment windows, balances work across the field service representatives on shift and pushes each route to the reps' tablets.",
+      "role": "field-dispatcher",
+      "kind": "coordination",
+      "inputs": [
+        "orders for the day"
+      ],
+      "outputs": [
+        "route assignment"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Review order on tablet",
+      "description": "At the start of the day or between jobs the representative reads the order on the tablet: meter location, prior visits, access codes, dog or hazard warnings and what result is needed.",
+      "role": "field-service-rep",
+      "kind": "review",
+      "inputs": [
+        "route assignment"
+      ],
+      "outputs": [
+        "prepared visit"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Drive to premises",
+      "description": "The representative drives the light vehicle to the premises, often across suburban and rural parts of a 1,116 km2 service area between urban jobs.",
+      "role": "field-service-rep",
+      "kind": "travel",
+      "inputs": [
+        "prepared visit"
+      ],
+      "outputs": [
+        "arrival at premises"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 20,
+        "high": 50
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 8,
+            "mode": 20,
+            "high": 50
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.95,
+          "condition": "on time"
+        },
+        {
+          "to": "s08",
+          "prob": 0.05,
+          "condition": "running late for an appointment"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from route density in a mixed urban and rural territory."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Call customer and rebook missed window",
+      "description": "When a representative will miss a four-hour window, the dispatcher calls the customer to warn them and either confirms a later arrival or rebooks the appointment, which counts against the appointments-met measure.",
+      "role": "field-dispatcher",
+      "kind": "communication",
+      "inputs": [
+        "late appointment"
+      ],
+      "outputs": [
+        "confirmed or rebooked appointment"
+      ],
+      "systems": [
+        "mwm",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.6,
+          "condition": "customer waits"
+        },
+        {
+          "to": "s05",
+          "prob": 0.4,
+          "condition": "rebooked"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Find meter and gain access",
+      "description": "The representative locates the meter, knocks or meets the customer for appointments, and deals with locked gates, dogs, blocked meter rooms or no one home.",
+      "role": "field-service-rep",
+      "kind": "physical",
+      "inputs": [
+        "arrival at premises"
+      ],
+      "outputs": [
+        "meter accessible"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 2,
+            "mode": 5,
+            "high": 15
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.86,
+          "condition": "access gained"
+        },
+        {
+          "to": "s17",
+          "prob": 0.14,
+          "condition": "no access"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "No-access share is the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Carry out the field work",
+      "description": "Depending on the order the representative removes the meter or fits a disconnect collar, reinstalls the meter to reconnect, reads and inspects the meter and seals, measures voltage at the meter base, or checks for diversion or damage. Photos are taken of the meter and reading.",
+      "role": "field-service-rep",
+      "kind": "physical",
+      "inputs": [
+        "meter accessible"
+      ],
+      "outputs": [
+        "completed field work",
+        "meter reading",
+        "photos"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong reading or seal number, or meter left without a seal.",
+        "typically_caught_at": "s19"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility safe work practice for meter removal and meter-base work: arc-rated PPE and inspection of the meter base before pulling or setting a meter",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 5,
+            "mode": 12,
+            "high": 40
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.88,
+          "condition": "normal result"
+        },
+        {
+          "to": "s12",
+          "prob": 0.07,
+          "condition": "tampering, diversion or hazard found"
+        },
+        {
+          "to": "s11",
+          "prob": 0.05,
+          "condition": "customer says the bill is paid"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Confirm account status for disputed disconnection",
+      "description": "When a customer at the door says they have paid, the representative calls the dispatcher, who checks the CIS for a payment or agreement posted that day; the disconnection goes ahead or is cancelled.",
+      "role": "field-dispatcher",
+      "kind": "communication",
+      "inputs": [
+        "customer statement",
+        "account"
+      ],
+      "outputs": [
+        "go or no-go decision"
+      ],
+      "systems": [
+        "cis",
+        "telephony"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.6,
+          "condition": "proceed and record"
+        },
+        {
+          "to": "END",
+          "prob": 0.4,
+          "condition": "payment confirmed, disconnection cancelled",
+          "outcome": "cancelled"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oeb-rules"
+        ],
+        "note": "The utility must have staff available to take payment at the time of disconnection; shares are the author's estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Document tampering or hazard",
+      "description": "The representative photographs broken seals, jumpers or a damaged meter base, records the condition and makes the site safe or calls for a trouble crew if there is an immediate hazard.",
+      "role": "field-service-rep",
+      "kind": "drafting",
+      "inputs": [
+        "tampering or hazard found"
+      ],
+      "outputs": [
+        "tamper or hazard report"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.3,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "light-vehicle",
+          "occupied_min": {
+            "low": 10,
+            "mode": 20,
+            "high": 45
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Supervisor reviews tamper or hazard case",
+      "description": "The field services supervisor reviews the report and photos, decides whether to refer the account for back-billing or to the police, arranges any meter change, and records the outcome before the order is completed.",
+      "role": "field-services-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "tamper or hazard report"
+      ],
+      "outputs": [
+        "referral decision"
+      ],
+      "systems": [
+        "mwm",
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Record result on tablet",
+      "description": "The representative enters the completion code, reading, seal numbers and notes on the tablet, attaches photos, and records time and mileage for the visit.",
+      "role": "field-service-rep",
+      "kind": "data_entry",
+      "inputs": [
+        "completed field work"
+      ],
+      "outputs": [
+        "field result",
+        "time record"
+      ],
+      "systems": [
+        "mwm",
+        "timesheets"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Post result to customer system",
+      "description": "The mobile system sends the completion back to the CIS, which updates the meter status, posts the reading and triggers billing, collections or move-in and move-out follow-up.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "field result"
+      ],
+      "outputs": [
+        "updated account"
+      ],
+      "systems": [
+        "mwm",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.94,
+          "condition": "accepted"
+        },
+        {
+          "to": "s16",
+          "prob": 0.06,
+          "condition": "rejected by the CIS"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Interface rejection share is the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Fix rejected completion",
+      "description": "The dispatcher reads the interface error (meter number mismatch, reading out of range, order already closed), corrects the completion in the CIS by hand or asks the representative for the missing detail.",
+      "role": "field-dispatcher",
+      "kind": "data_entry",
+      "inputs": [
+        "rejected completion"
+      ],
+      "outputs": [
+        "corrected completion"
+      ],
+      "systems": [
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Leave notice and record no access",
+      "description": "The representative leaves a door card asking the customer to call, photographs the obstacle and records a no-access completion. The order is re-routed for another attempt or returned to the originating group after repeated failures.",
+      "role": "field-service-rep",
+      "kind": "drafting",
+      "inputs": [
+        "no access"
+      ],
+      "outputs": [
+        "door card",
+        "no-access record"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.4,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.6,
+          "condition": "another attempt"
+        },
+        {
+          "to": "END",
+          "prob": 0.4,
+          "condition": "returned to originating group",
+          "outcome": "returned_no_access"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Reconcile and close completed orders",
+      "description": "Each afternoon the dispatcher compares routed orders with completions, chases representatives for missing results, checks reconnections and appointments against their standards, and closes the orders.",
+      "role": "field-dispatcher",
+      "kind": "validation",
+      "inputs": [
+        "completions",
+        "routes"
+      ],
+      "outputs": [
+        "closed orders",
+        "daily standards report"
+      ],
+      "systems": [
+        "mwm",
+        "cis",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "OEB service quality reporting: appointments met and reconnections within the required time",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.95,
+          "condition": "closed, not sampled",
+          "outcome": "completed"
+        },
+        {
+          "to": "s19",
+          "prob": 0.05,
+          "condition": "picked for weekly sample"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Supervisor samples completed orders",
+      "description": "Each week the supervisor reviews a sample of about one completion in twenty, checking readings and photos for wrong readings, missing seals and orders closed without the work being done, and sends errors back for a revisit.",
+      "role": "field-services-supervisor",
+      "kind": "review",
+      "inputs": [
+        "closed orders"
+      ],
+      "outputs": [
+        "quality findings"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced at this step.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Supervisor quality sampling of field completions",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.85,
+          "condition": "no issue",
+          "outcome": "completed"
+        },
+        {
+          "to": "s06",
+          "prob": 0.15,
+          "condition": "revisit needed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Sample review is a common field-services control; rates are the author's estimates."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Disconnection cancelled before the visit",
+      "share_of_cases": 0.06,
+      "description": "The customer pays, makes an arrears agreement or an agency hold is placed before the visit.",
+      "path": [
+        "s04"
+      ]
+    },
+    {
+      "name": "No access",
+      "share_of_cases": 0.14,
+      "description": "Locked gate, dog, blocked meter room or no one home for an appointment; a door card is left and the order re-routed or returned.",
+      "path": [
+        "s09",
+        "s17",
+        "s05"
+      ]
+    },
+    {
+      "name": "Tampering or hazard found",
+      "share_of_cases": 0.06,
+      "description": "Broken seals, jumpers or a damaged meter base; the supervisor decides on back-billing, police referral or a meter change.",
+      "path": [
+        "s10",
+        "s12",
+        "s13",
+        "s14"
+      ]
+    },
+    {
+      "name": "Missed appointment window",
+      "share_of_cases": 0.05,
+      "description": "The representative runs late and the dispatcher warns or rebooks the customer.",
+      "path": [
+        "s07",
+        "s08"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 2,
+        "p90": 6
+      },
+      "unit": "calendar days from order creation to result posted",
+      "population": "Field service orders at a mid-size Ontario distributor, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate anchored on the two-business-day reconnection rule (OEB) and next-day routing of most orders; disconnections may be spread over the 14-day window after the notice period."
+      }
+    },
+    {
+      "metric": "reconnection_time_limit",
+      "value": 2,
+      "unit": "business days after payment or arrears agreement",
+      "population": "Ontario electricity distributors",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oeb-rules"
+        ],
+        "note": "OEB consumer page: customers should generally expect reconnection within 2 business days."
+      }
+    },
+    {
+      "metric": "disconnection_notice_period",
+      "value": 14,
+      "unit": "days' notice before disconnection for non-payment (60 with medical documentation)",
+      "population": "Ontario electricity distributors",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oeb-rules"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Many disconnection visits are wasted because the customer pays on the day or at the door.",
+      "steps": [
+        "s04",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oeb-rules"
+        ],
+        "note": "Payment must be accepted up to the disconnection; wasted-visit share is the author's estimate."
+      }
+    },
+    {
+      "description": "No-access visits need repeat trips across a large territory.",
+      "steps": [
+        "s09",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Completions rejected by the CIS interface are fixed by hand.",
+      "steps": [
+        "s16"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "oeb-rules",
+      "title": "Rules for electricity utilities",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/consumer-information-and-protection/oebs-consumer-protection-role/rules-electricity-utilities",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Overdue notice at least 7 days before a disconnection notice; at least 14 days' notice (60 with a doctor's letter); disconnection any time in the following 14 days; a last contact attempt at least 48 hours before; staff available to take payment; winter ban for residential non-payment disconnection from November 15 to April 30 with reconnection by December 1; reconnection generally within 2 business days of payment or an arrears agreement; up to 21 days' delay while an agency checks low-income assistance eligibility."
+    },
+    {
+      "id": "oeb-ban-2022",
+      "title": "End of Disconnection Ban (news release, April 18, 2022)",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/newsroom/2022/end-disconnection-ban",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "The winter disconnection ban runs November 15 to April 30 and was coming to an end in 2022; distributors must follow a step-by-step notice process before disconnecting for non-payment."
+    }
+  ],
+  "assumptions": [
+    "Loaded costs are taken from the organisation file (wage times 1.40 for benefits, pension, payroll taxes and overhead).",
+    "Most residential meters of the period needed a visit to disconnect or reconnect; where remote switching was available those orders do not reach this process.",
+    "Disconnection orders are worked within the 14-day window after the notice period; the account check and route waits represent that spread.",
+    "Order mix: about 35% collections disconnections and reconnections, 20% move orders, 20% customer inquiries (high bill, voltage), 15% read exceptions, 10% billing meter orders.",
+    "Staffing gap: the simulated hands-on time implies about 13 FTE in total against 9.4 stated; the representatives' share (about 10 FTE) exceeds the eight in the organisation file. Representative minutes per visit were kept because travel in a 1,116 km2 territory is hard to reduce; the order volume (an organisation file estimate) may be high.",
+    "The four-hour appointment window and the 90% appointments-met standard are taken from the organisation file; the Distribution System Code page could not be opened in this session."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

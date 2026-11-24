@@ -1,0 +1,1899 @@
+{
+  "schema_version": "0.2",
+  "id": "efc-bill-customers",
+  "name": "Run daily billing and debit files (equipment finance company)",
+  "org": "equipment-finance-co",
+  "process": "bill-customers",
+  "sector": "equipment leasing and finance",
+  "function": "operations (billing and payments)",
+  "summary": "Every business day the lease system bills the contracts coming due: invoices about two weeks before the payment date, with GST/HST, QST or PST for the province where the equipment sits, and a pre-authorised debit file for payments due in two business days. A team of billing specialists works the exceptions the batch throws up, keys adjustments and amendments sent by customer service, insurance tracking and lease administration, releases the debit file to the bank under dual approval and reconciles the billing posted to the ledger. The work is slow and error-prone because much of it is re-keying requests from e-mail, because booking errors in tax codes and dates surface only at billing, and because the debit file has to beat the bank's deadline with every cancellation and insolvency hold removed.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A privately owned Canadian independent lessor with about 55,000 active small- and mid-ticket contracts serviced on one lease management system, a mid-market ERP ledger and a bank cash management portal.",
+    "org_size_employees": 340,
+    "notes": "One case is one daily billing run with its exceptions, about 2,500 contracts billed per run (55,000 a month over 22 business days). Hands-on times on each step are the team's combined minutes for the run. Invoices for due dates about 14 days out and the debit file for due dates two business days out come from the same nightly batch."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one daily billing run with its exceptions",
+  "trigger": "The end-of-day cut-off for contract changes on a business day starts the nightly billing batch.",
+  "end_state": "Invoices are sent, the debit file is accepted by the clearing bank, billing is posted to and reconciled with the general ledger, and any weekly or month-end billing outputs are delivered.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 21,
+      "mode": 22,
+      "high": 23
+    },
+    "seasonality": "Run size peaks on the runs that bill the 1st and 15th, the most common due days. 2020 brought deferral and hold volumes well above normal. Month-end and the first run of each week carry extra outputs.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "One run per business day, as in the organisation file process map (driver d_active_contracts, 51,000 to 59,000 contracts billed a month)."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "book-contracts",
+        "object": "booked_contract",
+        "share": 0.3
+      },
+      {
+        "from": "handle-service-requests",
+        "object": "billing_adjustment",
+        "share": 0.12
+      },
+      {
+        "from": "process-returned-payments",
+        "object": "billing_adjustment",
+        "share": 0.1
+      },
+      {
+        "from": "track-equipment-insurance",
+        "object": "insurance_charge",
+        "share": 0.08
+      },
+      {
+        "from": "quote-and-process-buyouts",
+        "object": "contract_amendment",
+        "share": 0.12
+      },
+      {
+        "from": "manage-end-of-term",
+        "object": "contract_amendment",
+        "share": 0.14
+      },
+      {
+        "from": "restructure-and-defer-payments",
+        "object": "contract_amendment",
+        "share": 0.05
+      },
+      {
+        "from": "process-lease-assumptions",
+        "object": "contract_amendment",
+        "share": 0.01
+      },
+      {
+        "from": "settle-casualty-losses",
+        "object": "contract_amendment",
+        "share": 0.01
+      },
+      {
+        "from": "recover-off-lease-equipment",
+        "object": "billing_adjustment",
+        "share": 0.02
+      },
+      {
+        "from": "handle-property-tax-assessments",
+        "object": "billing_adjustment",
+        "share": 0.01
+      },
+      {
+        "from": "manage-system-changes",
+        "object": "system_release",
+        "share": 0.04
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "customer",
+        "object": "invoice_statement"
+      },
+      {
+        "outcome": "any",
+        "to": "clearing_bank",
+        "object": "pad_file"
+      },
+      {
+        "outcome": "any",
+        "to": "close-the-month",
+        "object": "journal_entries"
+      },
+      {
+        "outcome": "any",
+        "to": "file-sales-taxes",
+        "object": "sales_tax_data"
+      },
+      {
+        "outcome": "billed_maturity_list_issued",
+        "to": "manage-end-of-term",
+        "object": "maturity_list"
+      },
+      {
+        "outcome": "any",
+        "to": "apply-customer-payments",
+        "object": "open_receivables"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "billing_specialist",
+      "title": "Billing specialist",
+      "department": "Billing and payment processing",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.2,
+      "loaded_cost_per_hour": {
+        "low": 26,
+        "mode": 32,
+        "high": 40
+      },
+      "occupation_code": "NOC 14200",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_jb_14200"
+        ],
+        "note": "Cost from the organisation file: Job Bank 2023-2024 Ontario wage for accounting clerks (median $25.00) at about 90% for 2019-2022, loaded by 1.35. Six specialists also sample bookings and help with returned payments, so about 3.2 FTE on billing runs is an author estimate."
+      }
+    },
+    {
+      "id": "mgr_billing",
+      "title": "Manager, billing and payments",
+      "department": "Billing and payment processing",
+      "layer": "manager",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 58,
+        "mode": 70,
+        "high": 85
+      },
+      "occupation_code": "NOC 10021",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file cost (loading factor 1.35). Share of time on approvals and month-end review is an author estimate."
+      }
+    },
+    {
+      "id": "sales_tax_analyst",
+      "title": "Sales and commodity tax analyst",
+      "department": "Tax",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 48,
+        "high": 60
+      },
+      "occupation_code": "NOC 11100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file cost (loading 1.35). Time on billing tax exceptions is an author estimate."
+      }
+    },
+    {
+      "id": "developer",
+      "title": "Developer and systems analyst",
+      "department": "Applications and development",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.02,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 62,
+        "high": 78
+      },
+      "occupation_code": "NOC 21232",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file cost (loading 1.35). Occasional rerun support."
+      }
+    },
+    {
+      "id": "lease_accountant",
+      "title": "Lease accountant",
+      "department": "Financial and lease accounting",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.02,
+      "loaded_cost_per_hour": {
+        "low": 40,
+        "mode": 50,
+        "high": 64
+      },
+      "occupation_code": "NOC 11100",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file cost (loading 1.35). Occasional interface corrections."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "lms",
+      "name": "Lease management system (contracts, schedules, billing, tax codes, asset records, servicing)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "gl_erp",
+      "name": "General ledger and accounts payable (mid-market ERP)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "bank_portal",
+      "name": "Bank cash management portal for pre-authorised debit files, EFT payments and wires",
+      "kind": "external_portal"
+    },
+    {
+      "id": "doc_imaging",
+      "name": "Document imaging and contract file store",
+      "kind": "document_store"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheet models (pool cuts, borrowing base, covenants, budget, tax workpapers)",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email_collab",
+      "name": "Email, calendars and team chat",
+      "kind": "communication"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Run nightly billing batch",
+      "description": "After the end-of-day cut-off for contract changes, the lease system runs the billing job stream: a pre-billing edit report, selection of contracts whose next payment falls within the invoice lead days (about 14 days), calculation of GST/HST, QST or PST by the province where the equipment is located, fees, insurance protection charges and late charges, and creation of debit items for payments due in two business days.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "contract payment schedules",
+        "tax codes",
+        "amendments and adjustments keyed during the day"
+      ],
+      "outputs": [
+        "billing register",
+        "pre-billing exception report",
+        "invoice items",
+        "draft debit items"
+      ],
+      "systems": [
+        "lms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 180,
+        "high": 300
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced by the batch itself; wrong set-up data passes through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_oracle_olfm",
+          "src_nbc_payments"
+        ],
+        "note": "Job sequence (pre-billing report, process billable streams, transfer to receivables, late charges) as described for Oracle Lease and Finance Management; two-week invoice lead as stated by National Bank. Wait from the 5 pm cut-off to the batch window is an author estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check batch completion and control totals",
+      "description": "First thing in the morning a billing specialist opens the job log and the billing register summary, confirms every job ended normally and compares the count and dollar total of contracts billed with the scheduled payments due and with the prior week's run for the same due day. A failed job or a total that is off by more than the tolerance stops the run.",
+      "role": "billing_specialist",
+      "kind": "validation",
+      "inputs": [
+        "job log",
+        "billing register summary",
+        "scheduled payments report"
+      ],
+      "outputs": [
+        "signed-off control total sheet"
+      ],
+      "systems": [
+        "lms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 480,
+        "mode": 600,
+        "high": 780
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A partial run is accepted because the totals check is done against the wrong due day.",
+        "typically_caught_at": "s20"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: completeness and accuracy of billing (batch control totals), tested by the external auditor and expected by securitisation servicing agreements",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.96,
+          "condition": "batch complete and totals agree"
+        },
+        {
+          "to": "s03",
+          "prob": 0.04,
+          "condition": "job failed or totals out of tolerance"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Batch-control check is standard practice for a nightly subledger run; the 4% failure rate and times are author estimates for a 2019-2022 lease system."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Fix failed job and rerun billing",
+      "description": "The billing specialist logs an IT ticket and a developer reads the job log, fixes the cause (a locked record, a bad rate table, a failed tax table load after a release) and reruns the failed part of the billing job stream in the morning window.",
+      "role": "developer",
+      "kind": "analysis",
+      "inputs": [
+        "job log",
+        "IT ticket"
+      ],
+      "outputs": [
+        "rerun billing job"
+      ],
+      "systems": [
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Rerun duplicates some invoice items.",
+        "typically_caught_at": "s02"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "rerun complete, totals checked again"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate. Releases to the lease system (manage-system-changes) are a common cause of failed runs."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Work the pre-billing exception report",
+      "description": "Specialists split the exception report and work each flagged contract: missing or invalid tax jurisdiction, invalid bank account or bill-to address, payment amount different from the schedule, first invoices of new bookings with interim rent to prorate, and contracts on hold for insolvency or deferral. For each they open the contract in the lease system and the signed documents in imaging, correct the data or put billing on hold for the day.",
+      "role": "billing_specialist",
+      "kind": "analysis",
+      "inputs": [
+        "pre-billing exception report",
+        "contract file in imaging"
+      ],
+      "outputs": [
+        "corrected contracts",
+        "billing holds"
+      ],
+      "systems": [
+        "lms",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 120,
+        "mode": 220,
+        "high": 420
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A contract is corrected wrongly (wrong prorated amount or tax code) and the customer is billed the wrong amount.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.35,
+          "condition": "tax jurisdiction or exemption questions in today's exceptions"
+        },
+        {
+          "to": "s06",
+          "prob": 0.65,
+          "condition": "no tax questions"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_oracle_olfm",
+          "src_nbc_payments"
+        ],
+        "note": "Exception types follow the pre-billing report errors Oracle lists (disabled bank accounts, bill-to sites, invalid GL codes) and National Bank's prorated first billing. About 2% of some 2,500 contracts in a run flagged, at about 4 to 5 minutes each, is an author estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Resolve sales tax exceptions",
+      "description": "The sales and commodity tax analyst receives the contracts with tax questions by email, confirms the province where the equipment is ordinarily located and whether PST, QST or HST applies, checks exemption documents on file (First Nations, farmers, production machinery, federal government) and tells billing which tax code to set. Contracts not settled today are held and billed in a later run.",
+      "role": "sales_tax_analyst",
+      "kind": "judgment",
+      "inputs": [
+        "tax exception list",
+        "exemption certificates",
+        "equipment location"
+      ],
+      "outputs": [
+        "tax code decision"
+      ],
+      "systems": [
+        "lms",
+        "doc_imaging",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong province or exemption accepted without valid documentation, leading to under- or over-collected tax.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Excise Tax Act s.136.1 and Schedule IX (each lease interval is a separate supply taxed where the property is ordinarily located); BC Provincial Sales Tax Act (PST on each lease payment, exemptions need documentation); Quebec QST Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "tax codes decided or contracts held"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_cra_333",
+          "src_bc_pst315"
+        ],
+        "note": "The rules are stated in CRA Memorandum 3-3-3 and BC Bulletin PST 315. Share of runs with tax questions (35%) and times are author estimates."
+      },
+      "concurrent_with": [
+        "s06"
+      ]
+    },
+    {
+      "id": "s06",
+      "name": "Key adjustments and check amendments",
+      "description": "Specialists work the billing work queue and shared mailbox: credit and rebill requests from customer service, returned payment fees, protection program charges from insurance tracking, property tax rebills, and amendments set up by lease administration (payout terminations, month-to-month renewals, restructures, assumptions, casualty terminations). For each they check the support, key or verify the change in the lease system and note the reason code.",
+      "role": "billing_specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "billing adjustment requests",
+        "contract amendments",
+        "insurance charges"
+      ],
+      "outputs": [
+        "keyed adjustments",
+        "verified amendments"
+      ],
+      "systems": [
+        "lms",
+        "email_collab",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 150,
+        "mode": 270,
+        "high": 480
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Adjustment keyed to the wrong contract or amount, or a payout termination missed so the customer is billed after payout.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.55,
+          "condition": "credits or waivers above the specialist's limit in the batch"
+        },
+        {
+          "to": "s08",
+          "prob": 0.45,
+          "condition": "all adjustments within the specialist's limit"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Daily inflow of roughly 100 to 150 adjustments and amendments derived from the volumes of the linked processes in the organisation file (buyouts, end of term, restructures, service requests, insurance), at 2 to 3 minutes each. Author estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Approve credits and waivers above limit",
+      "description": "The manager of billing and payments opens the pending adjustment queue, reads the reason and support for each credit, small balance write-off or fee waiver above the specialist's limit and approves it or sends it back with a question.",
+      "role": "mgr_billing",
+      "kind": "approval",
+      "inputs": [
+        "pending adjustments with support"
+      ],
+      "outputs": [
+        "approved adjustments"
+      ],
+      "systems": [
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 90,
+        "high": 300
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; a weak review lets an unsupported credit through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Delegation of authority policy and internal control over financial reporting: the person who keys a credit cannot approve it above the specialist limit",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.95,
+          "condition": "approved"
+        },
+        {
+          "to": "s06",
+          "prob": 0.05,
+          "condition": "sent back for support or correction"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common lessor practice; limits, approval share and timing are author estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Recalculate and sample-check invoices",
+      "description": "A specialist reruns billing on demand for the corrected contracts, then checks a sample of about 20 to 30 invoices against the contract schedule: every first invoice of a new booking, amended contracts and contracts with a tax change. The check covers payment amount, tax rate by province, fees and the due date.",
+      "role": "billing_specialist",
+      "kind": "review",
+      "inputs": [
+        "recalculated invoice items",
+        "contract schedules"
+      ],
+      "outputs": [
+        "checked invoice batch"
+      ],
+      "systems": [
+        "lms",
+        "doc_imaging"
+      ],
+      "touch_min": {
+        "low": 45,
+        "mode": 75,
+        "high": 150
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "An error in an unsampled invoice goes out.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Billing quality policy: second-person check of first invoices and amended contracts",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.9,
+          "condition": "sample clean"
+        },
+        {
+          "to": "s04",
+          "prob": 0.1,
+          "condition": "errors found, back to exception work"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Sample size and error-found rate are author estimates; book-contracts in the organisation file says booking errors found later cause rebills."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Build final debit file",
+      "description": "The lease system regenerates the pre-authorised debit file in the CPA Standard 005 format for payments due in two business days, leaving out contracts with a hold code (cancelled authorisation, insolvency stay, deferral, payout pending).",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "debit items",
+        "hold codes"
+      ],
+      "outputs": [
+        "debit file (CPA 005)"
+      ],
+      "systems": [
+        "lms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; a missing hold code passes through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_c1_aft"
+        ],
+        "note": "File upload and two-business-day delivery as described in the Central 1 AFT guide."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Reconcile debit file to payments due",
+      "description": "A specialist compares the debit file's record count and total with the payments due by debit in the billing register and works the hold list: written cancellation instructions received since yesterday, new bankruptcies and proposals, deferral agreements and accounts that collections asked to take off debit after repeated returns.",
+      "role": "billing_specialist",
+      "kind": "validation",
+      "inputs": [
+        "debit file summary",
+        "billing register",
+        "cancellation and hold instructions"
+      ],
+      "outputs": [
+        "debit reconciliation sheet"
+      ],
+      "systems": [
+        "lms",
+        "spreadsheets",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 25,
+        "mode": 45,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A cancellation instruction sitting in a mailbox is missed and the customer is debited.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Payments Canada Rule H1 s.30 (stop debits in the next cycle after a cancellation, within 30 days) and s.24 (business payors can claim reimbursement for 10 business days); internal control over financial reporting",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.25,
+          "condition": "debits to remove, add or change"
+        },
+        {
+          "to": "s12",
+          "prob": 0.75,
+          "condition": "file agrees and no changes"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_h1",
+          "src_pc_pad_guide"
+        ],
+        "note": "Rule requirements stated in Rule H1 and the Payments Canada PAD guide. Change rate and times are author estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Remove, hold or add debits",
+      "description": "The specialist removes debits for cancelled authorisations and customers under a stay of proceedings, holds deferred contracts, adds one-time debits that customers authorised to collections or customer service, and regenerates the file.",
+      "role": "billing_specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "hold list",
+        "one-time debit authorisations"
+      ],
+      "outputs": [
+        "corrected debit file"
+      ],
+      "systems": [
+        "lms"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A debit is left in after the customer cancelled or filed, leading to a reimbursement claim or a stay breach.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "file regenerated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate; Rule H1 s.30 and the Bankruptcy and Insolvency Act stay make removals mandatory."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Upload debit file to bank portal",
+      "description": "The specialist uploads the file to the bank's cash management portal, reads the validation summary (records, total, settlement date) and checks it against the reconciliation sheet before submitting it for approval.",
+      "role": "billing_specialist",
+      "kind": "data_entry",
+      "inputs": [
+        "debit file",
+        "reconciliation sheet"
+      ],
+      "outputs": [
+        "uploaded file pending approval"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 90
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Wrong settlement date or a file uploaded twice.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_c1_aft"
+        ],
+        "note": "Upload and validation summary as described in the Central 1 AFT guide. Times are author estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Approve debit file release",
+      "description": "The manager of billing and payments, or the treasury analyst as back-up, opens the pending file in the bank portal, compares the count and total with the reconciliation sheet and approves it before the bank's afternoon deadline, or rejects it.",
+      "role": "mgr_billing",
+      "kind": "approval",
+      "inputs": [
+        "pending file",
+        "reconciliation sheet"
+      ],
+      "outputs": [
+        "released debit file"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Bank portal dual authorisation and treasury policy: the user who uploads a payment file cannot release it",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.97,
+          "condition": "approved"
+        },
+        {
+          "to": "s12",
+          "prob": 0.03,
+          "condition": "rejected, file corrected and uploaded again"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_c1_aft"
+        ],
+        "note": "Second-user approval of uploaded AFT files is described in the Central 1 guide. Timing is an author estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Bank validates file and acknowledges",
+      "description": "The clearing bank validates the file format and limits, sends an acknowledgement report and later a report of rejected items (invalid institution, transit or account numbers). Items are exchanged for settlement on the due date.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "released debit file"
+      ],
+      "outputs": [
+        "acknowledgement report",
+        "reject report"
+      ],
+      "systems": [
+        "bank_portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_c1_aft"
+        ],
+        "note": "Acknowledgement and consolidated returns, rejects and error corrections reports described in the Central 1 guide. Timing is an author estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Review acknowledgement and rejects",
+      "description": "A specialist checks that the acknowledged total matches the file, flags rejected items so customer service can get corrected banking details or switch the customer to invoice, and resubmits if the whole file was refused.",
+      "role": "billing_specialist",
+      "kind": "review",
+      "inputs": [
+        "acknowledgement report",
+        "reject report"
+      ],
+      "outputs": [
+        "reject follow-up list"
+      ],
+      "systems": [
+        "bank_portal",
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.98,
+          "condition": "acknowledged"
+        },
+        {
+          "to": "s12",
+          "prob": 0.02,
+          "condition": "file refused, corrected and resubmitted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of reject frequency and time."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Generate and send invoices",
+      "description": "The lease system produces the invoice documents for the run: e-mailed PDF invoices for customers with an invoice e-mail on file and a print file for paper invoices. Invoices go mainly to customers who pay by cheque or EFT and to debit customers whose amount changed, where the invoice also serves as notice of the new amount.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "checked invoice batch"
+      ],
+      "outputs": [
+        "e-mailed invoices",
+        "print file"
+      ],
+      "systems": [
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Payments Canada Rule H1 s.17: notice of a changed or variable debit amount at least 10 calendar days before the debit, unless reduced or waived in the debit agreement under s.19",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_h1",
+          "src_nbc_payments"
+        ],
+        "note": "Notice period from Rule H1; National Bank charges a fee for invoices to customers not on debit, showing that paper invoices go mainly to non-debit customers. Runs alongside the debit file steps."
+      },
+      "concurrent_with": [
+        "s12",
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "id": "s17",
+      "name": "Print and mail paper invoices",
+      "description": "A specialist prints the paper invoices, runs them through the folder-inserter with return envelopes, checks the count against the print file and takes the trays to the mailroom for the afternoon postal pickup.",
+      "role": "billing_specialist",
+      "kind": "physical",
+      "inputs": [
+        "print file"
+      ],
+      "outputs": [
+        "mailed invoices"
+      ],
+      "systems": [
+        "lms"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Invoices mis-stuffed or a page skipped.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.7,
+          "condition": "bounced e-mails or returned mail waiting"
+        },
+        {
+          "to": "s19",
+          "prob": 0.3,
+          "condition": "nothing returned"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 15% of contracts are not on debit (organisation file assumption), so about 300 to 600 paper or e-mail invoices a run. Times are author estimates."
+      },
+      "concurrent_with": [
+        "s12",
+        "s13",
+        "s14",
+        "s15"
+      ]
+    },
+    {
+      "id": "s18",
+      "name": "Work bounced and returned invoices",
+      "description": "A specialist works the e-mail bounce folder and the returned mail tray, looks up other contacts in the lease system, resends the invoice and asks customer service to confirm a new address with the customer.",
+      "role": "billing_specialist",
+      "kind": "lookup",
+      "inputs": [
+        "bounce notices",
+        "returned mail"
+      ],
+      "outputs": [
+        "resent invoices",
+        "address change requests"
+      ],
+      "systems": [
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Post billing to the general ledger",
+      "description": "Overnight the lease system builds the billing journal (receivables, reduction of net investment in finance leases, operating lease income, fees, GST/HST, QST and PST payable by province) and the interface loads it into the general ledger. The billing register by province is saved for the sales tax returns.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "billing register"
+      ],
+      "outputs": [
+        "billing journal",
+        "sales tax register"
+      ],
+      "systems": [
+        "lms",
+        "gl_erp"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 480,
+        "high": 780
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; invalid account combinations are rejected by the interface.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_bdo_ifrs16",
+          "src_oracle_olfm"
+        ],
+        "note": "Finance versus operating lease postings follow IFRS 16 lessor accounting as summarised by BDO; transfer of billing to receivables and the ledger as in Oracle's lease billing flow. Overnight timing is an author estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Reconcile billing interface to the ledger",
+      "description": "Next morning a specialist compares the billing register totals with the journal batch posted in the general ledger by account and by province, and checks the interface error log for rejected lines.",
+      "role": "billing_specialist",
+      "kind": "validation",
+      "inputs": [
+        "billing register",
+        "general ledger batch",
+        "interface error log"
+      ],
+      "outputs": [
+        "daily billing reconciliation"
+      ],
+      "systems": [
+        "lms",
+        "gl_erp",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 300,
+        "mode": 420,
+        "high": 2100
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: daily subledger-to-ledger reconciliation of billing, relied on in the month-end close and by the external auditor",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 0.07,
+          "condition": "interface rejects or a difference"
+        },
+        {
+          "to": "s22",
+          "prob": 0.2,
+          "condition": "first run of the week"
+        },
+        {
+          "to": "s23",
+          "prob": 0.045,
+          "condition": "last run of the month"
+        },
+        {
+          "to": "END",
+          "prob": 0.685,
+          "condition": "balanced",
+          "outcome": "billed_and_posted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Wait covers the next-morning start and, at the high end, a weekend after a Friday run. Branch shares: weekly list on about one run in five, month-end on about one in 22. Author estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Correct interface rejects",
+      "description": "The specialist identifies the rejected lines, usually a new product or tax code without a ledger mapping, and asks a lease accountant to post a correcting entry and fix the mapping so the next interface runs clean.",
+      "role": "lease_accountant",
+      "kind": "analysis",
+      "inputs": [
+        "interface error log"
+      ],
+      "outputs": [
+        "correcting journal entry",
+        "fixed account mapping"
+      ],
+      "systems": [
+        "gl_erp",
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Correcting entry posted to the wrong period or account.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "corrected",
+          "outcome": "billed_and_posted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Issue weekly maturity list",
+      "description": "On the first run of the week the lease system lists contracts reaching the end of term in the next 90 days; a specialist checks the list against last week's and sends it to lease administration for end-of-term notices.",
+      "role": "billing_specialist",
+      "kind": "communication",
+      "inputs": [
+        "contract end dates"
+      ],
+      "outputs": [
+        "maturity list"
+      ],
+      "systems": [
+        "lms",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "Contracts missing from the list because the end date was keyed wrongly at booking.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "list sent",
+          "outcome": "billed_maturity_list_issued"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file process manage-end-of-term starts from such a list 60 to 90 days before expiry. Weekly cadence is an author estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Close the month's billing",
+      "description": "On the last run of the month a specialist prints the month's billing register, ties billed amounts by product and province to the ledger, lists contracts held from billing and interim rent not yet billed for accounting's accruals, and sends the tax register by province to the tax team.",
+      "role": "billing_specialist",
+      "kind": "analysis",
+      "inputs": [
+        "monthly billing register",
+        "general ledger",
+        "hold list"
+      ],
+      "outputs": [
+        "month-end billing package",
+        "sales tax register"
+      ],
+      "systems": [
+        "lms",
+        "gl_erp",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 120,
+        "mode": 240,
+        "high": 420
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 240
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A held contract or an unbilled amount is left off the accrual list.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: month-end cut-off and subledger reconciliation for the close",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "package ready"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate of month-end billing tasks and time."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Review month-end billing package",
+      "description": "The manager of billing and payments reviews the month-end package, asks about large held items and signs the reconciliation before it goes to accounting and tax.",
+      "role": "mgr_billing",
+      "kind": "review",
+      "inputs": [
+        "month-end billing package"
+      ],
+      "outputs": [
+        "signed billing reconciliation"
+      ],
+      "systems": [
+        "spreadsheets",
+        "email_collab"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Internal control over financial reporting: management review of the billing reconciliation",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "signed off",
+          "outcome": "billed_month_end_cut_off"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Failed billing job",
+      "share_of_cases": 0.04,
+      "description": "A job in the nightly stream fails or totals are out of tolerance; IT fixes and reruns it before the morning work can start, which squeezes the time left before the bank's deadline.",
+      "path": [
+        "s02",
+        "s03",
+        "s02"
+      ]
+    },
+    {
+      "name": "Sales tax question",
+      "share_of_cases": 0.35,
+      "description": "Contracts with an unclear province, a move between provinces or an exemption claim go to the tax analyst; unresolved ones are held and billed in a later run.",
+      "path": [
+        "s04",
+        "s05",
+        "s06"
+      ]
+    },
+    {
+      "name": "Errors found in the invoice sample",
+      "share_of_cases": 0.1,
+      "description": "The sample check finds wrong prorations, tax codes or fees, and specialists go back through the exception list.",
+      "path": [
+        "s08",
+        "s04",
+        "s05",
+        "s06",
+        "s07",
+        "s08"
+      ]
+    },
+    {
+      "name": "Debit holds and removals",
+      "share_of_cases": 0.25,
+      "description": "Cancellations, insolvency stays, deferrals and one-time debits force changes to the debit file before release.",
+      "path": [
+        "s10",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Debit file rejected",
+      "share_of_cases": 0.05,
+      "description": "The approver or the bank rejects the file (mismatch, wrong date, format error) and it is corrected and uploaded again, sometimes after the recommended deadline.",
+      "path": [
+        "s13",
+        "s12",
+        "s15",
+        "s12"
+      ]
+    },
+    {
+      "name": "Ledger interface rejects",
+      "share_of_cases": 0.07,
+      "description": "Lines with an unmapped product or tax code are rejected by the ledger interface and need a correcting entry.",
+      "path": [
+        "s20",
+        "s21"
+      ]
+    },
+    {
+      "name": "Month-end billing close",
+      "share_of_cases": 0.045,
+      "description": "The last run of the month adds the billing register reconciliation, accrual list and tax register.",
+      "path": [
+        "s20",
+        "s23",
+        "s24"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.7,
+        "p90": 3.7
+      },
+      "unit": "calendar days from the end-of-day cut-off to the billing reconciled in the ledger",
+      "population": "Daily lease billing runs at a mid-size lessor (derived)",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "src_c1_aft"
+        ],
+        "note": "Derived: batch on the evening of day 0, exceptions and debit file release on day 1 before the recommended deadline two business days before the due date (Central 1 guide), ledger interface overnight and reconciliation on the morning of day 2. Friday and pre-holiday runs wait over the weekend, which sets p90."
+      }
+    },
+    {
+      "metric": "invoice_lead_time_days",
+      "value": 14,
+      "unit": "calendar days before the payment due date",
+      "population": "National Bank equipment finance customers",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_nbc_payments"
+        ],
+        "note": "States invoices are issued about two weeks before each payment."
+      }
+    },
+    {
+      "metric": "pad_prenotification_days",
+      "value": 10,
+      "unit": "calendar days before a changed or variable debit",
+      "population": "All Canadian pre-authorised debits unless waived",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_h1"
+        ],
+        "note": "Rule H1 s.17; s.19 allows reduction or waiver if displayed prominently."
+      }
+    },
+    {
+      "metric": "business_pad_claim_window",
+      "value": 10,
+      "unit": "business days after the debit",
+      "population": "Business PADs in Canada",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_h1",
+          "src_pc_pad_guide"
+        ],
+        "note": "Rule H1 s.24(a)(ii)."
+      }
+    },
+    {
+      "metric": "aft_file_delivery_deadline",
+      "value": {
+        "recommended": 2,
+        "latest": 1
+      },
+      "unit": "business days before the due date",
+      "population": "Originators using Central 1 PaymentStream AFT (2019)",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src_c1_aft"
+        ],
+        "note": "Recommended 5 pm ET two business days before; optional 7 pm ET one business day before, with less time to fix errors."
+      }
+    },
+    {
+      "metric": "contracts_billed_per_run",
+      "value": 2500,
+      "unit": "contracts",
+      "population": "This organisation",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "55,000 active contracts over 22 business days."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Adjustments and amendments arrive by e-mail and work queue from five or more teams and are re-keyed into the lease system, so keying errors and missed payout terminations cause rebills and customer calls.",
+      "steps": [
+        "s06",
+        "s07"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author judgement from the number of upstream processes in the organisation file."
+      }
+    },
+    {
+      "description": "Tax code and date errors made at booking surface only when the contract is billed and need the tax analyst, who sits in another department.",
+      "steps": [
+        "s04",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file process book-contracts notes that wrong tax codes found later cause rebills."
+      }
+    },
+    {
+      "description": "The debit file must beat the bank's deadline, so a failed batch or a late approver leaves little time to remove cancelled and stayed debits, and a missed cancellation can lead to a reimbursement claim.",
+      "steps": [
+        "s03",
+        "s10",
+        "s11",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src_c1_aft",
+          "src_h1"
+        ],
+        "note": "Deadlines and cancellation duties from the sources; consequence is author judgement."
+      }
+    },
+    {
+      "description": "Paper invoices and returned mail still take daily manual handling for customers not on debit.",
+      "steps": [
+        "s17",
+        "s18"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src_h1",
+      "title": "Rule H1 Pre-Authorized Debits (PADs)",
+      "publisher": "Payments Canada (Canadian Payments Association)",
+      "url": "https://www.payments.ca/sites/default/files/h1eng.pdf",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "s.16 confirmation 10 calendar days before the first debit; s.17 pre-notification of changed or variable amounts at least 10 calendar days before; s.19 waiver must be displayed prominently; s.21 audit trail kept 12 months after the last debit; s.24 business PAD claims up to 10 business days; s.30 cancel in the next cycle and stop within 30 days. Current version opened; these sections date from the 2008 review and applied in 2019-2022."
+    },
+    {
+      "id": "src_pc_pad_guide",
+      "title": "Pre-authorized debit (business guide)",
+      "publisher": "Payments Canada",
+      "url": "https://www.payments.ca/resources/payment-guides/business-guides/pre-authorized-debit",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Payor's PAD agreement contents, 10-day notice for variable amounts, 10-day business claim window versus 90 days personal, one re-presentment within 30 days after a bounced debit, records kept one year after the last debit."
+    },
+    {
+      "id": "src_c1_aft",
+      "title": "PaymentStream AFT Guide for File Upload",
+      "publisher": "Central 1 Credit Union (hosted by Prospera Credit Union)",
+      "url": "https://www.prospera.ca/assets/pdf/PaymentStream_AFT_Guide_File_Upload.pdf",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "AFT files recommended by 5 pm ET two business days before the due date, optional by 7 pm ET one business day before; uploaded files can require approval by a second user; acknowledgement and consolidated returns and rejects reports."
+    },
+    {
+      "id": "src_cra_333",
+      "title": "GST/HST Memorandum 3-3-3, Place of supply in a province: tangible personal property",
+      "publisher": "Canada Revenue Agency",
+      "url": "https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/3-3-3/place-supply-province-tangible-personal-property.html",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Each lease interval is a separate supply (s.136.1); for leases over three months the supply is made where the property is ordinarily located at the time of the supply; the province and rate change if the equipment moves."
+    },
+    {
+      "id": "src_bc_pst315",
+      "title": "Bulletin PST 315, Rentals and leases of goods",
+      "publisher": "British Columbia Ministry of Finance",
+      "url": "https://www2.gov.bc.ca/assets/gov/taxes/sales-taxes/publications/pst-315-rentals-leases-goods.pdf",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Lessors charge PST on lease payments at the time they are paid or payable; exemptions for First Nations, production machinery, farmers and the federal government; some exemptions need documentation from the lessee."
+    },
+    {
+      "id": "src_nbc_payments",
+      "title": "Equipment financing: lease payments and invoices",
+      "publisher": "National Bank of Canada",
+      "url": "https://www.nbc.ca/en/business/help-centre/manage-business/financing/equipment-financing-payments-invoices.html",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Payment by cheque or pre-authorised debit, debit may be a condition of approval; invoices issued about two weeks before each payment; $5 invoice fee avoidable with debit; PST and GST/HST on payments, exempt customers send documentation; past-due interest 2% a month; prorated billing when equipment arrives before the lease start."
+    },
+    {
+      "id": "src_oracle_olfm",
+      "title": "Oracle Lease and Finance Management User Guide, Release 12.1: Billing",
+      "publisher": "Oracle",
+      "url": "https://docs.oracle.com/cd/E18727_01/doc.121/e13583/T289627T522221.htm",
+      "year": "n.d.",
+      "accessed": "2026-11-17",
+      "supports": "Contracts selected by stream type, due date and print lead days; pre-billing report for bank account, bill-to and GL code errors; process billable streams, transfer to receivables, print consolidated invoices; late charge and late interest programs."
+    },
+    {
+      "id": "src_jb_14200",
+      "title": "Wages for accounting and related clerks (NOC 14200)",
+      "publisher": "Job Bank, Government of Canada",
+      "url": "https://www.jobbank.gc.ca/wagereport/occupation/27033",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Hourly wages 2023-2024: Ontario low $18.12, median $25.00, high $37.00; Toronto region median $25.64."
+    },
+    {
+      "id": "src_bdo_ifrs16",
+      "title": "IFRS 16 (accounting news, October 2018)",
+      "publisher": "BDO Australia",
+      "url": "https://www.bdo.com.au/en-au/content/accounting-news/accounting-news-october-2018/ifrs-16",
+      "year": 2018,
+      "accessed": "2026-11-17",
+      "supports": "IFRS 16 keeps IAS 17 lessor accounting: finance leases carried as a net investment receivable with finance income at a constant periodic rate; operating lease income straight-line; IFRS 9 impairment applies to lease receivables."
+    }
+  ],
+  "assumptions": [
+    "One case is one daily run. Hands-on minutes are the combined time of several specialists, so the simulator, which adds touch time in sequence, overstates elapsed time: its median of about 2.8 days against the 1.7-day benchmark is explained mostly by about 16 hours of team touch time that in practice is spread across four to six people working side by side on day 1.",
+    "Invoices for due dates about 14 days out and debits for due dates two business days out come from the same nightly batch and are treated as one run.",
+    "About 85% of contracts pay by pre-authorised debit (organisation file assumption); invoices go mainly to the other 15% and to debit customers whose amount changes. Most of the lessor's debit agreements are assumed to include a Rule H1 pre-notification waiver, so the invoice notice matters mainly where no waiver was signed.",
+    "The manager of billing approves debit files; the treasury analyst is the back-up approver. Bank cut-off is taken as the Central 1 recommended deadline; the lessor's own bank may differ.",
+    "Volumes of adjustments and amendments per run are derived from the organisation file's process volumes, not observed.",
+    "No problem was found in the organisation file for this process. Its triggered_by list mixes daily inputs of very different size; trigger shares here weight them by their estimated share of the run's exception work."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

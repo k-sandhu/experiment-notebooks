@@ -1,0 +1,1513 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-mnt-roadside-breakdown",
+  "name": "Respond to roadside breakdowns",
+  "org": "freight-carrier-co",
+  "process": "mnt-roadside-breakdown",
+  "sector": "trucking and freight transportation",
+  "function": "fleet maintenance",
+  "summary": "When a tractor or trailer breaks down on the highway, the driver secures the scene and calls in, and the maintenance breakdown desk decides within minutes whether the driver can fix it, a company road technician or a contracted mobile repair or tire service should go, or the unit must be towed. Most calls are tires, brakes, lights, hoses and engine cooling faults fixed in about an hour once help arrives; the time is lost waiting for help to reach the unit, especially at night, in winter and on remote highways. A tow also means finding replacement power to recover the load and telling the customer it will be late.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with twelve company maintenance shops at its hubs and larger terminals, about 1,190 company power units and 4,120 trailers.",
+    "org_size_employees": 3000,
+    "notes": "Calls come from company truckload and linehaul tractors and from owner-operators who use the carrier's breakdown desk. City trucks that fail near their terminal are usually handled by the terminal shop and are a small share."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one breakdown call",
+  "trigger": "A driver phones in a breakdown on the road.",
+  "end_state": "The unit is running again, or towed to a shop with a repair work order open, and any vendor or tow invoice is matched and passed to payables.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 240,
+      "mode": 300,
+      "high": 380
+    },
+    "seasonality": "Highest from December to March (cold starts, gelled fuel, air system freezes, tire damage) and in summer heat for cooling faults.",
+    "evidence": {
+      "tier": "B",
+      "sources": [
+        "src-fw-tmc20",
+        "src-hdt-uptime21"
+      ],
+      "note": "TMC/FleetNet benchmarks give about 64,800 miles between roadside repairs for LTL fleets and 14,300 to 34,600 for truckload fleets (2019-2020). At an assumed 2.1 million linehaul miles and 3.6 million company truckload miles a month this gives about 30 LTL and 100 to 250 truckload calls; owner-operator calls handled by the desk and trailer and tire calls bring the total to the organisation file's 240 to 380. Mileages are the author's estimate."
+    },
+    "surge": {
+      "cause": "Winter storm or highway closure (snowstorms, freezing rain, mountain pass closures)",
+      "events_per_year": {
+        "low": 4,
+        "mode": 8,
+        "high": 14
+      },
+      "duration_days": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "volume_multiplier": {
+        "low": 1.4,
+        "mode": 1.8,
+        "high": 2.5
+      },
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Taken from the organisation file's surge estimate for this process."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "tl-trip-execution",
+        "object": "breakdown_call",
+        "share": 0.6
+      },
+      {
+        "from": "ltl-linehaul-dispatch",
+        "object": "breakdown_call",
+        "share": 0.4
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "mnt-defect-repair",
+        "object": "work_order"
+      },
+      {
+        "outcome": "any",
+        "to": "tow-operator",
+        "object": "tow_request"
+      },
+      {
+        "outcome": "closed",
+        "to": "fin-accounts-payable",
+        "object": "vendor_invoice"
+      },
+      {
+        "outcome": "any",
+        "to": "tl-load-planning",
+        "object": "equipment_availability"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "tl-driver-longhaul",
+      "title": "Long-haul truckload driver (company)",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 37,
+        "high": 44
+      },
+      "occupation_code": "NOC 73300",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 300); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Stands for the driver of the broken-down unit; about 60% of calls come from truckload drivers and 40% from LTL linehaul drivers, who do the same steps."
+      },
+      "shift_pattern": "field_rotation"
+    },
+    {
+      "id": "after-hours-dispatcher",
+      "title": "After-hours dispatcher",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.25,
+      "loaded_cost_per_hour": {
+        "low": 35,
+        "mode": 41,
+        "high": 49
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 8); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Takes breakdown calls outside office hours; in the day the driver manager or linehaul dispatcher takes the call the same way."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "title": "Breakdown and road call coordinator",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": null,
+      "shift_pattern": "shift_24x7",
+      "id": "road-call-coordinator",
+      "fte_on_process": 2.6,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The organisation file has no role for this work. Carriers of this size run a 24-hour maintenance breakdown desk (often called road call or road service coordinators) that troubleshoots with the driver, chooses the repair and sends help. About five people cover the desk around the clock; about 2.6 FTE of their time is spent on calls. Cost set like a linehaul dispatcher."
+      }
+    },
+    {
+      "id": "road-service-tech",
+      "title": "Road service technician",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.8,
+      "loaded_cost_per_hour": {
+        "low": 42,
+        "mode": 48,
+        "high": 56
+      },
+      "occupation_code": "NOC 72410",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 14); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. On-call technicians with a service truck attend about 30% of calls near company terminals."
+      },
+      "shift_pattern": "on_call"
+    },
+    {
+      "id": "shop-foreman",
+      "title": "Shop foreman",
+      "department": "Fleet maintenance",
+      "layer": "supervisor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 57,
+        "high": 66
+      },
+      "occupation_code": "NOC 72010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 14); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Approves costly tows and repairs and receives towed units."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "driver-manager",
+      "title": "Driver manager (fleet manager)",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 36); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Arranges replacement power or a recovery driver for the load and tells the customer of the delay."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "maintenance-planner",
+      "title": "Maintenance planner",
+      "department": "Fleet maintenance",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 44,
+        "high": 52
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (headcount 8); title, cost and shift from the organisation file, which loads wages by 1.30 for hourly staff and 1.35 for salaried staff. Matches vendor invoices to road call purchase orders the next working days."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "fleet-maint-system",
+      "name": "Fleet maintenance management system (work orders, PM schedules, parts)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "fuel-card",
+      "name": "Fuel card portal",
+      "kind": "external_portal"
+    }
+  ],
+  "resources": [
+    {
+      "id": "road-service-truck",
+      "name": "Road service truck",
+      "kind": "vehicle",
+      "count": 14,
+      "cost_per_hour": {
+        "low": 25,
+        "mode": 32,
+        "high": 42
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Pull over and secure the scene",
+      "description": "When a warning light, loss of power, air leak or tire failure occurs, the driver pulls onto the shoulder or the nearest safe place, switches on the hazard lights, sets out warning triangles behind the unit and checks the problem.",
+      "role": "tl-driver-longhaul",
+      "kind": "physical",
+      "inputs": [
+        "warning or failure"
+      ],
+      "outputs": [
+        "unit stopped safely"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Provincial highway traffic rules requiring warning devices around a disabled commercial vehicle",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Warning devices must be placed when a commercial vehicle is stopped on a highway under provincial rules; minutes are the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Call in the breakdown",
+      "description": "The driver phones the dispatch or breakdown line and gives the unit number, location (highway, nearest exit or kilometre marker), the symptoms and the dashboard codes, the load and its delivery time, and whether the unit is in a safe place.",
+      "role": "tl-driver-longhaul",
+      "kind": "communication",
+      "inputs": [
+        "unit stopped safely"
+      ],
+      "outputs": [
+        "breakdown call"
+      ],
+      "systems": [
+        "email-phone",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.2,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Take the call and log it",
+      "description": "The dispatcher opens the trip in the TMS, notes the breakdown and location against the load, checks the delivery appointment and the driver's remaining hours, and transfers the call to the maintenance breakdown desk.",
+      "role": "after-hours-dispatcher",
+      "kind": "intake",
+      "inputs": [
+        "breakdown call"
+      ],
+      "outputs": [
+        "logged breakdown"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Location recorded imprecisely, which delays the vendor or tow.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Troubleshoot and choose the response",
+      "description": "The road call coordinator talks the driver through checks, reads live fault codes and location from the telematics platform, looks up the unit's warranty and repair history, and decides whether the driver can fix it, a company road technician should go, a third-party mobile repair or tire service should be called, or the unit must be towed.",
+      "role": "road-call-coordinator",
+      "kind": "judgment",
+      "inputs": [
+        "logged breakdown",
+        "fault codes",
+        "unit history"
+      ],
+      "outputs": [
+        "repair decision"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Wrong response chosen (vendor sent for a fault that needs a tow), adding hours.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 0.12,
+          "condition": "driver can fix with guidance"
+        },
+        {
+          "to": "s06",
+          "prob": 0.28,
+          "condition": "company road technician in range"
+        },
+        {
+          "to": "s09",
+          "prob": 0.32,
+          "condition": "third-party mobile repair or tire service"
+        },
+        {
+          "to": "s11",
+          "prob": 0.22,
+          "condition": "tow needed"
+        },
+        {
+          "to": "s20",
+          "prob": 0.06,
+          "condition": "storm or road closure: help cannot reach the unit yet"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-tmc20",
+          "src-fo-tmc19"
+        ],
+        "note": "Tires, brakes, lighting, power plant and cooling make up most roadside repairs, and a typical roadside call often includes a tow (TMC/FleetNet); response shares are the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Coach the driver through a fix",
+      "description": "The coordinator talks the driver through a simple fix (resetting a fault, reconnecting an air or electrical line, replacing a fuse or bulb, regenerating the particulate filter) and confirms the warning has cleared.",
+      "role": "road-call-coordinator",
+      "kind": "communication",
+      "inputs": [
+        "repair decision"
+      ],
+      "outputs": [
+        "unit running"
+      ],
+      "systems": [
+        "email-phone",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Call out the road service technician",
+      "description": "The coordinator phones the on-call road service technician, gives the location, symptoms and likely parts, and agrees an arrival time with the driver.",
+      "role": "road-call-coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "repair decision"
+      ],
+      "outputs": [
+        "callout"
+      ],
+      "systems": [
+        "email-phone",
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Drive to the breakdown",
+      "description": "The road service technician loads likely parts on the service truck and drives to the unit, often at night and in winter conditions on highways near the terminal.",
+      "role": "road-service-tech",
+      "kind": "travel",
+      "inputs": [
+        "callout"
+      ],
+      "outputs": [
+        "technician on scene"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Fourteen road service technicians and trucks in the organisation file; travel and wait for a free technician are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "road-service-truck",
+          "occupied_min": {
+            "low": 30,
+            "mode": 90,
+            "high": 300
+          }
+        }
+      ]
+    },
+    {
+      "id": "s08",
+      "name": "Repair at the roadside",
+      "description": "Wearing high-visibility gear and using the truck's beacons for traffic protection, the technician diagnoses and repairs the fault on the shoulder: replaces a hose, belt, air line, lamp or tire, or makes a temporary repair that lets the unit reach a shop.",
+      "role": "road-service-tech",
+      "kind": "physical",
+      "inputs": [
+        "technician on scene"
+      ],
+      "outputs": [
+        "unit running or tow needed"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Roadside work-zone protection under provincial occupational health and safety and highway traffic rules",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.86,
+          "condition": "unit repaired"
+        },
+        {
+          "to": "s11",
+          "prob": 0.14,
+          "condition": "cannot be fixed on the road"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-tmc20"
+        ],
+        "note": "Average roadside repair time 1.1 hours in the TMC/FleetNet benchmark (Q4 2019); the range and share needing a tow are the author's estimate."
+      },
+      "resources": [
+        {
+          "id": "road-service-truck",
+          "occupied_min": {
+            "low": 20,
+            "mode": 60,
+            "high": 180
+          }
+        }
+      ]
+    },
+    {
+      "id": "s09",
+      "name": "Engage a third-party vendor",
+      "description": "The coordinator calls mobile repair or tire service vendors near the location from the approved vendor list, compares arrival times and rates, gives the vendor a purchase order number and passes the arrival time to the driver.",
+      "role": "road-call-coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "repair decision"
+      ],
+      "outputs": [
+        "vendor purchase order"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 50
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.7,
+          "condition": "vendor on the way"
+        },
+        {
+          "to": "s18",
+          "prob": 0.3,
+          "condition": "vendor slow to confirm or late: chase"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Chase the vendor and update the driver",
+      "description": "The coordinator phones the vendor for an updated arrival time, tries another vendor if the first cannot come, and keeps the driver and the dispatcher informed so the delivery appointment can be moved.",
+      "role": "road-call-coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "vendor purchase order"
+      ],
+      "outputs": [
+        "confirmed arrival"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Vendor travels and repairs",
+      "description": "The vendor drives to the unit and repairs it on the shoulder, most often a tire, brake, light or hose; the vendor's time is billed to the carrier.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "vendor purchase order"
+      ],
+      "outputs": [
+        "unit running or tow needed",
+        "vendor invoice"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 600
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.88,
+          "condition": "unit repaired"
+        },
+        {
+          "to": "s11",
+          "prob": 0.12,
+          "condition": "cannot be fixed on the road"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-tmc20",
+          "src-hdt-uptime21"
+        ],
+        "note": "Roadside repair takes about an hour once on scene (TMC/FleetNet); travel and arrival times are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Arrange a tow",
+      "description": "The coordinator chooses a heavy-tow operator that covers the area, agrees the rate and the destination (the nearest company shop or the dealer for warranty work), and tells the driver what to expect.",
+      "role": "road-call-coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "repair decision"
+      ],
+      "outputs": [
+        "tow request"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.4,
+          "condition": "tow or repair above the coordinator's limit"
+        },
+        {
+          "to": "s12",
+          "prob": 0.6,
+          "condition": "within limit"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-tmc20"
+        ],
+        "note": "Average tow cost about US$1,485 (TMC/FleetNet); minutes and share above the spending limit are the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Approve the tow or repair cost",
+      "description": "The on-call shop foreman reviews the tow quote or repair estimate against the unit's value and warranty and approves it or asks the coordinator to find a cheaper option.",
+      "role": "shop-foreman",
+      "kind": "approval",
+      "inputs": [
+        "tow request",
+        "quote"
+      ],
+      "outputs": [
+        "approved spend"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Company spending authority limits for road calls and tows",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Spending limits for road calls are common practice; author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Tow operator arrives and tows",
+      "description": "The tow operator travels to the unit, often far from town and in winter weather, hooks up the tractor or the combination and tows it to the shop or dealer.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "tow request"
+      ],
+      "outputs": [
+        "unit at shop",
+        "tow invoice"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 300,
+        "high": 900
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; night and winter calls on remote highways take longest, per the organisation file's process description."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Arrange replacement power and recover the load",
+      "description": "While the unit is towed, the driver manager finds a spare tractor or another driver to recover the trailer and finish the delivery, re-plans the driver's next load, and has customer service tell the consignee the new arrival time.",
+      "role": "driver-manager",
+      "kind": "coordination",
+      "inputs": [
+        "logged breakdown"
+      ],
+      "outputs": [
+        "replacement unit assigned",
+        "revised ETA"
+      ],
+      "systems": [
+        "tms",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      },
+      "concurrent_with": [
+        "s12"
+      ]
+    },
+    {
+      "id": "s14",
+      "name": "Receive the towed unit and open a repair order",
+      "description": "The shop foreman checks the towed unit in, records its condition and opens a repair work order for the defect repair queue, attaching the coordinator's notes and fault codes.",
+      "role": "shop-foreman",
+      "kind": "data_entry",
+      "inputs": [
+        "unit at shop",
+        "breakdown notes"
+      ],
+      "outputs": [
+        "repair work order"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 600
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.7,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "unit handed to the shop; tow invoice is matched on the repair work order",
+          "outcome": "towed to shop"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Record the roadside repair",
+      "description": "The coordinator records what was done, the parts, the vendor or technician time and the purchase order in the fleet maintenance system, and opens a follow-up work order when the fix was temporary.",
+      "role": "road-call-coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "repair details"
+      ],
+      "outputs": [
+        "road call record",
+        "follow-up work order"
+      ],
+      "systems": [
+        "fleet-maint-system"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Check the unit and resume the trip",
+      "description": "The driver walks around the unit, checks that the warning has cleared and nothing is leaking, records the delay on the logbook or ELD, and continues the trip or drives to the nearest shop for a permanent repair.",
+      "role": "tl-driver-longhaul",
+      "kind": "physical",
+      "inputs": [
+        "unit running"
+      ],
+      "outputs": [
+        "unit back on the road"
+      ],
+      "systems": [
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.45,
+          "condition": "third-party vendor invoice to match"
+        },
+        {
+          "to": "END",
+          "prob": 0.55,
+          "condition": "no invoice (driver fix or company technician)",
+          "outcome": "repaired on road"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Match the road call invoice",
+      "description": "When the vendor or tow operator's invoice arrives, the maintenance planner matches it to the purchase order and road call record, checks hours, mileage charges and parts against the quote, codes it to the unit and passes it to accounts payable.",
+      "role": "maintenance-planner",
+      "kind": "validation",
+      "inputs": [
+        "vendor or tow invoice",
+        "road call record"
+      ],
+      "outputs": [
+        "approved vendor invoice"
+      ],
+      "systems": [
+        "fleet-maint-system",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Overbilled hours or mileage accepted.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "invoice passed to payables",
+          "outcome": "closed"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Invoices arrive days after the call; author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Wait out the storm or road closure",
+      "description": "When a storm or highway closure stops tow trucks and technicians from reaching the unit, the coordinator keeps in touch with the driver, checks that the driver is safe and warm, and holds the response until the road reopens.",
+      "role": "road-call-coordinator",
+      "kind": "external_wait",
+      "inputs": [
+        "repair decision",
+        "road reports"
+      ],
+      "outputs": [
+        "road open"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "road reopened, choose the response again"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Storms close Highway 401, the Trans-Canada through the Rockies and the Coquihalla several times each winter (organisation file surge); duration is the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Tow after a failed roadside repair",
+      "share_of_cases": 0.08,
+      "description": "The technician or vendor cannot fix the unit on the shoulder and it is towed after all, adding hours.",
+      "path": [
+        "s08",
+        "s11",
+        "s12",
+        "s13",
+        "s14"
+      ]
+    },
+    {
+      "name": "Storm or road closure",
+      "share_of_cases": 0.06,
+      "description": "Help cannot reach the unit until the highway reopens; the driver waits in the cab.",
+      "path": [
+        "s04",
+        "s20",
+        "s04"
+      ]
+    },
+    {
+      "name": "Vendor late or unavailable",
+      "share_of_cases": 0.1,
+      "description": "The first vendor cannot come or is late and the coordinator chases or finds another.",
+      "path": [
+        "s09",
+        "s18",
+        "s10"
+      ]
+    },
+    {
+      "name": "Cost above the coordinator's limit",
+      "share_of_cases": 0.1,
+      "description": "A long tow or large repair needs the on-call foreman's approval.",
+      "path": [
+        "s11",
+        "s19",
+        "s12"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.4,
+        "p90": 4
+      },
+      "unit": "calendar days from call to call closed (invoice matched where there is one)",
+      "population": "Breakdown calls at a Canadian LTL and truckload carrier, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: most calls end when the unit is running again or reaches a shop, usually four to ten hours after the call; vendor-repaired calls close when the invoice is matched days later."
+      }
+    },
+    {
+      "metric": "roadside_repair_hours",
+      "value": 1.1,
+      "unit": "hours of repair time per roadside event",
+      "population": "TMC/FleetNet benchmark fleets, Q4 2019",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-fw-tmc20"
+        ],
+        "note": "Up from 0.9 hours six months earlier."
+      }
+    },
+    {
+      "metric": "miles_between_roadside_repairs_ltl",
+      "value": 64768,
+      "unit": "miles",
+      "population": "LTL fleets in the TMC/FleetNet benchmark, Q4 2019",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-fw-tmc20"
+        ],
+        "note": "Truckload dry van fleets averaged 14,333 miles in the same report."
+      }
+    },
+    {
+      "metric": "roadside_vs_shop_repair_cost",
+      "value": 4,
+      "unit": "times the cost of the same repair in the fleet's own shop",
+      "population": "Truckload fleets in the TMC/FleetNet program, 2018",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-fo-tmc19"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Waiting for a vendor or tow to reach the unit, at night, in winter and on remote highways, is most of the downtime.",
+      "steps": [
+        "s10",
+        "s12",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Named in the organisation file's process description; author's estimate."
+      }
+    },
+    {
+      "description": "Roadside repairs cost about four times as much as the same repair in the company's shop.",
+      "steps": [
+        "s09",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-fo-tmc19"
+        ],
+        "note": "TMC/FleetNet program, 2018."
+      }
+    },
+    {
+      "description": "Vague locations and symptoms from the driver send the wrong help.",
+      "steps": [
+        "s02",
+        "s03",
+        "s04"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "description": "Vendor invoices arrive late and with extra hours or mileage that must be checked against the call record.",
+      "steps": [
+        "s17"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "assumptions": [
+    "The organisation file names a 'shop dispatcher' in the process description but has no such role; this workflow adds a breakdown and road call coordinator (not in the organisation file) on a 24-hour desk.",
+    "Driver steps use the long-haul truckload driver; LTL linehaul drivers and owner-operators do the same steps.",
+    "Vendor and tow operator time is entered as waiting time on external steps (their labour is billed, not paid as wages), so it counts in elapsed time but not in the carrier's hands-on time.",
+    "About a third of calls generate a vendor invoice matched in s17; driver fixes and company technician calls do not, and tow invoices are matched on the shop repair work order after the unit is towed in.",
+    "The workflow adds fin-accounts-payable (vendor invoices) and tl-load-planning (replacement equipment) as receivers; the organisation file lists only defect repair work orders and tow requests. Tow operators' invoices already reach payables directly in the organisation file.",
+    "Simulated cycle time includes the days until a vendor invoice is matched for about a third of calls; the unit itself is usually moving again within hours."
+  ],
+  "sources": [
+    {
+      "id": "src-fw-tmc20",
+      "title": "TMC20: Unscheduled truck maintenance costs rising",
+      "publisher": "FreightWaves",
+      "url": "https://www.freightwaves.com/news/tmc20-unscheduled-truck-maintenance-costs-rising",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "TMC and FleetNet America benchmark, Q4 2019: average roadside repair cost US$450 (US$358 a year earlier); average tow cost US$1,485; roadside repair time rose from 0.9 to 1.1 hours; miles between roadside repairs 14,333 for truckload dry van fleets, 64,768 for LTL fleets and 44,303 for tank fleets; tires, brakes, lighting, power plant and cooling systems account for 65% of repairs."
+    },
+    {
+      "id": "src-fo-tmc19",
+      "title": "Study: Roadside truck breakdowns occur every 10,000 miles",
+      "publisher": "FleetOwner",
+      "url": "https://www.fleetowner.com/operations/maintenance/article/21703593/study-roadside-truck-breakdowns-occur-every-10000-miles",
+      "year": 2019,
+      "accessed": "2026-11-24",
+      "supports": "TMC and FleetNet America BenchMarkit program (truckload fleets, 2018): about 10,000 miles between breakdown events; average roadside repair event cost US$334 in Q4 2018 excluding tires; roadside repairs cost about four times as much as the same repair in the fleet's own shop; most frequent systems are cooling, wheels and hubs, brakes, lighting and tires."
+    },
+    {
+      "id": "src-hdt-uptime21",
+      "title": "4 Ways to Improve Fleet Uptime",
+      "publisher": "Heavy Duty Trucking (truckinginfo.com)",
+      "url": "https://www.truckinginfo.com/10143404/4-ways-to-improve-fleet-uptime",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "TMC/FleetNet benchmarking for Q3 2020: 34,629 miles between unscheduled roadside repairs for the average fleet; top five systems 72% of roadside repairs; LTL average cost per mechanical roadside repair US$642; top LTL fleets have 34% fewer breakdowns than the average LTL fleet."
+    }
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

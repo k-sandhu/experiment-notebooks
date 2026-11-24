@@ -1,0 +1,2303 @@
+{
+  "schema_version": "0.3",
+  "id": "edu-ops-outage-restoration",
+  "name": "Restore unplanned outages",
+  "org": "electric-distribution-utility",
+  "process": "ops-outage-restoration",
+  "sector": "electric utilities: power distribution",
+  "function": "distribution operations",
+  "summary": "When an outage needs more than a single trouble responder, the control room isolates the damaged section and switches healthy sections onto neighbouring feeders, then a line or cable crew repairs the broken pole, transformer or conductor under work protection. The operator keeps the outage record and the estimated restoration time current, and the event is closed with a cause code that feeds reliability reporting. Elapsed time is driven by crew call-out after hours, waits for tree crews, locates and traffic control, pole replacements, and the strict sequence of isolation, testing and grounding before anyone touches the line.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A city-owned Ontario electricity distributor with about 350,000 customers, a 24-hour system control centre, overhead and underground line crews and single-person trouble trucks, using SCADA, an outage management system, smart meters and mobile workforce tablets.",
+    "org_size_employees": 571,
+    "notes": "Modelled on Hydro Ottawa Limited's published major event reports, scorecard and news releases for 2019-2022; the organisation chart, headcounts and wages come from the organisation file."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one outage event needing a crew",
+  "trigger": "A feeder lockout seen in SCADA, or a trouble responder's request for a crew, opens an outage event that one person cannot fix.",
+  "end_state": "All customers are restored, the outage event is closed with a cause code and the work order is reviewed, or the event is handed to cable fault location and repair.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 60,
+      "mode": 100,
+      "high": 160
+    },
+    "seasonality": "Peaks in summer thunderstorms and winter ice and wind; spring flooding and autumn wind storms add smaller peaks.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Organisation file process volume (author's estimate). About one in four trouble orders needs a crew in this workflow's sister file, which at 900 orders a month gives about 200 crew requests, several of which belong to one event."
+    },
+    "surge": {
+      "cause": "major storm (wind, ice, lightning or derecho)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 2,
+        "high": 3
+      },
+      "duration_days": {
+        "low": 1,
+        "mode": 1,
+        "high": 8
+      },
+      "volume_multiplier": {
+        "low": 2,
+        "mode": 4,
+        "high": 15
+      },
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "me-index",
+          "me-2022-05",
+          "after-storm"
+        ],
+        "note": "Nine major events in 2019-2022; the May 2022 derecho caused 1,000 outages (against 200 for the 2018 tornadoes) and took about 7 days to restore 90% of customers with about 450 workers. Multiplier range is the author's estimate."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ops-trouble-response",
+        "object": "restoration_work_order",
+        "share": 0.55
+      },
+      {
+        "from": "ops-system-monitoring",
+        "object": "outage_event",
+        "share": 0.4
+      },
+      {
+        "from": "ops-major-event-response",
+        "object": "major_event_declaration",
+        "share": 0.05
+      }
+    ],
+    "inputs": [
+      {
+        "from": "fin-inventory-stores",
+        "object": "material_issue"
+      },
+      {
+        "from": "corp-fleet-maintenance",
+        "object": "fleet_availability"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "corp-outage-communications",
+        "object": "outage_event"
+      },
+      {
+        "outcome": "restored",
+        "to": "ops-system-monitoring",
+        "object": "outage_event"
+      },
+      {
+        "outcome": "restored",
+        "to": "ae-reliability-analysis",
+        "object": "interruption_data"
+      },
+      {
+        "outcome": "restored",
+        "to": "ae-records-gis",
+        "object": "as_built"
+      },
+      {
+        "outcome": "restored",
+        "to": "fin-payroll",
+        "object": "time_record"
+      },
+      {
+        "outcome": "handed_to_cable_fault_repair",
+        "to": "ops-cable-fault-repair",
+        "object": "restoration_work_order"
+      },
+      {
+        "outcome": "restored_with_damage_claim",
+        "to": "corp-legal-claims",
+        "object": "legal_claim"
+      },
+      {
+        "outcome": "restored_with_spill_report",
+        "to": "corp-environment",
+        "object": "spill_report"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "system-operator",
+      "title": "Distribution system operator (control room)",
+      "department": "System Control Centre",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.0,
+      "loaded_cost_per_hour": {
+        "low": 62,
+        "mode": 72,
+        "high": 85
+      },
+      "occupation_code": "NOC 92100",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro"
+        ],
+        "note": "Organisation file role; only minutes on crew-level events are counted here, the rest of the desk is in ops-system-monitoring."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "trouble-plt",
+      "title": "Trouble response power line technician",
+      "department": "Overhead Lines",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.8,
+      "loaded_cost_per_hour": {
+        "low": 62,
+        "mode": 70,
+        "high": 82
+      },
+      "occupation_code": "NOC 72203",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-plt"
+        ],
+        "note": "Patrols and field switching before a crew arrives; share of the 12 trouble PLTs is the author's estimate."
+      },
+      "shift_pattern": "shift_24x7"
+    },
+    {
+      "id": "lines-supervisor",
+      "title": "Overhead lines supervisor",
+      "department": "Overhead Lines",
+      "layer": "supervisor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 80,
+        "high": 92
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file: 8 overhead supervisors; crew assignment and next-day review per event."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "power-line-technician",
+      "title": "Power line technician (journeyperson)",
+      "department": "Overhead Lines",
+      "layer": "individual_contributor",
+      "fte_on_process": 7.0,
+      "loaded_cost_per_hour": {
+        "low": 58,
+        "mode": 65,
+        "high": 75
+      },
+      "occupation_code": "NOC 72203",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-plt"
+        ],
+        "note": "Organisation file: 62 journeyperson PLTs in crews of three to four. FTE counts emergency repair hours including after-hours call-outs (author's estimate)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "apprentice-plt",
+      "title": "Apprentice power line technician",
+      "department": "Overhead Lines",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.6,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 46,
+        "high": 56
+      },
+      "occupation_code": "NOC 72203",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-plt"
+        ],
+        "note": "Organisation file: 22 apprentices, one per crew; FTE follows the crew hours."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "stores-attendant",
+      "title": "Stores attendant",
+      "department": "Supply Chain and Stores",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 38,
+        "mode": 45,
+        "high": 54
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role (extended hours); emergency material issues for about 30% of overhead events. Not listed in the organisation file's process entry."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "underground-supervisor",
+      "title": "Underground and cable supervisor",
+      "department": "Underground and Cable",
+      "layer": "supervisor",
+      "fte_on_process": 0.15,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 80,
+        "high": 92
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file: 4 underground supervisors; assessment of underground events."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "cable-splicer",
+      "title": "Cable splicer / underground power line technician",
+      "department": "Underground and Cable",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.8,
+      "loaded_cost_per_hour": {
+        "low": 58,
+        "mode": 66,
+        "high": 76
+      },
+      "occupation_code": "NOC 72203",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file: 34 cable splicers in crews of three; emergency equipment replacements only (cable faults are in ops-cable-fault-repair)."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "safety-advisor",
+      "title": "Health and safety / environment advisor",
+      "department": "Health, Safety and Environment",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.02,
+      "loaded_cost_per_hour": {
+        "low": 55,
+        "mode": 65,
+        "high": 76
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Organisation file role; spill reports for about 5% of events. Not listed in the organisation file's process entry."
+      },
+      "shift_pattern": "on_call"
+    }
+  ],
+  "systems": [
+    {
+      "id": "scada",
+      "name": "SCADA for stations and feeder devices",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "oms",
+      "name": "Outage management system",
+      "kind": "workflow"
+    },
+    {
+      "id": "gis",
+      "name": "Geographic information system (asset and network model)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mwm",
+      "name": "Mobile workforce management and field tablets",
+      "kind": "workflow"
+    },
+    {
+      "id": "ami",
+      "name": "Smart meter (AMI) head-end and network",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "web-portal",
+      "name": "Customer web portal, MyAccount, mobile app and outage map",
+      "kind": "external_portal"
+    },
+    {
+      "id": "email",
+      "name": "Email, calendar and Teams",
+      "kind": "communication"
+    },
+    {
+      "id": "erp",
+      "name": "ERP: general ledger, work orders, purchasing, inventory, fixed assets",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "timesheets",
+      "name": "Time entry for crews and staff",
+      "kind": "workflow"
+    },
+    {
+      "id": "one-call-portal",
+      "name": "Ontario One Call member portal and locate management",
+      "kind": "external_portal"
+    },
+    {
+      "id": "safety-system",
+      "name": "Health, safety and environment incident system",
+      "kind": "workflow"
+    },
+    {
+      "id": "dms",
+      "name": "Document management and engineering drawing repository",
+      "kind": "document_store"
+    }
+  ],
+  "resources": [
+    {
+      "id": "trouble-truck",
+      "name": "Single-person trouble response truck with small bucket",
+      "kind": "vehicle",
+      "count": 12,
+      "cost_per_hour": {
+        "low": 30,
+        "mode": 40,
+        "high": 55
+      }
+    },
+    {
+      "id": "line-crew",
+      "name": "Overhead line crew (three to four line trades with a bucket truck and a digger)",
+      "kind": "crew",
+      "count": 20
+    },
+    {
+      "id": "bucket-truck",
+      "name": "Aerial bucket truck",
+      "kind": "vehicle",
+      "count": 42,
+      "cost_per_hour": {
+        "low": 45,
+        "mode": 60,
+        "high": 80
+      }
+    },
+    {
+      "id": "digger-derrick",
+      "name": "Digger derrick (pole setting truck)",
+      "kind": "vehicle",
+      "count": 14,
+      "cost_per_hour": {
+        "low": 50,
+        "mode": 65,
+        "high": 85
+      }
+    },
+    {
+      "id": "cable-crew",
+      "name": "Underground cable crew (two to three cable splicers with a cable truck)",
+      "kind": "crew",
+      "count": 14
+    },
+    {
+      "id": "cable-truck",
+      "name": "Cable splicing truck or van with generator",
+      "kind": "vehicle",
+      "count": 16,
+      "cost_per_hour": {
+        "low": 30,
+        "mode": 40,
+        "high": 55
+      }
+    },
+    {
+      "id": "warehouse",
+      "name": "Stores warehouse and pole yard",
+      "kind": "facility",
+      "count": 2
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Log the outage event",
+      "description": "A feeder breaker lockout alarm arrives through SCADA, or a trouble responder's crew request becomes an emergency work order; the outage management system opens one outage event with the predicted device, the customers affected and the start time.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "SCADA lockout alarm or restoration work order"
+      ],
+      "outputs": [
+        "outage event"
+      ],
+      "systems": [
+        "scada",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "scorecard-2021"
+        ],
+        "note": "Defective equipment, loss of supply and foreign interference were the main outage causes (source); event logging in the OMS is standard practice."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Analyse the outage",
+      "description": "The system operator reads the fault indicators and relay targets in SCADA, the call pattern in the OMS and the responder's report, and works out which section of the feeder is faulted and which healthy sections can be picked up from neighbouring feeders.",
+      "role": "system-operator",
+      "kind": "analysis",
+      "inputs": [
+        "outage event",
+        "SCADA fault indications"
+      ],
+      "outputs": [
+        "isolation and transfer plan"
+      ],
+      "systems": [
+        "scada",
+        "oms",
+        "gis"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2,
+        "high": 15
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Faulted section misjudged, so a re-closed section trips again.",
+        "typically_caught_at": "s08"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro"
+        ],
+        "note": "Operators identify system risks and prepare emergency switching and load transfers (posting); times are the author's estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Isolate and transfer load remotely",
+      "description": "The operator opens and closes SCADA-controlled switches and breakers to isolate the faulted section and pick up the healthy sections from adjacent feeders, checking feeder loading before each transfer and logging each operation.",
+      "role": "system-operator",
+      "kind": "coordination",
+      "inputs": [
+        "isolation and transfer plan"
+      ],
+      "outputs": [
+        "customers restored by switching",
+        "isolated section"
+      ],
+      "systems": [
+        "scada",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility Work Protection Code and Electrical Utility Safety Rules (IHSA), required for work on or near distribution lines under the Occupational Health and Safety Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-600",
+          "ho-blog-2022"
+        ],
+        "note": "Switching is largely done remotely from the System Office and automated devices restore some customers (sources); branch share is the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Set the estimated restoration time",
+      "description": "The operator enters the cause, the damage and an estimated restoration time in the OMS, which pushes it to the outage map, the outage line and email alerts for the customers still out.",
+      "role": "system-operator",
+      "kind": "data_entry",
+      "inputs": [
+        "isolation and transfer plan",
+        "responder or SCADA information"
+      ],
+      "outputs": [
+        "estimated restoration time"
+      ],
+      "systems": [
+        "oms",
+        "web-portal"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.15,
+        "defect_description": "Restoration estimate set before the crew has seen the damage and later missed.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "concurrent_with": [
+        "s03"
+      ],
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "me-2021-06",
+          "me-2022-06",
+          "ho-blog-2020"
+        ],
+        "note": "ETRs issued through the OMS, outage line and email alerts and shown on an outage map updated every 15 minutes (sources)."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Call the on-call supervisor",
+      "description": "The operator phones the overhead or underground supervisor (the on-call supervisor after hours) with the location, damage, customers out and access conditions, and sends the work order to the crew's tablet.",
+      "role": "system-operator",
+      "kind": "communication",
+      "inputs": [
+        "outage event",
+        "damage report"
+      ],
+      "outputs": [
+        "work order routed to a supervisor"
+      ],
+      "systems": [
+        "mwm",
+        "email"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.72,
+          "condition": "overhead damage"
+        },
+        {
+          "to": "s20",
+          "prob": 0.28,
+          "condition": "underground cable or equipment"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Overhead share assumed from 2,746 km overhead against 3,167 km underground and the higher fault rate of overhead plant (organisation file)."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Assign or call out a line crew",
+      "description": "The lines supervisor pulls a day crew from planned work or, after hours, calls out the on-call crew by phone, confirms who is fit to work under hours-of-work limits and tells the operator when the crew expects to arrive.",
+      "role": "lines-supervisor",
+      "kind": "coordination",
+      "inputs": [
+        "work order routed to a supervisor"
+      ],
+      "outputs": [
+        "assigned line crew"
+      ],
+      "systems": [
+        "mwm",
+        "email"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 75
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.3,
+          "condition": "pole, transformer or cable needed from stores"
+        },
+        {
+          "to": "s08",
+          "prob": 0.35,
+          "condition": "fault location not yet known: a responder patrols while the crew assembles"
+        },
+        {
+          "to": "s10",
+          "prob": 0.35,
+          "condition": "fault located and material on the truck is enough"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About half of outages occur outside day shift; on-call crews take about an hour to assemble (author's estimate)."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Issue emergency material",
+      "description": "The stores attendant, called in after hours if needed, picks the pole, transformer, cross-arms or conductor from the yard, loads it on the crew's trailer or truck and books the issue against the emergency work order.",
+      "role": "stores-attendant",
+      "kind": "physical",
+      "inputs": [
+        "assigned line crew",
+        "material list"
+      ],
+      "outputs": [
+        "material issue"
+      ],
+      "systems": [
+        "erp"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong transformer size or missing fittings issued, causing a second trip to the yard.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "warehouse",
+          "occupied_min": {
+            "low": 15,
+            "mode": 30,
+            "high": 60
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s08",
+          "prob": 0.5,
+          "condition": "fault location not yet known"
+        },
+        {
+          "to": "s10",
+          "prob": 0.5,
+          "condition": "fault located"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; stores attendants work extended hours (organisation file) and are called in for emergencies."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Patrol the line to find the fault",
+      "description": "A trouble responder drives the isolated section, looks for broken insulators, burnt conductors, fallen limbs or failed equipment, and reports the location and damage to the operator.",
+      "role": "trouble-plt",
+      "kind": "travel",
+      "inputs": [
+        "isolated section"
+      ],
+      "outputs": [
+        "fault location and damage report"
+      ],
+      "systems": [
+        "mwm",
+        "gis"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 45
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s06",
+        "s07"
+      ],
+      "resources": [
+        {
+          "id": "trouble-truck",
+          "occupied_min": {
+            "low": 15,
+            "mode": 30,
+            "high": 90
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; trouble trucks patrol before crews are sent (organisation file process description)."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Switch manually in the field",
+      "description": "On the operator's instructions the responder opens manual load-break switches or cut-outs on either side of the damage and closes others to pick up more customers, reporting each operation back by radio.",
+      "role": "trouble-plt",
+      "kind": "physical",
+      "inputs": [
+        "fault location and damage report",
+        "switching instructions"
+      ],
+      "outputs": [
+        "further customers restored",
+        "isolated work area"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility Work Protection Code and Electrical Utility Safety Rules (IHSA), required for work on or near distribution lines under the Occupational Health and Safety Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s08"
+      ],
+      "resources": [
+        {
+          "id": "trouble-truck",
+          "occupied_min": {
+            "low": 10,
+            "mode": 20,
+            "high": 45
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-plt"
+        ],
+        "note": "PLTs perform switching (posting); times are the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Travel to the site",
+      "description": "The crew drives the bucket truck and, if a pole is involved, the digger derrick from the service centre to the site, reading the work order and the responder's photographs on the way.",
+      "role": "power-line-technician",
+      "kind": "travel",
+      "inputs": [
+        "assigned line crew"
+      ],
+      "outputs": [
+        "crew on site"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "transit",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s09",
+        "s06",
+        "s07"
+      ],
+      "people": 3,
+      "resources": [
+        {
+          "id": "line-crew",
+          "occupied_min": {
+            "low": 15,
+            "mode": 25,
+            "high": 60
+          }
+        },
+        {
+          "id": "bucket-truck",
+          "occupied_min": {
+            "low": 15,
+            "mode": 25,
+            "high": 60
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate for a 1,116 km2 territory served from two operations centres (organisation file)."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Hold the tailboard and plan the job",
+      "description": "The crew leader walks the site, identifies energized equipment, traffic and tree hazards, decides the work method and the isolation needed, and the crew signs the tailboard form before starting.",
+      "role": "power-line-technician",
+      "kind": "judgment",
+      "inputs": [
+        "crew on site",
+        "damage report"
+      ],
+      "outputs": [
+        "job plan",
+        "signed tailboard"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Electrical Utility Safety Rules: job planning, hazard assessment and pre-job tailboard before work near energized equipment",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.2,
+      "experience_needed": "high",
+      "people": 3,
+      "resources": [
+        {
+          "id": "line-crew",
+          "occupied_min": {
+            "low": 5,
+            "mode": 10,
+            "high": 20
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.2,
+          "condition": "trees must be cut first"
+        },
+        {
+          "to": "s13",
+          "prob": 0.12,
+          "condition": "excavation or road work needs locates or police traffic control"
+        },
+        {
+          "to": "s14",
+          "prob": 0.68,
+          "condition": "ready to isolate"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ihsa-uwpc"
+        ],
+        "note": "EUSR job planning before work near energized lines; branch shares are the author's estimate (tree contacts caused 18,548 customer interruptions in 2020 per the organisation file)."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Contractor cuts trees clear",
+      "description": "The on-call line clearance contractor sends a tree crew that cuts and removes fallen trees and limbs from the conductors and the work area once the line is isolated or covered.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "job plan"
+      ],
+      "outputs": [
+        "cleared work area"
+      ],
+      "systems": [
+        "email"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 45,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "medium",
+      "resources": [
+        {
+          "id": "line-crew",
+          "occupied_min": {
+            "low": 30,
+            "mode": 60,
+            "high": 180
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-blog-2022",
+          "me-2019-07"
+        ],
+        "note": "On-call arborists and standing service agreements with forestry contractors (sources); times are the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Wait for locates and traffic control",
+      "description": "Before digging a new pole hole or working in a busy road, the crew waits for an emergency locate of buried plant through Ontario One Call members and for police or a traffic control contractor to close lanes.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "job plan"
+      ],
+      "outputs": [
+        "locate result",
+        "traffic control in place"
+      ],
+      "systems": [
+        "one-call-portal"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 20,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_cause": "site_access",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "resources": [
+        {
+          "id": "line-crew",
+          "occupied_min": {
+            "low": 20,
+            "mode": 60,
+            "high": 180
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; emergency locates are answered faster than the five-business-day standard locate (organisation file assumption)."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Issue work protection",
+      "description": "The operator writes or retrieves the switching order, has the isolating devices opened and tagged, confirms the isolation points against the operating diagram, and issues work protection to the crew leader, recording the permit in the log.",
+      "role": "system-operator",
+      "kind": "coordination",
+      "inputs": [
+        "job plan",
+        "switching order"
+      ],
+      "outputs": [
+        "work protection permit"
+      ],
+      "systems": [
+        "oms",
+        "scada"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "A back-feed point (for example a customer generator or an open point) is missed on the isolation plan.",
+        "typically_caught_at": "s15"
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility Work Protection Code and Electrical Utility Safety Rules (IHSA), required for work on or near distribution lines under the Occupational Health and Safety Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro",
+          "ihsa-uwpc"
+        ],
+        "note": "Control room delivery of Utility Work Protection Code processes (posting); permits and tags show when lines are isolated (IHSA)."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Test and ground the work area",
+      "description": "Two line trades test the isolated conductors for voltage with a tester, apply temporary grounds on both sides of the work area and confirm to the crew leader that the work area is protected.",
+      "role": "power-line-technician",
+      "kind": "physical",
+      "inputs": [
+        "work protection permit"
+      ],
+      "outputs": [
+        "grounded work area"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility Work Protection Code and Electrical Utility Safety Rules (IHSA), required for work on or near distribution lines under the Occupational Health and Safety Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "people": 2,
+      "resources": [
+        {
+          "id": "bucket-truck",
+          "occupied_min": {
+            "low": 10,
+            "mode": 15,
+            "high": 30
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ihsa-uwpc"
+        ],
+        "note": "Isolation, testing and grounding under the EUSR and the Utility Work Protection Code; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Repair the damage",
+      "description": "The crew replaces the failed transformer, splices or re-strings the broken conductor, replaces cross-arms, insulators or cut-outs, and re-makes connections from the bucket.",
+      "role": "power-line-technician",
+      "kind": "physical",
+      "inputs": [
+        "grounded work area",
+        "material issue"
+      ],
+      "outputs": [
+        "repaired line"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 40,
+        "mode": 75,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 20
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Connection or phasing error found when the line is re-energized.",
+        "typically_caught_at": "s23"
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "people": 3,
+      "resources": [
+        {
+          "id": "line-crew",
+          "occupied_min": {
+            "low": 40,
+            "mode": 75,
+            "high": 180
+          }
+        },
+        {
+          "id": "bucket-truck",
+          "occupied_min": {
+            "low": 40,
+            "mode": 75,
+            "high": 180
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-plt"
+        ],
+        "note": "Diagnose, repair or replace equipment (posting); durations are the author's estimate. Lightning and high wind stop bucket work (weather wait)."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Support the crew on the ground",
+      "description": "The apprentice sets up traffic cones and signs, rigs and sends up material on the hand line, runs the truck controls and cleans up the old equipment while the journeypersons work aloft.",
+      "role": "apprentice-plt",
+      "kind": "physical",
+      "inputs": [
+        "job plan"
+      ],
+      "outputs": [
+        "site support"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 40,
+        "mode": 75,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s16"
+      ],
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.2,
+          "condition": "broken pole must be replaced"
+        },
+        {
+          "to": "s19",
+          "prob": 0.8,
+          "condition": "repair complete"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ho-plt"
+        ],
+        "note": "Journeypersons train apprentices (posting); 22 apprentices in the overhead unit (organisation file)."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Replace the broken pole",
+      "description": "With the digger derrick the crew augers a new hole, sets and backfills a new pole, transfers the cross-arms, transformer and conductors from the broken pole, and cuts down the old one.",
+      "role": "power-line-technician",
+      "kind": "physical",
+      "inputs": [
+        "repaired line",
+        "new pole"
+      ],
+      "outputs": [
+        "new pole in service"
+      ],
+      "systems": [
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 150,
+        "mode": 240,
+        "high": 420
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 20
+      },
+      "wait_cause": "weather",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "people": 4,
+      "resources": [
+        {
+          "id": "line-crew",
+          "occupied_min": {
+            "low": 150,
+            "mode": 240,
+            "high": 420
+          }
+        },
+        {
+          "id": "digger-derrick",
+          "occupied_min": {
+            "low": 150,
+            "mode": 240,
+            "high": 420
+          }
+        },
+        {
+          "id": "bucket-truck",
+          "occupied_min": {
+            "low": 150,
+            "mode": 240,
+            "high": 420
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "after-storm",
+          "me-2022-05"
+        ],
+        "note": "Pole replacement is the slowest restoration job; about 325-350 poles a year normally (organisation file, from Hydro Ottawa). Duration is the author's estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Remove grounds and surrender protection",
+      "description": "The crew removes the temporary grounds, checks everyone is clear, and the crew leader surrenders the work protection to the operator by radio, who records it before any switching back.",
+      "role": "power-line-technician",
+      "kind": "physical",
+      "inputs": [
+        "repaired line"
+      ],
+      "outputs": [
+        "surrendered work protection"
+      ],
+      "systems": [],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility Work Protection Code and Electrical Utility Safety Rules (IHSA), required for work on or near distribution lines under the Occupational Health and Safety Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "people": 2,
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ihsa-uwpc"
+        ],
+        "note": "Surrender of permits and removal of tags under the Utility Work Protection Code; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Assess the underground fault",
+      "description": "The underground supervisor reviews the fault location, cable age and whether the failure is a padmount transformer, elbow or termination that a cable crew can replace, or a buried cable fault that needs fault locating and excavation.",
+      "role": "underground-supervisor",
+      "kind": "judgment",
+      "inputs": [
+        "work order routed to a supervisor"
+      ],
+      "outputs": [
+        "underground repair decision"
+      ],
+      "systems": [
+        "gis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 20,
+        "high": 90
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.45,
+          "condition": "buried cable fault: send to cable fault location and repair",
+          "outcome": "handed_to_cable_fault_repair"
+        },
+        {
+          "to": "s21",
+          "prob": 0.55,
+          "condition": "equipment a cable crew can replace"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the process map sends cable faults to ops-cable-fault-repair."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Cable crew replaces the failed equipment",
+      "description": "The cable crew drives to the site, takes work protection from the operator, tests and grounds, then replaces the padmount transformer, elbows or terminations, removes grounds and surrenders protection.",
+      "role": "cable-splicer",
+      "kind": "physical",
+      "inputs": [
+        "underground repair decision",
+        "work protection permit"
+      ],
+      "outputs": [
+        "repaired underground equipment"
+      ],
+      "systems": [
+        "mwm",
+        "oms"
+      ],
+      "touch_min": {
+        "low": 90,
+        "mode": 180,
+        "high": 360
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "resource_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility Work Protection Code and Electrical Utility Safety Rules (IHSA), required for work on or near distribution lines under the Occupational Health and Safety Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "high",
+      "people": 3,
+      "resources": [
+        {
+          "id": "cable-crew",
+          "occupied_min": {
+            "low": 90,
+            "mode": 180,
+            "high": 360
+          }
+        },
+        {
+          "id": "cable-truck",
+          "occupied_min": {
+            "low": 90,
+            "mode": 180,
+            "high": 360
+          }
+        }
+      ],
+      "next": [
+        {
+          "to": "s22",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of call-out, travel and replacement time for a cable crew of three (organisation file resource cable-crew)."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Re-energize and restore normal switching",
+      "description": "The operator closes the isolating devices, picks up the remaining customers, returns the transferred sections to their normal feeders when loading allows, and checks SCADA and meter last-gasp and power-up messages for customers still out.",
+      "role": "system-operator",
+      "kind": "coordination",
+      "inputs": [
+        "surrendered work protection"
+      ],
+      "outputs": [
+        "customers restored",
+        "normal configuration"
+      ],
+      "systems": [
+        "scada",
+        "oms",
+        "ami"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 20
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "safety",
+        "basis": "Utility Work Protection Code and Electrical Utility Safety Rules (IHSA), required for work on or near distribution lines under the Occupational Health and Safety Act",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oakville-cro",
+          "ho-600"
+        ],
+        "note": "Remote switching by the System Office and load transfers (sources); times are the author's estimate."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Confirm restoration and fix stragglers",
+      "description": "The crew checks that every transformer on the section is energized, reconnects services that dropped with the line and reports nested outages (single customers still out) to the operator before leaving.",
+      "role": "power-line-technician",
+      "kind": "validation",
+      "inputs": [
+        "customers restored"
+      ],
+      "outputs": [
+        "confirmed restoration",
+        "nested outages"
+      ],
+      "systems": [
+        "mwm",
+        "ami"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.1,
+      "experience_needed": "medium",
+      "people": 2,
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; nested outages are common after a primary repair."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Close the outage event",
+      "description": "The operator records restoration times by step, customers affected at each step and the cause code, so the event produces correct interruption data for reliability reporting.",
+      "role": "system-operator",
+      "kind": "data_entry",
+      "inputs": [
+        "confirmed restoration"
+      ],
+      "outputs": [
+        "closed outage event",
+        "interruption data"
+      ],
+      "systems": [
+        "oms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Step restoration times or customer counts entered wrongly, distorting reliability statistics.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s25",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "scorecard-2021"
+        ],
+        "note": "Interruption data feeds the hours and number of interruptions reported on the OEB scorecard; waiting time is the author's estimate."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Review the work order next business day",
+      "description": "The supervisor reviews the completed emergency work order, crew hours and overtime, materials used and any follow-up such as a temporary repair to make permanent, sends as-built changes to records and flags damage by a third party or a spill.",
+      "role": "lines-supervisor",
+      "kind": "review",
+      "inputs": [
+        "closed outage event",
+        "completed work order",
+        "timesheets"
+      ],
+      "outputs": [
+        "approved time",
+        "as-built markup",
+        "follow-up order"
+      ],
+      "systems": [
+        "erp",
+        "timesheets",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 180,
+        "mode": 600,
+        "high": 4000
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.86,
+          "condition": "routine event",
+          "outcome": "restored"
+        },
+        {
+          "to": "s26",
+          "prob": 0.09,
+          "condition": "third party damaged the plant (for example a vehicle into a pole)"
+        },
+        {
+          "to": "s27",
+          "prob": 0.05,
+          "condition": "transformer oil leaked"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; foreign interference caused 55,962 customer interruptions in 2020 (organisation file), and failed transformers sometimes leak oil."
+      }
+    },
+    {
+      "id": "s26",
+      "name": "Prepare the damage recovery package",
+      "description": "For third-party damage the supervisor collects the police report number, photographs, the crew's time and material costs and sends a package to legal and claims to recover the cost from the driver's insurer.",
+      "role": "lines-supervisor",
+      "kind": "drafting",
+      "inputs": [
+        "approved time",
+        "photographs",
+        "police report"
+      ],
+      "outputs": [
+        "damage claim package"
+      ],
+      "systems": [
+        "erp",
+        "email",
+        "dms"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "restored_with_damage_claim"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the process map sends legal claims to corp-legal-claims."
+      }
+    },
+    {
+      "id": "s27",
+      "name": "Report the oil spill",
+      "description": "The health and safety and environment advisor records the spill, reports it to the provincial Spills Action Centre when required, and arranges clean-up and disposal of contaminated soil.",
+      "role": "safety-advisor",
+      "kind": "communication",
+      "inputs": [
+        "spill details"
+      ],
+      "outputs": [
+        "spill report"
+      ],
+      "systems": [
+        "safety-system",
+        "email"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Environmental Protection Act, Part X spill reporting",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "always",
+          "outcome": "restored_with_spill_report"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; the process map sends spill reports to corp-environment."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Broken pole",
+      "share_of_cases": 0.14,
+      "description": "A pole broken by a vehicle, wind or a falling tree adds several hours with a digger derrick and often a locate and traffic control first.",
+      "path": [
+        "s11",
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17",
+        "s18"
+      ]
+    },
+    {
+      "name": "Tree on the line",
+      "share_of_cases": 0.14,
+      "description": "A contractor tree crew must cut the tree off the conductors before the line crew can isolate and repair.",
+      "path": [
+        "s11",
+        "s12",
+        "s14"
+      ]
+    },
+    {
+      "name": "Buried cable fault",
+      "share_of_cases": 0.13,
+      "description": "Underground faults that need fault locating and excavation leave this workflow for the cable fault repair process after the operator has restored what switching can.",
+      "path": [
+        "s05",
+        "s20"
+      ]
+    },
+    {
+      "name": "Third-party damage",
+      "share_of_cases": 0.07,
+      "description": "A vehicle into a pole or a contractor dig-in leads to a damage recovery claim.",
+      "path": [
+        "s25",
+        "s26"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "average_interruption_duration_hours",
+      "value": 1.34,
+      "unit": "hours per customer interrupted (SAIDI 0.83 / SAIFI 0.62), 2021, excluding loss of supply and major events",
+      "population": "Hydro Ottawa Limited customers",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "scorecard-2021"
+        ],
+        "note": "Computed from the scorecard values; 2020: 0.83 / 0.72 = 1.15 h. Customers picked up by switching early pull this average well below the duration of a crew repair."
+      }
+    },
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.2,
+        "p90": 3.0
+      },
+      "unit": "calendar days from outage event to work order reviewed",
+      "population": "Crew-level unplanned outages at a large Ontario distributor, ordinary weather",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: last customer restored in about 3-8 hours for a crew repair, then the supervisor's review the next business day: about 10-16 hours after restoration on weekdays and up to three days for Friday and weekend events."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "After hours the crew has to be called out and assembled, which adds about an hour before travel even starts.",
+      "steps": [
+        "s06"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate; overhead trades work extended hours with on-call rotations (organisation file)."
+      }
+    },
+    {
+      "description": "Restoration estimates are set before anyone has seen the damage and are often missed, which drives repeat customer calls.",
+      "steps": [
+        "s04"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "me-2022-05"
+        ],
+        "note": "In the derecho the outage map could not reflect the situation and was withdrawn until estimates could be given in days."
+      }
+    },
+    {
+      "description": "Crews stand idle waiting for tree crews, locates or traffic control while customers stay out.",
+      "steps": [
+        "s12",
+        "s13"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common practice."
+      }
+    },
+    {
+      "description": "Step restoration times and customer counts are entered by hand after the event and drive reliability statistics.",
+      "steps": [
+        "s24"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "scorecard-2021",
+      "title": "Scorecard - Hydro Ottawa Limited (2017-2021) and 2021 Scorecard MD&A",
+      "publisher": "Ontario Energy Board",
+      "url": "https://www.oeb.ca/documents/scorecard/2021/Scorecard%20-%20Hydro%20Ottawa%20Limited.pdf",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Average hours of interruption per customer 0.83 in 2020 and 2021; average interruptions per customer 0.72 in 2020 and 0.62 in 2021 (both excluding loss of supply and major events); one major event in 2021; top outage causes loss of supply, defective equipment and foreign interference; emergency (unplanned) capital $8.57M against a $6.73M budget in 2021."
+    },
+    {
+      "id": "oakville-cro",
+      "title": "Control Room Operator (job posting, closed February 13, 2022)",
+      "publisher": "Oakville Hydro, via The MEARIE Group careers site",
+      "url": "https://mearie.talentnest.com/en/posting/82564",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Ontario distribution control room duties: operate SCADA/ADMS and automated field devices, prepare and direct scheduled and emergency switching and load transfers, deliver Utility Work Protection Code processes, liaise with Hydro One and the IESO on outages and restoration, daily KPI reporting and post-event analysis; MEARIE operator training."
+    },
+    {
+      "id": "ho-600",
+      "title": "600 skilled field workers dispersed across city to restore remaining 29,000 customers - 3:00 PM update",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/news-releases/600-skilled-field-workers-dispersed-across-city-restore-remaining-29000-customers-300",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "About 600 employees and crews working around the clock; 151,000 restored six days after the storm; switching largely done remotely by the System Office; homes with damaged electrical equipment need repairs before reconnection; stay 10 metres from downed lines and call the outage line."
+    },
+    {
+      "id": "ho-blog-2022",
+      "title": "How utilities prepare for emergencies",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/blog/how-utilities-prepare-emergencies",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Emergency Response Plan with year-round simulations; priorities set by health and safety risk, essential services such as hospitals and schools, then densely populated areas; system operators in the control centre on duty 24/7; field operators handle emergency response, outage restoration and single-customer calls; on-call staff, contractors and arborists after hours; automated field devices restore some customers automatically."
+    },
+    {
+      "id": "ho-plt",
+      "title": "Powerline Technician / Hydro Ottawa (job posting, closed February 24, 2025)",
+      "publisher": "Hydro Ottawa, via The MEARIE Group careers site",
+      "url": "https://mearie.talentnest.com/posting/196792",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "PLTs respond to electrical emergencies, outages and reliability problems, diagnose and repair or replace equipment, assist first responders, do switching and live-line work, and provide 24/7 on-call duty on a yearly schedule; IBEW Local 636 collective agreement."
+    },
+    {
+      "id": "me-2021-06",
+      "title": "Hydro Ottawa Limited Major Event: June 14, 2021",
+      "publisher": "Hydro Ottawa",
+      "url": "https://www.hydroottawa.com/en/about-us/regulatory-affairs/major-events/June-14-2021",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Lightning; 17,441 customers (5%); 90% restored by 1:04 am the next day (about 8.5 h); storms forecast; full on-shift staffing and on-call roster; no mutual aid; ETRs through the OMS, outage line and email alerts from one minute after the start."
+    },
+    {
+      "id": "me-2022-06",
+      "title": "Hydro Ottawa Limited Major Event: June 18, 2022",
+      "publisher": "Hydro Ottawa",
+      "url": "https://www.hydroottawa.com/en/about-us/regulatory-affairs/major-events/June-18-2022",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Cable fault on a Hydro One 115 kV supply; 27,405 customers (8%); 90% restored in 2 h 40 min; no warning; full on-shift complement and on-call roster; no mutual aid; first tweet 26 minutes and OMS ETRs 34 minutes after the start."
+    },
+    {
+      "id": "ho-blog-2020",
+      "title": "How Hydro Ottawa powers through summer storm season",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/blog/how-hydro-ottawa-powers-through-summer-storm-season",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "Additional staff put on standby and resources relocated when severe weather is forecast; outages reported through the 24/7 outage line, app and MyAccount; outage map updated every 15 minutes; restoration estimates posted when available."
+    },
+    {
+      "id": "ihsa-uwpc",
+      "title": "Keys to the Utility Work Protection Code (IHSA Health and Safety Magazine)",
+      "publisher": "Infrastructure Health and Safety Association",
+      "url": "https://www.ihsa.ca/IHSA-Health-Safety-Magazine/IHSAV232/Keys-to-the-Utility-Work-Protection-Code.aspx",
+      "year": null,
+      "accessed": "2026-11-24",
+      "supports": "The Electrical Utility Safety Rules govern how workers act near hazards and the Utility Work Protection Code uses permits and tags to show when lines are isolated and safe to work on; permit issuers and workers need training and certification. Publication year not stated on the page."
+    },
+    {
+      "id": "me-2019-07",
+      "title": "Hydro Ottawa Limited Major Event: July 5, 2019",
+      "publisher": "Hydro Ottawa",
+      "url": "https://www.hydroottawa.com/en/about-us/regulatory-affairs/major-events/July-5-2019",
+      "year": 2019,
+      "accessed": "2026-11-24",
+      "supports": "Lightning and loss of supply at four stations; 70,069 customers (21%); longest outage 6 h 35 min; on-call staff, four extra PLTs and control room staff held past end of day; standing service agreements with forestry, civil and lines contractors (not used); Electrical Emergency Response Plan activated with an Incident Command Centre staffed 7:30 pm to 2:00 am; daily SAIDI 12.11 against 5.3."
+    },
+    {
+      "id": "after-storm",
+      "title": "Hydro Ottawa releases its After the Storm report",
+      "publisher": "Hydro Ottawa (via Cision Newswire)",
+      "url": "https://newswire.ca/news-releases/hydro-ottawa-releases-its-after-the-storm-report-815321222.html",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "May 2022 derecho: winds up to 190 km/h; damage across the entire service territory; 1,000 individual outages against 200 after the 2018 tornadoes; more than 1,500 known or reported tree contacts; 180,000 customers out at the peak; estimated cost $23.8M."
+    },
+    {
+      "id": "me-2022-05",
+      "title": "Hydro Ottawa Limited Major Event: May 21, 2022",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/about-us/regulatory-affairs/major-events/may-21-2022",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "Derecho began 3:36 pm May 21, 2022; 90% of interrupted customers restored by 6:00 pm May 28; 180,946 customers interrupted on the day plus 11,528 on later days (54% of customers); about 450 workers including four high-voltage lines contractors, four neighbouring utilities, three forestry, three civil and one communications contractor; mutual assistance through Electricity Canada and EDA channels; no equipment or material shortages; outage map withdrawn and relaunched May 30 with restoration estimates in days; daily SAIDI 2,308.27 against an IEEE 1366 threshold of 5.05; only a Severe Thunderstorm Watch at 2:12 pm before outages began; company-wide debrief under way."
+    },
+    {
+      "id": "me-index",
+      "title": "Major events (list of Hydro Ottawa major event reports)",
+      "publisher": "Hydro Ottawa",
+      "url": "https://hydroottawa.com/en/about-us/regulatory-affairs/major-events",
+      "year": 2026,
+      "accessed": "2026-11-24",
+      "supports": "Major events listed by date: three in 2019 (April 15, July 5, November 1), two in 2020 (March 7, October 18), one in 2021 (June 14), three in 2022 (May 21, June 18, December 23); after a major event the utility files a report with the OEB normally within 60 days of occurrence."
+    }
+  ],
+  "assumptions": [
+    "Volumes are crew-level events in ordinary weather; storm events arrive through the surge and the major event workflow.",
+    "Crews are three journeypersons plus an apprentice on overhead work, recorded as people on the journeyperson step and a concurrent apprentice step; cable crews are three splicers.",
+    "System operator minutes on these events are counted here (about 1 FTE); continuous desk monitoring is in edu-ops-system-monitoring.",
+    "Underground equipment failures are reviewed by the underground supervisor in the same way as the overhead review step, which is recorded against the lines supervisor for simplicity.",
+    "Buried cable faults leave this workflow after assessment; their locating, excavation and splicing are documented in ops-cable-fault-repair.",
+    "The simulated median (about 1.5 days) is mostly the wait for the supervisor's next-business-day review; the last customer on a crew-level event is restored in a simulated median of about 7 hours (p90 about 11), consistent with crew repairs taking far longer than the 1.15-1.34 hour average interruption per customer, which includes customers restored by switching within minutes.",
+    "Loaded costs come from the organisation file (wage x 1.40). The share of events by branch is the author's estimate; no published breakdown was found."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

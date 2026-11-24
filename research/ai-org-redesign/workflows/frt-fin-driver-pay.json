@@ -1,0 +1,1397 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-fin-driver-pay",
+  "name": "Calculate company driver pay",
+  "org": "freight-carrier-co",
+  "process": "fin-driver-pay",
+  "sector": "trucking and freight transportation",
+  "function": "finance (settlements)",
+  "summary": "Every two weeks the carrier works out what each of its roughly 1,200 company drivers earned. City pickup and delivery drivers are paid by the hour from timecards that terminal supervisors approve; linehaul and truckload drivers are paid by the mile with extra pay for stops, delays, detention and layovers that supervisors and driver managers approve. Settlements clerks check claims against electronic log data, build the pay record, and send an approved file to payroll. Pay rules are complex and claims arrive by message and phone, so missing trips and unpaid waiting time come back as driver complaints after payday.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees, federally regulated for its extra-provincial trucking, with about 540 hourly city drivers, 240 linehaul drivers and 430 truckload drivers paid biweekly.",
+    "org_size_employees": 3000,
+    "notes": "The workflow starts at the close of a pay period and ends when the driver's pay is in the payroll run, or after a later dispute is settled. Deductions, deposits and remittances are in the payroll run."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one driver pay record (one driver for one biweekly pay period)",
+  "trigger": "The biweekly pay period closes with the driver's trips, timecards and claims recorded in the TMS.",
+  "end_state": "The driver's pay record is approved and in the payroll run, or a later pay dispute is explained or adjusted.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2900,
+      "mode": 3250,
+      "high": 3600
+    },
+    "seasonality": "Steady; more delay and layover claims in winter storms and spring road restrictions, more drivers in the autumn peak.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "About 1,210 company drivers in the organisation file paid biweekly: 1,210 x 26 / 12 = about 2,620 records a month. The organisation file links this volume to all employees, but only drivers are counted."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ltl-linehaul-dispatch",
+        "object": "trip_record",
+        "share": 0.2
+      },
+      {
+        "from": "tl-trip-execution",
+        "object": "trip_record",
+        "share": 0.3
+      },
+      {
+        "from": "tl-detention-accessorials",
+        "object": "accessorial_charge",
+        "share": 0.05
+      },
+      {
+        "from": "ltl-pd-dispatch",
+        "object": "driver_timecard",
+        "share": 0.45
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "paid_as_calculated",
+        "to": "hr-payroll-run",
+        "object": "driver_pay_record"
+      },
+      {
+        "outcome": "adjusted",
+        "to": "hr-payroll-run",
+        "object": "driver_pay_record"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "settlements-clerk",
+      "title": "Driver pay and owner-operator settlements clerk",
+      "department": "Finance",
+      "layer": "individual_contributor",
+      "fte_on_process": 3.7,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 33,
+        "high": 39
+      },
+      "occupation_code": "NOC 13102",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 11 hands-on minutes per record times 2,650 records a month is about 3.7 FTE of the 10 settlements clerks; the rest do owner-operator settlements."
+      }
+    },
+    {
+      "id": "driver-manager",
+      "title": "Driver manager (fleet manager)",
+      "department": "Truckload fleet operations",
+      "layer": "individual_contributor",
+      "fte_on_process": 1.9,
+      "loaded_cost_per_hour": {
+        "low": 36,
+        "mode": 43,
+        "high": 52
+      },
+      "occupation_code": "NOC 14404",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves truckload drivers' add-on pay and answers queries; about 1.9 FTE spread across 36 driver managers."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "terminal-ops-supervisor",
+      "title": "Terminal operations supervisor",
+      "department": "LTL terminal network",
+      "layer": "supervisor",
+      "fte_on_process": 1.1,
+      "loaded_cost_per_hour": {
+        "low": 46,
+        "mode": 54,
+        "high": 64
+      },
+      "occupation_code": "NOC 72024",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves city drivers' timecards across 38 terminals; not listed in the organisation file's process entry."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "linehaul-supervisor",
+      "title": "Linehaul driver supervisor",
+      "department": "Linehaul driver pool",
+      "layer": "supervisor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 58,
+        "high": 68
+      },
+      "occupation_code": "NOC 72024",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves linehaul trip sheets and delay pay; not listed in the organisation file's process entry."
+      },
+      "shift_pattern": "extended_hours"
+    },
+    {
+      "id": "finance-manager",
+      "title": "Finance operations manager",
+      "department": "Finance",
+      "layer": "manager",
+      "fte_on_process": 0.1,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 82,
+        "high": 98
+      },
+      "occupation_code": "NOC 10010",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approves the pay register each period; not listed in the organisation file's process entry."
+      }
+    },
+    {
+      "id": "payroll-administrator",
+      "title": "Payroll administrator",
+      "department": "Human resources",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.2,
+      "loaded_cost_per_hour": {
+        "low": 32,
+        "mode": 38,
+        "high": 45
+      },
+      "occupation_code": "NOC 13102",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Imports and reconciles the driver pay file; not listed in the organisation file's process entry."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "eld-telematics",
+      "name": "Electronic logging devices and telematics platform",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "dock-handheld",
+      "name": "Dock and driver handheld scanning",
+      "kind": "instrument"
+    },
+    {
+      "id": "route-planner",
+      "name": "City route planning and dispatch board",
+      "kind": "workflow"
+    },
+    {
+      "id": "fuel-card",
+      "name": "Fuel card portal",
+      "kind": "external_portal"
+    },
+    {
+      "id": "hris-payroll",
+      "name": "HR information and payroll system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "bi-reporting",
+      "name": "Business intelligence reporting",
+      "kind": "analytics"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Close the pay period and pull the driver's work",
+      "description": "At the end of the two-week pay period the TMS closes the period and gathers, for each company driver, the dispatched trips with their miles, stops and border crossings, the city drivers' daily timecards and the electronic log on-duty totals, and opens a pay record for the driver.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "trip records",
+        "driver timecards",
+        "ELD on-duty hours"
+      ],
+      "outputs": [
+        "open driver pay record"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 720
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A trip finished just before the cut-off is left out of the period.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.45,
+          "condition": "hourly city pickup and delivery driver"
+        },
+        {
+          "to": "s05",
+          "prob": 0.55,
+          "condition": "mileage-paid linehaul or truckload driver"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Biweekly pay for about 1,210 company drivers gives about 2,620 records a month; 540 of them are hourly city drivers. Driver counts from the organisation file; pay frequency is the author's estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Approve city drivers' daily timecards",
+      "description": "The terminal operations supervisor reviews each city driver's punches for the period against the route start and finish times on the dispatch board, approves normal days and marks days with missed punches or unusually long hours for correction.",
+      "role": "terminal-ops-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "driver timecards",
+        "route times"
+      ],
+      "outputs": [
+        "approved timecards"
+      ],
+      "systems": [
+        "tms",
+        "route-planner"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A long day approved without checking the reason.",
+        "typically_caught_at": "s12"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Terminal timecard approval before payroll",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.9,
+          "condition": "all days approved"
+        },
+        {
+          "to": "s03",
+          "prob": 0.1,
+          "condition": "missed punch or unexplained hours"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times and the 10% exception share are the author's estimates."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Correct missed punches from handheld and log data",
+      "description": "The supervisor compares the driver's handheld first and last scans and electronic log on-duty times with the timecard, talks to the driver, and enters the corrected start or end time with a note.",
+      "role": "terminal-ops-supervisor",
+      "kind": "validation",
+      "inputs": [
+        "timecard exception",
+        "handheld scans",
+        "ELD on-duty times"
+      ],
+      "outputs": [
+        "corrected timecard"
+      ],
+      "systems": [
+        "tms",
+        "dock-handheld",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Corrected time does not match the driver's recollection, leading to a pay query.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "corrected"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Calculate hourly pay and overtime",
+      "description": "The TMS pay module multiplies approved hours by the driver's rate and applies the overtime thresholds for city operators (over 9 hours a day or 45 a week) or, for drivers who also drove highway trips that week, the 60-hour threshold of the class worked most.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved timecards",
+        "pay rates"
+      ],
+      "outputs": [
+        "calculated hourly pay"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Canada Labour Code Part III and Motor Vehicle Operators Hours of Work Regulations, ss. 5 to 7 (standard hours for city and highway operators)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.92,
+          "condition": "no discrepancy"
+        },
+        {
+          "to": "s10",
+          "prob": 0.08,
+          "condition": "hours conflict with log or rate missing"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-mvohwr"
+        ],
+        "note": "City motor vehicle operators: standard hours up to 9 a day and 45 a week; highway operators up to 60 a week; mixed weeks follow the class worked most."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Calculate trip pay from dispatched trips",
+      "description": "The pay module prices each trip in the period from the driver's pay scale: miles from the carrier's mileage table between dispatched points, extra stops, drops and hooks, border crossings and any hourly pay codes already entered by dispatch.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "trip records",
+        "mileage table",
+        "driver pay scale"
+      ],
+      "outputs": [
+        "calculated trip pay"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Mileage table distance shorter than the route driven, which the driver later disputes.",
+        "typically_caught_at": "s16"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.364,
+          "condition": "linehaul driver"
+        },
+        {
+          "to": "s07",
+          "prob": 0.636,
+          "condition": "truckload driver"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fleetowner",
+          "src-tn-2025"
+        ],
+        "note": "Per-mile activity pay is the trucking norm, with small add-ons for delays and border crossings; the linehaul and truckload split follows the organisation file's driver counts."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Approve linehaul trip sheets and delay pay",
+      "description": "The linehaul driver supervisor reviews the driver's runs for the period, approves hourly pay claimed for delays at hubs, breakdowns, weather holds and road closures, and rejects claims the dispatch notes do not support.",
+      "role": "linehaul-supervisor",
+      "kind": "approval",
+      "inputs": [
+        "calculated trip pay",
+        "delay pay claims",
+        "dispatch notes"
+      ],
+      "outputs": [
+        "approved linehaul pay"
+      ],
+      "systems": [
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Delay claim approved twice across two periods.",
+        "typically_caught_at": "s12"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Supervisor approval of non-mileage pay codes",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.85,
+          "condition": "claims supported"
+        },
+        {
+          "to": "s08",
+          "prob": 0.15,
+          "condition": "claim needs checking against the log"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Review truckload trips and approve detention and layover pay",
+      "description": "The driver manager reviews each of the driver's loads for the period and approves detention after the free time at shippers and receivers, layover days, extra stops, tarping and breakdown pay that the driver claimed by in-cab message, checking them against what dispatch recorded.",
+      "role": "driver-manager",
+      "kind": "approval",
+      "inputs": [
+        "calculated trip pay",
+        "driver pay claims",
+        "detention records"
+      ],
+      "outputs": [
+        "approved truckload pay"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A claim the driver sent by message is missed.",
+        "typically_caught_at": "s16"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Driver manager approval of accessorial pay",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.75,
+          "condition": "claims supported"
+        },
+        {
+          "to": "s08",
+          "prob": 0.25,
+          "condition": "claim needs checking against the log"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-tn-2020",
+          "src-tn-2025"
+        ],
+        "note": "Canadian long-haul pay is mileage plus hourly pay for wait time at many fleets; detention pay is received by 45% of surveyed drivers. Times and shares are the author's estimates."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Check pay claims against electronic log data",
+      "description": "The settlements clerk opens the driver's electronic log and telematics stop history for the claimed delay, confirms arrival and departure times at the site and the on-duty status, and approves, reduces or rejects the claim with a note.",
+      "role": "settlements-clerk",
+      "kind": "validation",
+      "inputs": [
+        "pay claim",
+        "ELD and telematics records"
+      ],
+      "outputs": [
+        "verified pay claim"
+      ],
+      "systems": [
+        "eld-telematics",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Arrival taken from the wrong stop.",
+        "typically_caught_at": "s16"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Pay claims verified against ELD records before payment",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 0.85,
+          "condition": "verified"
+        },
+        {
+          "to": "s10",
+          "prob": 0.15,
+          "condition": "times do not support the claim"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fleetowner"
+        ],
+        "note": "ELD and telematics data give an audit trail of detention time. Before the ELD mandate (June 2021) this check used paper logs and took longer; shares are the author's estimates."
+      },
+      "concurrent_with": [
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "id": "s09",
+      "name": "Build and check the mileage driver's pay record",
+      "description": "The settlements clerk reviews the calculated trips and approved add-ons, applies any guaranteed minimum, overtime past 60 hours for highway operators, advances taken on the fuel card and other deductions, and checks that every dispatched trip in the period is on the record.",
+      "role": "settlements-clerk",
+      "kind": "analysis",
+      "inputs": [
+        "approved trip pay",
+        "advances and deductions"
+      ],
+      "outputs": [
+        "driver pay record"
+      ],
+      "systems": [
+        "tms",
+        "fuel-card",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 360,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Advance not deducted or a trip left off.",
+        "typically_caught_at": "s16"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Motor Vehicle Operators Hours of Work Regulations, s. 6 and s. 7 (60-hour standard for highway operators)",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 0.92,
+          "condition": "complete"
+        },
+        {
+          "to": "s10",
+          "prob": 0.08,
+          "condition": "discrepancy found"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-mvohwr",
+          "src-fleetowner"
+        ],
+        "note": "Highway operators' standard hours are up to 60 a week; per-mile pay is confusing for drivers. Times are the author's estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Send a pay discrepancy query",
+      "description": "The settlements clerk sends the driver manager or supervisor the driver's name, the trip or day in question and what does not match, such as a trip missing from the period, hours above the log total or a pay rate not set up.",
+      "role": "settlements-clerk",
+      "kind": "communication",
+      "inputs": [
+        "discrepancy"
+      ],
+      "outputs": [
+        "pay query"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Answer the pay query after checking with the driver",
+      "description": "The driver manager or supervisor checks dispatch notes and, if needed, messages the driver, then replies with the corrected trip, hours or rate so the clerk can finish the record before the payroll cut-off.",
+      "role": "driver-manager",
+      "kind": "communication",
+      "inputs": [
+        "pay query"
+      ],
+      "outputs": [
+        "answer to pay query"
+      ],
+      "systems": [
+        "email-phone",
+        "eld-telematics",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "answered"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Driver managers handle pay queries between dispatch work; for city drivers the terminal supervisor answers. Author's estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Review the pay variance report",
+      "description": "The settlements clerk runs the variance report that compares each driver's gross pay with recent periods and flags negative pay, very large add-ons or a driver with no pay, and rechecks the flagged records.",
+      "role": "settlements-clerk",
+      "kind": "review",
+      "inputs": [
+        "driver pay records"
+      ],
+      "outputs": [
+        "checked pay records"
+      ],
+      "systems": [
+        "tms",
+        "bi-reporting"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 3
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 480
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.97,
+          "condition": "no issue"
+        },
+        {
+          "to": "s09",
+          "prob": 0.03,
+          "condition": "record reopened"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Approve the driver pay register",
+      "description": "The finance operations manager reviews the pay register totals by terminal and division against the previous period and the trip and hour statistics, and approves the register for export. One approval covers all drivers in the run.",
+      "role": "finance-manager",
+      "kind": "approval",
+      "inputs": [
+        "pay register"
+      ],
+      "outputs": [
+        "approved pay register"
+      ],
+      "systems": [
+        "tms",
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 0.05,
+        "mode": 0.1,
+        "high": 0.3
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Payroll register approved by someone other than the clerks who calculate pay",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Per-record share of a register review of about 1,200 drivers; author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Export pay records to payroll",
+      "description": "The TMS creates the pay file with each driver's earnings by pay code and sends it to the payroll system before the payroll cut-off.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "approved pay register"
+      ],
+      "outputs": [
+        "driver pay file"
+      ],
+      "systems": [
+        "tms",
+        "hris-payroll"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 360
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; author's estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Import and reconcile the driver pay file",
+      "description": "The payroll administrator imports the file, reconciles the record count and gross totals to the approved register and resolves employees whose numbers do not match the payroll master, before the payroll run calculates deductions and deposits.",
+      "role": "payroll-administrator",
+      "kind": "review",
+      "inputs": [
+        "driver pay file",
+        "approved pay register"
+      ],
+      "outputs": [
+        "driver pay in payroll"
+      ],
+      "systems": [
+        "hris-payroll"
+      ],
+      "touch_min": {
+        "low": 0.2,
+        "mode": 0.4,
+        "high": 1
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 360,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Payroll interface reconciliation (financial reporting controls)",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.9,
+          "condition": "paid as calculated",
+          "outcome": "paid_as_calculated"
+        },
+        {
+          "to": "s16",
+          "prob": 0.1,
+          "condition": "driver queries the pay statement"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Log the driver's query about the pay statement",
+      "description": "After payday the driver calls or messages the driver manager or terminal supervisor that a trip, stop, detention or overtime is missing or wrong; the manager logs the query with the trip details and sends it to settlements.",
+      "role": "driver-manager",
+      "kind": "communication",
+      "inputs": [
+        "driver pay statement",
+        "driver complaint"
+      ],
+      "outputs": [
+        "pay dispute"
+      ],
+      "systems": [
+        "email-phone",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 7200,
+        "high": 12960
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fleetowner",
+          "src-tn-2025"
+        ],
+        "note": "Drivers' pay complaints come from complex pay systems and unpaid work; 42% of surveyed fleets have no policy for paying non-driving tasks. Query share is the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Investigate the pay dispute",
+      "description": "The settlements clerk reopens the period, compares the statement with dispatch, the log and the pay scale, and decides whether the driver was underpaid, overpaid or paid correctly, writing back to the manager with the reason.",
+      "role": "settlements-clerk",
+      "kind": "analysis",
+      "inputs": [
+        "pay dispute",
+        "pay record",
+        "ELD records"
+      ],
+      "outputs": [
+        "dispute decision"
+      ],
+      "systems": [
+        "tms",
+        "eld-telematics",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.7,
+          "condition": "pay was wrong"
+        },
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "pay was correct, explained to driver",
+          "outcome": "paid_as_calculated"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Enter the pay adjustment for the next run",
+      "description": "The settlements clerk enters the adjustment with its reason code so it is paid on the next pay date, or flags it for an off-cycle payment when the amount is large.",
+      "role": "settlements-clerk",
+      "kind": "data_entry",
+      "inputs": [
+        "dispute decision"
+      ],
+      "outputs": [
+        "pay adjustment"
+      ],
+      "systems": [
+        "tms",
+        "hris-payroll"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "adjusted",
+          "outcome": "adjusted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Missed punch on a city driver's timecard",
+      "share_of_cases": 0.045,
+      "description": "The supervisor rebuilds the start or end time from handheld scans and the log before pay can be calculated.",
+      "path": [
+        "s02",
+        "s03",
+        "s04"
+      ]
+    },
+    {
+      "name": "Delay or detention claim checked against the log",
+      "share_of_cases": 0.12,
+      "description": "A claim for detention, breakdown or weather delay is checked against ELD and telematics stop times before it is paid.",
+      "path": [
+        "s07",
+        "s08",
+        "s09"
+      ]
+    },
+    {
+      "name": "Pay discrepancy before cut-off",
+      "share_of_cases": 0.1,
+      "description": "A missing trip, hours above the log or a missing rate is queried with the driver manager before the payroll cut-off.",
+      "path": [
+        "s10",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Driver disputes the pay statement",
+      "share_of_cases": 0.1,
+      "description": "After payday the driver reports a missing trip or unpaid waiting time; settlements investigates and adjusts the next pay.",
+      "path": [
+        "s15",
+        "s16",
+        "s17",
+        "s18"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 2,
+        "p90": 4
+      },
+      "unit": "calendar days from pay period close to driver pay in the payroll run",
+      "population": "Canadian carrier paying company drivers biweekly, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Payroll cut-off is usually two to three business days after period close so pay can be deposited about a week after it; author's estimate."
+      }
+    },
+    {
+      "metric": "drivers_receiving_detention_pay",
+      "value": 0.453,
+      "unit": "share of surveyed drivers and carriers",
+      "population": "Trucknews.com reader survey of 401 respondents, 2025",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-tn-2025"
+        ],
+        "note": "Reader survey, not a random sample; after the 2019-2022 period."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Mileage pay with many add-on codes is hard for drivers to check, and claims sent by message are missed, so pay complaints arrive after payday.",
+      "steps": [
+        "s05",
+        "s07",
+        "s16",
+        "s17"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fleetowner"
+        ],
+        "note": "Per-mile pay is inconsistent and confusing for drivers; consistency of pay matters for retention."
+      }
+    },
+    {
+      "description": "Waiting time and detention are paid unevenly and each claim has to be checked against log data.",
+      "steps": [
+        "s07",
+        "s08"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-tn-2025",
+          "src-fleetowner"
+        ],
+        "note": "45% of surveyed respondents receive detention pay; ELD data provides the audit trail for detention."
+      }
+    },
+    {
+      "description": "Approvals by supervisors and driver managers who are busy dispatching hold up the payroll cut-off.",
+      "steps": [
+        "s02",
+        "s06",
+        "s07",
+        "s11"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from common carrier practice."
+      }
+    }
+  ],
+  "assumptions": [
+    "Company drivers are paid biweekly; city pickup and delivery drivers by the hour, linehaul and truckload drivers by the mile with hourly or flat add-ons, following the hybrid pay that Trucking HR Canada describes.",
+    "The carrier is federally regulated, so overtime follows the Canada Labour Code and the Motor Vehicle Operators Hours of Work Regulations (45 hours a week for city operators, 60 for highway operators) rather than provincial employment standards.",
+    "Hands-on time is about 11 settlements clerk minutes per record (about 3.7 FTE), plus supervisor and driver manager approvals; the organisation file's 10 settlements clerks also handle about 1,650 owner-operator settlements a month.",
+    "Terminal operations supervisors, linehaul supervisors, the finance operations manager and payroll administrators take part although the organisation file's process entry lists only settlements clerks and driver managers.",
+    "Before the ELD mandate took effect in June 2021 many claims were checked against paper logs, which took longer than the times shown.",
+    "Shares of the triggers follow the driver mix: 45% city drivers (split between pickup and delivery timecards), 20% linehaul, 30% truckload trips and 5% records started by a detention record.",
+    "The cycle-time benchmark covers period close to payroll; the simulated p90 (about 8 days) is longer because it includes the 10% of records disputed by the driver after payday.",
+    "Loaded costs come from the organisation file.",
+    "Organisation file corrected on 2026-11-24: driver_timecard now comes from ltl-pd-dispatch, once per driver-day, as the pickup and delivery workflows record; it previously came from each pickup and delivery stop.",
+    "Organisation file corrected on 2026-11-24: driver pay records now follow the 1510 employed drivers paid every two weeks, about 3250 a month (previously 2,650, which fitted about 1,210 drivers)."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  },
+  "sources": [
+    {
+      "id": "src-mvohwr",
+      "title": "Motor Vehicle Operators Hours of Work Regulations (C.R.C., c. 990)",
+      "publisher": "Government of Canada, Justice Laws Website",
+      "url": "https://laws-lois.justice.gc.ca/eng/regulations/C.R.C.,_c._990/FullText.html",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "For federally regulated (extra-provincial) carriers: a city motor vehicle operator works exclusively within 10 miles of the home terminal and has standard hours of no more than 9 a day and 45 a week (s. 5); a highway motor vehicle operator has standard hours of no more than 60 a week (s. 6); an employee who works in more than one class in a week takes the standard hours of the class worked most, and hours over 60 count as overtime (s. 7)."
+    },
+    {
+      "id": "src-fleetowner",
+      "title": "Dynamics of truck driver pay",
+      "publisher": "FleetOwner (Cristina Commendatore)",
+      "url": "https://www.fleetowner.com/fleet-management/article/21164046/dynamics-of-truck-driver-pay",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "Per-mile activity-based pay is the trucking norm and is inconsistent and confusing for drivers; detention pay usually starts after a two-hour window; ELD and telematics data give an audit trail for detention that ended 'he said, she said' disputes; drivers' pay complaints come from complex pay systems and uncompensated work; consistency of pay matters for retention."
+    },
+    {
+      "id": "src-tn-2020",
+      "title": "What drives trucker compensation low?",
+      "publisher": "Trucknews.com",
+      "url": "https://www.trucknews.com/transportation/what-drives-trucker-compensation-low/1003146047",
+      "year": 2020,
+      "accessed": "2026-11-24",
+      "supports": "Trucking HR Canada says most employers in its Top Fleet Employer programme pay long-haul drivers a hybrid of mileage pay and hourly pay for wait time, and its 2019 employer survey showed a trend away from mileage pay; drivers say they are not paid for all their work."
+    },
+    {
+      "id": "src-tn-2025",
+      "title": "Pulse Survey: Readers speak out on unpaid on-duty tasks",
+      "publisher": "Trucknews.com",
+      "url": "https://www.trucknews.com/transportation/pulse-survey-readers-speak-out-on-unpaid-on-duty-tasks/1003201880",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "Reader survey of 401 Canadian drivers and carriers: 45.3% receive detention pay; over half face detention frequently; 35% typically wait one to two hours and 24% two hours or more; pay structures mix mileage, hourly pay for non-driving tasks, percentage of revenue and small add-ons for delays or border crossings; 42% say their company has no policy for paying non-driving tasks."
+    }
+  ]
+}

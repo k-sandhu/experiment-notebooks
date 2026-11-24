@@ -1,0 +1,1572 @@
+{
+  "schema_version": "0.3",
+  "id": "frt-sls-pricing-quotes",
+  "name": "Price quotes and customer rate agreements",
+  "org": "freight-carrier-co",
+  "process": "sls-pricing-quotes",
+  "sector": "trucking (less-than-truckload and truckload freight)",
+  "function": "sales and pricing",
+  "summary": "The pricing desk turns requests from shippers and account executives into prices the billing system can apply. Most requests are spot quotes for one shipment or a few weeks of volume, which an analyst rates against the tariff, records as a quote number and emails the same day. About a quarter are account proposals, where the analyst costs the customer's shipment history lane by lane, sets a discount within an authority matrix, and the account executive presents it; accepted proposals are loaded into the rating engine and audited. The work is slowed by incomplete shipment details, approval queues and customers who take weeks to decide, and errors in recording quotes or loading discounts turn into billing disputes and rebills months later.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A Canadian LTL and truckload carrier of about 3,000 employees with a central pricing desk of ten analysts, a pricing manager, and 32 account executives who sell regionally.",
+    "org_size_employees": 3000,
+    "notes": "Describes the LTL pricing desk; truckload spot quotes follow a shorter version of the spot path. Costing uses spreadsheets and a costing model fed from the TMS rather than a dedicated pricing optimisation tool, as was common in 2019-2022."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one quote or pricing request",
+  "trigger": "A shipper or an account executive sends a request for a price on one or more lanes.",
+  "end_state": "A quote is sent with a quote number recorded in the rating engine, or an accepted proposal is loaded and audited in the rating engine, or the proposal is declined or lapses.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2000,
+      "mode": 2500,
+      "high": 3200
+    },
+    "seasonality": "Busier from August to November as shippers plan peak and budget for the coming year, quieter in July and late December; 2020 dipped in April and May during lockdowns.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Volume taken from the organisation file process entry (about one pricing request per four active accounts a month); not checked against a published figure."
+    },
+    "surge": {
+      "cause": "General rate increase and contract renewal season (shippers re-tender and ask for new quotes after the GRI notice)",
+      "events_per_year": {
+        "low": 1,
+        "mode": 1,
+        "high": 1
+      },
+      "duration_days": {
+        "low": 30,
+        "mode": 45,
+        "high": 60
+      },
+      "volume_multiplier": {
+        "low": 1.2,
+        "mode": 1.4,
+        "high": 1.8
+      },
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fw-gri"
+        ],
+        "note": "FreightWaves says GRIs are announced in Q3 or Q4 and take effect in Q1, and that only 20% to 25% of LTL revenue is subject to them, so the GRI itself creates little quoting work; the multiplier is the author's estimate and is lower than the organisation file's 2 to 4."
+      }
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "shipper",
+        "object": "quote_request",
+        "share": 0.7
+      },
+      {
+        "from": "sls-account-acquisition",
+        "object": "quote_request",
+        "share": 0.3
+      }
+    ],
+    "inputs": [
+      {
+        "from": "ltl-network-planning",
+        "object": "network_plan"
+      },
+      {
+        "from": "fin-fuel-surcharge",
+        "object": "fuel_surcharge_table"
+      },
+      {
+        "from": "fin-billing-corrections",
+        "object": "pricing_error_report"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "quote_issued",
+        "to": "shipper",
+        "object": "rate_quote"
+      },
+      {
+        "outcome": "quote_issued",
+        "to": "fin-rating-invoicing",
+        "object": "rate_quote"
+      },
+      {
+        "outcome": "agreement_loaded",
+        "to": "shipper",
+        "object": "rate_agreement"
+      },
+      {
+        "outcome": "agreement_loaded",
+        "to": "fin-rating-invoicing",
+        "object": "rate_agreement"
+      },
+      {
+        "outcome": "agreement_loaded",
+        "to": "sls-rfp-response",
+        "object": "rate_quote"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "pricing-analyst",
+      "title": "Pricing analyst",
+      "department": "Sales and customer service",
+      "layer": "senior_specialist",
+      "fte_on_process": 8.0,
+      "loaded_cost_per_hour": {
+        "low": 45,
+        "mode": 54,
+        "high": 66
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lineage-job",
+          "src-fastfrate-job"
+        ],
+        "note": "Eight of the ten analysts' time on quotes and proposals; the rest goes to RFP responses and renewals. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      }
+    },
+    {
+      "id": "account-executive",
+      "title": "Account executive",
+      "department": "Sales and customer service",
+      "layer": "individual_contributor",
+      "fte_on_process": 4.0,
+      "loaded_cost_per_hour": {
+        "low": 50,
+        "mode": 62,
+        "high": 78
+      },
+      "occupation_code": "NOC 64101",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 12% of 32 account executives' time spent chasing details and presenting proposals. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      }
+    },
+    {
+      "id": "pricing-manager",
+      "title": "Pricing manager",
+      "department": "Sales and customer service",
+      "layer": "manager",
+      "fte_on_process": 0.4,
+      "loaded_cost_per_hour": {
+        "low": 80,
+        "mode": 95,
+        "high": 115
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "About 40% of the pricing manager's time on approvals. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      }
+    },
+    {
+      "id": "network-analyst",
+      "title": "Network and pricing-cost analyst",
+      "department": "LTL network planning and linehaul control",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 48,
+        "mode": 58,
+        "high": 72
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Lane and cost checks for about a quarter of proposals; not listed on this process in the organisation file. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      }
+    },
+    {
+      "id": "vp-sales",
+      "title": "Vice-president, sales and marketing",
+      "department": "Sales and customer service",
+      "layer": "executive",
+      "fte_on_process": 0.03,
+      "loaded_cost_per_hour": {
+        "low": 130,
+        "mode": 160,
+        "high": 200
+      },
+      "occupation_code": "NOC 00012",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Occasional approval of strategic deals; not listed on this process in the organisation file. Loaded cost from the organisation file (wage x 1.35 for salaried office staff)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "crm",
+      "name": "Customer relationship management system",
+      "kind": "workflow"
+    },
+    {
+      "id": "tms",
+      "name": "Transportation management system (LTL and truckload operations, billing, rating)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "rating-engine",
+      "name": "Rating engine and tariff tables",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "bi-reporting",
+      "name": "Business intelligence reporting",
+      "kind": "analytics"
+    },
+    {
+      "id": "spreadsheets",
+      "name": "Spreadsheets",
+      "kind": "spreadsheet"
+    },
+    {
+      "id": "email-phone",
+      "name": "Email, phone system and contact centre software",
+      "kind": "communication"
+    },
+    {
+      "id": "linehaul-planner-tool",
+      "name": "Linehaul load planning tool and planning spreadsheets",
+      "kind": "spreadsheet"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Receive and log pricing request",
+      "description": "A pricing analyst opens the shared pricing inbox or the CRM request queue, where requests arrive from shippers directly or from account executives after a sales call. The analyst creates or opens the request record in the CRM, links it to the customer account if one exists and notes the requested lanes, due date and requester.",
+      "role": "pricing-analyst",
+      "kind": "intake",
+      "inputs": [
+        "quote request email or CRM request"
+      ],
+      "outputs": [
+        "logged pricing request"
+      ],
+      "systems": [
+        "crm",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 6
+      },
+      "wait_before_min": {
+        "low": 10,
+        "mode": 90,
+        "high": 900
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Request linked to the wrong customer account or bill-to number.",
+        "typically_caught_at": "s04"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lineage-job",
+          "src-fastfrate-job"
+        ],
+        "note": "Postings describe pricing analysts handling spot quotes and pricing requests from sales and customers; queue time is the author's estimate for a desk that works weekday office hours, so evening requests wait overnight."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Check shipment details are complete",
+      "description": "The analyst checks that the request gives origin and destination postal codes, pieces, weight, dimensions or density, commodity, dangerous goods flags, accessorials such as liftgate or appointment, and expected frequency. Without dimensions the analyst cannot price on density, which is how most Canadian LTL pricing is set.",
+      "role": "pricing-analyst",
+      "kind": "validation",
+      "inputs": [
+        "logged pricing request"
+      ],
+      "outputs": [
+        "checked request"
+      ],
+      "systems": [
+        "crm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 15
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Missing or understated dimensions accepted, so the quote assumes a better density than the freight has.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.82,
+          "condition": "details complete"
+        },
+        {
+          "to": "s03",
+          "prob": 0.18,
+          "condition": "dimensions, volume or accessorials missing"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Share of incomplete requests (18%) is the author's estimate from common pricing desk practice."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Chase missing shipment details",
+      "description": "The account executive, or the analyst for shipper-direct requests routed back to sales, emails or calls the shipper for the missing dimensions, commodity or volume. The request waits until the shipper replies, often a day or more, and is then re-checked.",
+      "role": "account-executive",
+      "kind": "communication",
+      "inputs": [
+        "checked request"
+      ],
+      "outputs": [
+        "completed shipment details"
+      ],
+      "systems": [
+        "email-phone",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 960,
+        "high": 4320
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "details received"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Shipper reply time of hours to three days is the author's estimate."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Review customer history and current pricing",
+      "description": "The analyst looks up the customer's last 12 months of shipments in the TMS, the current discount or contract in the rating engine, revenue and margin in the BI reports, and any credit hold. This shows whether the request is a new lane for an existing customer, a re-price, or a prospect with no history.",
+      "role": "pricing-analyst",
+      "kind": "lookup",
+      "inputs": [
+        "checked request"
+      ],
+      "outputs": [
+        "customer pricing context"
+      ],
+      "systems": [
+        "tms",
+        "rating-engine",
+        "bi-reporting"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 3,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common pricing desk practice; touch time is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Decide spot quote or account proposal",
+      "description": "The analyst decides whether the request is a one-off or short-term spot quote that can be rated against the tariff within spot guidelines, or an account proposal that needs a costed shipment profile. Requests from account acquisition and multi-lane re-prices go to the proposal path.",
+      "role": "pricing-analyst",
+      "kind": "judgment",
+      "inputs": [
+        "customer pricing context"
+      ],
+      "outputs": [
+        "quote type"
+      ],
+      "systems": [
+        "crm"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 2
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A multi-lane request treated as a spot quote, so it is priced without costing.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 0.78,
+          "condition": "spot or short-term quote"
+        },
+        {
+          "to": "s09",
+          "prob": 0.22,
+          "condition": "account proposal"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Split of 78% spot and 22% proposals is the author's estimate; it reflects that most pricing requests are single-shipment or short-term volume quotes."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Rate the shipment and set the spot price",
+      "description": "The analyst runs the shipment through the rating engine at the base tariff, checks whether the lane is a headhaul or backhaul in the network plan, applies a discount within the spot floor, and adds the fuel surcharge and accessorials. Backhaul lanes get deeper discounts to fill empty trailers.",
+      "role": "pricing-analyst",
+      "kind": "analysis",
+      "inputs": [
+        "shipment details",
+        "tariff",
+        "network plan",
+        "fuel surcharge table"
+      ],
+      "outputs": [
+        "spot price"
+      ],
+      "systems": [
+        "rating-engine",
+        "linehaul-planner-tool"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 5,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 10,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong class or density assumption, or a lane priced without checking balance.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Pricing department discount guidelines for spot quotes (analyst may quote within published spot floors)",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lineage-job",
+          "src-fastfrate-job"
+        ],
+        "note": "Postings list spot quotes and one-off rate requests as core analyst work; the lane balance check is common LTL practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Record the spot quote in the rating engine",
+      "description": "The analyst creates a quote number in the rating engine with the lane, weight break, price, accessorials and an expiry date, usually 30 days, so that billing rates the shipment at the quoted price when the bill of lading shows the quote number. Quotes not recorded or recorded on the wrong account are rated at full tariff and later disputed.",
+      "role": "pricing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "spot price"
+      ],
+      "outputs": [
+        "quote record"
+      ],
+      "systems": [
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 10
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Quote saved on the wrong account or with the wrong expiry, so billing rates at tariff and the customer disputes the invoice.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fastfrate-job"
+        ],
+        "note": "Posting describes uploading rates and maintaining rate programs in the TMS; the link to billing errors is described in the organisation file process entry."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Send the spot quote",
+      "description": "The analyst emails the quote to the shipper or account executive with the quote number, price, validity, fuel surcharge basis and the instruction to show the quote number on the bill of lading. Some shippers ask for a re-quote at a different weight or date.",
+      "role": "pricing-analyst",
+      "kind": "communication",
+      "inputs": [
+        "quote record"
+      ],
+      "outputs": [
+        "rate quote"
+      ],
+      "systems": [
+        "email-phone",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 5
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.95,
+          "condition": "quote sent",
+          "outcome": "quote_issued"
+        },
+        {
+          "to": "s06",
+          "prob": 0.05,
+          "condition": "shipper asks for a re-quote"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Re-quote share is the author's estimate."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Build the shipment profile from customer data",
+      "description": "The analyst imports the customer's shipment history file, often a spreadsheet of three to twelve months of shipments, into the costing workbook, cleans postal codes and weights, fills missing dimensions with commodity averages and maps each lane to origin and destination terminals. Prospects without history give a sample that the analyst has to scale.",
+      "role": "pricing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "customer shipment history file"
+      ],
+      "outputs": [
+        "shipment profile"
+      ],
+      "systems": [
+        "spreadsheets",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 25,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Lanes mis-mapped or density filled with averages that do not match the freight.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lineage-job"
+        ],
+        "note": "Posting describes breaking down bid opportunities for pricing analysis; queue of up to four days reflects proposal backlogs in the author's estimate."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Cost the freight",
+      "description": "The analyst runs the profile through the costing model: pickup and delivery cost per stop and per hundredweight, cross-dock handling by density, and linehaul cost per lane from the network cost factors. The output is the cost per shipment and the operating ratio at candidate discount levels.",
+      "role": "pricing-analyst",
+      "kind": "analysis",
+      "inputs": [
+        "shipment profile",
+        "network cost factors"
+      ],
+      "outputs": [
+        "costed profile"
+      ],
+      "systems": [
+        "spreadsheets",
+        "bi-reporting"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Cost factor out of date for a lane, so the margin is overstated.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.25,
+          "condition": "new lane, cross-border or large volume"
+        },
+        {
+          "to": "s12",
+          "prob": 0.75,
+          "condition": "standard lanes"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lineage-job"
+        ],
+        "note": "Posting describes fact-based costing of each opportunity in costing software; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Check lane capacity and linehaul cost",
+      "description": "A network analyst checks linehaul load factors and trailer balance on the requested lanes, and partner or interline costs for points the carrier does not serve directly. The analyst replies with a capacity view and adjusted cost factors while the pricing analyst finishes the costing.",
+      "role": "network-analyst",
+      "kind": "analysis",
+      "inputs": [
+        "costed profile",
+        "network plan"
+      ],
+      "outputs": [
+        "lane capacity and cost note"
+      ],
+      "systems": [
+        "linehaul-planner-tool",
+        "bi-reporting",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Network analyst involvement for about a quarter of proposals is the author's estimate; the role exists in the organisation file but is not listed on this process."
+      },
+      "concurrent_with": [
+        "s10"
+      ]
+    },
+    {
+      "id": "s12",
+      "name": "Set the discount and terms",
+      "description": "The analyst chooses the discount off the base tariff, minimum charge, any freight-all-kinds class or density rule, accessorial waivers and the target operating ratio, using the cost, the lane balance and competitor prices reported by the account executive. Counter-offers from the customer come back to this step.",
+      "role": "pricing-analyst",
+      "kind": "judgment",
+      "inputs": [
+        "costed profile",
+        "competitor intelligence"
+      ],
+      "outputs": [
+        "proposed pricing"
+      ],
+      "systems": [
+        "spreadsheets",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 12,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 240
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Discount set too deep on a lane, or an accessorial waived unintentionally.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fastfrate-job",
+          "src-fw-gri"
+        ],
+        "note": "Postings describe researching competitor pricing; FreightWaves describes discounts off base tariff rates; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Check pricing authority",
+      "description": "The analyst compares the proposed discount, projected annual revenue and operating ratio with the pricing authority matrix. Proposals below the margin floor or above the analyst's revenue limit go to the pricing manager.",
+      "role": "pricing-analyst",
+      "kind": "validation",
+      "inputs": [
+        "proposed pricing",
+        "authority matrix"
+      ],
+      "outputs": [
+        "authority decision"
+      ],
+      "systems": [
+        "spreadsheets"
+      ],
+      "touch_min": {
+        "low": 1,
+        "mode": 2,
+        "high": 5
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Pricing authority matrix by discount depth and annual revenue",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.6,
+          "condition": "within analyst authority"
+        },
+        {
+          "to": "s14",
+          "prob": 0.4,
+          "condition": "needs manager approval"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lineage-job"
+        ],
+        "note": "Posting says analysts work within the pricing department's approved guidelines; the 40% referral share is the author's estimate."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Pricing manager review",
+      "description": "The pricing manager opens the costing workbook, checks the operating ratio by lane and the effect on network balance, and approves, asks for changes or escalates strategic or below-floor deals to the vice-president of sales.",
+      "role": "pricing-manager",
+      "kind": "approval",
+      "inputs": [
+        "proposed pricing",
+        "costed profile"
+      ],
+      "outputs": [
+        "approved pricing"
+      ],
+      "systems": [
+        "spreadsheets",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 2880
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Pricing authority matrix: proposals outside analyst limits approved by the pricing manager",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.76,
+          "condition": "approved"
+        },
+        {
+          "to": "s12",
+          "prob": 0.17,
+          "condition": "revise discount or terms"
+        },
+        {
+          "to": "s15",
+          "prob": 0.07,
+          "condition": "strategic or below floor"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Approval shares and manager wait are the author's estimates."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Vice-president approval for strategic pricing",
+      "description": "The vice-president of sales reviews deals that fall below the margin floor or are large enough to change network flows, usually in a short meeting with the pricing manager and the account executive, and approves or sends the price back.",
+      "role": "vp-sales",
+      "kind": "approval",
+      "inputs": [
+        "approved pricing",
+        "deal summary"
+      ],
+      "outputs": [
+        "executive approval"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Pricing authority matrix: below-floor or strategic pricing approved by the vice-president of sales",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 0.8,
+          "condition": "approved"
+        },
+        {
+          "to": "s12",
+          "prob": 0.2,
+          "condition": "revise"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Vice-president approval for about 3% of proposals is the author's estimate; vp-sales is not listed on this process in the organisation file."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Draft the rate proposal",
+      "description": "The analyst builds the rate sheet and proposal letter from the template: base tariff reference, discount, minimum charge, accessorial schedule, fuel surcharge table, validity of 30 to 60 days and terms of carriage. Large proposals include lane-by-lane prices in a spreadsheet attachment.",
+      "role": "pricing-analyst",
+      "kind": "drafting",
+      "inputs": [
+        "approved pricing"
+      ],
+      "outputs": [
+        "rate proposal"
+      ],
+      "systems": [
+        "spreadsheets",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 15,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Typing error or omitted lane on the rate sheet.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-fastfrate-job",
+          "src-lineage-job"
+        ],
+        "note": "Postings describe preparing customer proposals; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Present the proposal to the customer",
+      "description": "The account executive sends the proposal and walks the customer through it by phone, video call or a visit, answering questions on transit times, accessorials and fuel surcharge. The executive records the presentation and any objections in the CRM.",
+      "role": "account-executive",
+      "kind": "communication",
+      "inputs": [
+        "rate proposal"
+      ],
+      "outputs": [
+        "presented proposal"
+      ],
+      "systems": [
+        "crm",
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.6,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common LTL sales practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Await the customer's decision",
+      "description": "The customer compares the proposal with other carriers' prices and decides. Many proposals get no answer and lapse at the end of their validity; some come back with a counter-offer or a competitor's price to beat.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "presented proposal"
+      ],
+      "outputs": [
+        "customer decision"
+      ],
+      "systems": [
+        "email-phone"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 30240
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.45,
+          "condition": "accepted"
+        },
+        {
+          "to": "s12",
+          "prob": 0.12,
+          "condition": "counter-offer"
+        },
+        {
+          "to": "END",
+          "prob": 0.43,
+          "condition": "declined or lapsed",
+          "outcome": "proposal_not_accepted"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Win rate of about 45% and decision time of one day to three weeks are the author's estimates."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Prepare the rate agreement record",
+      "description": "The analyst confirms the bill-to and shipper account numbers, the locations covered, the effective date and the agreed prices, and prepares the rate agreement record for loading. New customers must first be set up by onboarding, so the analyst checks that the account exists.",
+      "role": "pricing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "accepted proposal"
+      ],
+      "outputs": [
+        "rate agreement record"
+      ],
+      "systems": [
+        "crm",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "A shipper location or bill-to number omitted from the agreement.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Load the pricing into the rating engine",
+      "description": "The analyst keys the discount, minimum charges, accessorial exceptions, fuel surcharge table and effective dates into the rating engine and links them to each account number. Loading errors are the main source of later billing disputes and rebills.",
+      "role": "pricing-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "rate agreement record"
+      ],
+      "outputs": [
+        "loaded pricing"
+      ],
+      "systems": [
+        "rating-engine",
+        "tms"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 12,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 480
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.08,
+        "defect_description": "Wrong account linked, wrong effective date or a lane missed.",
+        "typically_caught_at": "s21"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lineage-job",
+          "src-fastfrate-job"
+        ],
+        "note": "Postings describe updating rates and rate agreements in Truckmate or the TMS; error share is the author's estimate."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Test-rate and audit the loaded pricing",
+      "description": "A second pricing analyst rates a sample of the customer's past shipments against the new pricing and compares the results with the proposal. Differences go back to the loading analyst to fix.",
+      "role": "pricing-analyst",
+      "kind": "review",
+      "inputs": [
+        "loaded pricing",
+        "rate proposal"
+      ],
+      "outputs": [
+        "audited pricing"
+      ],
+      "systems": [
+        "rating-engine"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 480,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "A loading error missed by the sample.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Pricing department rule: a second analyst audits contract pricing before it takes effect",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s22",
+          "prob": 0.9,
+          "condition": "matches proposal"
+        },
+        {
+          "to": "s20",
+          "prob": 0.1,
+          "condition": "loading error found"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Second-analyst audit is common practice at carriers with rating engines; error share is the author's estimate."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Confirm the pricing to the customer and billing",
+      "description": "The analyst emails the account executive, the customer and the billing supervisor with the agreement number and effective date, and closes the request in the CRM. Billing uses the agreement to rate the customer's next shipments.",
+      "role": "pricing-analyst",
+      "kind": "communication",
+      "inputs": [
+        "audited pricing"
+      ],
+      "outputs": [
+        "rate agreement"
+      ],
+      "systems": [
+        "email-phone",
+        "crm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; earlier errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "pricing in effect",
+          "outcome": "agreement_loaded"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are the author's estimate."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Incomplete shipment details",
+      "share_of_cases": 0.18,
+      "description": "The request lacks dimensions, commodity or volume, so the account executive goes back to the shipper and the request waits for a reply.",
+      "path": [
+        "s02",
+        "s03",
+        "s02"
+      ]
+    },
+    {
+      "name": "Counter-offer",
+      "share_of_cases": 0.05,
+      "description": "The customer returns with a competitor's price; the analyst re-sets the discount and the proposal goes through approval again.",
+      "path": [
+        "s18",
+        "s12",
+        "s13",
+        "s14",
+        "s16",
+        "s17",
+        "s18"
+      ]
+    },
+    {
+      "name": "Loading error found in audit",
+      "share_of_cases": 0.01,
+      "description": "The second analyst finds a wrong account link or effective date and the pricing is reloaded.",
+      "path": [
+        "s21",
+        "s20",
+        "s21"
+      ]
+    },
+    {
+      "name": "Strategic deal escalated",
+      "share_of_cases": 0.01,
+      "description": "A below-floor or network-changing deal waits for the vice-president of sales.",
+      "path": [
+        "s14",
+        "s15",
+        "s16"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 0.3,
+        "p90": 15
+      },
+      "unit": "calendar days from request received to quote sent, proposal accepted and loaded, or proposal declined",
+      "population": "Canadian LTL carrier pricing desk, all pricing requests",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: spot quotes are usually answered the same business day, and proposals take one to three weeks including the customer's decision. No published turnaround figure was found; carrier quote pages searched gave no response-time commitment."
+      }
+    },
+    {
+      "metric": "share_of_ltl_revenue_subject_to_gri",
+      "value": {
+        "low": 0.2,
+        "high": 0.25
+      },
+      "unit": "share of revenue",
+      "population": "US LTL carriers ArcBest and Saia, 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "src-fw-gri"
+        ],
+        "note": "Stated in the article; the rest is under contract or individual pricing, which is the work this process creates."
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Spot quotes not recorded against the right account, or expired, are billed at tariff and come back as disputes and rebills.",
+      "steps": [
+        "s07",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "The organisation file names pricing errors as a source of billing errors; frequency is the author's estimate."
+      }
+    },
+    {
+      "description": "Proposals wait in the analyst queue and the manager's inbox during busy months, while the customer is comparing other carriers' prices.",
+      "steps": [
+        "s09",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate of common pricing desk backlogs."
+      }
+    },
+    {
+      "description": "Costing is done in spreadsheets from customer files that need cleaning, so each proposal repeats manual data preparation.",
+      "steps": [
+        "s09",
+        "s10"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "src-lineage-job"
+        ],
+        "note": "Posting describes breaking down bid data for pricing analysis and costing in separate costing software."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "src-lineage-job",
+      "title": "Logistics Pricing Analyst (Calgary) job posting",
+      "publisher": "Lineage Logistics (via SJF Ventures job board)",
+      "url": "https://jobs.sjfventures.com/companies/lineage-logistics/jobs/38499077-logistics-pricing-analyst",
+      "year": 2024,
+      "accessed": "2026-11-24",
+      "supports": "Pricing analyst prepares spot quotes and cost checks, breaks down bids, costs opportunities in TCG costing software, maintains rate sheets, accessorials and fuel surcharge programs in Truckmate, works within the pricing department's approved guidelines and coordinates the annual general rate increase and rate agreement updates."
+    },
+    {
+      "id": "src-fastfrate-job",
+      "title": "Pricing Analyst - Fastfrate Group (Woodbridge) job posting",
+      "publisher": "Challenger Motor Freight / Fastfrate Group (via Built In)",
+      "url": "https://builtin.com/job/pricing-analyst-fastfrate-group-woodbridge/9646957",
+      "year": 2025,
+      "accessed": "2026-11-24",
+      "supports": "Pricing analyst prepares customer proposals, keeps the director informed through the RFQ process, tracks competitor pricing, handles urgent one-off rate requests, uploads rates and maintains rate programs in the TMS, and is reachable after hours for pricing problems."
+    },
+    {
+      "id": "src-fw-gri",
+      "title": "LTL: How do general rate increases work?",
+      "publisher": "FreightWaves (Todd Maiden)",
+      "url": "https://www.freightwaves.com/news/ltl-how-do-general-rate-increases-work",
+      "year": 2022,
+      "accessed": "2026-11-24",
+      "supports": "GRIs raise base tariff rates while shippers keep negotiated discounts; GRIs are usually announced in Q3 or Q4 and take effect in Q1; only about 25% of ArcBest's and 20% to 25% of Saia's business is subject to the GRI, the rest is under contract or individual pricing; most carriers took a 5% to 6% GRI in Q1 2021 and many a second later in 2021."
+    }
+  ],
+  "assumptions": [
+    "78% of requests are spot or short-term quotes and 22% are account proposals; the organisation file gives no split.",
+    "At the organisation file's 2,500 requests a month, the simulated hands-on time (mean about 1.1 hours a request) implies about 21 FTE at 130 productive hours a month, against 12.7 FTE stated (8 of the 10 pricing analysts plus part of the account executives' time). The stated FTE cannot rise much because the organisation file has only ten pricing analysts, who also carry RFP responses and renewals. Either the volume is closer to 1,300 to 1,800 requests a month, or simple spot quotes are given by customer service representatives from the rating engine and should be counted elsewhere, or the pricing analyst headcount is low; the gap is reported rather than hidden by shortening touch times further.",
+    "Network analyst and vice-president of sales take part although the organisation file does not list them on this process.",
+    "The simulated median (about 0.4 days) is set by the spot path, where requests arriving in the evening wait for the morning; the 90th percentile (about 15 days) is set by proposals waiting for customer decisions.",
+    "Truckload spot quotes are included in the volume and follow the spot path; truckload lane pricing for contract customers follows the proposal path.",
+    "No step in this process ties up vehicles, equipment or crews, so no resources are listed; no step is done by several people of one role together."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

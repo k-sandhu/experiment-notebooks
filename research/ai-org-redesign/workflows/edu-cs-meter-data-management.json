@@ -1,0 +1,1437 @@
+{
+  "schema_version": "0.3",
+  "id": "edu-cs-meter-data-management",
+  "name": "Collect and validate smart meter data",
+  "org": "electric-distribution-utility",
+  "process": "cs-meter-data-management",
+  "sector": "electricity distribution",
+  "function": "customer service (metering)",
+  "summary": "Every day the utility's smart meter network collects hourly reads from about 352,000 meters and sends them to the province's Meter Data Management/Repository (MDM/R), run by the IESO as Smart Metering Entity, which validates and estimates the data and later returns billing quantities. A team of meter data analysts works the exceptions the next working day: meters that stopped communicating, reads that failed validation, mismatches between the billing system and the repository, meter exchanges and failed billing quantity requests. Work is slow because each exception needs a look at interval history, outage records and account changes, weekend cycles wait for Monday, and every unresolved meter risks an estimated bill, which the OEB limits to two a year per customer.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A municipally owned Ontario distributor of about 350,000 customers with a mesh AMI network, a local meter data tool, a CIS, and the provincial MDM/R.",
+    "org_size_employees": 571,
+    "notes": "One case is one daily read cycle: all meters' reads for one calendar day, from collection to release of billing quantities and hand-off of unresolved exceptions."
+  },
+  "currency": "CAD",
+  "unit_of_work": "one daily read cycle",
+  "trigger": "Midnight: the AMI head-end starts collecting the previous day's interval reads.",
+  "end_state": "The day's billing quantities are released to billing, and every exception is either fixed, sent to the field or handed to billing exceptions.",
+  "cadence": "daily",
+  "volume": {
+    "cases_per_month": {
+      "low": 30,
+      "mode": 30.4,
+      "high": 31
+    },
+    "seasonality": "One cycle every day of the year. Exception counts rise after storms and long outages (meters lose communication), on daylight-saving changes and after mass meter exchange campaigns.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "One cycle per calendar day."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "ieso",
+        "object": "validated_reads",
+        "share": 1.0
+      }
+    ],
+    "inputs": [
+      {
+        "from": "cs-meter-exchange",
+        "object": "meter_change_record"
+      },
+      {
+        "from": "ops-field-service-orders",
+        "object": "field_result"
+      },
+      {
+        "from": "cs-move-in-move-out",
+        "object": "account_change"
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "released",
+        "to": "cs-billing",
+        "object": "validated_reads"
+      },
+      {
+        "outcome": "released",
+        "to": "ieso",
+        "object": "meter_change_record"
+      },
+      {
+        "outcome": "any",
+        "to": "ops-field-service-orders",
+        "object": "read_exception"
+      },
+      {
+        "outcome": "any",
+        "to": "cs-meter-exchange",
+        "object": "meter_order"
+      },
+      {
+        "outcome": "any",
+        "to": "cs-billing-exceptions",
+        "object": "read_exception"
+      },
+      {
+        "outcome": "any",
+        "to": "corp-ot-systems",
+        "object": "ot_ticket"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "meter-data-analyst",
+      "title": "Meter data analyst",
+      "department": "Metering Services",
+      "layer": "individual_contributor",
+      "fte_on_process": 5.5,
+      "loaded_cost_per_hour": {
+        "low": 44,
+        "mode": 52,
+        "high": 62
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Org file has 8 meter data analysts; about 5 to 6 FTE on daily read exceptions, the rest on billing exceptions, sampling data and reporting. Loaded cost from the organisation file (wage x 1.40)."
+      }
+    },
+    {
+      "id": "meter-supervisor",
+      "title": "Metering supervisor",
+      "department": "Metering Services",
+      "layer": "supervisor",
+      "fte_on_process": 0.3,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 70,
+        "high": 82
+      },
+      "occupation_code": null,
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Weekly backlog review and escalations. Loaded cost from the organisation file (wage x 1.40)."
+      },
+      "shift_pattern": "office_hours"
+    }
+  ],
+  "systems": [
+    {
+      "id": "ami",
+      "name": "Smart meter (AMI) head-end and network",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "mdmr",
+      "name": "Provincial Meter Data Management/Repository (IESO Smart Metering Entity) portal",
+      "kind": "external_portal"
+    },
+    {
+      "id": "mdm",
+      "name": "Local meter data management and validation tool",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "cis",
+      "name": "Customer information and billing system (CIS)",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "oms",
+      "name": "Outage management system",
+      "kind": "workflow"
+    },
+    {
+      "id": "mwm",
+      "name": "Mobile workforce management and field tablets",
+      "kind": "workflow"
+    },
+    {
+      "id": "itsm",
+      "name": "IT service management ticketing",
+      "kind": "workflow"
+    },
+    {
+      "id": "bi-reporting",
+      "name": "Business intelligence and regulatory reporting",
+      "kind": "analytics"
+    },
+    {
+      "id": "email",
+      "name": "Email, calendar and Teams",
+      "kind": "communication"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Collect overnight interval reads",
+      "description": "The AMI head-end polls about 352,000 smart meters through the mesh network and collectors after midnight and stores the 24 hourly register and interval reads for the previous day. Meters that do not answer are marked missing for the retry pass.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "meter network"
+      ],
+      "outputs": [
+        "raw interval reads"
+      ],
+      "systems": [
+        "ami"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Re-poll missing meters",
+      "description": "The head-end runs its scheduled retry passes on meters and collectors that did not report, and fills gaps from meter memory where the meter answers late. Reads still missing after the last pass stay as gaps for the provincial repository to estimate.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "raw interval reads"
+      ],
+      "outputs": [
+        "read file with gaps flagged"
+      ],
+      "systems": [
+        "ami"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 180,
+        "mode": 300,
+        "high": 420
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022. Collection and retry windows of four to seven hours."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Transmit reads to the provincial repository",
+      "description": "The head-end formats the day's reads into the repository's interface file and transmits it to the IESO Smart Metering Entity's Meter Data Management/Repository (MDM/R). Transmission failures raise an alert to the OT on-call specialist.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "read file with gaps flagged"
+      ],
+      "outputs": [
+        "MDM/R read submission"
+      ],
+      "systems": [
+        "ami",
+        "mdmr"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.005,
+        "defect_description": "File rejected or late, so the day loads with missing intervals.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sme"
+        ],
+        "note": "The MDM/R processes reads from over 5.1 million smart meters for all Ontario distributors daily (sme)."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Repository validates, estimates and edits reads",
+      "description": "The MDM/R runs validation, estimation and editing (VEE) on each meter's day: sum checks between interval and register reads, gap and spike checks, and estimation of missing intervals. It returns read status and a list of failed and estimated meters to the distributor.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "MDM/R read submission"
+      ],
+      "outputs": [
+        "VEE results",
+        "failed and estimated meter list"
+      ],
+      "systems": [
+        "mdmr"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 150,
+        "high": 360
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Ontario Regulation 393/07: the Smart Metering Entity specifies and performs VEE to produce billing quantity data",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sme"
+        ],
+        "note": "The SME reports meter-read and billing-quantity service levels and adjusts VEE thresholds (for example the 2021 Small General Service sum-check threshold change) (sme). Processing time is the author's estimate."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Load results and build exception worklists",
+      "description": "The local meter data tool imports the repository's VEE results, the head-end's communication status and the CIS account list, and builds worklists: non-communicating meters, failed validations, synchronization mismatches and meters estimated several days running.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "VEE results",
+        "head-end status",
+        "CIS account list"
+      ],
+      "outputs": [
+        "exception worklists"
+      ],
+      "systems": [
+        "mdm",
+        "ami",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 90
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.71,
+          "condition": "weekday cycle"
+        },
+        {
+          "to": "s06",
+          "prob": 0.29,
+          "condition": "read day falls on Saturday or Sunday"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022. Two of seven read days fall on a weekend."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Hold weekend cycle until Monday",
+      "description": "Analysts work office hours, so exception worklists built on Saturday and Sunday wait for Monday. The OT on-call specialist reacts only to head-end or transmission alarms; ordinary meter exceptions are left in the queue.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "exception worklists"
+      ],
+      "outputs": [
+        "queued worklists"
+      ],
+      "systems": [
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 1200,
+        "mode": 2160,
+        "high": 2900
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "Monday morning"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Office-hours analysts; weekend worklists wait one to two days."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Review daily read performance",
+      "description": "A meter data analyst opens the daily dashboard in the local tool and the MDM/R portal, checks the read success rate, the count of 'No Data' and estimated meters, any collector outages and the age of open exceptions, and splits the day's worklists among the team.",
+      "role": "meter-data-analyst",
+      "kind": "analysis",
+      "inputs": [
+        "exception worklists",
+        "MDM/R performance reports"
+      ],
+      "outputs": [
+        "work allocation"
+      ],
+      "systems": [
+        "mdm",
+        "mdmr",
+        "ami"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 45,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A collector outage is missed and its meters stay estimated another day.",
+        "typically_caught_at": "s09"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sme"
+        ],
+        "note": "The SME gives each distributor monthly performance reports and daily operational data and tracks 'No Data' responses that impede billing (sme)."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Work failed validations",
+      "description": "Two analysts go through meters that failed VEE: sum-check failures between interval and register reads, zero consumption on an active account, consumption on a vacant premise and reverse flow on a meter without generation. They compare the interval profile with history and the CIS account, edit or accept the estimate, or mark the meter for a field check.",
+      "role": "meter-data-analyst",
+      "kind": "validation",
+      "inputs": [
+        "failed meter list",
+        "interval history",
+        "CIS account"
+      ],
+      "outputs": [
+        "dispositioned validation failures",
+        "field check list"
+      ],
+      "systems": [
+        "mdm",
+        "mdmr",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 150,
+        "mode": 210,
+        "high": 330
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 15,
+        "high": 60
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "An edit or accepted estimate is wrong and flows to the bill.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022. Two analysts for most of the day."
+      },
+      "people": 2
+    },
+    {
+      "id": "s09",
+      "name": "Work non-communicating meters",
+      "description": "Two other analysts work meters with no reads for one or more days. They ping each meter from the head-end, check the outage management system for an outage or disconnection, look for a pattern by collector or street, and decide whether the cause is the network, the meter or the premise.",
+      "role": "meter-data-analyst",
+      "kind": "analysis",
+      "inputs": [
+        "non-communicating meter list",
+        "outage records"
+      ],
+      "outputs": [
+        "diagnosed meters",
+        "field order list"
+      ],
+      "systems": [
+        "ami",
+        "oms",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 150,
+        "mode": 210,
+        "high": 330
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "A failed meter is diagnosed as a network problem and stays estimated.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s10",
+          "prob": 0.3,
+          "condition": "collector or head-end fault suspected"
+        },
+        {
+          "to": "s11",
+          "prob": 0.7,
+          "condition": "meter-level causes only"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022. Runs alongside the validation work."
+      },
+      "people": 2,
+      "concurrent_with": [
+        "s08"
+      ]
+    },
+    {
+      "id": "s10",
+      "name": "Raise OT ticket for network fault",
+      "description": "When a cluster of meters behind one collector or relay stops reporting, the analyst opens a ticket for the OT specialists with the collector id, the affected meter count and the first missing hour, and follows up on the ticket the next day.",
+      "role": "meter-data-analyst",
+      "kind": "communication",
+      "inputs": [
+        "diagnosed meters"
+      ],
+      "outputs": [
+        "OT ticket"
+      ],
+      "systems": [
+        "itsm",
+        "ami"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Fix synchronization mismatches",
+      "description": "One analyst resolves records where the CIS and the MDM/R disagree: meter number, multiplier, rate class, or account status after a move-in, move-out or retailer switch. The analyst corrects the CIS or resubmits the master data so the repository can return billing quantities.",
+      "role": "meter-data-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "synchronization exception list",
+        "CIS account changes"
+      ],
+      "outputs": [
+        "corrected master data"
+      ],
+      "systems": [
+        "cis",
+        "mdmr",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 200
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 5,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A keyed multiplier or meter number is wrong.",
+        "typically_caught_at": "s19"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s12",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sme"
+        ],
+        "note": "The SME works with distributors on synchronization and data-submission quality, and fewer synchronization exceptions improve billing success (sme). Time is the author's estimate."
+      },
+      "concurrent_with": [
+        "s09",
+        "s10"
+      ]
+    },
+    {
+      "id": "s12",
+      "name": "Process meter change records",
+      "description": "The same analyst checks the meter exchanges completed by technicians the day before: old meter final read, new meter initial read, dates and seal information. Clean records are sent to the MDM/R so the new meter's reads are accepted; incomplete ones go back to the metering supervisor.",
+      "role": "meter-data-analyst",
+      "kind": "validation",
+      "inputs": [
+        "meter change records"
+      ],
+      "outputs": [
+        "meter change records sent to the MDM/R"
+      ],
+      "systems": [
+        "cis",
+        "mdmr",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "An exchange is synchronized with a wrong read, giving a spike on the next bill.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022. About 100 exchanges a working day."
+      },
+      "concurrent_with": [
+        "s11"
+      ]
+    },
+    {
+      "id": "s13",
+      "name": "Close exceptions from field results",
+      "description": "An analyst reads the results of completed field orders (meter replaced, premise vacant, tampering found, meter base repaired) and closes or updates the matching exceptions in the local tool and the CIS.",
+      "role": "meter-data-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "field results"
+      ],
+      "outputs": [
+        "closed exceptions"
+      ],
+      "systems": [
+        "mdm",
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 50,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Create field and meter orders",
+      "description": "For meters that need a visit the analyst creates the order in the CIS: a meter exchange for a failed or non-communicating meter, or a field investigation for suspected tampering, vacant premises or access problems, with the evidence attached.",
+      "role": "meter-data-analyst",
+      "kind": "data_entry",
+      "inputs": [
+        "field check list",
+        "field order list"
+      ],
+      "outputs": [
+        "meter orders",
+        "field investigation orders"
+      ],
+      "systems": [
+        "cis",
+        "mwm"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 100
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 20
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Order created with the wrong premise or reason.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 0.2,
+          "condition": "weekly backlog review day"
+        },
+        {
+          "to": "s16",
+          "prob": 0.8,
+          "condition": "other days"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Review aged exceptions and backlog",
+      "description": "The metering supervisor reviews exceptions open more than five days, meters estimated close to the two-estimates-a-year limit and the field order backlog, and reassigns or escalates them with field services and IT.",
+      "role": "meter-supervisor",
+      "kind": "review",
+      "inputs": [
+        "aged exception report"
+      ],
+      "outputs": [
+        "escalations",
+        "reassigned work"
+      ],
+      "systems": [
+        "mdm",
+        "bi-reporting"
+      ],
+      "touch_min": {
+        "low": 40,
+        "mode": 60,
+        "high": 90
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 240,
+        "high": 600
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Distribution System Code estimated-billing limit: no more than two estimated bills to a customer in 12 months",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s16",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "bg2015"
+        ],
+        "note": "Limit of two estimated bills in 12 months (bg2015); weekly review frequency is the author's estimate."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Request billing quantities for the day's cycle",
+      "description": "In the evening batch the CIS sends billing quantity requests to the MDM/R for every account whose bill period ended, with the meter, period and rate structure.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "bill cycle account list"
+      ],
+      "outputs": [
+        "billing quantity requests"
+      ],
+      "systems": [
+        "cis",
+        "mdmr"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 420,
+        "high": 600
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sme"
+        ],
+        "note": "Billing quantity requests and responses are a critical MDM/R service level (sme); batch timing is the author's estimate."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Repository returns billing quantities",
+      "description": "The MDM/R aggregates each account's validated intervals into time-of-use or tiered billing quantities and returns them, or returns 'No Data' when the period is not billable yet.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "billing quantity requests"
+      ],
+      "outputs": [
+        "billing quantity responses"
+      ],
+      "systems": [
+        "mdmr"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 180,
+        "high": 480
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sme"
+        ],
+        "note": "100% of billing quantity requests fulfilled on time in Q2 2021 (sme)."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Load responses and flag failures",
+      "description": "The CIS loads the responses and puts accounts with 'No Data', partial periods or failed sum checks on the billing quantity failure list for the analysts.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "billing quantity responses"
+      ],
+      "outputs": [
+        "billable reads",
+        "billing quantity failure list"
+      ],
+      "systems": [
+        "cis"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Work billing quantity failures",
+      "description": "Next morning two analysts go through the failure list: they fix the master data, trigger a re-request after an edit, or decide that the period needs a manual estimate. Each account is checked against its estimate history so the customer does not receive a third estimated bill in a year.",
+      "role": "meter-data-analyst",
+      "kind": "validation",
+      "inputs": [
+        "billing quantity failure list"
+      ],
+      "outputs": [
+        "re-requests",
+        "accounts needing manual edit"
+      ],
+      "systems": [
+        "cis",
+        "mdmr",
+        "mdm"
+      ],
+      "touch_min": {
+        "low": 60,
+        "mode": 120,
+        "high": 180
+      },
+      "wait_before_min": {
+        "low": 300,
+        "mode": 420,
+        "high": 600
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "An account is re-requested without the underlying fix and fails again.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.55,
+          "condition": "all failures resolved by re-request",
+          "outcome": "released"
+        },
+        {
+          "to": "s20",
+          "prob": 0.35,
+          "condition": "manual estimate or edit needed"
+        },
+        {
+          "to": "s21",
+          "prob": 0.1,
+          "condition": "cannot be resolved in metering"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sme",
+          "bg2015"
+        ],
+        "note": "'No Data' responses impede billing (sme); estimate limit (bg2015). Shares are the author's estimate."
+      },
+      "people": 2
+    },
+    {
+      "id": "s20",
+      "name": "Edit or estimate reads in the repository",
+      "description": "For gaps the VEE could not fill, the analyst enters a manual estimate or edit in the MDM/R portal using the customer's own history or a like-day profile, records the reason code, and re-requests billing quantities.",
+      "role": "meter-data-analyst",
+      "kind": "judgment",
+      "inputs": [
+        "accounts needing manual edit",
+        "interval history"
+      ],
+      "outputs": [
+        "edited intervals",
+        "re-requests"
+      ],
+      "systems": [
+        "mdmr",
+        "cis"
+      ],
+      "touch_min": {
+        "low": 30,
+        "mode": 60,
+        "high": 120
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Manual estimate far from actual use, later corrected by a rebill.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "MDM/R VEE editing rules and Distribution System Code estimated-billing limits",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.85,
+          "condition": "re-request succeeds",
+          "outcome": "released"
+        },
+        {
+          "to": "s21",
+          "prob": 0.15,
+          "condition": "still not billable"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Refer unresolved accounts to billing",
+      "description": "The analyst lists accounts that metering cannot make billable today (meter needs a visit, long gap, disputed history) with the reason and expected fix date, and sends them to the billing exceptions queue so billing can hold or estimate the bill.",
+      "role": "meter-data-analyst",
+      "kind": "communication",
+      "inputs": [
+        "unresolved accounts"
+      ],
+      "outputs": [
+        "read exceptions"
+      ],
+      "systems": [
+        "cis",
+        "email"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced; errors pass through.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "handed over",
+          "outcome": "released"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Weekend read days",
+      "share_of_cases": 0.29,
+      "description": "Saturday and Sunday cycles are collected and validated automatically, but their exceptions wait for Monday, when analysts work three days of worklists.",
+      "path": [
+        "s05",
+        "s06",
+        "s07"
+      ]
+    },
+    {
+      "name": "Collector or network outage",
+      "share_of_cases": 0.3,
+      "description": "A collector, relay or backhaul link fails and hundreds of meters stop reporting; the analyst raises an OT ticket and the meters are estimated until the network is repaired.",
+      "path": [
+        "s09",
+        "s10",
+        "s11"
+      ]
+    },
+    {
+      "name": "Accounts not billable today",
+      "share_of_cases": 0.15,
+      "description": "Some accounts in the day's cycle cannot get billing quantities even after edits and are handed to billing exceptions to hold or estimate the bill.",
+      "path": [
+        "s19",
+        "s20",
+        "s21"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 1.5,
+        "p90": 3.0
+      },
+      "unit": "calendar days from start of read collection to billing quantities released and exceptions dispositioned",
+      "population": "Ontario distributor daily read cycles, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate: reads collected overnight, VEE by morning, exceptions worked the same working day, billing quantity failures the next morning; weekend cycles wait to Monday."
+      }
+    },
+    {
+      "metric": "billing_quantity_requests_fulfilled_on_time",
+      "value": 100,
+      "unit": "percent of requests, Q2 2021",
+      "population": "All Ontario distributors using the MDM/R",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "sme"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "smart_meters_processed_daily_by_mdmr",
+      "value": 5107693,
+      "unit": "meters, Q2 2021",
+      "population": "Ontario, all distributors",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "sme"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "'No Data' billing quantity responses and synchronization mismatches between the CIS and the repository hold up bills until an analyst fixes master data and re-requests.",
+      "steps": [
+        "s11",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "sme"
+        ],
+        "note": "SME notes 'No Data' responses impede billing and that fewer synchronization exceptions improve billing success."
+      }
+    },
+    {
+      "description": "Weekend exceptions wait until Monday, so a meter that fails on Friday night may be estimated for three days before anyone looks at it.",
+      "steps": [
+        "s06"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Office-hours staffing of the analyst team."
+      }
+    },
+    {
+      "description": "Diagnosing a non-communicating meter needs the head-end, the outage system and the CIS open side by side; the knowledge of which collectors are flaky is held by a few experienced analysts.",
+      "steps": [
+        "s09"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Author's estimate from how Ontario distributors ran the AMI head-end, the provincial MDM/R and a local exception tool in 2019-2022."
+      }
+    },
+    {
+      "description": "Customers near the two-estimates-a-year limit have to be tracked by hand across the metering and billing teams.",
+      "steps": [
+        "s15",
+        "s19"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "bg2015"
+        ],
+        "note": "Limit introduced by the 2015 Distribution System Code amendments."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "sme",
+      "title": "Quarterly SME MDM/R Report, Issue 32.0 (2nd quarter 2021)",
+      "publisher": "IESO Smart Metering Entity (report to the Ontario Energy Board)",
+      "url": "https://www.oeb.ca/sites/default/files/Quarterly%20SME%20MDMR%20Report%20-%20Issue%2032.0.pdf",
+      "year": 2021,
+      "accessed": "2026-11-24",
+      "supports": "MDM/R scale (5,107,693 meters, all distributors, daily processing), billing quantity and meter read service levels, 'No Data' responses, synchronization exceptions, VEE threshold changes."
+    },
+    {
+      "id": "bg2015",
+      "title": "Backgrounder: Monthly and Estimated Billing Changes to the Distribution System Code",
+      "publisher": "Ontario Energy Board",
+      "url": "https://oeb.ca/sites/default/files/bg_Billing_Practices_Code_Amendments_20150415.pdf",
+      "year": 2015,
+      "accessed": "2026-11-24",
+      "supports": "Monthly billing from December 2016, bills based on actual reads, at most two estimated bills per customer in 12 months."
+    }
+  ],
+  "assumptions": [
+    "The case is a daily cycle, so the simulation's touch time is the whole team's exception work for one day and the FTE check compares it with the analyst team.",
+    "The organisation file lists the IESO's 'validated_reads' as the trigger; in practice the cycle starts with the utility's own AMI head-end collection and the IESO repository returns validated data during the cycle. Meter change records, field results and account changes are standing inputs, not triggers, so they are listed under inputs.",
+    "Two analysts each work validation failures, non-communicating meters and billing quantity failures in parallel; these steps use people = 2 and concurrent_with so elapsed time is not added twice.",
+    "A storm surge is not modelled as extra cases because the number of daily cycles does not change; storms raise the exception count inside each cycle (for example after the May 2022 derecho).",
+    "The billing quantity request is placed in the evening batch and failures are worked the next morning, which puts about one working day between read collection and billable quantities.",
+    "Exception shares and step times are the author's estimates; no Ontario distributor publishes its daily exception counts."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-24"
+  }
+}

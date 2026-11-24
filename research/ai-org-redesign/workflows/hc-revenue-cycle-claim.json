@@ -1,0 +1,2450 @@
+{
+  "schema_version": "0.2",
+  "id": "hc-revenue-cycle-claim",
+  "name": "Hospital outpatient encounter: charge capture to claim payment, denials and patient billing",
+  "org": null,
+  "process": null,
+  "sector": "healthcare",
+  "function": "revenue cycle (health information management and patient financial services)",
+  "summary": "After a hospital outpatient visit, test or procedure, charges flow from clinical systems, coders assign diagnosis and procedure codes, and the billing system builds a claim that a scrubber checks before it goes to the payer. The payer pays, pays in part or denies; payments post automatically from electronic remittances while denials are triaged, corrected or appealed. Any balance the patient owes is billed in statement cycles, with financial assistance screening and collection rules for tax-exempt hospitals. Work slows at coding backlogs, scrubber edit queues, payer waits and appeal cycles, and about one claim in nine to one in seven is denied the first time.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A US nonprofit community hospital of about 300 beds with emergency, imaging, laboratory, outpatient surgery and clinic services, an in-house coding team and patient financial services office.",
+    "org_size_employees": 2500,
+    "notes": "Professional (physician) billing is out of scope. Outpatient encounters include emergency, observation, surgery, imaging, laboratory and clinic visits."
+  },
+  "currency": "USD",
+  "unit_of_work": "one hospital outpatient encounter (one institutional claim)",
+  "trigger": "Services for a registered outpatient are documented and the charges post to the patient account.",
+  "end_state": "The account balance is zero: paid by the payer and patient, written off, adjusted under financial assistance, or placed with a collection agency as bad debt.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 17000,
+      "mode": 20000,
+      "high": 24000
+    },
+    "seasonality": "Higher patient balances in the first quarter when deductibles reset; volume dips in late December.",
+    "evidence": {
+      "tier": "C",
+      "sources": [],
+      "note": "Estimate of about 240,000 outpatient encounters a year for a 300-bed community hospital."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "Outpatient registration and clinical services (ED, imaging, lab, surgery, clinics)",
+        "object": "documented services and charges",
+        "share": 1.0
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "any",
+        "to": "Payers (Medicare, Medicaid, commercial and Medicare Advantage plans)",
+        "object": "institutional claim"
+      },
+      {
+        "outcome": "any",
+        "to": "General ledger and month-end close",
+        "object": "payments, adjustments and write-offs"
+      },
+      {
+        "outcome": "paid_in_full",
+        "to": "Patient",
+        "object": "statements and receipts"
+      },
+      {
+        "outcome": "charity_adjusted",
+        "to": "Community benefit reporting (IRS Schedule H)",
+        "object": "financial assistance adjustment"
+      },
+      {
+        "outcome": "bad_debt",
+        "to": "Collection agency",
+        "object": "placed account"
+      },
+      {
+        "outcome": "written_off",
+        "to": "Denial prevention and revenue integrity reporting",
+        "object": "denial write-off with reason"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "charge_specialist",
+      "title": "Department charge capture specialist",
+      "department": "Revenue integrity",
+      "layer": "individual_contributor",
+      "fte_on_process": 5,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 37,
+        "high": 45
+      },
+      "occupation_code": "SOC 43-3021",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Wage proxy billing and posting clerks. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "coder",
+      "title": "Outpatient coder",
+      "department": "Health information management",
+      "layer": "individual_contributor",
+      "fte_on_process": 16,
+      "loaded_cost_per_hour": {
+        "low": 35,
+        "mode": 42,
+        "high": 52
+      },
+      "occupation_code": "SOC 29-2072",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ftr2019",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Medical records specialists. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "coding_auditor",
+      "title": "Coding quality auditor",
+      "department": "Health information management",
+      "layer": "senior_specialist",
+      "fte_on_process": 1.2,
+      "loaded_cost_per_hour": {
+        "low": 45,
+        "mode": 53,
+        "high": 65
+      },
+      "occupation_code": "SOC 29-9021",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ftr2019",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Audit teams measure coder accuracy. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "physician",
+      "title": "Attending or performing physician",
+      "department": "Medical staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 160,
+        "mode": 200,
+        "high": 260
+      },
+      "occupation_code": "SOC 29-1229",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Answers documentation queries only. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "biller",
+      "title": "Hospital billing specialist",
+      "department": "Patient financial services",
+      "layer": "individual_contributor",
+      "fte_on_process": 9,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 37,
+        "high": 45
+      },
+      "occupation_code": "SOC 43-3021",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgma2021",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Works scrubber edits, rejections and corrected claims. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "patient_access",
+      "title": "Patient access representative",
+      "department": "Patient access",
+      "layer": "individual_contributor",
+      "fte_on_process": 2,
+      "loaded_cost_per_hour": {
+        "low": 24,
+        "mode": 28,
+        "high": 34
+      },
+      "occupation_code": "SOC 43-4171",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgma2021",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Registration and insurance verification. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "payment_poster",
+      "title": "Cash posting specialist",
+      "department": "Patient financial services",
+      "layer": "individual_contributor",
+      "fte_on_process": 3,
+      "loaded_cost_per_hour": {
+        "low": 31,
+        "mode": 37,
+        "high": 45
+      },
+      "occupation_code": "SOC 43-3021",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Wage proxy billing and posting clerks. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "denial_specialist",
+      "title": "Denials and appeals specialist",
+      "department": "Patient financial services",
+      "layer": "individual_contributor",
+      "fte_on_process": 10,
+      "loaded_cost_per_hour": {
+        "low": 34,
+        "mode": 40,
+        "high": 48
+      },
+      "occupation_code": "SOC 43-3021",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgma2021",
+          "premier2024",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Senior billing role; wage set above the clerk mean. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "appeals_nurse",
+      "title": "Clinical appeals nurse",
+      "department": "Utilization review and denials",
+      "layer": "senior_specialist",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 60,
+        "mode": 72,
+        "high": 88
+      },
+      "occupation_code": "SOC 29-1141",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Writes medical necessity arguments. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "ar_followup",
+      "title": "Insurance follow-up representative",
+      "department": "Patient financial services",
+      "layer": "individual_contributor",
+      "fte_on_process": 5,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 36,
+        "high": 43
+      },
+      "occupation_code": "SOC 43-3011",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Bill and account collectors. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "pfs_supervisor",
+      "title": "Patient financial services supervisor",
+      "department": "Patient financial services",
+      "layer": "supervisor",
+      "fte_on_process": 1,
+      "loaded_cost_per_hour": {
+        "low": 70,
+        "mode": 90,
+        "high": 110
+      },
+      "occupation_code": "SOC 11-9111",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Wage proxy medical and health services managers, set below their mean for a supervisor. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "customer_service",
+      "title": "Patient billing customer service representative",
+      "department": "Patient financial services",
+      "layer": "individual_contributor",
+      "fte_on_process": 5,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 34,
+        "high": 40
+      },
+      "occupation_code": "SOC 43-4051",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Customer service representatives. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "financial_counselor",
+      "title": "Financial counselor",
+      "department": "Patient access",
+      "layer": "individual_contributor",
+      "fte_on_process": 2,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 36,
+        "high": 44
+      },
+      "occupation_code": "SOC 43-4051",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "irs501r",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Processes financial assistance applications; wage proxy customer service representatives. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    },
+    {
+      "id": "collector",
+      "title": "Self-pay collector",
+      "department": "Patient financial services",
+      "layer": "individual_contributor",
+      "fte_on_process": 4.5,
+      "loaded_cost_per_hour": {
+        "low": 30,
+        "mode": 36,
+        "high": 43
+      },
+      "occupation_code": "SOC 43-3011",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "irs501r",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "Bill and account collectors. Loaded cost = BLS May 2021 mean hourly wage x 1.8 (hospital benefits factor 1.51 from BLS ECEC December 2021, plus about 20 percent overhead)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "ehr",
+      "name": "Hospital electronic health record and department clinical systems",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "pas",
+      "name": "Patient accounting (hospital billing) system with chargemaster",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "encoder",
+      "name": "Encoder and coding work queues",
+      "kind": "workflow"
+    },
+    {
+      "id": "scrubber",
+      "name": "Claim scrubber and clearinghouse",
+      "kind": "workflow"
+    },
+    {
+      "id": "elig",
+      "name": "Eligibility verification (X12 270/271) tool",
+      "kind": "external_portal"
+    },
+    {
+      "id": "portal",
+      "name": "Payer provider portals",
+      "kind": "external_portal"
+    },
+    {
+      "id": "remit",
+      "name": "Remittance processing (X12 835 and bank lockbox images)",
+      "kind": "other"
+    },
+    {
+      "id": "denials",
+      "name": "Denial management work queues and reports",
+      "kind": "workflow"
+    },
+    {
+      "id": "roi",
+      "name": "Release of information and document imaging",
+      "kind": "document_store"
+    },
+    {
+      "id": "statements",
+      "name": "Patient statement vendor and online bill pay",
+      "kind": "external_portal"
+    },
+    {
+      "id": "phone",
+      "name": "Telephone and call center system",
+      "kind": "communication"
+    },
+    {
+      "id": "agency",
+      "name": "Collection agency placement interface",
+      "kind": "other"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Post charges from clinical systems",
+      "description": "When the visit, test or procedure is documented, the clinical systems send charge lines to the patient accounting system through the chargemaster, which assigns revenue codes, prices and, for many lab, imaging and therapy items, hard-coded CPT or HCPCS codes.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "documented services"
+      ],
+      "outputs": [
+        "charge lines on the account"
+      ],
+      "systems": [
+        "ehr",
+        "pas"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Charge missing or posted to the wrong account because an order or documentation step was skipped.",
+        "typically_caught_at": "s02"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard hospital charge capture design; error share is an estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Reconcile department charges",
+      "description": "Each morning the department charge specialist compares the previous day's procedure log or schedule with the charges posted, adds missing charges, corrects quantities and clears charge-edit work queues such as missing physician or missing modifier.",
+      "role": "charge_specialist",
+      "kind": "validation",
+      "inputs": [
+        "procedure log",
+        "charge lines"
+      ],
+      "outputs": [
+        "reconciled charges"
+      ],
+      "systems": [
+        "pas",
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 0.5,
+        "mode": 1,
+        "high": 4
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "A missed or duplicate charge is not caught.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Hospital revenue integrity policy requiring daily charge reconciliation by each revenue-producing department.",
+        "removability": "discretionary"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 0.55,
+          "condition": "visit needs a coder (ED, surgery, observation, clinic procedure)"
+        },
+        {
+          "to": "s07",
+          "prob": 0.45,
+          "condition": "hard-coded services (lab, imaging, therapy)"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; share of encounters coded by hand is an estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Assign diagnosis and procedure codes",
+      "description": "The outpatient coder opens the encounter in the coding work queue, reads the physician notes, operative or procedure report and results, and assigns ICD-10-CM diagnosis codes and CPT or HCPCS procedure codes with modifiers in the encoder. The coder checks that the codes support medical necessity and that charges match documentation, then finalizes the abstract.",
+      "role": "coder",
+      "kind": "judgment",
+      "inputs": [
+        "clinical documentation",
+        "charge lines"
+      ],
+      "outputs": [
+        "coded abstract"
+      ],
+      "systems": [
+        "encoder",
+        "ehr",
+        "pas"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 6,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 2160,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Wrong or missing code or modifier, unsupported diagnosis, or charge not matching documentation.",
+        "typically_caught_at": "s08"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "HIPAA code set standards (45 CFR 162.1002: ICD-10-CM, CPT and HCPCS) and the ICD-10-CM Official Guidelines for Coding and Reporting.",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.06,
+          "condition": "documentation unclear or incomplete"
+        },
+        {
+          "to": "s06",
+          "prob": 0.04,
+          "condition": "selected for pre-bill review"
+        },
+        {
+          "to": "s07",
+          "prob": 0.9,
+          "condition": "coded"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ftr2019"
+        ],
+        "note": "No national outpatient productivity standard exists; times and branch shares are estimates."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Send a documentation query to the physician",
+      "description": "The coder writes a non-leading query in the EHR inbox asking the physician to clarify a diagnosis, laterality, procedure detail or missing signature, and places the account on hold.",
+      "role": "coder",
+      "kind": "communication",
+      "inputs": [
+        "coded abstract draft"
+      ],
+      "outputs": [
+        "physician query"
+      ],
+      "systems": [
+        "ehr",
+        "encoder"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 60
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Compliant query practice per hospital HIM policy (non-leading queries, retained in the record).",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common HIM practice; times are estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Physician answers the query",
+      "description": "The physician sees the query among many inbox items, reviews the note and adds an addendum or answers the query, which returns the account to the coder.",
+      "role": "physician",
+      "kind": "drafting",
+      "inputs": [
+        "physician query"
+      ],
+      "outputs": [
+        "addendum or answer"
+      ],
+      "systems": [
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "returns to coder"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Response delays are a common cause of unbilled accounts; times are estimates."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Pre-bill coding review",
+      "description": "A coding auditor reviews a sample of accounts before billing (new coders, high-dollar surgeries, targeted risk areas), compares codes with documentation and either releases the account or returns it to the coder with feedback.",
+      "role": "coding_auditor",
+      "kind": "review",
+      "inputs": [
+        "coded abstract",
+        "documentation"
+      ],
+      "outputs": [
+        "audited abstract"
+      ],
+      "systems": [
+        "encoder",
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "An error passes the audit.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Hospital compliance program coding audits and the 95 percent coding accuracy standard.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 0.85,
+          "condition": "codes confirmed"
+        },
+        {
+          "to": "s03",
+          "prob": 0.15,
+          "condition": "returned for correction"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ftr2019"
+        ],
+        "note": "Audit teams and the 95 percent accuracy standard per For The Record; sample share is an estimate."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Build the claim in the nightly batch",
+      "description": "Once the account is final-coded and past the bill hold days, the patient accounting system builds the institutional claim (UB-04 data in X12 837I format) in its nightly run, applying payer-specific billing rules.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "coded account"
+      ],
+      "outputs": [
+        "claim"
+      ],
+      "systems": [
+        "pas"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 720,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s08",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Standard batch design; bill hold length is an estimate."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Run claim scrubber edits",
+      "description": "The claim scrubber applies NCCI procedure-to-procedure and medically unlikely edits, Outpatient Code Editor logic, payer-specific rules and demographic checks. Clean claims go straight to submission; claims that fail drop into billing work queues by edit type.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "claim"
+      ],
+      "outputs": [
+        "clean claim or edit list"
+      ],
+      "systems": [
+        "scrubber"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 120
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "CMS NCCI procedure-to-procedure and medically unlikely edits and the OPPS Outpatient Code Editor, updated quarterly; payer edits.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.82,
+          "condition": "passes all edits"
+        },
+        {
+          "to": "s09",
+          "prob": 0.18,
+          "condition": "fails one or more edits"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cms_ncci",
+          "tt_kpi"
+        ],
+        "note": "Clean claim targets are 90 to 95 percent; 82 percent first pass is an estimate for ordinary practice."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Work the scrubber edit",
+      "description": "The billing specialist opens the claim in the edit queue, reads the edit message, and fixes what is within billing's remit (modifier, units, payer ID, authorization number, coordination of benefits), or routes it to coding or patient access. Corrections are typed into the patient accounting system and the claim is re-released.",
+      "role": "biller",
+      "kind": "validation",
+      "inputs": [
+        "edit list",
+        "account"
+      ],
+      "outputs": [
+        "corrected claim"
+      ],
+      "systems": [
+        "scrubber",
+        "pas",
+        "portal"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Edit overridden instead of fixed.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.75,
+          "condition": "fixed by billing"
+        },
+        {
+          "to": "s03",
+          "prob": 0.12,
+          "condition": "coding edit returned to coder"
+        },
+        {
+          "to": "s10",
+          "prob": 0.13,
+          "condition": "registration or insurance error"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgma2021"
+        ],
+        "note": "MGMA recommends scrubbers and authorization checks; shares and times are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Correct registration and insurance",
+      "description": "A patient access representative re-verifies coverage in the eligibility tool, calls the patient or checks the payer portal for the right plan, subscriber and member ID, and updates the registration so the claim can be rebuilt.",
+      "role": "patient_access",
+      "kind": "data_entry",
+      "inputs": [
+        "edit or denial message"
+      ],
+      "outputs": [
+        "corrected registration"
+      ],
+      "systems": [
+        "elig",
+        "pas",
+        "phone",
+        "portal"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong plan chosen again.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "claim rebuilt"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hfma2021",
+          "mgma2021"
+        ],
+        "note": "Registration and eligibility errors cause about 27 percent of denials; times are estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Submit the claim through the clearinghouse",
+      "description": "The claim goes in the next clearinghouse batch as an X12 837I file. The clearinghouse and payer return acceptance or rejection reports (999 and 277CA) that billing checks the next day.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "clean claim"
+      ],
+      "outputs": [
+        "submitted claim",
+        "acknowledgement"
+      ],
+      "systems": [
+        "scrubber"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 360,
+        "high": 1440
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "HIPAA electronic transaction standards (ASC X12 837I) and payer timely filing limits, for Medicare one calendar year after the service (42 CFR 424.44).",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.96,
+          "condition": "accepted by payer"
+        },
+        {
+          "to": "s12",
+          "prob": 0.04,
+          "condition": "front-end rejection"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr424_44"
+        ],
+        "note": "Timely filing limit from the regulation; rejection share is an estimate."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Fix a front-end rejection",
+      "description": "The billing specialist reads the rejection report, fixes the missing or invalid data element (subscriber ID, provider identifier, date span) and re-releases the claim.",
+      "role": "biller",
+      "kind": "data_entry",
+      "inputs": [
+        "rejection report"
+      ],
+      "outputs": [
+        "corrected claim"
+      ],
+      "systems": [
+        "scrubber",
+        "pas"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Same error resent.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Payer adjudicates the claim",
+      "description": "The payer's claim system prices the claim against the contract or fee schedule, applies its edits and medical policies, and pays, pays in part, pends for records or denies. Medicare cannot pay a clean electronic claim before day 14 and owes interest after 30 days; commercial payers follow state prompt-pay laws.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "submitted claim"
+      ],
+      "outputs": [
+        "remittance advice (835)"
+      ],
+      "systems": [
+        "portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 10080,
+        "mode": 20160,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "Payer errors are outside this process.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Medicare payment floor and interest (42 U.S.C. 1395h(c)): no payment before 13 days after receipt for electronic claims, interest on clean claims unpaid after 30 days; state prompt-pay laws for commercial plans.",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.92,
+          "condition": "remittance received"
+        },
+        {
+          "to": "s21",
+          "prob": 0.08,
+          "condition": "no response after 30 to 45 days"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "usc1395h",
+          "tt_kpi"
+        ],
+        "note": "Payment floor from statute; days in A/R benchmark 30 to 50; wait range is an estimate (commercial payers can pay sooner than Medicare)."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Auto-post the electronic remittance",
+      "description": "The remittance file and bank deposit are matched and the patient accounting system posts payments, contractual adjustments, patient responsibility and denial codes line by line without a person touching most accounts.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "835 remittance",
+        "bank deposit"
+      ],
+      "outputs": [
+        "posted payment and adjustments"
+      ],
+      "systems": [
+        "remit",
+        "pas"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 2880
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Payment posted to the wrong line or contractual adjustment miscalculated.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.25,
+          "condition": "paid in full by insurance",
+          "outcome": "paid_in_full"
+        },
+        {
+          "to": "s23",
+          "prob": 0.51,
+          "condition": "patient balance remains"
+        },
+        {
+          "to": "s16",
+          "prob": 0.12,
+          "condition": "claim or line denied"
+        },
+        {
+          "to": "s15",
+          "prob": 0.12,
+          "condition": "posting exception"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hfma_cit",
+          "hcdive2017",
+          "premier2024"
+        ],
+        "note": "Initial denials about 9 to 15 percent of claims; 12 percent used; other shares are estimates."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Post exceptions by hand and reconcile",
+      "description": "The cash posting specialist works unmatched deposits, paper explanations of benefits, recoupments and underpaid lines, posts them by hand from lockbox images, and reconciles the day's postings to the bank deposit.",
+      "role": "payment_poster",
+      "kind": "data_entry",
+      "inputs": [
+        "lockbox images",
+        "unposted cash report"
+      ],
+      "outputs": [
+        "posted payment"
+      ],
+      "systems": [
+        "remit",
+        "pas"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Keying error in payment or adjustment amount.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "audit_requirement",
+        "basis": "Daily cash reconciliation of postings to bank deposits (hospital internal control over financial reporting).",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.3,
+          "condition": "resolved, nothing owed",
+          "outcome": "paid_in_full"
+        },
+        {
+          "to": "s23",
+          "prob": 0.5,
+          "condition": "patient balance remains"
+        },
+        {
+          "to": "s16",
+          "prob": 0.2,
+          "condition": "underpayment or denial to work"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; shares and times are estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Triage the denial",
+      "description": "The denial specialist opens the denial work queue item, reads the claim adjustment and remark codes and the payer portal detail, decides whether the cause is registration, authorization, coding, medical necessity or non-covered, and chooses to correct and resubmit, appeal, bill the patient or write off.",
+      "role": "denial_specialist",
+      "kind": "analysis",
+      "inputs": [
+        "denial codes",
+        "account"
+      ],
+      "outputs": [
+        "denial category and action"
+      ],
+      "systems": [
+        "denials",
+        "pas",
+        "portal"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Wrong root cause chosen; denial later written off as untimely.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 0.45,
+          "condition": "correctable error"
+        },
+        {
+          "to": "s18",
+          "prob": 0.3,
+          "condition": "appealable decision"
+        },
+        {
+          "to": "s22",
+          "prob": 0.15,
+          "condition": "not recoverable (untimely, non-covered without notice)"
+        },
+        {
+          "to": "s23",
+          "prob": 0.1,
+          "condition": "patient responsibility"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgma2021",
+          "ajmc2021"
+        ],
+        "note": "86 percent of denials avoidable and 24 percent of all denials not recoverable; branch shares are estimates based on these."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Correct and resubmit the claim",
+      "description": "The billing specialist fixes the claim, for example adding the authorization number, a modifier or corrected coordination of benefits, gets coding to change a code where needed, and sends a corrected or replacement claim.",
+      "role": "biller",
+      "kind": "data_entry",
+      "inputs": [
+        "denial category"
+      ],
+      "outputs": [
+        "corrected claim"
+      ],
+      "systems": [
+        "pas",
+        "scrubber",
+        "portal"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Correction incomplete; claim denied again.",
+        "typically_caught_at": "s13"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "resubmitted"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "mgma2021"
+        ],
+        "note": "MGMA: $25.20 average cost to rework a claim; times are estimates."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Assemble records and draft the appeal",
+      "description": "The denial specialist requests the relevant record pages from release of information, fills the payer's appeal form, writes a letter citing the contract or policy, and attaches the authorization or proof of timely filing.",
+      "role": "denial_specialist",
+      "kind": "drafting",
+      "inputs": [
+        "denial",
+        "medical record"
+      ],
+      "outputs": [
+        "appeal packet"
+      ],
+      "systems": [
+        "roi",
+        "denials",
+        "portal"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 35,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Missing documentation in the packet.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s19",
+          "prob": 0.4,
+          "condition": "medical necessity denial"
+        },
+        {
+          "to": "s20",
+          "prob": 0.6,
+          "condition": "administrative or coding appeal"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hcdive2017",
+          "premier2024"
+        ],
+        "note": "Average $118 per appealed claim (2016) and $43.84 per denied claim (2022); times are estimates."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Clinical appeals nurse writes the medical necessity argument",
+      "description": "For medical necessity denials, a nurse reviews the record against the payer's criteria and writes the clinical argument, sometimes asking the physician to support it.",
+      "role": "appeals_nurse",
+      "kind": "drafting",
+      "inputs": [
+        "appeal packet",
+        "medical record"
+      ],
+      "outputs": [
+        "clinical appeal letter"
+      ],
+      "systems": [
+        "ehr",
+        "denials"
+      ],
+      "touch_min": {
+        "low": 20,
+        "mode": 40,
+        "high": 75
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Argument does not address the payer's criterion.",
+        "typically_caught_at": "s20"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common in hospital denial teams; times are estimates."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Payer reviews the appeal",
+      "description": "The appeal goes to the payer by portal, fax or mail and waits for its decision. Hospitals report each review cycle takes 45 to 60 days and many claims need more than one round.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "appeal packet"
+      ],
+      "outputs": [
+        "appeal decision"
+      ],
+      "systems": [
+        "portal"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 30240,
+        "mode": 64800,
+        "high": 86400
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.55,
+          "condition": "overturned and paid"
+        },
+        {
+          "to": "s22",
+          "prob": 0.45,
+          "condition": "upheld"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "premier2024"
+        ],
+        "note": "Premier: review cycles of 45 to 60 days; 54.3 percent of denied claims ultimately paid."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Follow up an unpaid claim",
+      "description": "From the aged trial balance the follow-up representative picks claims with no payment after 30 to 45 days, checks the payer portal or calls the payer, waits on hold, and learns the claim is in process, not on file or waiting for records, then acts or resubmits.",
+      "role": "ar_followup",
+      "kind": "communication",
+      "inputs": [
+        "aged trial balance"
+      ],
+      "outputs": [
+        "status note and action"
+      ],
+      "systems": [
+        "portal",
+        "phone",
+        "pas"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 14400,
+        "mode": 25920,
+        "high": 43200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong action logged.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 0.6,
+          "condition": "payment follows"
+        },
+        {
+          "to": "s11",
+          "prob": 0.4,
+          "condition": "claim not on file; resubmitted"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "premier2024",
+          "tt_kpi"
+        ],
+        "note": "Premier reports 13.9 percent of claims past due; times are estimates."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Approve a denial write-off",
+      "description": "The supervisor reviews write-off requests above the staff limit, checks that appeal options are exhausted, and approves the adjustment with a denial reason code so it is reported as a denial write-off.",
+      "role": "pfs_supervisor",
+      "kind": "approval",
+      "inputs": [
+        "write-off request"
+      ],
+      "outputs": [
+        "posted adjustment"
+      ],
+      "systems": [
+        "pas",
+        "denials"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Recoverable balance written off.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "segregation_of_duties",
+        "basis": "Adjustment approval limits under hospital internal control policy; denial write-offs tracked as HFMA MAP Key AR-6.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.65,
+          "condition": "balance written off",
+          "outcome": "written_off"
+        },
+        {
+          "to": "s23",
+          "prob": 0.35,
+          "condition": "patient balance remains"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hfma_cit"
+        ],
+        "note": "Write-off metric per HFMA; approval practice and shares are estimates."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Send the patient statement",
+      "description": "After insurance pays, the patient balance moves to self-pay and the statement vendor mails or emails a statement in the next cycle, with the financial assistance summary and online payment options.",
+      "role": "system",
+      "kind": "system_auto",
+      "inputs": [
+        "patient balance"
+      ],
+      "outputs": [
+        "patient statement"
+      ],
+      "systems": [
+        "pas",
+        "statements"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 2880,
+        "high": 10080
+      },
+      "wait_cause": "batch",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Section 501(r) billing rules for tax-exempt hospitals: the first post-discharge statement starts the 120-day notification and 240-day application periods and must tell patients about financial assistance.",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "irs501r"
+        ],
+        "note": "Rule from the IRS page; statement cycle length is an estimate."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Patient reviews the bill",
+      "description": "The patient receives the statement and pays in full, calls with questions or for a payment plan, or does not respond to the first statement.",
+      "role": "external",
+      "kind": "external_wait",
+      "inputs": [
+        "patient statement"
+      ],
+      "outputs": [
+        "payment or call"
+      ],
+      "systems": [
+        "statements"
+      ],
+      "touch_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_before_min": {
+        "low": 4320,
+        "mode": 14400,
+        "high": 43200
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.58,
+          "condition": "paid in full",
+          "outcome": "paid_in_full"
+        },
+        {
+          "to": "s25",
+          "prob": 0.2,
+          "condition": "calls the billing office"
+        },
+        {
+          "to": "s27",
+          "prob": 0.22,
+          "condition": "no payment after the first statement"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Patient payment behaviour shares are estimates."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Handle the patient's billing call",
+      "description": "The customer service representative explains the explanation of benefits and balance, sets up a payment plan, updates insurance when the patient has other coverage, and offers a financial assistance application where the patient may qualify.",
+      "role": "customer_service",
+      "kind": "communication",
+      "inputs": [
+        "patient call",
+        "account"
+      ],
+      "outputs": [
+        "resolution or referral"
+      ],
+      "systems": [
+        "phone",
+        "pas"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Wrong balance quoted or insurance not updated.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.6,
+          "condition": "paid or on a payment plan",
+          "outcome": "paid_in_full"
+        },
+        {
+          "to": "s26",
+          "prob": 0.2,
+          "condition": "applies for financial assistance"
+        },
+        {
+          "to": "s10",
+          "prob": 0.2,
+          "condition": "other insurance to bill"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; shares and times are estimates."
+      }
+    },
+    {
+      "id": "s26",
+      "name": "Review the financial assistance application",
+      "description": "The financial counselor checks the application and income documents against the hospital's financial assistance policy, asks for missing documents, applies the free or discounted care level and adjusts the account.",
+      "role": "financial_counselor",
+      "kind": "judgment",
+      "inputs": [
+        "application",
+        "income documents"
+      ],
+      "outputs": [
+        "assistance decision and adjustment"
+      ],
+      "systems": [
+        "pas",
+        "phone"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 20160
+      },
+      "wait_cause": "external_party",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Eligibility misjudged.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Section 501(r)(4) to (6): financial assistance policy, 240-day application period, and reasonable efforts to determine eligibility before collection actions.",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.7,
+          "condition": "approved; balance adjusted",
+          "outcome": "charity_adjusted"
+        },
+        {
+          "to": "s27",
+          "prob": 0.3,
+          "condition": "not eligible; balance stands"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "irs501r"
+        ],
+        "note": "Rule from the IRS page; shares and times are estimates."
+      }
+    },
+    {
+      "id": "s27",
+      "name": "Send final notices and place with a collection agency",
+      "description": "After further statements, the self-pay collector sends the 30-day final notice with the plain language financial assistance summary, attempts an oral notice by phone, and after the 120-day period places unpaid balances with a collection agency and moves them to bad debt.",
+      "role": "collector",
+      "kind": "communication",
+      "inputs": [
+        "aged self-pay balance"
+      ],
+      "outputs": [
+        "final notice",
+        "agency placement"
+      ],
+      "systems": [
+        "pas",
+        "statements",
+        "phone",
+        "agency"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 100800,
+        "mode": 115200,
+        "high": 144000
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.01,
+        "defect_description": "Account placed before notice requirements were met.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Section 501(r)(6): no extraordinary collection actions within 120 days of the first post-discharge statement, 30 days written notice with a plain language summary and an oral notice attempt.",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.5,
+          "condition": "paid after later statements or final notice",
+          "outcome": "paid_in_full"
+        },
+        {
+          "to": "END",
+          "prob": 0.5,
+          "condition": "placed with agency as bad debt",
+          "outcome": "bad_debt"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "irs501r"
+        ],
+        "note": "Timelines from the IRS page; shares are estimates."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Physician documentation query",
+      "share_of_cases": 0.035,
+      "description": "The coder cannot code from the note and waits days for the physician's addendum.",
+      "path": [
+        "s03",
+        "s04",
+        "s05",
+        "s03"
+      ]
+    },
+    {
+      "name": "Scrubber edit",
+      "share_of_cases": 0.18,
+      "description": "The claim fails an NCCI, OCE, payer or demographic edit and waits in a billing queue.",
+      "path": [
+        "s08",
+        "s09",
+        "s11"
+      ]
+    },
+    {
+      "name": "Registration or eligibility error",
+      "share_of_cases": 0.04,
+      "description": "Wrong plan or subscriber details send the account back to patient access and the claim is rebuilt.",
+      "path": [
+        "s09",
+        "s10",
+        "s07"
+      ]
+    },
+    {
+      "name": "Denial corrected and resubmitted",
+      "share_of_cases": 0.07,
+      "description": "The denial specialist finds a correctable error and the claim goes through the payer again.",
+      "path": [
+        "s16",
+        "s17",
+        "s11",
+        "s13"
+      ]
+    },
+    {
+      "name": "Appeal",
+      "share_of_cases": 0.045,
+      "description": "Records and a letter go to the payer and the decision takes 45 to 60 days or more.",
+      "path": [
+        "s18",
+        "s19",
+        "s20"
+      ]
+    },
+    {
+      "name": "No payer response",
+      "share_of_cases": 0.08,
+      "description": "The claim is unpaid after 30 to 45 days and a representative chases it.",
+      "path": [
+        "s13",
+        "s21"
+      ]
+    },
+    {
+      "name": "Financial assistance",
+      "share_of_cases": 0.03,
+      "description": "The patient applies and the balance is reduced or removed under the hospital's policy.",
+      "path": [
+        "s25",
+        "s26"
+      ]
+    },
+    {
+      "name": "Bad debt placement",
+      "share_of_cases": 0.08,
+      "description": "After 120 days and a 30-day notice the balance goes to a collection agency.",
+      "path": [
+        "s24",
+        "s27"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 40,
+        "p90": 120
+      },
+      "unit": "calendar days from charge posting to zero balance",
+      "population": "US hospital outpatient accounts, 2019-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "tt_kpi",
+          "usc1395h",
+          "premier2024",
+          "irs501r"
+        ],
+        "note": "Synthesis: days in A/R targets of 30 to 50; Medicare pays electronic claims from day 14; appeal cycles take 45 to 60 days; self-pay balances cannot go to agencies before 120 days."
+      }
+    },
+    {
+      "metric": "initial_denial_rate",
+      "value": {
+        "2016": 0.09,
+        "Q3 2020": 0.11,
+        "private payers 2022": 0.15
+      },
+      "unit": "share of claims denied on first submission",
+      "population": "US hospitals",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "hcdive2017",
+          "hfma2021",
+          "premier2024"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "denials_potentially_avoidable",
+      "value": 0.86,
+      "unit": "share of denials",
+      "population": "102 million claims, July 2019 to June 2020",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "hfma2021",
+          "mgma2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "denials_not_recoverable",
+      "value": 0.24,
+      "unit": "share of all denials",
+      "population": "Change Healthcare 2020 index",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "mgma2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "denial_cause_registration_eligibility",
+      "value": 0.27,
+      "unit": "share of denials",
+      "population": "Change Healthcare 2020 index",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "hfma2021",
+          "mgma2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "cost_to_rework_claim",
+      "value": 25.2,
+      "unit": "USD per claim",
+      "population": "MGMA, 2021",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "mgma2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "cost_per_appealed_claim",
+      "value": {
+        "2016": 118,
+        "2022": 43.84
+      },
+      "unit": "USD",
+      "population": "Change Healthcare 2016 hospital data; Premier survey of 516 hospitals on 2022 claims",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "hcdive2017",
+          "premier2024"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "denied_claims_ultimately_paid",
+      "value": 0.543,
+      "unit": "share of denied claims",
+      "population": "Premier, 2022 claims",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "premier2024"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "days_in_accounts_receivable_target",
+      "value": {
+        "max": 50,
+        "preferred_low": 30,
+        "preferred_high": 40
+      },
+      "unit": "days",
+      "population": "AAFP guidance cited by TechTarget",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "tt_kpi"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "clean_claim_rate_target",
+      "value": 0.9,
+      "unit": "share of claims passing edits without manual work",
+      "population": "Industry targets",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "tt_kpi"
+        ],
+        "note": "Some sources cite 95 percent."
+      }
+    },
+    {
+      "metric": "coding_accuracy_standard",
+      "value": 0.95,
+      "unit": "share of codes correct on audit",
+      "population": "Industry standard",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ftr2019"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Registration and eligibility errors made at the front end cause about a quarter of denials and send claims back through patient access.",
+      "steps": [
+        "s10",
+        "s09",
+        "s16"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "hfma2021",
+          "mgma2021"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Accounts wait in coding queues and for physician query answers, holding up the claim.",
+      "steps": [
+        "s03",
+        "s04",
+        "s05"
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common source of discharged-not-final-billed backlogs; estimate."
+      }
+    },
+    {
+      "description": "Appeals take 45 to 60 days a round and often several rounds, and much of the effort recovers claims that should have paid.",
+      "steps": [
+        "s18",
+        "s19",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "premier2024"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Unpaid claims are chased by phone and portal one at a time from aged trial balance lists.",
+      "steps": [
+        "s21"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "premier2024"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Denial backlogs, staff turnover and legacy systems mean many avoidable denials are never recovered.",
+      "steps": [
+        "s16",
+        "s22"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ajmc2021"
+        ],
+        "note": "48 percent of avoidable denials cannot be recovered."
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "hfma2021",
+      "title": "Healthcare news of note: National index shows denials are up 11%",
+      "publisher": "Healthcare Financial Management Association",
+      "url": "https://www.hfma.org/topics/news/2021/07/healthcare-news-of-note--national-index-shows-denials-are-up-11.html",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Change Healthcare 2020 Denials Index: initial denials above 11% of claims in Q3 2020, up 23% since 2016; 86% potentially avoidable; registration and eligibility about 27% of denials; half of denials from front-end causes; 102 million claims at 1,500+ hospitals."
+    },
+    {
+      "id": "mgma2021",
+      "title": "6 keys to addressing denials in your medical practice's revenue cycle",
+      "publisher": "Medical Group Management Association",
+      "url": "https://www.mgma.com/mgma-stats/6-keys-to-addressing-denials-in-your-medical-practice-s-revenue-cycle",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Average cost to rework a claim $25.20; denial causes registration and eligibility 27%, authorization 11.6%, service not covered 10.6%; 86% avoidable; 24% of all denials not recoverable; recommends eligibility checks, authorization matching, scrubbers and ABNs."
+    },
+    {
+      "id": "ajmc2021",
+      "title": "Medical claim denial rates rising, highest in initial COVID-19 hotspots",
+      "publisher": "AJMC",
+      "url": "https://www.ajmc.com/view/medical-claim-denial-rates-rising-highest-in-initial-covid-19-hotspots",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "Initial denials up 23% since 2016; 86% potentially avoidable, 34% unequivocally avoidable; 48% of avoidable denials cannot be recovered; causes include backlog, attrition and legacy technology."
+    },
+    {
+      "id": "hfma_cit",
+      "title": "HFMA Claim Integrity Task Force seeks to standardize denial metrics",
+      "publisher": "Healthcare Financial Management Association",
+      "url": "https://www.hfma.org/topics/hfm/2021/march/hfma-claim-integrity-task-force-seeks-to-standardize-denial-metr.html",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "About 9% of hospital claims denied, about $262 billion a year; initial denial rate measured by volume and dollars; denial write-offs as a percentage of net patient service revenue (MAP Key AR-6)."
+    },
+    {
+      "id": "hcdive2017",
+      "title": "Report: $262B in healthcare claims initially denied last year",
+      "publisher": "Healthcare Dive",
+      "url": "https://www.healthcaredive.com/news/report-262b-in-healthcare-claims-initially-denied-last-year/445758/",
+      "year": 2017,
+      "accessed": "2026-11-17",
+      "supports": "Change Healthcare 2016 data: about 9% of claims initially denied; 63% of denials recoverable; $118 average cost per appealed claim."
+    },
+    {
+      "id": "premier2024",
+      "title": "Trend Alert: Private payers retain profits by refusing or delaying legitimate medical claims",
+      "publisher": "Premier Inc.",
+      "url": "https://www.premierinc.com/newsroom/blog/trend-alert-private-payers-retain-profits-by-refusing-or-delaying-legitimate-medical-claims",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Survey of 516 hospitals on 2022 claims: nearly 15% of claims to private payers initially denied; 54.3% of denied claims ultimately paid; average $43.84 per claim to fight denials; each review cycle 45 to 60 days; average three rounds; 13.9% of claims past due."
+    },
+    {
+      "id": "tt_kpi",
+      "title": "Breaking down the top 5 healthcare revenue cycle KPIs",
+      "publisher": "TechTarget RevCycle Management",
+      "url": "https://www.techtarget.com/revcyclemanagement/feature/Breaking-Down-the-Top-5-Healthcare-Revenue-Cycle-KPIs",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "Days in accounts receivable below 50, 30 to 40 preferable (AAFP); clean claim rate 90% or higher, some cite 95%; cost to collect 2% to 4% of net patient revenue; HFMA definitions."
+    },
+    {
+      "id": "ftr2019",
+      "title": "Coding productivity: In search of standards (For The Record, February 2019)",
+      "publisher": "For The Record",
+      "url": "https://www.fortherecordmag.com/archives/0219p22.shtml",
+      "year": 2019,
+      "accessed": "2026-11-17",
+      "supports": "No industry-wide coding productivity standard; 95% accuracy is the accepted quality standard; quality is measured by separate manual audit teams; inpatient productivity about 2 cases per hour."
+    },
+    {
+      "id": "cms_ncci",
+      "title": "National Correct Coding Initiative (NCCI) edits",
+      "publisher": "Centers for Medicare & Medicaid Services",
+      "url": "https://www.cms.gov/medicare/coding-billing/national-correct-coding-initiative-ncci-edits",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Procedure-to-procedure and medically unlikely edits apply to outpatient hospital claims through the Outpatient Code Editor; files updated quarterly."
+    },
+    {
+      "id": "usc1395h",
+      "title": "42 U.S. Code 1395h (Social Security Act section 1816), subsection (c)",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/uscode/text/42/1395h",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Medicare may not pay clean claims sooner than 13 days after receipt for electronic claims (28 days for paper) and owes interest on clean claims not paid within 30 days."
+    },
+    {
+      "id": "cfr424_44",
+      "title": "42 CFR 424.44 Time limits for filing claims",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/42/424.44",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Medicare claims must be filed within one calendar year after the date of service, with narrow exceptions."
+    },
+    {
+      "id": "irs501r",
+      "title": "Billing and collections: Section 501(r)(6)",
+      "publisher": "Internal Revenue Service",
+      "url": "https://www.irs.gov/charities-non-profits/billing-and-collections-section-501r6",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Tax-exempt hospitals may not start extraordinary collection actions for 120 days after the first post-discharge bill, must accept assistance applications for 240 days, and must give 30 days written notice with a plain language summary and attempt oral notice."
+    },
+    {
+      "id": "bls_oes2021",
+      "title": "Occupational Employment and Wage Statistics, May 2021 National Estimates",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/oes/2021/may/oes_nat.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Mean hourly wages May 2021: medical records specialists $23.23, health information technologists $29.53, billing and posting clerks $20.55, bill and account collectors $19.85, customer service representatives $18.79, receptionists and information clerks $15.82, registered nurses $39.78, medical and health services managers $57.61, physicians all other $111.30."
+    },
+    {
+      "id": "bls_ecec2021",
+      "title": "Employer Costs for Employee Compensation, December 2021",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/news.release/archives/ecec_03182022.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Private hospitals: wages 66.1% of compensation, benefits 33.9%."
+    }
+  ],
+  "assumptions": [
+    "One encounter equals one institutional claim; interim and recurring-account billing (therapy series) are treated the same way.",
+    "About 45 percent of encounters (lab, imaging, therapy) are hard-coded through the chargemaster and skip the coder; this share is an estimate.",
+    "The 12 percent initial denial rate sits between the 9 to 11 percent hospital index figures and the 15 percent reported for private payers.",
+    "Branch shares for edits, rejections, posting exceptions, patient payment and collections are estimates; no single source gives them for one encounter type.",
+    "The cycle-time benchmark is a synthesis from days-in-A/R targets, the Medicare payment floor, appeal cycle lengths and the 501(r) 120-day period, not a measured distribution.",
+    "Fte_on_process values are set from hands-on time times volume at 130 productive hours a month with an allowance for non-case work such as reports, training and meetings.",
+    "External steps (payer adjudication and appeal review, patient response) carry no hands-on time in this file; their time is in wait_before_min."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}

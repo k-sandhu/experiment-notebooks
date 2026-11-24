@@ -1,0 +1,2197 @@
+{
+  "schema_version": "0.2",
+  "id": "hc-prior-authorization",
+  "name": "Prior authorization of a procedure or specialty drug (provider office and health plan)",
+  "org": null,
+  "process": null,
+  "sector": "healthcare",
+  "function": "utilization management and revenue cycle front end",
+  "summary": "Before some procedures, imaging and specialty drugs, a US health plan must approve the service in advance. A coordinator in the physician's office works out whether approval is needed, gathers chart evidence, and submits it by portal, fax or phone; at the plan an intake coordinator logs it, a nurse checks it against clinical criteria and a physician must review any denial. Denials lead to peer-to-peer calls and written appeals. The process is slow because of queues on both sides, faxed documents that are re-keyed, requests for missing information and calls to chase status, and more than eight in ten appealed denials are reversed.",
+  "baseline": {
+    "period": "2019-2022",
+    "org_archetype": "A regional US health plan with about 150,000 commercial and Medicare Advantage members and its own utilization management department, plus the several hundred physician offices that send it requests.",
+    "org_size_employees": 600,
+    "notes": "Provider-office roles are counted across all offices that send requests to this plan; plan roles are the plan's own staff. Medical-benefit requests for procedures, advanced imaging and specialty drugs; pharmacy-benefit (Part D) drug requests are out of scope."
+  },
+  "currency": "USD",
+  "unit_of_work": "one prior authorization request for one procedure or specialty drug",
+  "trigger": "A physician signs an order for a procedure, advanced imaging study or specialty drug for a patient whose plan may require prior authorization.",
+  "end_state": "The service is approved and scheduled, found not to need authorization, or denied with the patient told and appeal rights used or waived.",
+  "cadence": "per_case",
+  "volume": {
+    "cases_per_month": {
+      "low": 2500,
+      "mode": 3500,
+      "high": 4500
+    },
+    "seasonality": "Higher in January when deductibles reset and plan lists change, and before year-end for elective procedures.",
+    "evidence": {
+      "tier": "C",
+      "sources": [
+        "kff2026"
+      ],
+      "note": "KFF reports 1.4 to 1.7 Medicare Advantage PA requests per enrollee per year in 2019-2022; commercial use is lower. Estimate assumes about 0.3 medical-benefit requests for procedures, imaging and specialty drugs per member per year across 150,000 members."
+    }
+  },
+  "interfaces": {
+    "triggered_by": [
+      {
+        "from": "Physician visit and order entry (provider office)",
+        "object": "signed order",
+        "share": 0.85
+      },
+      {
+        "from": "Hospital or imaging center scheduling",
+        "object": "scheduled procedure needing authorization",
+        "share": 0.15
+      }
+    ],
+    "produces": [
+      {
+        "outcome": "approved",
+        "to": "Patient scheduling and specialty pharmacy dispensing",
+        "object": "authorization number"
+      },
+      {
+        "outcome": "approved",
+        "to": "Claim submission (revenue cycle)",
+        "object": "authorization number on the account"
+      },
+      {
+        "outcome": "denied",
+        "to": "Patient (member)",
+        "object": "denial notice with appeal rights"
+      },
+      {
+        "outcome": "denied",
+        "to": "External review organization (when the member requests)",
+        "object": "appeal file"
+      },
+      {
+        "outcome": "any",
+        "to": "Plan UM reporting and regulators (CMS, state insurance departments)",
+        "object": "determination and timeliness records"
+      },
+      {
+        "outcome": "no_auth_required",
+        "to": "Patient scheduling",
+        "object": "cleared order"
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "pa_coordinator",
+      "title": "Prior authorization coordinator (provider office)",
+      "department": "Provider office front desk and referrals",
+      "layer": "individual_contributor",
+      "fte_on_process": 27,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 33,
+        "high": 40
+      },
+      "occupation_code": "SOC 43-6013",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ama2020",
+          "ama2023",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "AMA surveys report 30 to 35 percent of practices employ staff who work only on PA. FTE is summed across all submitting offices for this plan's volume. Loaded cost = BLS May 2021 national mean hourly wage x 1.75 (benefits factor about 1.42 from BLS ECEC December 2021, where wages are 70 percent of compensation in private health care, plus about 23 percent overhead for space, IT and supervision)."
+      }
+    },
+    {
+      "id": "ordering_physician",
+      "title": "Ordering physician (specialist or primary care)",
+      "department": "Provider office clinical staff",
+      "layer": "senior_specialist",
+      "fte_on_process": 4,
+      "loaded_cost_per_hour": {
+        "low": 150,
+        "mode": 195,
+        "high": 260
+      },
+      "occupation_code": "SOC 29-1229",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ama2020",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "AMA counts physician and staff hours together. FTE summed across submitting offices. Loaded cost = BLS May 2021 national mean hourly wage x 1.75 (benefits factor about 1.42 from BLS ECEC December 2021, where wages are 70 percent of compensation in private health care, plus about 23 percent overhead for space, IT and supervision)."
+      }
+    },
+    {
+      "id": "um_intake",
+      "title": "Utilization management intake coordinator (health plan)",
+      "department": "Health plan utilization management",
+      "layer": "individual_contributor",
+      "fte_on_process": 10,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 33,
+        "high": 40
+      },
+      "occupation_code": "SOC 43-6013",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "bls_oes2021"
+        ],
+        "note": "Non-clinical intake role common in plan UM departments; wage proxy is medical secretaries and administrative assistants. Loaded cost = BLS May 2021 national mean hourly wage x 1.75 (benefits factor about 1.42 from BLS ECEC December 2021, where wages are 70 percent of compensation in private health care, plus about 23 percent overhead for space, IT and supervision)."
+      }
+    },
+    {
+      "id": "um_nurse",
+      "title": "Utilization review nurse (health plan)",
+      "department": "Health plan utilization management",
+      "layer": "individual_contributor",
+      "fte_on_process": 12.5,
+      "loaded_cost_per_hour": {
+        "low": 58,
+        "mode": 70,
+        "high": 85
+      },
+      "occupation_code": "SOC 29-1141",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ccmguide",
+          "bls_oes2021",
+          "bls_ecec2021"
+        ],
+        "note": "First-level clinical reviewer applying MCG or InterQual criteria. Loaded cost = BLS May 2021 national mean hourly wage x 1.75 (benefits factor about 1.42 from BLS ECEC December 2021, where wages are 70 percent of compensation in private health care, plus about 23 percent overhead for space, IT and supervision)."
+      }
+    },
+    {
+      "id": "medical_director",
+      "title": "Plan medical director (physician reviewer)",
+      "department": "Health plan utilization management",
+      "layer": "senior_specialist",
+      "fte_on_process": 2.5,
+      "loaded_cost_per_hour": {
+        "low": 160,
+        "mode": 195,
+        "high": 250
+      },
+      "occupation_code": "SOC 29-1229",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr422566",
+          "wellcare2024",
+          "bls_oes2021"
+        ],
+        "note": "Regulation requires physician or appropriate professional review of adverse decisions; medical directors hold peer-to-peer calls. Loaded cost = BLS May 2021 national mean hourly wage x 1.75 (benefits factor about 1.42 from BLS ECEC December 2021, where wages are 70 percent of compensation in private health care, plus about 23 percent overhead for space, IT and supervision)."
+      }
+    },
+    {
+      "id": "appeals_coordinator",
+      "title": "Appeals and grievances coordinator (health plan)",
+      "department": "Health plan appeals and grievances",
+      "layer": "individual_contributor",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 28,
+        "mode": 34,
+        "high": 42
+      },
+      "occupation_code": "SOC 43-6013",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "bls_oes2021"
+        ],
+        "note": "Non-clinical case-file role; wage proxy medical secretaries and administrative assistants. Loaded cost = BLS May 2021 national mean hourly wage x 1.75 (benefits factor about 1.42 from BLS ECEC December 2021, where wages are 70 percent of compensation in private health care, plus about 23 percent overhead for space, IT and supervision)."
+      }
+    },
+    {
+      "id": "appeal_physician",
+      "title": "Appeal physician reviewer (not involved in the initial decision)",
+      "department": "Health plan appeals and grievances or contracted review organization",
+      "layer": "senior_specialist",
+      "fte_on_process": 0.5,
+      "loaded_cost_per_hour": {
+        "low": 160,
+        "mode": 200,
+        "high": 260
+      },
+      "occupation_code": "SOC 29-1229",
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ccmguide",
+          "cfr2560",
+          "bls_oes2021"
+        ],
+        "note": "Appeals are decided by a clinician who did not make the initial decision. Loaded cost = BLS May 2021 national mean hourly wage x 1.75 (benefits factor about 1.42 from BLS ECEC December 2021, where wages are 70 percent of compensation in private health care, plus about 23 percent overhead for space, IT and supervision)."
+      }
+    }
+  ],
+  "systems": [
+    {
+      "id": "ehr",
+      "name": "Provider electronic health record and order work queues",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "pm",
+      "name": "Provider practice management (scheduling and billing) system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "portal",
+      "name": "Health plan provider portal",
+      "kind": "external_portal"
+    },
+    {
+      "id": "fax",
+      "name": "Fax and electronic fax server",
+      "kind": "communication"
+    },
+    {
+      "id": "phone",
+      "name": "Telephone and call queues",
+      "kind": "communication"
+    },
+    {
+      "id": "um",
+      "name": "Health plan utilization management case system",
+      "kind": "workflow"
+    },
+    {
+      "id": "core",
+      "name": "Health plan eligibility and benefits (core administration) system",
+      "kind": "system_of_record"
+    },
+    {
+      "id": "criteria",
+      "name": "Licensed clinical criteria sets (MCG or InterQual) and plan medical and drug policies",
+      "kind": "document_store"
+    },
+    {
+      "id": "letters",
+      "name": "Plan correspondence and letter generation tool",
+      "kind": "other"
+    },
+    {
+      "id": "appeals",
+      "name": "Health plan appeals and grievances tracking system",
+      "kind": "workflow"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s01",
+      "name": "Check whether authorization is required",
+      "description": "The coordinator picks the new order from the EHR referral or order work queue, notes the procedure or drug code and the diagnosis, and looks up the patient's plan on the payer's code list or portal. Rules differ by plan, product, site of service and delegated vendor and change several times a year, so the coordinator often has to search or call.",
+      "role": "pa_coordinator",
+      "kind": "lookup",
+      "inputs": [
+        "signed order",
+        "patient insurance details"
+      ],
+      "outputs": [
+        "decision that PA is needed"
+      ],
+      "systems": [
+        "ehr",
+        "portal",
+        "phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "Requirement missed or wrongly assumed (wrong product, site of service or code list version).",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s02",
+          "prob": 0.95,
+          "condition": "authorization required"
+        },
+        {
+          "to": "END",
+          "prob": 0.05,
+          "condition": "service not on the plan's list",
+          "outcome": "no_auth_required"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ama2020"
+        ],
+        "note": "AMA 2019 survey: 67 percent of physicians say it is difficult to tell whether PA is required. Time is an estimate."
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Verify eligibility, benefits and the reviewing vendor",
+      "description": "The coordinator checks active coverage and plan type in the payer portal or eligibility response, confirms the provider and site are in network, and notes whether the plan delegates review of this service to a radiology or specialty drug benefit manager with its own portal.",
+      "role": "pa_coordinator",
+      "kind": "lookup",
+      "inputs": [
+        "patient insurance details"
+      ],
+      "outputs": [
+        "verified coverage and routing"
+      ],
+      "systems": [
+        "portal",
+        "pm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 3,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 30
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Request routed to the wrong plan or delegated vendor.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s03",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common front-office practice; time is an estimate."
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Gather clinical documentation",
+      "description": "The coordinator opens the chart and pulls the latest office notes, imaging and lab reports and the list of treatments already tried, compares them with the payer's published criteria checklist, and saves the pages as PDF or prints them for fax. When a criterion is not documented, the coordinator flags it for the physician.",
+      "role": "pa_coordinator",
+      "kind": "lookup",
+      "inputs": [
+        "chart notes",
+        "imaging and lab reports",
+        "payer criteria checklist"
+      ],
+      "outputs": [
+        "clinical packet"
+      ],
+      "systems": [
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 12,
+        "high": 35
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.15,
+        "defect_description": "Packet lacks a required element such as dates of failed therapy, a recent note or the imaging report.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s04",
+          "prob": 0.4,
+          "condition": "criteria not clearly documented or a letter is required"
+        },
+        {
+          "to": "s05",
+          "prob": 0.6,
+          "condition": "chart supports the request"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jew2020",
+          "oig2022"
+        ],
+        "note": "Jew et al. list form completion, calls, letters and faxing as the PA activities; OIG found documentation disputes are a common denial cause."
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Physician adds a note or letter of medical necessity",
+      "description": "When the coordinator's EHR message reaches the physician between patients, the physician reviews the packet, writes an addendum or short letter explaining why the requested service or drug is needed and why alternatives are unsuitable, and signs it.",
+      "role": "ordering_physician",
+      "kind": "drafting",
+      "inputs": [
+        "clinical packet",
+        "criteria checklist"
+      ],
+      "outputs": [
+        "signed letter or addendum"
+      ],
+      "systems": [
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Letter does not address the specific criterion the plan uses.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s05",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Physician involvement is part of the AMA combined physician and staff hours; share and times are estimates."
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Complete the payer form and submit",
+      "description": "The coordinator re-keys patient, provider, codes, units, dates and clinical answers into the payer portal form or a faxed request form, attaches the documents and submits. Where the portal is not available the packet is faxed and the request is sometimes started by phone. The reference number is pasted into the EHR.",
+      "role": "pa_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "clinical packet",
+        "payer request form"
+      ],
+      "outputs": [
+        "submitted request with reference number"
+      ],
+      "systems": [
+        "portal",
+        "fax",
+        "phone",
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 5,
+        "mode": 10,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.06,
+        "defect_description": "Keying error in member ID, code or units, or an attachment left off.",
+        "typically_caught_at": "s07"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s06",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hfma2020"
+        ],
+        "note": "CAQH 2019: 21 minutes per manual PA transaction and 8 minutes by portal for providers; the step time here is an estimate of the submission share of that."
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Receive, index and time-stamp the request",
+      "description": "At the plan, portal requests land in the UM queue and faxes arrive on the fax server. The intake coordinator matches the request to the member, opens a case in the UM system, re-keys codes, provider and dates from faxed pages, and records the receipt time that starts the decision clock.",
+      "role": "um_intake",
+      "kind": "intake",
+      "inputs": [
+        "portal or fax request"
+      ],
+      "outputs": [
+        "UM case"
+      ],
+      "systems": [
+        "um",
+        "fax",
+        "portal",
+        "core"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 7,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 15,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Wrong member, code or provider keyed from a faxed form.",
+        "typically_caught_at": "s11"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Receipt date starts the decision deadline: 42 CFR 422.568 (Medicare Advantage, 14 days standard) and 29 CFR 2560.503-1 (ERISA group plans, 15 days pre-service, 72 hours urgent).",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s07",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr422568",
+          "cfr2560",
+          "ccmguide"
+        ],
+        "note": "Intake practice per UM descriptions; times are estimates."
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Screen eligibility, requirement and completeness",
+      "description": "The intake coordinator confirms coverage on the service date, network status and that the code is on the plan's PA list, and checks required fields and attachments. Where plan policy allows, non-clinical staff approve listed services that meet explicit scripted rules; anything needing clinical judgment goes to the nurse queue.",
+      "role": "um_intake",
+      "kind": "validation",
+      "inputs": [
+        "UM case",
+        "PA code list"
+      ],
+      "outputs": [
+        "screened case"
+      ],
+      "systems": [
+        "um",
+        "core"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Case sent to the wrong review queue or service line.",
+        "typically_caught_at": "s11"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Accreditation and state utilization review rules (NCQA and URAC UM standards): non-clinical staff may approve only against explicit criteria and may never issue a medical necessity denial.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 0.03,
+          "condition": "no authorization needed; provider told",
+          "outcome": "no_auth_required"
+        },
+        {
+          "to": "s08",
+          "prob": 0.14,
+          "condition": "required information missing"
+        },
+        {
+          "to": "s13",
+          "prob": 0.12,
+          "condition": "approved under a non-clinical script"
+        },
+        {
+          "to": "s10",
+          "prob": 0.25,
+          "condition": "complete; office calls for status while it waits"
+        },
+        {
+          "to": "s11",
+          "prob": 0.46,
+          "condition": "complete; goes to clinical review"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "cfr422566"
+        ],
+        "note": "Branch shares are estimates; only clinicians may deny for medical necessity under 42 CFR 422.566(d)."
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Pend the case and request missing information",
+      "description": "The intake coordinator sends a pend notice by fax or portal message, or calls the office, listing what is missing and the response deadline. For some products this triggers a documented extension of the decision clock.",
+      "role": "um_intake",
+      "kind": "communication",
+      "inputs": [
+        "screened case"
+      ],
+      "outputs": [
+        "pend notice"
+      ],
+      "systems": [
+        "um",
+        "fax",
+        "phone",
+        "letters"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 6,
+        "high": 12
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 30,
+        "high": 240
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Plan asks for documents that were already attached.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Extension and incomplete-request notices: 42 CFR 422.568(b)(2) written notice of the reasons for an extension (Medicare Advantage); 29 CFR 2560.503-1(f)(2)(iii) notice of missing information (ERISA).",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s09",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "oig2022",
+          "cfr422568"
+        ],
+        "note": "OIG found plans requesting documentation that the records already supported."
+      }
+    },
+    {
+      "id": "s09",
+      "name": "Provider supplies the missing information",
+      "description": "The coordinator finds the pend notice in the fax tray or portal inbox, pulls the requested records, asks the physician when a clinical answer is needed, and faxes or uploads them with the case number. When nobody sees the notice before the deadline, the plan decides on what it has.",
+      "role": "pa_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "pend notice"
+      ],
+      "outputs": [
+        "additional records"
+      ],
+      "systems": [
+        "fax",
+        "portal",
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 6,
+        "mode": 12,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 7200
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Wrong or partial records sent again.",
+        "typically_caught_at": "s11"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s11",
+          "prob": 0.88,
+          "condition": "information received"
+        },
+        {
+          "to": "s12",
+          "prob": 0.12,
+          "condition": "deadline passes without a response"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Response times and the share that lapse are estimates."
+      }
+    },
+    {
+      "id": "s10",
+      "name": "Chase the plan for status",
+      "description": "While the request waits at the plan, the coordinator checks the portal or calls the plan's provider line, waits on hold and asks for the case status, often because the patient has called the office asking for news. The note is logged in the EHR.",
+      "role": "pa_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "reference number"
+      ],
+      "outputs": [
+        "status note"
+      ],
+      "systems": [
+        "portal",
+        "phone",
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 10,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "concurrent_with": [
+        "s11"
+      ],
+      "next": [
+        {
+          "to": "s11",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jew2020",
+          "ama2018"
+        ],
+        "note": "Jew et al. list payer and patient calls among PA tasks; AMA reports most offices wait at least a business day. Share and time are estimates."
+      }
+    },
+    {
+      "id": "s11",
+      "name": "Nurse review against clinical criteria",
+      "description": "The utilization review nurse opens the case and attachments, selects the applicable MCG or InterQual subset or plan medical or drug policy, and checks each criterion against the notes, for example weeks of conservative therapy, imaging findings or drugs already tried. The nurse approves when criteria are met and documents which were met; a case that does not meet criteria goes to a physician reviewer because nurses may not deny.",
+      "role": "um_nurse",
+      "kind": "judgment",
+      "inputs": [
+        "UM case",
+        "clinical packet",
+        "criteria set"
+      ],
+      "outputs": [
+        "criteria review note"
+      ],
+      "systems": [
+        "um",
+        "criteria"
+      ],
+      "touch_min": {
+        "low": 12,
+        "mode": 22,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 5760
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.04,
+        "defect_description": "A criterion misread or a document overlooked.",
+        "typically_caught_at": "s12"
+      },
+      "control": {
+        "type": "accreditation",
+        "basis": "Written, evidence-based review criteria applied consistently and documented (NCQA and URAC UM standards; state utilization review laws).",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.7,
+          "condition": "criteria met"
+        },
+        {
+          "to": "s08",
+          "prob": 0.08,
+          "condition": "clinical information missing"
+        },
+        {
+          "to": "s12",
+          "prob": 0.22,
+          "condition": "criteria not met or unclear"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ccmguide",
+          "oig2022"
+        ],
+        "note": "Process per UM descriptions; branch shares and times are estimates."
+      }
+    },
+    {
+      "id": "s12",
+      "name": "Physician review by the plan medical director",
+      "description": "The medical director reads the nurse summary and the documentation, checks the plan policy, and decides to approve, partly approve or deny, entering the clinical rationale in the UM system. Some reviewers call the ordering office first, but most decide on the file.",
+      "role": "medical_director",
+      "kind": "judgment",
+      "inputs": [
+        "criteria review note",
+        "clinical packet"
+      ],
+      "outputs": [
+        "determination with rationale"
+      ],
+      "systems": [
+        "um",
+        "criteria"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 120,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Denial that the record supports approving (plan criteria stricter than coverage rules, or a missed document).",
+        "typically_caught_at": "s21"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "42 CFR 422.566(d): an adverse medical necessity decision must be reviewed by a physician or other appropriate health care professional; state utilization review laws and NCQA require a physician or peer reviewer for denials.",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.38,
+          "condition": "approved after physician review"
+        },
+        {
+          "to": "s16",
+          "prob": 0.62,
+          "condition": "denied in full or in part"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr422566",
+          "oig2022"
+        ],
+        "note": "Rule is stated in 42 CFR 422.566(d); OIG found 13 percent of sampled denials met coverage rules. Branch shares are estimates."
+      }
+    },
+    {
+      "id": "s13",
+      "name": "Issue the approval and authorization number",
+      "description": "The UM system generates the authorization number with approved codes, units and dates; the intake coordinator checks it, releases the approval to the portal and fax, and the member letter is queued for mailing.",
+      "role": "um_intake",
+      "kind": "communication",
+      "inputs": [
+        "approval decision"
+      ],
+      "outputs": [
+        "authorization number",
+        "approval notice"
+      ],
+      "systems": [
+        "um",
+        "letters",
+        "fax",
+        "portal"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 8
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Approved units or dates keyed differently from the request.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s14",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are estimates."
+      }
+    },
+    {
+      "id": "s14",
+      "name": "Record the authorization in scheduling and billing systems",
+      "description": "The coordinator finds the approval in the portal or fax tray, checks codes, units and dates against the order, and re-keys the authorization number into the EHR order and the practice management account so the claim will carry it.",
+      "role": "pa_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "approval notice"
+      ],
+      "outputs": [
+        "authorization on the account"
+      ],
+      "systems": [
+        "portal",
+        "fax",
+        "ehr",
+        "pm"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 4320
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Authorization number or dates keyed wrongly, causing a later claim denial.",
+        "typically_caught_at": "downstream"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s15",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Re-keying between portal and practice systems is common; time is an estimate."
+      }
+    },
+    {
+      "id": "s15",
+      "name": "Tell the patient and schedule the service",
+      "description": "The coordinator or scheduler calls the patient to say the service is approved and books the procedure, or sends the drug order to the specialty pharmacy or infusion center with the authorization attached.",
+      "role": "pa_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "authorization on the account"
+      ],
+      "outputs": [
+        "scheduled service"
+      ],
+      "systems": [
+        "pm",
+        "phone"
+      ],
+      "touch_min": {
+        "low": 2,
+        "mode": 4,
+        "high": 10
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "service scheduled",
+          "outcome": "approved"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are estimates."
+      }
+    },
+    {
+      "id": "s16",
+      "name": "Draft and send the denial notice",
+      "description": "The nurse fills the denial letter template with the criteria not met, the reviewer's name, alternatives, and peer-to-peer and appeal rights with deadlines. The letter is faxed or posted to the provider and mailed to the member, and the decision date is recorded.",
+      "role": "um_nurse",
+      "kind": "drafting",
+      "inputs": [
+        "determination with rationale"
+      ],
+      "outputs": [
+        "denial notice"
+      ],
+      "systems": [
+        "um",
+        "letters",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 120,
+        "high": 720
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.1,
+        "defect_description": "Generic reason that does not tell the office what was missing.",
+        "typically_caught_at": "s17"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Written denial notice with the reason and appeal rights: 42 CFR 422.568(d) (Medicare Advantage); 29 CFR 2560.503-1(g) (ERISA group plans); state utilization review laws.",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s17",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "cfr422568",
+          "cfr2560"
+        ],
+        "note": "Notice requirement stated in the regulations; times are estimates."
+      }
+    },
+    {
+      "id": "s17",
+      "name": "Physician reviews the denial and chooses a response",
+      "description": "The coordinator routes the denial to the physician, who reads the reason and decides whether to accept it and change the plan of care, ask for a peer-to-peer call, or file a written appeal. Many physicians do not contest because of the time each route takes.",
+      "role": "ordering_physician",
+      "kind": "judgment",
+      "inputs": [
+        "denial notice"
+      ],
+      "outputs": [
+        "chosen response"
+      ],
+      "systems": [
+        "ehr",
+        "fax"
+      ],
+      "touch_min": {
+        "low": 3,
+        "mode": 5,
+        "high": 15
+      },
+      "wait_before_min": {
+        "low": 240,
+        "mode": 1440,
+        "high": 4320
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 0.55,
+          "condition": "accept denial or switch to an alternative"
+        },
+        {
+          "to": "s19",
+          "prob": 0.3,
+          "condition": "request a peer-to-peer"
+        },
+        {
+          "to": "s22",
+          "prob": 0.15,
+          "condition": "file a written appeal"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "kff2026",
+          "ama2023"
+        ],
+        "note": "KFF: about 7.5 to 11.7 percent of Medicare Advantage denials are formally appealed; peer-to-peer share is an estimate."
+      }
+    },
+    {
+      "id": "s18",
+      "name": "Tell the patient about the denial and the options",
+      "description": "The coordinator or nurse calls the patient to explain the denial, the alternative treatment the physician chose, or the option to pay or appeal, and documents the call. Some patients abandon the recommended treatment at this point.",
+      "role": "pa_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "denial notice",
+        "physician decision"
+      ],
+      "outputs": [
+        "patient informed"
+      ],
+      "systems": [
+        "phone",
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 4,
+        "mode": 8,
+        "high": 20
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.9,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "END",
+          "prob": 1.0,
+          "condition": "case closed without the requested service",
+          "outcome": "denied"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "ama2020",
+          "ama2023"
+        ],
+        "note": "AMA surveys: 74 to 80 percent of physicians report patients abandoning treatment because of PA. Time is an estimate."
+      }
+    },
+    {
+      "id": "s19",
+      "name": "Request and schedule a peer-to-peer call",
+      "description": "The coordinator calls the plan's peer-to-peer line within the plan's window, usually a few business days, gives the case number and nurse and reviewer names, waits on hold or leaves a message, and books a slot that suits both physicians.",
+      "role": "pa_coordinator",
+      "kind": "coordination",
+      "inputs": [
+        "denial notice"
+      ],
+      "outputs": [
+        "peer-to-peer appointment"
+      ],
+      "systems": [
+        "phone",
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 15,
+        "high": 40
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 60,
+        "high": 480
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.05,
+        "defect_description": "Window missed or call not booked; case must go to written appeal.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Plan peer-to-peer policy: request within a set window after the denial (for example five business days) and before an appeal is filed.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s20",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "wellcare2024"
+        ],
+        "note": "Window and information required are from a plan bulletin; time is an estimate."
+      }
+    },
+    {
+      "id": "s20",
+      "name": "Physician prepares for and joins the peer-to-peer call",
+      "description": "At the booked time the ordering physician reviews the chart and the denial reason, calls or takes the call between patients, often after a hold, and argues the case with the plan's medical director.",
+      "role": "ordering_physician",
+      "kind": "communication",
+      "inputs": [
+        "peer-to-peer appointment",
+        "chart"
+      ],
+      "outputs": [
+        "case argued"
+      ],
+      "systems": [
+        "phone",
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 720,
+        "mode": 2880,
+        "high": 7200
+      },
+      "wait_cause": "calendar",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": null,
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s21",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jew2020",
+          "wellcare2024"
+        ],
+        "note": "Peer-to-peer calls are a listed PA activity; times are estimates."
+      }
+    },
+    {
+      "id": "s21",
+      "name": "Medical director holds the call and records the outcome",
+      "description": "The plan medical director discusses the case on the same call, may accept new clinical details, and records whether the denial is reversed or upheld; a reversal is passed to intake to issue the authorization.",
+      "role": "medical_director",
+      "kind": "judgment",
+      "inputs": [
+        "denial file",
+        "new clinical details"
+      ],
+      "outputs": [
+        "peer-to-peer outcome"
+      ],
+      "systems": [
+        "um",
+        "phone"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 15,
+        "high": 30
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 0,
+        "high": 0
+      },
+      "wait_cause": "none",
+      "error": {
+        "introduces_defect_prob": 0.0,
+        "defect_description": "None introduced.",
+        "typically_caught_at": null
+      },
+      "control": {
+        "type": "policy",
+        "basis": "Plan and accreditation practice of making a physician reviewer available to discuss a denial with the treating physician.",
+        "removability": "needs_policy_change"
+      },
+      "desk_work_share": 0.8,
+      "experience_needed": "high",
+      "concurrent_with": [
+        "s20"
+      ],
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.5,
+          "condition": "denial reversed"
+        },
+        {
+          "to": "s22",
+          "prob": 0.15,
+          "condition": "upheld; physician files a written appeal"
+        },
+        {
+          "to": "s18",
+          "prob": 0.35,
+          "condition": "upheld; physician accepts"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "wellcare2024"
+        ],
+        "note": "Reversal share is an estimate; no representative study found."
+      }
+    },
+    {
+      "id": "s22",
+      "name": "Physician writes the appeal letter",
+      "description": "The physician writes or edits a letter that answers the specific denial reason, cites guidelines or literature and adds any new clinical facts, and signs it.",
+      "role": "ordering_physician",
+      "kind": "drafting",
+      "inputs": [
+        "denial notice",
+        "chart"
+      ],
+      "outputs": [
+        "signed appeal letter"
+      ],
+      "systems": [
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 4320,
+        "high": 10080
+      },
+      "wait_cause": "approval_availability",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Letter does not address the stated reason.",
+        "typically_caught_at": "s25"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s23",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "jew2020"
+        ],
+        "note": "Appeal letters are a listed PA activity; times are estimates."
+      }
+    },
+    {
+      "id": "s23",
+      "name": "Assemble and submit the appeal",
+      "description": "The coordinator assembles the appeal form, letter, denial notice and records and sends them to the plan's appeals unit by fax, mail or portal, keeping proof of submission.",
+      "role": "pa_coordinator",
+      "kind": "data_entry",
+      "inputs": [
+        "signed appeal letter",
+        "records"
+      ],
+      "outputs": [
+        "submitted appeal"
+      ],
+      "systems": [
+        "fax",
+        "portal",
+        "ehr"
+      ],
+      "touch_min": {
+        "low": 10,
+        "mode": 20,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.03,
+        "defect_description": "Missing records or sent to the wrong address.",
+        "typically_caught_at": "s24"
+      },
+      "control": null,
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s24",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "C",
+        "sources": [],
+        "note": "Common practice; times are estimates."
+      }
+    },
+    {
+      "id": "s24",
+      "name": "Log the appeal and assemble the case file",
+      "description": "The appeals coordinator logs the appeal, sends an acknowledgement, pulls the original UM case and letters into the appeal file and assigns a physician reviewer who was not involved in the first decision, of the same or a similar specialty where required.",
+      "role": "appeals_coordinator",
+      "kind": "intake",
+      "inputs": [
+        "submitted appeal",
+        "UM case"
+      ],
+      "outputs": [
+        "appeal case file"
+      ],
+      "systems": [
+        "appeals",
+        "um"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 25,
+        "high": 45
+      },
+      "wait_before_min": {
+        "low": 60,
+        "mode": 720,
+        "high": 2880
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Reviewer assigned who lacks the needed specialty.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Appeal decided by a reviewer not involved in the initial determination and within the deadline: 29 CFR 2560.503-1(h) and (i) (30 days pre-service); Medicare Advantage reconsideration rules in 42 CFR Part 422 Subpart M.",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "medium",
+      "next": [
+        {
+          "to": "s25",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr2560",
+          "ccmguide"
+        ],
+        "note": "Appeal structure per regulation and UM guide; times are estimates."
+      }
+    },
+    {
+      "id": "s25",
+      "name": "Appeal physician reviews and decides",
+      "description": "The appeal reviewer reads the whole file, including the new letter, applies the coverage policy and decides to overturn or uphold the denial, writing the rationale.",
+      "role": "appeal_physician",
+      "kind": "judgment",
+      "inputs": [
+        "appeal case file"
+      ],
+      "outputs": [
+        "appeal decision"
+      ],
+      "systems": [
+        "appeals",
+        "criteria"
+      ],
+      "touch_min": {
+        "low": 15,
+        "mode": 30,
+        "high": 60
+      },
+      "wait_before_min": {
+        "low": 1440,
+        "mode": 7200,
+        "high": 20160
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "Decision not consistent with policy.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "licensed_signoff",
+        "basis": "Appeal of a medical necessity denial decided by a licensed physician or appropriate clinical peer (29 CFR 2560.503-1(h)(3); state utilization review laws).",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "high",
+      "next": [
+        {
+          "to": "s13",
+          "prob": 0.7,
+          "condition": "denial overturned in full or in part"
+        },
+        {
+          "to": "s26",
+          "prob": 0.3,
+          "condition": "denial upheld"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "kff2026"
+        ],
+        "note": "KFF: more than 80 percent of appealed Medicare Advantage denials are overturned; 0.70 assumes lower overturn in commercial plans (estimate)."
+      }
+    },
+    {
+      "id": "s26",
+      "name": "Send the upheld-appeal letter",
+      "description": "The appeals coordinator sends the decision letter with the reason and the rights to a further or external review, and closes the appeal case.",
+      "role": "appeals_coordinator",
+      "kind": "communication",
+      "inputs": [
+        "appeal decision"
+      ],
+      "outputs": [
+        "appeal decision letter"
+      ],
+      "systems": [
+        "appeals",
+        "letters"
+      ],
+      "touch_min": {
+        "low": 8,
+        "mode": 12,
+        "high": 25
+      },
+      "wait_before_min": {
+        "low": 0,
+        "mode": 240,
+        "high": 1440
+      },
+      "wait_cause": "queue",
+      "error": {
+        "introduces_defect_prob": 0.02,
+        "defect_description": "External review rights omitted.",
+        "typically_caught_at": "downstream"
+      },
+      "control": {
+        "type": "regulatory",
+        "basis": "Notice of adverse appeal decision with external review rights (29 CFR 2560.503-1(j); ACA external review rules).",
+        "removability": "fixed_by_law"
+      },
+      "desk_work_share": 1.0,
+      "experience_needed": "low",
+      "next": [
+        {
+          "to": "s18",
+          "prob": 1.0,
+          "condition": "always"
+        }
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "cfr2560"
+        ],
+        "note": "Notice rule from the regulation; times are estimates."
+      }
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "Missing information pend",
+      "share_of_cases": 0.2,
+      "description": "The plan pends the case for missing records, the office resends, and a share lapse into a denial for lack of information.",
+      "path": [
+        "s07",
+        "s08",
+        "s09",
+        "s11"
+      ]
+    },
+    {
+      "name": "Peer-to-peer after denial",
+      "share_of_cases": 0.035,
+      "description": "The office books a call with the plan medical director within a few business days of the denial.",
+      "path": [
+        "s17",
+        "s19",
+        "s20",
+        "s21"
+      ]
+    },
+    {
+      "name": "Written appeal",
+      "share_of_cases": 0.025,
+      "description": "A letter and records go to the appeals unit and a different physician decides within 30 days for pre-service appeals.",
+      "path": [
+        "s22",
+        "s23",
+        "s24",
+        "s25"
+      ]
+    },
+    {
+      "name": "Urgent (expedited) request",
+      "share_of_cases": 0.1,
+      "description": "The office marks the request urgent; plans must decide within 72 hours, so the queues are skipped and the same steps run within one to three days.",
+      "path": [
+        "s05",
+        "s06",
+        "s11",
+        "s12"
+      ]
+    },
+    {
+      "name": "Wrong vendor or plan",
+      "share_of_cases": 0.03,
+      "description": "The request is sent to the plan when a delegated radiology or specialty drug benefit manager handles the service, and is returned to start again.",
+      "path": [
+        "s02",
+        "s07"
+      ]
+    },
+    {
+      "name": "Retroactive authorization",
+      "share_of_cases": 0.03,
+      "description": "The service was done urgently or the requirement was missed, and the office asks for authorization after the fact, which many plans refuse.",
+      "path": [
+        "s01",
+        "s05",
+        "s11"
+      ]
+    }
+  ],
+  "benchmarks": [
+    {
+      "metric": "cycle_time_days",
+      "value": {
+        "p50": 6,
+        "p90": 18
+      },
+      "unit": "calendar days from signed order to a recorded decision, including appeals",
+      "population": "Medical-benefit PA requests for procedures and specialty drugs, US, 2017-2022",
+      "evidence": {
+        "tier": "C",
+        "sources": [
+          "ama2018",
+          "jew2020",
+          "hecht2021",
+          "cfr422568"
+        ],
+        "note": "Synthesis: AMA reports most offices wait one or more business days after submission and about 30 percent three or more; a dermatology clinic had a median 12-day delay to treatment; office-run biologic PAs averaged 20.9 days; regulations cap standard plan decisions at 14 or 15 days."
+      }
+    },
+    {
+      "metric": "provider_minutes_per_manual_pa",
+      "value": 21,
+      "unit": "minutes",
+      "population": "US providers, 2019 CAQH Index",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "hfma2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "provider_cost_per_manual_pa",
+      "value": 10.92,
+      "unit": "USD",
+      "population": "US providers, 2019 CAQH Index",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "hfma2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "staff_minutes_per_pa_complex_dermatology",
+      "value": 30,
+      "unit": "minutes (median, IQR 17-105)",
+      "population": "51 PAs, one academic clinic, 2018-2019",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "jew2020"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "pa_requests_per_physician_per_week",
+      "value": {
+        "2019": 33,
+        "2022": 45
+      },
+      "unit": "requests",
+      "population": "AMA physician surveys",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ama2020",
+          "ama2023"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "physician_and_staff_hours_per_week_on_pa",
+      "value": {
+        "2019": 14.4,
+        "2022": 14
+      },
+      "unit": "hours per physician",
+      "population": "AMA physician surveys",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ama2020",
+          "ama2023"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "ma_pa_requests_per_enrollee",
+      "value": {
+        "2021": 1.5,
+        "2022": 1.7
+      },
+      "unit": "requests per enrollee per year",
+      "population": "Medicare Advantage",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "kff2026"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "ma_denial_rate",
+      "value": 0.074,
+      "unit": "share of requests denied in full or part",
+      "population": "Medicare Advantage, 2022",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "kff2026"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "ma_appeal_overturn_rate",
+      "value": 0.8,
+      "unit": "share of appealed denials overturned (more than 80 percent each year)",
+      "population": "Medicare Advantage, 2019-2024",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "kff2026"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "metric": "denials_meeting_coverage_rules",
+      "value": 0.13,
+      "unit": "share of sampled MA PA denials",
+      "population": "15 large MA organizations, June 2019",
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oig2022"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "pain_points": [
+    {
+      "description": "Offices struggle to tell whether a service needs authorization because lists differ by plan, product and vendor.",
+      "steps": [
+        "s01",
+        "s02"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ama2020"
+        ],
+        "note": "67 percent find it difficult to determine."
+      }
+    },
+    {
+      "description": "Faxed packets are re-keyed at the plan and approvals are re-keyed into practice systems.",
+      "steps": [
+        "s05",
+        "s06",
+        "s14"
+      ],
+      "evidence": {
+        "tier": "B",
+        "sources": [
+          "hfma2020",
+          "cms0057"
+        ],
+        "note": "CAQH shows manual transactions take far longer than electronic ones."
+      }
+    },
+    {
+      "description": "Plans pend or deny for documentation that the record already contained.",
+      "steps": [
+        "s08",
+        "s09",
+        "s12"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "oig2022"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "description": "Queues at the nurse and physician reviewer and the time to book peer-to-peer calls delay care.",
+      "steps": [
+        "s11",
+        "s12",
+        "s19",
+        "s20"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "ama2023",
+          "ama2018"
+        ],
+        "note": "94 percent report delays."
+      }
+    },
+    {
+      "description": "Most appealed denials are reversed, so much of the denial, peer-to-peer and appeal effort reverses decisions rather than changing care.",
+      "steps": [
+        "s16",
+        "s25",
+        "s21"
+      ],
+      "evidence": {
+        "tier": "A",
+        "sources": [
+          "kff2026"
+        ],
+        "note": ""
+      }
+    }
+  ],
+  "sources": [
+    {
+      "id": "ama2020",
+      "title": "Prior auth survey findings underscore need for legislative action",
+      "publisher": "American Medical Association",
+      "url": "https://www.ama-assn.org/practice-management/sustainability/prior-auth-survey-findings-underscore-need-legislative-action",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "December 2019 survey of 1,000 physicians: 33 PAs per physician per week, 14.4 hours of physician and staff time, 30% have staff working only on PA, 67% find it difficult to tell whether PA is required, 91% report delays, 74% report abandoned treatment."
+    },
+    {
+      "id": "ama2023",
+      "title": "March 24, 2023: Advocacy Update spotlight on prior authorization",
+      "publisher": "American Medical Association",
+      "url": "https://www.ama-assn.org/health-care-advocacy/advocacy-update/march-24-2023-advocacy-update-spotlight-prior-authorization",
+      "year": 2023,
+      "accessed": "2026-11-17",
+      "supports": "December 2022 survey: 45 PAs per physician per week, about 14 hours a week, 35% employ staff for PA only, 94% report delayed care, 80% report abandoned treatment."
+    },
+    {
+      "id": "ama2018",
+      "title": "Prior authorization is a major practice burden. How do you compare?",
+      "publisher": "American Medical Association",
+      "url": "https://www.ama-assn.org/practice-management/sustainability/prior-authorization-major-practice-burden-how-do-you-compare",
+      "year": 2018,
+      "accessed": "2026-11-17",
+      "supports": "Almost two thirds of physicians wait at least one business day for a decision, nearly one in four wait three to five days, 7% wait more than five days; 29.1 PAs and 14.6 hours per physician per week; about half of PAs are for services and half for drugs."
+    },
+    {
+      "id": "kff2026",
+      "title": "Medicare Advantage Insurers Made Nearly 53 Million Prior Authorization Determinations in 2024",
+      "publisher": "KFF",
+      "url": "https://www.kff.org/medicare/medicare-advantage-insurers-made-nearly-53-million-prior-authorization-determinations-in-2024/",
+      "year": 2026,
+      "accessed": "2026-11-17",
+      "supports": "Medicare Advantage PA requests per enrollee 1.7 (2019), 1.4 (2020), 1.5 (2021), 1.7 (2022); denial rate 7.4% in 2022; 7.5% of denials appealed in 2019 and 11.7% in 2023; more than 80% of appealed denials overturned each year 2019-2024; standard decision time 14 days before 2026."
+    },
+    {
+      "id": "hfma2020",
+      "title": "Prior authorization cost and time burdens increase for providers",
+      "publisher": "Healthcare Financial Management Association (reporting the 2019 CAQH Index)",
+      "url": "https://www.hfma.org/topics/news/2020/01/prior-authorization-cost-and-time-burdens-increase-for-providers.html",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "2019 CAQH Index: provider time per manual PA 21 minutes (16 in 2018), web portal 8 minutes, fully electronic 4 minutes; provider cost per manual PA $10.92."
+    },
+    {
+      "id": "oig2022",
+      "title": "Some Medicare Advantage Organization Denials of Prior Authorization Requests Raise Concerns About Beneficiary Access to Medically Necessary Care (OEI-09-18-00260)",
+      "publisher": "HHS Office of Inspector General",
+      "url": "https://oig.hhs.gov/reports-and-publications/all-reports-and-publications/some-medicare-advantage-organization-denials-of-prior-authorization-requests-raise-concerns-about-beneficiary-access-to-medically-necessary-care",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "13% of sampled PA denials met Medicare coverage rules; causes include plan criteria beyond Medicare rules, requests for documentation already supported by the records, and human errors such as overlooking a document."
+    },
+    {
+      "id": "cms0057",
+      "title": "CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F) fact sheet",
+      "publisher": "Centers for Medicare & Medicaid Services",
+      "url": "https://www.cms.gov/newsroom/fact-sheets/cms-interoperability-and-prior-authorization-final-rule-cms-0057-f",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "From January 2026, impacted payers must decide within 72 hours (expedited) and 7 calendar days (standard) and give a specific reason for denials; decisions may be sent by portal, fax, email, mail or phone."
+    },
+    {
+      "id": "cfr422566",
+      "title": "42 CFR 422.566 Organization determinations",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/42/422.566",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "A partially or fully adverse medical necessity decision must be reviewed by a physician or other appropriate health care professional with relevant expertise and a current unrestricted license."
+    },
+    {
+      "id": "cfr422568",
+      "title": "42 CFR 422.568 Standard timeframes and notice requirements for organization determinations",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/42/422.568",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Standard service decisions within 14 calendar days, extendable by up to 14 days with written notice of the reasons; written notice required for any full or partial denial."
+    },
+    {
+      "id": "cfr2560",
+      "title": "29 CFR 2560.503-1 Claims procedure",
+      "publisher": "Legal Information Institute, Cornell Law School",
+      "url": "https://www.law.cornell.edu/cfr/text/29/2560.503-1",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "ERISA group health plans: pre-service decisions within 15 days (one 15-day extension), urgent within 72 hours, pre-service appeals within 30 days, urgent appeals within 72 hours."
+    },
+    {
+      "id": "jew2020",
+      "title": "Evaluating the impact of prior authorizations in patients with complex dermatological conditions",
+      "publisher": "Journal of the American Academy of Dermatology (PubMed Central)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7936393",
+      "year": 2020,
+      "accessed": "2026-11-17",
+      "supports": "Prospective single-clinic study, 51 PAs: median 30 minutes of staff time per PA (IQR 17-105), $33.82 average administrative cost, median 12 days delay to access treatment, 49% initially approved, 56% of appealed PAs eventually approved; activities listed include forms, payer and patient calls, appeal letters, peer-to-peer calls and faxing."
+    },
+    {
+      "id": "hecht2021",
+      "title": "Use of a specialty pharmacy sped time to PA decisions for dermatology practice",
+      "publisher": "AJMC (reporting Hecht et al., J Am Pharm Assoc 2021)",
+      "url": "https://ajmc.com/view/use-of-a-specialty-pharmacy-sped-time-to-pa-decisions-for-dermatology-practice",
+      "year": 2021,
+      "accessed": "2026-11-17",
+      "supports": "PAs for dermatology biologics handled by the physician office took an average of 20.9 days to a decision versus 1.9 days at a specialty pharmacy (2017-2019); 76% of office PAs completed versus 93%."
+    },
+    {
+      "id": "wellcare2024",
+      "title": "Peer-to-Peer Review (provider bulletin)",
+      "publisher": "Wellcare (California)",
+      "url": "https://www.wellcare.com/california/providers/bulletins/2024/peer-to-peer-review",
+      "year": 2024,
+      "accessed": "2026-11-17",
+      "supports": "Provider may request a peer-to-peer with a plan medical director within five business days of an adverse PA determination by phone, giving member, case number, medical director and nurse names; after that window or once an appeal is filed, only an appeal is available."
+    },
+    {
+      "id": "ccmguide",
+      "title": "Commercial insurance, managed care and utilization management (CCM study guide)",
+      "publisher": "Open Exam Prep",
+      "url": "https://open-exam-prep.com/study-guides/ccm/reimbursement-payer-models/managed-care-utilization",
+      "year": 2025,
+      "accessed": "2026-11-17",
+      "supports": "Describes prospective review against MCG or InterQual criteria, adverse determination, peer-to-peer with the plan medical director before formal appeal, appeal levels reviewed by a clinician not involved in the original decision, and ERISA timeframes."
+    },
+    {
+      "id": "bls_oes2021",
+      "title": "Occupational Employment and Wage Statistics, May 2021 National Estimates",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/oes/2021/may/oes_nat.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Mean hourly wages May 2021: medical secretaries and administrative assistants (43-6013) $19.11, registered nurses (29-1141) $39.78, physicians all other (29-1229) $111.30."
+    },
+    {
+      "id": "bls_ecec2021",
+      "title": "Employer Costs for Employee Compensation, December 2021",
+      "publisher": "US Bureau of Labor Statistics",
+      "url": "https://www.bls.gov/news.release/archives/ecec_03182022.htm",
+      "year": 2022,
+      "accessed": "2026-11-17",
+      "supports": "Private health care and social assistance: wages 70.2% of compensation, benefits 29.8%; private hospitals: wages 66.1%, benefits 33.9%."
+    }
+  ],
+  "assumptions": [
+    "Scope is medical-benefit requests for procedures, advanced imaging and specialty drugs that need clinical documentation; simple pharmacy-benefit and inpatient concurrent reviews are out of scope.",
+    "Provider-office roles and FTE are summed across all offices submitting to one regional plan, so the stated FTE is a share of many people's time rather than one team.",
+    "Branch shares for intake screening, nurse approval, medical director approval, peer-to-peer use and reversal are estimates chosen so that overall initial denials come to about 10 percent, slightly above the 6 to 7 percent Medicare Advantage average, because this scope excludes routine requests.",
+    "The appeal overturn share is set at 0.70, below the more than 80 percent seen in Medicare Advantage, to allow for commercial plans; no commercial figure was found.",
+    "The cycle-time benchmark is a synthesis of survey and single-site study figures, not a measured national distribution.",
+    "Fte_on_process values are set from hands-on time times volume at 130 productive hours a month with a modest allowance for non-case work; no published staffing ratio for UM departments was found.",
+    "The simulated 90th percentile (about 11 days) is below the synthesized benchmark (18 days) because repeated resubmissions, second pends and external review, which drive the longest single-site cases, are listed as exceptions rather than modelled as loops.",
+    "Waits use the 2019-2022 rules (14 days for MA standard decisions, 15 days ERISA pre-service); the 7-day rule of CMS-0057-F applies only from 2026."
+  ],
+  "author": {
+    "model": "claude-opus",
+    "date": "2026-11-17"
+  }
+}
