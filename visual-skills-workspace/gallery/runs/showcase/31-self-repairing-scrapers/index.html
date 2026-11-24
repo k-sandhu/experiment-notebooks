@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Self-repairing scrapers</title>
+<style>:root{color-scheme:dark}html,body{margin:0;background:#141517}body{padding:16px;min-height:100vh;box-sizing:border-box}</style>
+</head><body>
+<div id="x"></div>
+<script>
+/* explainer-kit v1. A small engine for animated, stepwise SVG explainers. No dependencies.
+   Exposes window.K. Read explainer-kit/SKILL.md for the API and the rules it encodes.
+   Every animation is tied to a "generation": moving to another step cancels all timers,
+   loops and tweens of the old step, so steps can never bleed into each other. */
+(function () {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const QS = new URLSearchParams(location.search);
+const REC = QS.has('record');
+const f = n => (+n).toFixed(1);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = { inOut: k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, out: k => 1 - Math.pow(1 - k, 3), linear: k => k };
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+function rng(seed) { let a = seed >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- styles: one object per look. ink colours draw lines and text; fill colours encode data
+   (fills were checked for colour-blind separation against their background). */
+const STYLES = {
+  chalkboard: { dark: 1, bg: '#1E2023', panel: '#17191B', ink: '#ECE7DA', mut: '#9A9A93', faint: '#55585E', line: '#4A4D53',
+    blue: '#9CC3E6', green: '#A8DDC3', amber: '#F2D98B', violet: '#C3B5E8', red: '#EBA494',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 1, texture: 1, hand: "'Caveat', cursive", handSize: 1.12, font: 'https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap' },
+  paper: { dark: 0, bg: '#FBF8F1', panel: '#F3EEE3', ink: '#22252A', mut: '#5F6368', faint: '#C9C3B6', line: '#BDB6A8',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: .7, texture: 0, hand: "'Kalam', cursive", handSize: 1, font: 'https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&display=swap' },
+  editorial: { dark: 0, bg: '#FFFFFF', panel: '#F5F5F2', ink: '#1A1A1A', mut: '#5C5C5C', faint: '#D6D6D0', line: '#C4C4BE',
+    blue: '#2F6DB5', green: '#1E7F55', amber: '#C27C12', violet: '#7B5EA7', red: '#C8553D',
+    fill: { blue: '#2F6DB5', amber: '#C27C12', green: '#1E7F55', violet: '#7B5EA7', red: '#C8553D' },
+    rough: 0, texture: 0, hand: "'Source Serif 4', Georgia, serif", handSize: .9, font: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap' },
+  blueprint: { dark: 1, bg: '#10243A', panel: '#0C1C2E', ink: '#E6EEF5', mut: '#93A8BC', faint: '#3A5672', line: '#4A6A89',
+    blue: '#8EC5F0', green: '#9BE0C0', amber: '#F5D58A', violet: '#C9B8F2', red: '#F2A08F',
+    fill: { blue: '#4A8FDB', amber: '#BF8420', green: '#2FA876', violet: '#A070E8', red: '#E8604F' },
+    rough: 0, texture: 0, grid: 1, hand: "'IBM Plex Mono', ui-monospace, monospace", handSize: .78, font: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&display=swap' },
+};
+let ST = STYLES.chalkboard, ROUGH = 1;
+const C = {};                                   // active colours, e.g. K.C.ink, K.C.fill.blue
+function col(c) { if (!c) return C.ink; if (c[0] === '#' || c.startsWith('rgb') || c === 'none' || c === 'transparent') return c; if (c.startsWith('fill.')) return C.fill[c.slice(5)] || c; return C[c] || c; }
+function useStyle(name, root) {
+  ST = STYLES[name] || STYLES.chalkboard; ROUGH = ST.rough;
+  Object.keys(C).forEach(k => delete C[k]); Object.assign(C, ST, { fill: { ...ST.fill } });
+  injectCSS();
+  if (ST.font && !document.querySelector(`link[href="${ST.font}"]`)) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ST.font; document.head.appendChild(l); }
+  if (root) {
+    const v = { bg: ST.bg, panel: ST.panel, ink: ST.ink, mut: ST.mut, faint: ST.faint, line: ST.line, blue: ST.blue, green: ST.green, amber: ST.amber, violet: ST.violet, red: ST.red, hand: ST.hand };
+    for (const k in v) root.style.setProperty('--k-' + k, v[k]);
+    root.classList.add('kx', 'kx-' + (name in STYLES ? name : 'chalkboard'));
+    if (ST.texture) { const r = rng(9); let s = ''; for (let i = 0; i < 140; i++) s += `<circle cx='${(r() * 240).toFixed(1)}' cy='${(r() * 240).toFixed(1)}' r='${(.4 + r() * .8).toFixed(2)}' fill='%23ffffff' fill-opacity='${(.02 + r() * .045).toFixed(3)}'/>`; root.style.backgroundImage = `url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'>${s}</svg>")`; }
+    if (ST.grid) root.style.backgroundImage = `linear-gradient(${ST.faint}55 1px,transparent 1px),linear-gradient(90deg,${ST.faint}55 1px,transparent 1px)`, root.style.backgroundSize = '20px 20px';
+  }
+  return ST;
+}
+function fontsReady(ms = 1500) { return Promise.race([document.fonts ? document.fonts.ready.then(() => document.fonts.load(`20px ${ST.hand.split(',')[0]}`)) : Promise.resolve(), new Promise(r => setTimeout(r, ms))]).catch(() => {}); }
+
+/* ---------- hand-drawn geometry. Each shape takes a seed so its wobble is identical on every frame. */
+const J = (r, a) => (r() - .5) * 2 * a * ROUGH;
+function line(x1, y1, x2, y2, seed = 1, bow = 1.6) { const r = rng(seed); return `M${f(x1 + J(r, .5))} ${f(y1 + J(r, .5))} Q${f((x1 + x2) / 2 + J(r, bow))} ${f((y1 + y2) / 2 + J(r, bow))} ${f(x2)} ${f(y2)}`; }
+function rect(x, y, w, h, seed = 1) {
+  if (!ROUGH) return `M${f(x)} ${f(y)}H${f(x + w)}V${f(y + h)}H${f(x)}Z`;
+  const r = rng(seed), p = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]].map(q => [q[0] + J(r, 1.3), q[1] + J(r, 1.3)]);
+  let d = `M${f(p[0][0])} ${f(p[0][1])}`;
+  for (let i = 0; i < 4; i++) { const A = p[i], B = p[(i + 1) % 4]; d += ` Q${f((A[0] + B[0]) / 2 + J(r, 1.5))} ${f((A[1] + B[1]) / 2 + J(r, 1.5))} ${f(B[0])} ${f(B[1])}`; }
+  return d + ` L${f(p[0][0] + (p[1][0] - p[0][0]) * .08)} ${f(p[0][1] + J(r, 1))}`;
+}
+function ellipse(cx, cy, rx, ry = rx, seed = 1) { const r = rng(seed); return `M${f(cx - rx)} ${f(cy)} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx + rx)} ${f(cy + J(r, .6))} A${f(rx)} ${f(ry + J(r, .6))} 0 1 0 ${f(cx - rx + 1.5 * ROUGH)} ${f(cy + .6 * ROUGH)}`; }
+function arrow(fx, fy, x, y, seed = 1, L = 8) { const a = Math.atan2(y - fy, x - fx), r = rng(seed), k = .5 + J(r, .06); return `M${f(x - L * Math.cos(a - k))} ${f(y - L * Math.sin(a - k))} L${f(x)} ${f(y)} L${f(x - L * Math.cos(a + k))} ${f(y - L * Math.sin(a + k))}`; }
+function poly(pts, seed = 1) { const r = rng(seed); return 'M' + pts.map((p, i) => `${f(p[0] + (i ? J(r, .6) : 0))} ${f(p[1] + (i ? J(r, .6) : 0))}`).join(' L'); }
+function curve(x1, y1, x2, y2, bend = .3) { const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1; return `M${f(x1)} ${f(y1)} Q${f(mx - dy * bend)} ${f(my + dx * bend)} ${f(x2)} ${f(y2)}`; }
+
+/* ---------- markup builders. Elements carry data-k (draw|fade), data-t (delay ms) and data-d (duration ms);
+   the engine reveals them in that order when a step opens, and shows them at once with reduced motion. */
+function P(d, c, t = 0, du = 600, w = 1.5, extra = '') { return `<path d="${d}" fill="none" stroke="${col(c)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" data-k="draw" data-t="${t}" data-d="${du}" ${extra}/>`; }
+function T(x, y, s, o = {}) {
+  const fam = o.h ? 'var(--k-hand)' : o.m ? 'var(--font-mono, ui-monospace, Menlo, monospace)' : 'var(--font-sans, system-ui, -apple-system, Segoe UI, Roboto, sans-serif)';
+  const z = (o.z || 12) * (o.h ? ST.handSize : 1);
+  return `<text${o.id ? ` id="${o.id}"` : ''} x="${x}" y="${y}" text-anchor="${o.a || 'middle'}" font-size="${f(z)}"${o.w ? ` font-weight="${o.w}"` : ''} fill="${col(o.c)}" style="font-family:${fam};font-variant-numeric:tabular-nums" data-k="fade" data-t="${o.t || 0}" data-d="${o.d || 450}"${o.extra ? ' ' + o.extra : ''}>${o.raw ? s : esc(s)}</text>`;
+}
+function F(shape, c, t = 0, o = {}) { return `<path d="${shape}" fill="${col(c)}" fill-opacity="${o.op == null ? .85 : o.op}" stroke="none" data-k="fade" data-t="${t}" data-d="${o.d || 450}"${o.id ? ` id="${o.id}"` : ''}/>`; }
+function reveal(svg) {
+  const els = [...svg.querySelectorAll('[data-k]')];
+  if (RM) { els.forEach(e => { e.style.opacity = 1; e.style.strokeDashoffset = 0; }); return 0; }
+  let end = 0;
+  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (e.dataset.k === 'draw') { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
+  svg.getBoundingClientRect();
+  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (e.dataset.k === 'draw') { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
+  return end;
+}
+function finish(svg) { svg.querySelectorAll('[data-k]').forEach(e => { e.style.transition = 'none'; e.style.strokeDashoffset = 0; e.style.opacity = 1; }); }
+
+/* ---------- small DOM helpers */
+function mk(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+const ICON = {
+  left: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  right: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  play: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
+  replay: '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  restart: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+let cssDone = false;
+function injectCSS() {
+  if (cssDone) return; cssDone = true;
+  const s = document.createElement('style');
+  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+.kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
+.kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
+.kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
+.kx-count{font-size:11px;color:var(--k-mut);white-space:nowrap;font-variant-numeric:tabular-nums}
+.kx-cap{font-size:13.5px;line-height:1.55;margin:6px 8px 8px;color:var(--k-ink)}
+.kx-act{display:flex;justify-content:center;align-items:center;gap:8px;min-height:44px;flex-wrap:wrap;margin:0 4px 4px}
+.kx-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--k-mut);margin:6px 8px 8px}.kx-legend>span{transition:opacity .4s}
+.kx-sw{display:inline-block;width:12px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.kx-nav{display:flex;align-items:center;gap:8px}.kx button.kx-next{min-width:112px}.kx-act .kx-ctl{flex:1 1 100%}
+@media (max-width:480px){.kx{padding:12px 8px 10px}.kx button.kx-next{min-width:96px;padding:0 8px}.kx button.kx-dot{padding:10px 3px}.kx-nav{gap:6px}}
+.kx button{background:transparent;border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:0 12px;font:inherit;font-size:13px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+.kx button:hover{border-color:var(--k-mut)}.kx button:focus-visible,.kx [role=button]:focus-visible{outline:2px solid var(--k-violet);outline-offset:2px}
+.kx button.pri{border-color:var(--k-violet);color:var(--k-violet)}.kx button[aria-pressed=true]{background:color-mix(in srgb,var(--k-violet) 18%,transparent)}
+.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
+.kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
+.kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
+.kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:11px;line-height:17px;height:92px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
+.kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1}
+.kx-time{font-size:11px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
+.kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
+.kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
+.kx-ripple{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2px solid var(--k-ink);pointer-events:none;animation:kxrp .6s ease-out forwards}@keyframes kxrp{from{transform:scale(.3);opacity:.9}to{transform:scale(1.4);opacity:0}}
+.kx-recording .kx-nav button:not(.kx-dot),.kx-recording .kx-scrub button{visibility:hidden}
+.kx .sr-only,.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.kx *{transition:none!important;animation:none!important}}`;
+  document.head.appendChild(s);
+}
+
+/* ---------- step context: everything a step needs, bound to its generation */
+function makeCtx(eng, svg, i) {
+  const g = eng.gen, alive = () => g === eng.gen, dyn = svg.querySelector('.kx-dyn');
+  const q = s => svg.querySelector(s);
+  const pick = e => typeof e === 'string' ? q(e) : e;
+  const s = {
+    i, svg, dyn, q, alive, C, RM, root: eng.root, act: eng.act,
+    at(ms, fn) { const id = setTimeout(() => { if (alive()) fn(); }, ms); eng.timers.push(id); return id; },
+    wait(ms) { return new Promise(r => s.at(ms, () => { if (!(eng.inDemo && eng.touched)) r(); })); },   // an idle demo stops for good once the reader acts
+    loop(delay, fn) { s.at(delay, () => { let last = performance.now(); const t0 = last, st = {}; const k = n => { if (!alive()) return; st.dt = Math.min(.05, Math.max(0, (n - last) / 1000)); last = n; st.e = n - t0; if (fn(st) !== false) requestAnimationFrame(k); }; requestAnimationFrame(k); }); },
+    tween(du, fn, o = {}) { const ez = ease[o.ease || 'inOut']; return new Promise(res => s.at(o.delay || 0, () => { if (RM || du <= 0) { fn(1); res(); return; } const t0 = performance.now(); const k = n => { if (!alive()) return; const p = clamp((n - t0) / du); fn(ez(p)); if (p < 1) requestAnimationFrame(k); else res(); }; requestAnimationFrame(k); })); },
+    el(tag, attrs, parent) { return mk(tag, attrs, parent || dyn); },
+    drawIn(e, du = 500, delay = 0) { e = pick(e); if (!e || RM) return; const L = e.getTotalLength() + 1; e.style.transition = 'none'; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; e.getBoundingClientRect(); e.style.transition = `stroke-dashoffset ${du}ms cubic-bezier(.45,0,.55,1) ${delay}ms`; e.style.strokeDashoffset = 0; },
+    fadeIn(e, du = 400, delay = 0) { e = pick(e); if (!e) return; e.style.transition = 'none'; e.style.opacity = 0; e.getBoundingClientRect(); e.style.transition = `opacity ${du}ms ease ${delay}ms`; e.style.opacity = 1; },
+    fadeOut(e, du = 400, remove = true) { e = pick(e); if (!e) return; e.style.transition = `opacity ${du}ms`; e.style.opacity = 0; if (remove) setTimeout(() => e.remove(), du + 50); },
+    travel(path, du = 600, c = 'ink', o = {}) {   // a dot that moves along a path element or a list of points
+      let p = pick(path), temp = false;
+      if (Array.isArray(path)) { p = mk('path', { d: 'M' + path.map(q => q.join(' ')).join(' L'), fill: 'none', stroke: col(c), 'stroke-width': 1.6, 'stroke-opacity': o.trail === false ? 0 : .5, 'stroke-linecap': 'round' }, dyn); temp = true; if (o.trail !== false) s.drawIn(p, du); }
+      const d = mk('circle', { r: o.r || 3.6, fill: col(c) }, dyn), L = p.getTotalLength();
+      const done = () => { s.fadeOut(d, 300); if (temp && !o.keep) setTimeout(() => s.fadeOut(p, 450), 200); };
+      if (RM) { const e = p.getPointAtLength(L); d.setAttribute('cx', e.x); d.setAttribute('cy', e.y); done(); return Promise.resolve(); }
+      return s.tween(du, k => { const e = p.getPointAtLength(k * L); d.setAttribute('cx', f(e.x)); d.setAttribute('cy', f(e.y)); }, { delay: o.delay || 0 }).then(done);
+    },
+    ring(x, y, w, h, c = 'ink', o = {}) { const p = mk('path', { d: rect(x, y, w, h, Math.round(x * 7 + y)), fill: 'none', stroke: col(c), 'stroke-width': o.w || 2.4, 'stroke-linecap': 'round', class: 'pulse' }, dyn); p.style.opacity = 0; setTimeout(() => p.remove(), 1400); return p; },
+    write(x, y, text, o = {}) { const w = document.createElementNS(NS, 'g'); w.innerHTML = T(x, y, text, o); const t = w.firstChild; dyn.appendChild(t); t.removeAttribute('data-k'); s.fadeIn(t, o.d || 450, o.t || 0); return t; },
+    float(x, y, text, c = 'ink', z = 16) { const t = s.write(x, y, text, { h: 1, z, c }); if (!RM) { t.style.transition = 'transform 1.1s ease-out, opacity 1.1s ease-out'; requestAnimationFrame(() => requestAnimationFrame(() => { t.style.transform = 'translateY(-18px)'; t.style.opacity = 0; })); } setTimeout(() => t.remove(), 1200); },
+    swap(e, text, c) { e = pick(e); if (!e) return; e.style.transition = 'opacity .15s'; e.style.opacity = 0; s.at(160, () => { e.textContent = text; if (c) e.setAttribute('fill', col(c)); e.style.opacity = 1; }); },
+    count(e, to, o = {}) { e = pick(e); if (!e) return; const from = o.from != null ? o.from : (+e.dataset.v || 0), fmt = o.fmt || (v => Math.round(v).toLocaleString()); e.dataset.v = to; return s.tween(o.du || 900, k => { e.textContent = (o.pre || '') + fmt(lerp(from, to, k)) + (o.post || ''); }, { delay: o.delay || 0 }); },
+    bar(e, frac, du = 600, axis = 'x') { e = pick(e); if (!e) return; e.style.transformBox = 'fill-box'; e.style.transformOrigin = axis === 'x' ? '0 50%' : '50% 100%'; e.style.transition = RM ? 'none' : `transform ${du}ms cubic-bezier(.45,0,.55,1)`; e.style.transform = axis === 'x' ? `scaleX(${clamp(frac).toFixed(4)})` : `scaleY(${clamp(frac).toFixed(4)})`; },
+    btn(icon, label, fn, o = {}) { const b = document.createElement('button'); if (o.primary) b.className = 'pri'; b.innerHTML = (ICON[icon] || '') + esc(label); b.type = 'button'; b.onclick = e => { if (e.isTrusted) s.touched(); fn(b); }; eng.act.appendChild(b); return b; },
+    on(e, fn, label) { e = pick(e); e.setAttribute('role', 'button'); e.setAttribute('tabindex', '0'); if (label) e.setAttribute('aria-label', label); e.style.cursor = 'pointer'; const h = ev => { if (ev.isTrusted) s.touched(); fn(ev); }; e.addEventListener('click', h); e.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); h(ev); } }); return e; },
+    point(ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const m = svg.getScreenCTM(); return m ? pt.matrixTransform(m.inverse()) : { x: 0, y: 0 }; },
+    drag(e, o) { e = pick(e); e.style.touchAction = 'none'; e.style.cursor = 'grab'; let on = false; e.addEventListener('pointerdown', ev => { on = true; e.setPointerCapture(ev.pointerId); s.touched(); o.move && o.move(s.point(ev), ev); }); e.addEventListener('pointermove', ev => { if (on && alive()) o.move && o.move(s.point(ev), ev); }); const up = ev => { if (!on) return; on = false; o.end && o.end(s.point(ev), ev); }; e.addEventListener('pointerup', up); e.addEventListener('pointercancel', up); return e; },
+    cap(text) { eng.cap.textContent = text; },
+    touched() { eng.touched = true; if (eng.stopAuto && !REC) eng.stopAuto(); },   // a reader who acts takes over from autoplay
+    tap(e) { e = pick(e); if (!e || !alive() || (eng.inDemo && eng.touched)) return; const r = e.getBoundingClientRect(), R = eng.root.getBoundingClientRect(), d = document.createElement('div'); d.className = 'kx-ripple'; d.style.left = (r.left + r.width / 2 - R.left) + 'px'; d.style.top = (r.top + r.height / 2 - R.top) + 'px'; eng.root.appendChild(d); setTimeout(() => d.remove(), 650); e.dispatchEvent(new MouseEvent('click', { bubbles: true })); },
+    /* unit charts: one circle per item, keyed, so items keep their identity when they move */
+    units(items, o = {}) { const gU = mk('g', { class: 'kx-units' }, o.parent || dyn); s._units = items.map((it, j) => { const c = mk('circle', { cx: o.x0 || 0, cy: o.y0 || 0, r: o.r || 4, fill: col(o.fill || 'fill.blue') }, gU); c.style.transition = 'fill .5s, opacity .5s'; return { it, c, x: o.x0 || 0, y: o.y0 || 0, r: o.r || 4, j }; }); return s._units; },
+    arrange(layout, o = {}) { const U = s._units || [], du = o.du || 900, stg = o.stagger == null ? 4 : o.stagger, ez = ease[o.ease || 'inOut'];
+      const tg = U.map((u, j) => { const L = layout(u.it, j) || {}; if (L.fill) u.c.style.fill = col(L.fill); if (L.opacity != null) u.c.style.opacity = L.opacity; return { x0: u.x, y0: u.y, r0: u.r, x: L.x == null ? u.x : L.x, y: L.y == null ? u.y : L.y, r: L.r == null ? u.r : L.r, dl: (L.order == null ? j : L.order) * stg }; });
+      const tot = du + Math.max(0, ...tg.map(t => t.dl));
+      return s.tween(tot, k => { const ms = k * tot; U.forEach((u, j) => { const t = tg[j], p = ez(clamp((ms - t.dl) / du)); u.x = lerp(t.x0, t.x, p); u.y = lerp(t.y0, t.y, p); u.r = lerp(t.r0, t.r, p); u.c.setAttribute('cx', f(u.x)); u.c.setAttribute('cy', f(u.y)); u.c.setAttribute('r', f(u.r)); }); }, { ease: 'linear', delay: o.delay || 0 }); },
+  };
+  return s;
+}
+
+/* ---------- stepper: a lesson that moves one idea at a time, with fixed controls */
+const ALL = (window.EXPLAINERS = window.EXPLAINERS || []);
+function frame(root, o, kind) {
+  root = typeof root === 'string' ? document.querySelector(root) : root;
+  useStyle(o.style || 'chalkboard', root);
+  const [W, H] = o.viewBox || [380, 300];
+  const legend = (o.legend || []).map(l => `<span data-l="${l.key}"><span class="kx-sw" style="background:${col(l.color)}"></span>${esc(l.label)}</span>`).join('');
+  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div>
+<svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
+${kind === 'player' ? '<div class="kx-scrub"><button class="kx-pp" type="button"></button><input type="range" min="0" step="1" aria-label="Scrub the timeline"><span class="kx-time"></span></div>' : '<div class="kx-act"></div>'}
+${legend ? `<div class="kx-legend">${legend}</div>` : ''}<div class="kx-nav"><button class="kx-back" type="button" aria-label="Previous">${ICON.left}</button><div class="kx-dots"></div>${kind === 'stepper' ? `<button class="kx-replay" type="button" aria-label="Replay this step" title="Replay this step">${ICON.replay}</button>` : ''}<button class="kx-next" type="button"></button></div>`;
+  if (REC) root.classList.add('kx-recording');
+  const $ = s => root.querySelector(s);
+  return { root, W, H, svg: $('.kx-stage'), cap: $('.kx-cap'), act: $('.kx-act'), title: $('.kx-title'), count: $('.kx-count'), dots: $('.kx-dots'), next: $('.kx-next'), back: $('.kx-back'), replay: $('.kx-replay'), log: $('.kx-log'), $ };
+}
+function fixCaptionHeight(fr, texts) {   // reserve the tallest caption so nothing below it ever moves
+  const m = fr.cap.cloneNode(); m.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;min-height:0;width:${fr.cap.clientWidth}px`; m.removeAttribute('aria-live'); fr.cap.parentNode.appendChild(m);
+  let h = 0; texts.forEach(t => { m.textContent = t; h = Math.max(h, m.offsetHeight); }); m.remove(); fr.cap.style.minHeight = h + 'px';
+}
+function stepper(o) {
+  const fr = frame(o.root, o, 'stepper'), S = o.steps;
+  if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
+  const eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
+  let cur = 0, first = true, auto = null, ends = [];
+  eng.stopAuto = () => { auto = null; };
+  S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
+  const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
+  fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
+  function build(i) {
+    cur = i; eng.touched = false; const st = S[i], s = {};
+    fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
+    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = `Step ${i + 1} of ${S.length}`;
+    fr.svg.setAttribute('aria-label', (st.title || '') + '. ' + (st.alt || st.cap || ''));
+    [...fr.dots.children].forEach((d, j) => j === i ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current'));
+    fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !st.keys || st.keys.includes(e.dataset.l) ? 1 : .3);
+    fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : 'Next' + ICON.right;
+    fr.cap.style.transition = 'none'; fr.cap.style.opacity = 0; fr.cap.textContent = st.cap || '';
+    const revealEnd = reveal(fr.svg);
+    const ctx = makeCtx(eng, fr.svg, i);
+    ctx.at(st.capDelay == null ? 300 : st.capDelay, () => { fr.cap.style.transition = 'opacity .6s'; fr.cap.style.opacity = 1; });
+    if (st.start) st.start(ctx);
+    eng.inDemo = false;
+    if (st.demo && st.idleDemo && !REC) ctx.at(st.idleDemo, () => { if (!eng.touched) { eng.inDemo = true; Promise.resolve(st.demo(ctx)).finally(() => { eng.inDemo = false; }); } });
+    ends[i] = st.duration || revealEnd + 600;
+    eng.ctx = ctx;
+  }
+  function go(i, keepAuto) {
+    if (!keepAuto) auto = null;
+    eng.gen++; eng.timers.forEach(clearTimeout); eng.timers = [];
+    i = Math.max(0, Math.min(S.length - 1, i));
+    const g = eng.gen;
+    if (first || RM) { first = false; build(i); fr.svg.style.opacity = 1; }
+    else { fr.svg.style.opacity = 0; setTimeout(() => { if (g === eng.gen) { build(i); fr.svg.style.opacity = 1; } }, 230); }
+  }
+  fr.back.onclick = () => go(cur - 1);
+  fr.next.onclick = () => go(cur < S.length - 1 ? cur + 1 : 0);
+  fr.replay.onclick = () => go(cur);
+  document.addEventListener('keydown', e => { if (e.target.closest && e.target.closest('[role=button],input,button,textarea,select')) return; if (ALL.length > 1 && !fr.root.contains(document.activeElement)) return; if (e.key === 'ArrowRight') go(cur + 1); if (e.key === 'ArrowLeft') go(cur - 1); });
+  const api = {
+    kind: 'stepper', root: fr.root, get count() { return S.length; }, get current() { return cur; },
+    go: i => go(i), duration: i => S[i].duration || ends[i] || 4000, hasDemo: i => !!S[i].demo,
+    demo: i => { const c = eng.ctx; return c && c.i === i && S[i].demo ? Promise.resolve(S[i].demo(c)) : Promise.resolve(); },
+    demoDuration: i => S[i].demoDuration || 0,
+    async autoplay(hold = o.hold || 2200) { const me = auto = {}; for (let i = 0; i < S.length; i++) { if (auto !== me) return; go(i, true); await sleep(260 + api.duration(i)); if (auto !== me) return; if (S[i].demo) { await Promise.race([api.demo(i), sleep(S[i].demoDuration || 12000)]); await sleep(S[i].demoDuration ? 0 : 600); } await sleep(hold); } },
+  };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { go(+(QS.get('step') || 1) - 1); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; });
+    else if (o.autoplay && !RM && !QS.has('step') && !QS.has('static')) { const run = () => api.autoplay().then(() => { if (o.autoplay === 'loop' && auto) run(); }); run(); } });
+  return api;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
+   so pause, scrub, replay and recording all work for free. Chapters label stretches of the timeline. */
+function player(o) {
+  const fr = frame(o.root, o, 'player'), eng = { gen: 0, timers: [], root: fr.root, act: null, cap: fr.cap, touched: false };
+  const CH = o.chapters || [{ at: 0, title: o.title || '', cap: '' }], D = o.duration;
+  const range = fr.$('.kx-scrub input'), pp = fr.$('.kx-pp'), tm = fr.$('.kx-time');
+  range.max = D; let t = 0, playing = false, last = 0, chap = -1, speed = o.speed || 1;
+  fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
+  const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
+  CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
+  fixCaptionHeight(fr, CH.map(c => c.cap || ''));
+  const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
+  function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.opacity = !c.keys || c.keys.includes(e.dataset.l) ? 1 : .3); }
+  function logTo(x) { if (!fr.log || !o.log) return; const L = o.log.filter(e => e.t <= x).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
+  function draw() { range.value = t; tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
+  function seek(x) { t = clamp(x, 0, D); draw(); }
+  function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n; t += dt * speed; if (t >= D) { t = D; playing = false; updPP(); } draw(); if (playing) requestAnimationFrame(tick); }
+  function play() { if (t >= D) t = 0; if (RM) { seek(end(chapterAt(t)) - 1); return; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }  // reduced motion: jump to the end state of the chapter instead of animating
+  function pause() { playing = false; updPP(); }
+  function updPP() { pp.innerHTML = playing ? ICON.pause + 'Pause' : t >= D ? ICON.replay + 'Replay' : ICON.play + 'Play'; pp.setAttribute('aria-label', playing ? 'Pause' : 'Play'); }
+  pp.onclick = () => playing ? pause() : play();
+  range.oninput = () => { pause(); seek(+range.value); };
+  fr.back.onclick = () => { seek(CH[Math.max(0, chapterAt(t) - (t - CH[chapterAt(t)].at < 600 ? 1 : 0))].at); };
+  fr.next.innerHTML = 'Next' + ICON.right; fr.next.onclick = () => { const k = chapterAt(t); seek(k < CH.length - 1 ? CH[k + 1].at : 0); play(); };
+  const end = i => i < CH.length - 1 ? CH[i + 1].at : D;
+  const api = { kind: 'player', root: fr.root, get count() { return CH.length; }, get current() { return chapterAt(t); }, go: i => { seek(CH[i].at); play(); }, duration: i => (end(i) - CH[i].at) / speed, hasDemo: () => false, demo: () => Promise.resolve(), seek, play, pause, get time() { return t; },
+    async autoplay() { seek(0); play(); while (t < D) await sleep(200); await sleep(o.hold || 2000); } };
+  let resolveReady; api.ready = new Promise(r => resolveReady = r);
+  ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
+  fontsReady().then(() => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if (o.autoplay !== false && !QS.has('static')) play(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  return api;
+}
+
+/* ---------- controls for explorables */
+let uid = 0;
+function slider(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent; const id = 'kx' + (++uid);
+  const w = document.createElement('div'); w.className = 'kx-ctl';
+  w.innerHTML = `<label for="${id}">${esc(o.label)}</label><output for="${id}"></output><input id="${id}" type="range" min="${o.min}" max="${o.max}" step="${o.step || 'any'}" value="${o.value}">`;
+  parent.appendChild(w); const inp = w.querySelector('input'), out = w.querySelector('output'), fmt = o.fmt || (v => v);
+  const upd = () => { out.textContent = fmt(+inp.value); o.oninput && o.oninput(+inp.value); };
+  inp.addEventListener('input', upd); upd();
+  return { el: w, input: inp, get value() { return +inp.value; }, set(v) { inp.value = v; upd(); } };
+}
+function toggle(parent, o) {
+  parent = typeof parent === 'string' ? document.querySelector(parent) : parent;
+  const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', o.value ? 'true' : 'false'); b.innerHTML = esc(o.label); parent.appendChild(b);
+  b.onclick = () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', v); o.onchange && o.onchange(v); };
+  return b;
+}
+
+/* ---------- layout and number helpers */
+const grid = (j, o) => ({ x: (o.x0 || 0) + (j % o.cols) * (o.gap || 10), y: (o.y0 || 0) + Math.floor(j / o.cols) * (o.gapY || o.gap || 10) });
+function scale(d0, d1, r0, r1) { const s = v => r0 + (v - d0) / (d1 - d0 || 1) * (r1 - r0); s.invert = p => d0 + (p - r0) / (r1 - r0 || 1) * (d1 - d0); return s; }
+const fmt = {
+  int: v => Math.round(v).toLocaleString('en-US'),
+  pct: (v, d = 0) => (v * 100).toFixed(d) + '%',
+  usd: (v, d = 2) => (v < 0 ? '−' : '') + '$' + Math.abs(v).toFixed(d),
+  sec: v => v < 60 ? v.toFixed(0) + ' s' : Math.floor(v / 60) + ' min ' + Math.round(v % 60) + ' s',
+};
+/* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
+function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
+
+const K = { version: '1.0', NS, RM, C, STYLES, useStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, slider, toggle, grid, scale, fmt, wilson, sleep };
+window.K = K;
+})();
+</script>
+<script>
+/* ===== SCENE: everything below is the explainer itself. Edit freely. ===== */
+const {P, T, F, line, rect, ellipse, arrow, curve, poly, C} = K;
+
+/* ---------- DATA. Source: notebooks/31-self-repairing-scrapers (README.md and data/). See notes.md.
+   Grid codes per source-week, derived from data/attempts.jsonl (last attempt of each source-week):
+   C = accepted and correct with no writer call, R = accepted and correct after a repair that week,
+   F = not accepted (flagged for a person), X = accepted but wrong (nobody noticed).
+   Column order = README section 1 table order. */
+const SRC = ['bok','kso','krs','ksc','asc','mer','nca','hfb','gbs','lhr','cvp','pgc','bra','ohb','keb','pkb','fmf','oce','poa','adv'];
+const REDESIGNED = ['kso','krs','ksc','hfb','lhr','cvp'];                     // README section 1, redesign column
+const GRID = {
+  haiku:      ['CCCCCCCRCCCCCCCCCCCC','CCCCCCCCCCCCCCCCCCCC','CRRCCCCRCRCCCCCCCCCC','CCCCCCCCCCCCCCCCCCCC'],  // Haiku 5.5, rules only
+  granRules:  ['RXFRXFCFRRCRCFCXXXXF','CXFCXFCFCCCCCFCXXXFF','CRFRXFCFCRXCCFCXXXFF','CCXCXFCRCCXCCFCXXXFF'],  // Granite 4.2 8B, rules only
+  granReview: ['FRFFFFCFRRCRCFCFFXFF','RCFRRFCFCCCCCFCRFRRF','CFFRCFCFCRRCCFCCRCCF','CRFCCFCRCCCCCFCCCCCF'],  // Granite 4.2 8B, rules + review
+};
+const COST = {            // US dollars, README sections 5 and 7 (Haiku weekly: $0.21 / $0.00 / $0.07 / $0.00)
+  haikuW1first: 0.19,     // data/attempts.jsonl: week-1 write cost before the Harrow & Finch repair = $0.193
+  hfbRepair: 0.013,       // README section 3: "cost $0.013"
+  haikuW1: 0.21, haikuTotal: 0.28, sonnetTotal: 1.76,
+  granRules: 0.06, granReview: 4.87,
+};
+const PLANTED = [         // README section 6, planted-error table: [label, cases, rules flagged, review flagged]
+  ['Date taken from the next row', 20, 0, 20],
+  ['Day and month swapped', 20, 14, 20],
+  ['Body: first paragraph only', 20, 1, 20],
+  ['Body: links and footer added', 20, 6, 20],
+  ['Author missing on every record', 15, 15, 15],
+  ['Title cut to five words', 20, 0, 20],
+  ['Three oldest releases missing', 20, 12, 20],
+  ['No change (control)', 20, 0, 0],
+];
+const METHODS = [         // README section 7: [label, release-weeks right of 593, four-week cost, kind]
+  ['Haiku programs, rules only', 593, 0.28, 'prog'],
+  ['Sonnet programs, rules only', 593, 1.76, 'prog'],
+  ['Sonnet reads every page', 593, 4.25, 'read'],
+  ['Haiku programs, rules + review', 593, 5.31, 'prog'],
+  ['Sonnet programs, rules + review', 593, 7.03, 'prog'],
+  ['Granite reads every page', 572, 0.06, 'read'],
+  ['Haiku reads every page', 560, 0.23, 'read'],
+  ['Granite programs, rules + review', 404, 4.87, 'prog'],
+  ['Granite programs, rules only', 294, 0.06, 'prog'],
+];
+const count = (rows, code) => rows.join('').split('').filter(c => code.includes(c)).length;
+const wk4ok = rows => count([rows[3]], 'CR');
+
+/* ---------- layout */
+const MONO = 'var(--font-mono, ui-monospace, Menlo, monospace)';
+const BX = {             // system boxes: x, y, w, h
+  pages: [12, 12, 60, 42], prog: [88, 12, 64, 42], rules: [168, 12, 58, 42],
+  review: [242, 12, 58, 42], track: [316, 12, 52, 42], writer: [88, 84, 64, 40],
+};
+const X0 = 50, CW = 15.9, CELLW = 13.5, Y0 = 168, RH = 21, CELLH = 17;
+const cx = j => X0 + j * CW, cy = w => Y0 + w * RH;
+const FILL = {C: 'fill.green', R: 'fill.blue', F: 'fill.amber', X: 'fill.red'};
+const GLYPH = {C: '', R: 'R', F: 'F', X: '✗', P: '!'};
+const usd = v => '$' + v.toFixed(2);
+
+// a box: plain (shown at once) or drawn in with a delay
+function box(id, color, labels, o = {}) {
+  const [x, y, w, h] = BX[id], seed = {pages: 11, prog: 12, rules: 13, review: 14, track: 15, writer: 16}[id];
+  const dash = o.dashed ? ' stroke-dasharray="4 4"' : '';
+  const outline = o.anim ? P(rect(x, y, w, h, seed), color, o.t || 0, 600, 1.6, dash)
+    : `<path d="${rect(x, y, w, h, seed)}" fill="none" stroke="${K.col(color)}" stroke-width="1.6"${dash}/>`;
+  let txt = '';
+  labels.forEach((l, i) => { txt += T(x + w / 2, y + (labels.length === 1 ? h / 2 + 5 : 19 + i * 15), l.s,
+    {h: l.h, z: l.z || 13, c: l.c || color, t: (o.t || 0) + 200, id: l.id}); });
+  return `<g id="g_${id}" style="transition:opacity .45s;opacity:${o.op == null ? 1 : o.op}">${outline}${txt}</g>`;
+}
+function conn(x1, y1, x2, y2, color, seed, o = {}) {
+  const d = line(x1, y1, x2, y2, seed, .6), a = arrow(x1, y1, x2, y2, seed + 1, 6);
+  if (o.anim) return P(d, color, o.t || 0, 300, 1.4) + P(a, color, (o.t || 0) + 280, 120, 1.4);
+  return `<path d="${d} ${a}" fill="none" stroke="${K.col(color)}" stroke-width="1.4" stroke-linecap="round"/>`;
+}
+
+// the whole system diagram; o.writer = model name; o.review = 'off' | 'on'; o.dim = ids to dim; o.anim = draw in
+function system(o = {}) {
+  const dim = id => (o.dim || []).includes(id) ? .28 : 1, an = !!o.anim, t0 = an ? 0 : 0;
+  const revOn = o.review === 'on';
+  let m = '';
+  m += box('pages', 'ink', [{s: 'Pages', h: 1, z: 15}, {s: '20 sites', z: 12, c: 'mut'}], {anim: an, t: t0, op: dim('pages')});
+  m += box('prog', 'ink', [{s: 'Program', h: 1, z: 15}, {s: 'runs free', z: 12, c: 'mut'}], {anim: an, t: t0 + 250, op: dim('prog')});
+  m += box('rules', 'ink', [{s: 'Rules', h: 1, z: 15}, {s: 'free', z: 12, c: 'mut'}], {anim: an, t: t0 + 500, op: dim('rules')});
+  m += box('review', revOn ? 'violet' : 'mut', [{s: 'Review', h: 1, z: 15, id: 'revLab'}, {s: revOn ? 'Opus 5.5' : 'off', z: 12, c: revOn ? 'violet' : 'mut', id: 'revSub'}],
+    {anim: an, t: t0 + 750, dashed: !revOn, op: o.review === 'hide' ? .28 : dim('review')});
+  m += box('track', 'ink', [{s: 'Tracker', h: 1, z: 14}], {anim: an, t: t0 + 1000, op: dim('track')});
+  m += box('writer', 'violet', [{s: 'Writer', h: 1, z: 15}, {s: o.writer || 'Haiku 5.5', z: 12, id: 'wName'}], {anim: an, t: t0 + 1250, op: dim('writer')});
+  const c = an ? 1400 : 0;
+  m += `<g id="g_conn" style="transition:opacity .45s">` +
+    conn(72, 33, 87, 33, 'mut', 21, {anim: an, t: c}) + conn(152, 33, 167, 33, 'mut', 23, {anim: an, t: c + 100}) +
+    conn(226, 33, 241, 33, 'mut', 25, {anim: an, t: c + 200}) + conn(300, 33, 315, 33, 'mut', 27, {anim: an, t: c + 300}) + `</g>`;
+  // writer -> program (writes), rules -> writer (report on a failed check)
+  m += `<g id="g_writes" style="transition:opacity .45s;opacity:${dim('writer')}">` + conn(120, 83, 120, 56, 'violet', 31, {anim: an, t: c + 400}) +
+    T(126, 74, 'writes', {z: 12, c: 'violet', a: 'start', t: c + 500}) + `</g>`;
+  const rp = `M197 55 L197 104 L154 104`;
+  m += `<g id="g_report" style="transition:opacity .45s;opacity:${dim('report')}">` +
+    (an ? P(rp, 'red', c + 600, 500, 1.4, 'stroke-dasharray="3 3"') : `<path d="${rp}" fill="none" stroke="${C.red}" stroke-width="1.4" stroke-dasharray="3 3"/>`) +
+    (an ? P(arrow(197, 104, 154, 104, 33, 6), 'red', c + 1050, 120, 1.4) : `<path d="${arrow(197, 104, 154, 104, 33, 6)}" fill="none" stroke="${C.red}" stroke-width="1.4"/>`) +
+    T(202, 76, 'failed?', {z: 12, c: 'red', a: 'start', t: c + 700}) + T(202, 90, 'report', {z: 12, c: 'red', a: 'start', t: c + 750}) + `</g>`;
+  return m;
+}
+// paths the travelling dots follow
+const PATH = {
+  pagesToProg: [[72, 33], [88, 33]], progToRules: [[152, 33], [168, 33]],
+  rulesToTrack: [[226, 33], [316, 33]], rulesToReview: [[226, 33], [242, 33]], reviewToTrack: [[300, 33], [316, 33]],
+  writerToProg: [[120, 84], [120, 54]], report: [[197, 54], [197, 104], [152, 104]],
+};
+
+function spend(v, label) {
+  return `<g id="g_spend">` + T(250, 96, label || 'Model spend', {z: 12, c: 'mut', a: 'start'}) +
+    T(250, 120, usd(v), {id: 'spend', z: 22, w: 600, a: 'start', extra: `data-v="${v}"`}) + `</g>`;
+}
+
+// the 20 x 4 grid; rows: 4 strings with '.' for weeks not yet run
+function grid(rows, o = {}) {
+  let m = T(12, 148, o.cond || 'Claude Haiku 5.5 writes, rules check', {z: 12, c: 'mut', a: 'start', id: 'cond'});
+  const showRe = o.redesign;
+  m += T(368, 148, '▲ redesigned in week 3', {z: 12, c: 'mut', a: 'end', id: 'reLab', extra: `style="opacity:${showRe ? 1 : 0};transition:opacity .4s"`});
+  SRC.forEach((s, j) => {
+    if (!REDESIGNED.includes(s)) return;
+    const x = cx(j) + CELLW / 2;
+    m += `<path class="re" d="M${x - 4} 163 L${x + 4} 163 L${x} 156 Z" fill="${C.mut}" style="opacity:${showRe ? 1 : 0};transition:opacity .4s"/>`;
+  });
+  for (let w = 0; w < 4; w++) {
+    m += T(14, cy(w) + 13, 'Wk ' + (w + 1), {z: 12, c: 'mut', a: 'start'});
+    for (let j = 0; j < 20; j++) m += cell(w, j, rows[w][j]);
+  }
+  return m;
+}
+function cellAttrs(code) {
+  if (code === '.' || !code) return {fill: 'none', stroke: C.faint, txt: '', tc: C.bg};
+  if (code === 'P') return {fill: 'none', stroke: C.red, txt: '!', tc: C.red};
+  return {fill: K.col(FILL[code]), stroke: 'none', txt: GLYPH[code], tc: C.bg};
+}
+function cell(w, j, code) {
+  const a = cellAttrs(code), x = cx(j), y = cy(w);
+  return `<g id="c${w}_${j}"><rect x="${x}" y="${y}" width="${CELLW}" height="${CELLH}" rx="2.5" fill="${a.fill}" stroke="${a.stroke}" stroke-width="1.2" style="transition:fill .35s,stroke .35s"/>` +
+    `<text x="${x + CELLW / 2}" y="${y + 12.5}" text-anchor="middle" font-size="12" font-weight="700" fill="${a.tc}" style="font-family:var(--font-sans, system-ui, sans-serif)">${a.txt}</text></g>`;
+}
+function setCell(s, w, j, code) {
+  const g = s.q(`#c${w}_${j}`); if (!g) return;
+  const a = cellAttrs(code), r = g.querySelector('rect'), t = g.querySelector('text');
+  r.setAttribute('fill', a.fill); r.setAttribute('stroke', a.stroke); t.textContent = a.txt; t.setAttribute('fill', a.tc);
+}
+const ring = (s, w, j, c) => s.ring(cx(j) - 2, cy(w) - 2, CELLW + 4, CELLH + 4, c);
+
+// the event log panel: a fixed box with up to 6 lines; addLog writes into it
+const LOG_Y = 280, LOG_H = 144;
+function logPanel(head) {
+  return `<rect x="12" y="${LOG_Y}" width="356" height="${LOG_H}" rx="7" fill="${C.panel}" stroke="${C.line}"/>` +
+    T(22, LOG_Y + 18, head || 'event log of the recorded run', {m: 1, z: 12, c: 'faint', a: 'start'}) +
+    `<g id="log"></g>`;
+}
+function makeLog(s) {
+  const lines = [], g = s.q('#log');
+  return (text, c = 'ink') => {
+    lines.push([text, c]); if (lines.length > 6) lines.shift();
+    g.innerHTML = lines.map((l, i) => `<text x="22" y="${LOG_Y + 42 + i * 19}" font-size="12" fill="${K.col(l[1])}" style="font-family:${MONO}">${K.esc(l[0])}</text>`).join('');
+    const last = g.lastChild; s.fadeIn(last, 300);
+  };
+}
+const summary = (text, c) => T(190, 266, text, {id: 'sum', z: 13, c: c || 'ink', w: 600});
+const rowsUpTo = (rows, n, extra) => rows.map((r, w) => w < n ? r : (extra && extra[w]) || '....................');
+
+/* ---------- steps */
+K.stepper({
+  root: '#x', style: 'chalkboard', viewBox: [380, 432],
+  title: 'A replay of a recorded experiment: a language model writes 20 web scrapers, free automatic rules catch the breaks after six site redesigns, one repair each fixes them, and a paid model review only matters when the writer model is weak.',
+  legend: [
+    {key: 'ok', label: 'Correct, no model call', color: 'fill.green'},
+    {key: 'rep', label: 'Correct after a repair', color: 'fill.blue'},
+    {key: 'flag', label: 'Flagged for a person', color: 'fill.amber'},
+    {key: 'bad', label: 'Wrong, nobody noticed', color: 'fill.red'},
+    {key: 'model', label: 'Model call (costs money)', color: 'violet'},
+  ],
+  extraCaptions: [
+    'With the Opus review, only 1 wrong source-week slips through and 16 of 20 sources are right by week 4. The reviews raise four weeks of spend from $0.06 to $4.87.',
+  ],
+  steps: [
+    { title: '1. Watching 20 news pages', keys: ['model'],
+      cap: 'Every Monday a program visits 20 news pages and copies each new release into a tracker. A model writes the program; checks that never see the right answer decide whether to keep it.',
+      draw: () => system({anim: true, review: 'off'}) + spend(0) + grid(rowsUpTo(GRID.haiku, 0)) + logPanel(),
+      start(s) {
+        const log = makeLog(s);
+        s.at(2200, () => log('• 20 made-up organisations, 1 news page each'));
+        s.at(2700, () => log('• 4 weekly runs, 5 to 26 October 2026'));
+        s.at(3200, () => log('• fields: headline, date, author, text'));
+        s.at(3700, () => log('• the right answers are hidden from every check', 'mut'));
+      },
+      duration: 4300 },
+
+    { title: '2. Week 1: write once', keys: ['ok', 'model'],
+      cap: 'Claude Haiku 5.5 sees one listing page and one sample release per site and writes 20 programs. 19 pass every rule and are fully correct. One does not.',
+      draw: () => system({review: 'off', dim: ['report']}) + spend(0) + grid(rowsUpTo(GRID.haiku, 0)) + logPanel(),
+      start(s) {
+        const log = makeLog(s);
+        log('→ Haiku writes 20 programs, one per site', 'violet');
+        s.travel(PATH.writerToProg, 600, 'violet', {delay: 300});
+        s.count('#spend', COST.haikuW1first, {from: 0, du: 2200, delay: 400, fmt: usd});
+        for (let j = 0; j < 20; j++) s.at(900 + j * 110, () => {
+          if (SRC[j] === 'hfb') { setCell(s, 0, j, 'P'); ring(s, 0, j, 'red'); } else setCell(s, 0, j, 'C');
+        });
+        s.at(1200, () => s.travel([...PATH.progToRules, ...PATH.rulesToTrack.slice(1)], 900, 'green'));
+        s.at(3300, () => log('✓ 19 pass every rule: all 19 fully correct', 'green'));
+        s.at(3900, () => log('✗ Harrow & Finch Bank fails the date rule', 'red'));
+      },
+      duration: 4600 },
+
+    { title: '3. Check, report, repair', keys: ['rep', 'model'],
+      cap: 'Harrow & Finch sends dates in milliseconds. The program read them as seconds and returned no date. The free date rule caught it, the report went back, and one repair fixed it.',
+      draw: () => system({review: 'off', dim: ['pages', 'track']}) + spend(COST.haikuW1first) +
+        grid(rowsUpTo(GRID.haiku, 0, ['CCCCCCCPCCCCCCCCCCCC'])) + logPanel(),
+      start(s) {
+        const log = makeLog(s), j = SRC.indexOf('hfb');
+        ring(s, 0, j, 'red');
+        log('← 6 records: headlines, authors, text ok', 'ink');
+        s.at(500, () => log('  published_at 1790602200000 -> date: None', 'mut'));
+        s.at(900, () => s.travel(PATH.progToRules, 500, 'ink'));
+        s.at(1500, () => { s.ring(168, 12, 58, 42, 'red'); log('✗ rule: date must be "YYYY-MM-DD", got None', 'red'); });
+        s.at(2300, () => { s.travel(PATH.report, 800, 'red'); log('→ report: error, 15 requests, 2 records', 'red'); });
+        s.at(3300, () => { s.ring(88, 84, 64, 40, 'violet'); log('→ Haiku repairs: big numbers / 1000', 'violet');
+          s.count('#spend', COST.haikuW1, {from: COST.haikuW1first, du: 700, fmt: usd}); });
+        s.at(3900, () => s.travel(PATH.writerToProg, 500, 'violet'));
+        s.at(4500, () => s.travel([...PATH.progToRules, ...PATH.rulesToTrack.slice(1)], 900, 'blue'));
+        s.at(5400, () => { setCell(s, 0, j, 'R'); ring(s, 0, j, 'blue'); log('✓ date 2026-09-28: 24 of 24 fields right', 'blue'); });
+      },
+      duration: 6000 },
+
+    { title: '4. Week 2: reuse for free', keys: ['ok'],
+      cap: 'In week 2 the stored programs run again on 1 to 3 new releases per site. No site changed, every rule passes, so no model is called: 20 of 20 correct for $0.00.',
+      draw: () => system({review: 'off', dim: ['writer', 'report']}) + spend(COST.haikuW1) + grid(rowsUpTo(GRID.haiku, 1)) + logPanel(),
+      start(s) {
+        const log = makeLog(s);
+        log('→ same 20 programs, this week\'s pages', 'ink');
+        s.travel([...PATH.pagesToProg, ...PATH.progToRules.slice(0), ...PATH.rulesToTrack.slice(1)], 1500, 'green', {delay: 300});
+        for (let j = 0; j < 20; j++) s.at(700 + j * 70, () => setCell(s, 1, j, GRID.haiku[1][j]));
+        s.at(2300, () => log('✓ 20 of 20 pass every rule', 'green'));
+        s.at(2800, () => log('✓ 20 of 20 fully correct, no model call', 'green'));
+        s.at(3300, () => log('  spend this week: $0.00', 'mut'));
+      },
+      duration: 3800 },
+
+    { title: '5. Week 3: six redesigns', keys: ['ok', 'rep', 'model'],
+      cap: 'Six sites are redesigned. Four redesigns break the program and a free rule flags every break; one repair each fixes them. Week 4 runs free. Sonnet 5.5 did the same for $1.76.',
+      draw: () => system({review: 'off'}) + spend(COST.haikuW1) + grid(rowsUpTo(GRID.haiku, 2), {redesign: true}) + logPanel() +
+        `<text id="sum" x="190" y="266" text-anchor="middle" font-size="13" font-weight="600" fill="${C.ink}"></text>`,
+      start(s) {
+        const log = makeLog(s), H = GRID.haiku[2];
+        const breaks = [ // README section 5 and data/attempts.jsonl static_problems, week 3
+          ['kso', '✗ Statistics Office: 0 records'],
+          ['krs', '✗ Revenue Service: 5 records vs 8 last week'],
+          ['hfb', '✗ Harrow & Finch: 0 records (410 Gone)'],
+          ['lhr', '✗ Lumen Home: author "Words by Daren Pell"'],
+        ];
+        for (let j = 0; j < 20; j++) s.at(300 + j * 60, () => setCell(s, 2, j, H[j] === 'R' ? 'P' : 'C'));
+        breaks.forEach(([id, txt], i) => s.at(1700 + i * 650, () => { const j = SRC.indexOf(id); ring(s, 2, j, 'red'); log(txt, 'red'); }));
+        s.at(4400, () => s.travel(PATH.report, 600, 'red'));
+        s.at(5000, () => { s.travel(PATH.writerToProg, 500, 'violet'); s.count('#spend', COST.haikuTotal, {from: COST.haikuW1, du: 800, fmt: usd}); });
+        s.at(5600, () => { breaks.forEach(([id]) => setCell(s, 2, SRC.indexOf(id), 'R')); log('→ 4 repairs, +$0.07: all 4 now correct', 'blue'); });
+        s.at(6200, () => log('✓ Securities Comm., Corvel: still correct', 'green'));
+        for (let j = 0; j < 20; j++) s.at(6900 + j * 45, () => setCell(s, 3, j, GRID.haiku[3][j]));
+        s.at(7900, () => { log('✓ week 4: 20 of 20, no model call', 'green');
+          s.q('#sum').textContent = `${count(GRID.haiku, 'CR')} of 80 source-weeks correct for ${usd(COST.haikuTotal)}`; s.fadeIn('#sum', 400); });
+      },
+      duration: 8600 },
+
+    { title: '6. A weak writer', keys: ['ok', 'rep', 'flag', 'bad', 'model'],
+      cap: 'Granite 4.2 8B, a small open model, writes weaker programs. With rules only, 22 source-weeks of wrong records slip through (red ✗). Tap to add the Opus review of 2 sampled records.',
+      draw: () => system({review: 'off', writer: 'Granite 8B'}) + spend(COST.granRules, 'Spend, 4 weeks') +
+        grid(GRID.haiku, {cond: 'Granite 4.2 8B writes, rules check', redesign: true}) +
+        `<rect x="12" y="${LOG_Y}" width="356" height="${LOG_H}" rx="7" fill="${C.panel}" stroke="${C.line}"/>` +
+        T(30, LOG_Y + 34, 'Wrong, nobody noticed', {z: 13, c: 'ink', a: 'start'}) +
+        T(350, LOG_Y + 36, String(count(GRID.granRules, 'X')), {id: 'stBad', z: 24, w: 700, c: 'red', a: 'end', extra: `data-v="${count(GRID.granRules, 'X')}"`}) +
+        T(30, LOG_Y + 52, 'source-weeks out of 80', {z: 12, c: 'mut', a: 'start'}) +
+        T(30, LOG_Y + 82, 'Sources correct in week 4', {z: 13, c: 'ink', a: 'start'}) +
+        T(350, LOG_Y + 84, wk4ok(GRID.granRules) + ' of 20', {id: 'stOk', z: 24, w: 700, c: 'green', a: 'end'}) +
+        T(30, LOG_Y + 112, 'Flagged for a person, 4 weeks', {z: 13, c: 'ink', a: 'start'}) +
+        T(350, LOG_Y + 114, String(count(GRID.granRules, 'F')), {id: 'stFlag', z: 24, w: 700, c: 'amber', a: 'end', extra: `data-v="${count(GRID.granRules, 'F')}"`}) +
+        T(30, LOG_Y + 132, 'source-weeks out of 80', {z: 12, c: 'mut', a: 'start'}),
+      start(s) {
+        let on = false;
+        const order = [...Array(80).keys()];
+        for (let k = 0; k < 80; k++) { const w = Math.floor(k / 20), j = k % 20; s.at(200 + k * 18, () => setCell(s, w, j, GRID.granRules[w][j])); }
+        const apply = () => {
+          const G = on ? GRID.granReview : GRID.granRules;
+          order.forEach(k => { const w = Math.floor(k / 20), j = k % 20; s.at(k * 12, () => setCell(s, w, j, G[w][j])); });
+          const rv = s.q('#g_review path'); rv.setAttribute('stroke', on ? C.violet : C.mut); rv.setAttribute('stroke-dasharray', on ? '' : '4 4');
+          s.swap('#revSub', on ? 'Opus 5.5' : 'off', on ? 'violet' : 'mut'); s.q('#revLab').setAttribute('fill', on ? C.violet : C.mut);
+          s.swap('#cond', on ? 'Granite 4.2 8B writes, rules + review' : 'Granite 4.2 8B writes, rules check');
+          s.count('#stBad', count(G, 'X'), {du: 800});
+          s.count('#stFlag', count(G, 'F'), {du: 800});
+          s.swap('#stOk', wk4ok(G) + ' of 20');
+          s.count('#spend', on ? COST.granReview : COST.granRules, {du: 900, fmt: usd});
+          if (on) { s.ring(242, 12, 58, 42, 'violet'); s.travel([...PATH.rulesToReview, ...PATH.reviewToTrack.slice(0)], 800, 'violet'); }
+          s.cap(on ? 'With the Opus review, only 1 wrong source-week slips through and 16 of 20 sources are right by week 4. The reviews raise four weeks of spend from $0.06 to $4.87.'
+                   : 'Granite 4.2 8B, a small open model, writes weaker programs. With rules only, 22 source-weeks of wrong records slip through (red ✗). Tap to add the Opus review of 2 sampled records.');
+        };
+        const b = s.btn('check', 'Add the Opus review', () => { on = !on; b.setAttribute('aria-pressed', on); b.lastChild.textContent = on ? 'Remove the review' : 'Add the Opus review'; apply(); }, {primary: true});
+        b.setAttribute('aria-pressed', 'false');
+      },
+      demo: async s => { s.tap(s.act.querySelector('button')); await s.wait(2600); },
+      idleDemo: 5500, demoDuration: 2800, duration: 1800 },
+
+    { title: '7. Which check catches what', keys: ['model'],
+      cap: 'Errors were planted in correct output. The free rules flagged 48 of 135, mostly loud ones. The Opus review flagged all 135. Neither raised an alarm on 20 unchanged controls.',
+      draw: () => {
+        const tot = PLANTED.slice(0, 7), nR = tot.reduce((a, r) => a + r[2], 0), nV = tot.reduce((a, r) => a + r[3], 0), nC = tot.reduce((a, r) => a + r[1], 0);
+        let m = T(12, 22, `${nC} planted errors, 20 unchanged controls`, {z: 14, a: 'start', w: 600}) +
+          T(12, 42, `Rules flagged ${nR}`, {z: 13, c: 'ink', a: 'start'}) + T(130, 42, `Review flagged ${nV}`, {z: 13, c: 'violet', a: 'start'});
+        PLANTED.forEach((r, i) => {
+          const y = 58 + i * 46, ctl = i === 7, BW = 220 / r[1];
+          m += T(12, y + 12, r[0], {z: 13, a: 'start', c: ctl ? 'mut' : 'ink', t: 200 + i * 120});
+          m += T(12, y + 27, 'rules', {z: 12, c: 'mut', a: 'start', t: 200 + i * 120}) + T(12, y + 41, 'review', {z: 12, c: 'violet', a: 'start', t: 200 + i * 120});
+          m += `<rect x="70" y="${y + 18}" width="220" height="10" rx="2" fill="${C.faint}" opacity=".35"/>`;
+          m += `<rect x="70" y="${y + 32}" width="220" height="10" rx="2" fill="${C.faint}" opacity=".35"/>`;
+          m += `<rect class="pb" x="70" y="${y + 18}" width="${Math.max(0, r[2] * BW)}" height="10" rx="2" fill="${C.ink}" style="transform-box:fill-box;transform-origin:0 50%;transform:scaleX(0)"/>`;
+          m += `<rect class="pb" x="70" y="${y + 32}" width="${Math.max(0, r[3] * BW)}" height="10" rx="2" fill="${C.fill.violet}" style="transform-box:fill-box;transform-origin:0 50%;transform:scaleX(0)"/>`;
+          const lab = ctl ? ['0 false alarms', '0 false alarms'] : [`${r[2]} of ${r[1]}`, `${r[3]} of ${r[1]}`];
+          m += T(296, y + 27, lab[0], {z: 12, a: 'start', c: 'ink', t: 900 + i * 150}) + T(296, y + 41, lab[1], {z: 12, a: 'start', c: 'violet', t: 900 + i * 150});
+        });
+        return m;
+      },
+      start(s) { [...s.svg.querySelectorAll('.pb')].forEach((b, k) => s.at(300 + Math.floor(k / 2) * 150, () => s.bar(b, 1, 700))); },
+      duration: 2600 },
+
+    { title: '8. Or read every page?', keys: [],
+      cap: 'Haiku’s programs with free rules were right in all 593 release-weeks for $0.28. Sonnet reading every page was also always right, for $4.25. Real pages are often 10 to 50 times larger.',
+      draw: () => {
+        let m = T(12, 20, 'Share of 593 release-weeks right', {z: 13, a: 'start', w: 600}) + T(368, 20, '4-week cost', {z: 13, a: 'end', w: 600});
+        METHODS.forEach((r, i) => {
+          const y = 34 + i * 43, frac = r[1] / 593, pct = r[1] === 593 ? '100%' : (100 * frac).toFixed(1) + '%';
+          m += T(12, y + 13, r[0], {z: 13, a: 'start', c: 'ink', t: 150 + i * 100});
+          m += T(368, y + 13, usd(r[2]), {z: 13, a: 'end', w: 600, c: 'ink', t: 150 + i * 100});
+          m += `<rect x="12" y="${y + 20}" width="290" height="11" rx="2" fill="${C.faint}" opacity=".35"/>`;
+          m += `<rect class="mb" x="12" y="${y + 20}" width="${290 * frac}" height="11" rx="2" fill="${C.fill.green}" style="transform-box:fill-box;transform-origin:0 50%;transform:scaleX(0)"/>`;
+          m += T(310, y + 30, pct, {z: 12, a: 'start', c: 'ink', t: 900 + i * 100});
+        });
+        m += T(12, 428, 'Bars: share right. Costs: model calls, list prices.', {z: 12, a: 'start', c: 'mut', t: 1600});
+        return m;
+      },
+      start(s) {
+        [...s.svg.querySelectorAll('.mb')].forEach((b, k) => s.bar(b, 1, 700 + k * 60));
+        s.at(1900, () => s.ring(8, 30, 364, 40, 'green'));
+      },
+      duration: 2800 },
+
+    { title: '9. What to do', keys: ['model'],
+      cap: 'Let a capable model write the scrapers, run the free rules on every run, and pay for a model review only where the rules are blind: new or repaired programs and weak writers.',
+      draw: () => {
+        let m = system({review: 'on', dim: []}) + spend(COST.haikuTotal, 'Haiku, 4 weeks');
+        const items = [
+          ['1', 'Let a capable model write', 'the programs. Haiku was enough.', 'violet'],
+          ['2', 'Run the free rules on every run;', 'a failed rule triggers a repair.', 'ink'],
+          ['3', 'Pay for the review only on new or', 'repaired programs and weak writers.', 'violet'],
+        ];
+        items.forEach((it, i) => {
+          const y = 158 + i * 54, t = 400 + i * 900;
+          m += T(22, y + 4, it[0], {h: 1, z: 22, c: it[3], t});
+          m += T(40, y, it[1], {z: 13, a: 'start', t: t + 100}) + T(40, y + 18, it[2], {z: 13, a: 'start', t: t + 200});
+        });
+        m += `<rect x="12" y="330" width="356" height="92" rx="7" fill="${C.panel}" stroke="${C.line}"/>` +
+          T(24, 352, 'Caveat', {h: 1, z: 18, c: 'amber', a: 'start', t: 3200}) +
+          T(24, 374, '20 made-up, small, tidy sites, one trap each.', {z: 12.5, a: 'start', t: 3300}) +
+          T(24, 392, 'Real sites will make errors nobody planned for,', {z: 12.5, a: 'start', t: 3400}) +
+          T(24, 410, 'and the rules flagged only 48 of 135 planted ones.', {z: 12.5, a: 'start', t: 3500});
+        return m;
+      },
+      start(s) {
+        s.at(500, () => s.ring(88, 84, 64, 40, 'violet'));
+        s.at(1400, () => s.ring(168, 12, 58, 42, 'ink'));
+        s.at(2300, () => s.ring(242, 12, 58, 42, 'violet'));
+      },
+      duration: 4100 },
+  ],
+});
+
+</script>
+</body></html>
