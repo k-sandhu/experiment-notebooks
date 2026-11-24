@@ -1,4 +1,4 @@
-/* explainer-kit v1.2. A small engine for animated, stepwise SVG explainers. No dependencies.
+/* explainer-kit v1.3. A small engine for animated, stepwise SVG explainers. No dependencies.
    Exposes window.K. Read explainer-kit/SKILL.md for the API and the rules it encodes.
    Every animation is tied to a "generation": moving to another step cancels all timers,
    loops and tweens of the old step, so steps can never bleed into each other. */
@@ -98,9 +98,10 @@ function reveal(svg) {
   const els = [...svg.querySelectorAll('[data-k]')];
   if (RM) { els.forEach(e => { e.style.opacity = 1; e.style.strokeDashoffset = 0; }); return 0; }
   let end = 0;
-  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (e.dataset.k === 'draw') { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
+  const drawn = e => e.dataset.k === 'draw' && !e.getAttribute('stroke-dasharray');   // a dashed line fades in, so the draw-in does not replace its dashes
+  els.forEach(e => { e.style.transition = 'none'; const t = +e.dataset.t, d = +e.dataset.d; end = Math.max(end, t + d); if (drawn(e)) { const L = e.getTotalLength() + 1; e.style.strokeDasharray = L + ' ' + L; e.style.strokeDashoffset = L; } else e.style.opacity = 0; });
   svg.getBoundingClientRect();
-  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (e.dataset.k === 'draw') { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
+  requestAnimationFrame(() => requestAnimationFrame(() => els.forEach(e => { const t = e.dataset.t, d = e.dataset.d; if (drawn(e)) { e.style.transition = `stroke-dashoffset ${d}ms cubic-bezier(.45,0,.55,1) ${t}ms`; e.style.strokeDashoffset = 0; } else { e.style.transition = `opacity ${d}ms ease ${t}ms`; e.style.opacity = 1; } })));
   return end;
 }
 function finish(svg) { svg.querySelectorAll('[data-k]').forEach(e => { e.style.transition = 'none'; e.style.strokeDashoffset = 0; e.style.opacity = 1; }); }
@@ -120,7 +121,18 @@ let cssDone = false;
 function injectCSS() {
   if (cssDone) return; cssDone = true;
   const s = document.createElement('style');
-  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  s.textContent = `.kx{background-color:var(--k-bg);color:var(--k-ink);border-radius:16px;padding:14px 10px 12px;font-family:var(--font-sans,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);max-width:560px;margin:0 auto;position:relative;box-sizing:border-box;-webkit-tap-highlight-color:transparent;display:flex;flex-direction:column}
+.kx-side{display:contents}.kx-head{order:-1}
+.kx.kx-wide{max-width:1120px;display:grid;grid-template-columns:minmax(0,640px) minmax(300px,420px);justify-content:center;gap:0 32px;padding:22px 24px 20px;align-items:start}
+.kx-wide .kx-main{min-width:0;align-self:center}.kx-wide svg.kx-stage{max-height:calc(100vh - 60px)}
+.kx-wide .kx-side{display:flex;flex-direction:column;min-width:0;align-self:stretch}.kx-wide .kx-head{flex-direction:column;align-items:flex-start;gap:2px;margin:4px 0 6px}
+.kx-wide .kx-title{font-size:30px}.kx-wide.kx-blueprint .kx-title,.kx-wide.kx-editorial .kx-title{font-size:23px}.kx-wide .kx-count{font-size:13px}
+.kx-wide .kx-cap{font-size:16px;line-height:1.6;margin:8px 0 12px}.kx-wide .kx-act{justify-content:flex-start;margin:0 0 6px}.kx-wide .kx-legend{font-size:13px;margin:6px 0 10px;min-height:0}
+.kx-wide .kx-nav{margin-top:auto;padding-top:10px}.kx-wide .kx-ctl{margin:4px 0;font-size:13.5px}.kx-wide .kx-log{margin:8px 0 0}.kx-wide .kx-scrub{margin:6px 0}
+.kx-wide.kx-figure .kx-nav{margin-top:12px}
+.kx-introing .kx-scrub,.kx-introing .kx-nav,.kx-introing .kx-legend,.kx-introing .kx-log,.kx-introing .kx-act{visibility:hidden}
+.kx-introhost{position:relative}.kx-introing .kx-introhost .kx-introbtn{visibility:visible;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:1}.kx-wide.kx-introing .kx-introhost .kx-introbtn{left:auto;right:0;transform:translateY(-50%)}
+.kx-introbar{display:flex;justify-content:center;margin:2px 4px 10px}.kx-wide .kx-introbar{justify-content:flex-start;margin:2px 0 12px}.kx .kx-introbar button{min-width:150px}
 .kx *{box-sizing:border-box}.kx svg.kx-stage{display:block;width:100%;height:auto;overflow:visible;transition:opacity .22s ease}
 .kx-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 6px;min-height:28px}
 .kx-title{font-family:var(--k-hand);font-size:23px;line-height:1.15}.kx-blueprint .kx-title,.kx-editorial .kx-title{font-size:19px}
@@ -134,12 +146,12 @@ function injectCSS() {
 .kx button{background:transparent;border:1px solid var(--k-line);color:var(--k-ink);border-radius:8px;padding:0 12px;font:inherit;font-size:13px;min-height:40px;min-width:40px;display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer}
 .kx button:hover{border-color:var(--k-mut)}.kx button:focus-visible,.kx [role=button]:focus-visible{outline:2px solid var(--k-violet);outline-offset:2px}
 .kx button.pri{border-color:var(--k-violet);color:var(--k-violet)}.kx button[aria-pressed=true]{background:color-mix(in srgb,var(--k-violet) 18%,transparent)}
-.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0}
+.kx-dots{display:flex;flex:1;justify-content:center;flex-wrap:nowrap;min-width:0;overflow:hidden}
 .kx button.kx-dot{padding:10px 5px;border:0;min-height:0;min-width:0;background:none}
-.kx-dot i{width:8px;height:8px;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
+.kx-dot i{width:8px;height:8px;flex:none;border-radius:50%;border:1px solid var(--k-mut);display:inline-block}.kx-dot[aria-current=step] i{background:var(--k-ink);border-color:var(--k-ink)}
 .kx-log{font-family:var(--font-mono,ui-monospace,Menlo,monospace);font-size:12px;line-height:18px;height:98px;overflow:hidden;background:var(--k-panel);border:1px solid var(--k-line);border-radius:8px;padding:6px 8px;margin:8px 4px 0;display:flex;flex-direction:column;justify-content:flex-end;white-space:pre-wrap}
 .kx-scrub{display:flex;align-items:center;gap:8px;margin:6px 4px}.kx-scrub input{flex:1;min-width:60px}.kx button.kx-speed{min-width:46px;padding:0 6px;font-variant-numeric:tabular-nums}
-.kx-time{font-size:12px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.kx-time{font-size:12px;color:var(--k-mut);min-width:64px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .kx input[type=range]{accent-color:var(--k-violet);height:32px;width:100%;margin:0}
 .kx-ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;font-size:12.5px;margin:4px 8px}.kx-ctl output{font-variant-numeric:tabular-nums;color:var(--k-ink);font-weight:600}.kx-ctl input{grid-column:1/3}
 .kx .pulse{animation:kxpl 1.2s ease-in-out 1 forwards}@keyframes kxpl{0%,100%{opacity:0}50%{opacity:.85}}
@@ -198,6 +210,44 @@ function makeCtx(eng, svg, i) {
   return s;
 }
 
+/* ---------- layout. 'auto' (default) puts the drawing beside the text and controls when the space the
+   explainer sits in is at least WIDE px across (a laptop or desktop), and stacks them on a phone or in a
+   narrow column. 'stack' always stacks; 'side' always sits side by side. The drawing keeps its viewBox in
+   both, so one scene serves both layouts; it simply draws larger on a wide screen. */
+const WIDE = 760;
+function layout(root, mode) {
+  const set = on => { if (root.classList.contains('kx-wide') === on) return; root.classList.toggle('kx-wide', on); dispatchEvent(new Event('resize')); };
+  if (mode === 'side' || mode === 'stack') { set(mode === 'side'); return; }
+  const host = root.parentElement || document.body, check = () => set((host.clientWidth || innerWidth) >= WIDE);
+  check(); if ('ResizeObserver' in window) new ResizeObserver(check).observe(host); else addEventListener('resize', check);
+}
+
+/* ---------- intro: an opening scene for a reader who knows nothing about the subject. o.intro =
+   {title, cap, draw, alt, start}. A stepper shows it as its first step; a player or figure shows it until
+   the reader presses Start, then builds the real view. Recording and ?step= / ?static links skip it. */
+function introStep(it) {   // in a stepper the intro is step 0; its `start` is the button label, not a step's start(s) function
+  const st = Object.assign({ title: 'Before you start' }, it, { isIntro: true });
+  if (typeof st.start !== 'function') { st.label = st.start; delete st.start; }
+  return st;
+}
+function introGate(fr, o, start) {
+  const it = o.intro;
+  if (!it || REC || QS.has('step') || QS.has('static')) { start(); return; }
+  fr.root.classList.add('kx-introing');
+  fr.svg.innerHTML = (typeof it.draw === 'function' ? it.draw(K) : it.draw || '') + '<g class="kx-dyn"></g>'; reveal(fr.svg);
+  fr.title.textContent = it.title || 'Before you start'; fr.count.textContent = 'Start here'; fr.cap.textContent = it.cap || '';
+  fr.svg.setAttribute('aria-label', (it.title || '') + '. ' + (it.alt || it.cap || ''));
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'pri kx-introbtn'; b.innerHTML = esc(typeof it.start === 'string' ? it.start : 'Start') + ICON.right;
+  // put the Start button over a control row that is already there (hidden during the intro), so nothing moves when it goes;
+  // a figure with no control row gets a row of its own
+  const host = fr.root.querySelector('.kx-nav') || fr.root.querySelector('.kx-scrub');
+  let bar = null;
+  if (host) { host.classList.add('kx-introhost'); host.appendChild(b); }
+  else { bar = document.createElement('div'); bar.className = 'kx-introbar'; bar.appendChild(b); fr.cap.after(bar); }
+  fr.endIntro = () => { fr.endIntro = null; b.remove(); if (bar) bar.remove(); if (host) host.classList.remove('kx-introhost'); fr.root.classList.remove('kx-introing'); };
+  b.onclick = () => { if (fr.endIntro) fr.endIntro(); start(); };
+}
+
 /* ---------- stepper: a lesson that moves one idea at a time, with fixed controls */
 const ALL = (window.EXPLAINERS = window.EXPLAINERS || []);
 function frame(root, o, kind) {
@@ -217,11 +267,12 @@ function frame(root, o, kind) {
   else if (kind === 'player') { scrub = ctl === 'none' ? '' : `<div class="kx-scrub">${B.pp}<input type="range" min="0" step="1" aria-label="Scrub the timeline"><span class="kx-time"></span></div>`;
     if (ctl === 'full') nav = B.back + B.dots + B.next; else if (ctl === 'none') { nav = B.pp; solo = true; } }
   else { nav = (o.frame && !RM ? B.pp : '') + (ctl !== 'none' ? B.replay : ''); solo = true; }
-  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div>
-<svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
+  root.innerHTML = `<h2 class="sr-only">${esc(o.title || '')}</h2><div class="kx-main"><svg class="kx-stage" viewBox="0 0 ${W} ${H}" role="img"></svg></div>
+<div class="kx-side"><div class="kx-head"><span class="kx-title"></span><span class="kx-count"></span></div><p class="kx-cap" aria-live="polite"></p>${kind === 'player' && o.log ? '<div class="kx-log" aria-hidden="true"></div>' : ''}
 ${kind === 'player' ? scrub : '<div class="kx-act"></div>'}
-${legend ? `<div class="kx-legend">${legend}</div>` : ''}${nav ? `<div class="kx-nav${solo ? ' kx-solo' : ''}">${nav}</div>` : ''}`;
+${legend ? `<div class="kx-legend">${legend}</div>` : ''}${nav ? `<div class="kx-nav${solo ? ' kx-solo' : ''}">${nav}</div>` : ''}</div>`;
   root.classList.add('kx-' + kind, 'kx-c-' + ctl);
+  layout(root, o.layout || 'auto');
   if (REC) root.classList.add('kx-recording');
   const $ = s => root.querySelector(s);
   return { root, W, H, ctl, svg: $('.kx-stage'), head: $('.kx-head'), cap: $('.kx-cap'), act: $('.kx-act'), title: $('.kx-title'), count: $('.kx-count'), dots: $('.kx-dots'), next: $('.kx-next'), back: $('.kx-back'), replay: $('.kx-replay'), pp: $('.kx-pp'), log: $('.kx-log'), $ };
@@ -234,8 +285,20 @@ function fixCaptionHeight(fr, texts) {   // reserve the tallest caption so nothi
   const m = fr.cap.cloneNode(); m.style.cssText = `position:absolute;visibility:hidden;left:-9999px;top:0;min-height:0;width:${fr.cap.clientWidth}px`; m.removeAttribute('aria-live'); fr.cap.parentNode.appendChild(m);
   let h = 0; texts.forEach(t => { m.textContent = t; h = Math.max(h, m.offsetHeight); }); m.remove(); fr.cap.style.minHeight = h + 'px';
 }
+function fixHeadHeight(fr, titles, counts) {   // reserve the tallest heading (title plus step count) any step shows
+  const h = fr.head; if (!h || !h.isConnected || !h.clientWidth) return;
+  const t0 = fr.title.textContent, c0 = fr.count.textContent; h.style.minHeight = '0px'; let m = 0;
+  titles.forEach(t => counts.forEach(c => { fr.title.textContent = t || ''; fr.count.textContent = c; m = Math.max(m, h.offsetHeight); }));
+  fr.title.textContent = t0; fr.count.textContent = c0; h.style.minHeight = m + 'px';
+}
+function fixLegendHeight(fr, keySets) {   // reserve the tallest legend any step shows, so a step with more colours never pushes the controls down
+  const lg = fr.root.querySelector('.kx-legend'); if (!lg || !lg.clientWidth) return;
+  const spans = [...lg.querySelectorAll('[data-l]')], keep = spans.map(e => e.style.display); lg.style.minHeight = '0px'; let h = 0;
+  keySets.forEach(ks => { spans.forEach(e => e.style.display = !ks || ks.includes(e.dataset.l) ? '' : 'none'); h = Math.max(h, lg.offsetHeight); });
+  spans.forEach((e, j) => e.style.display = keep[j]); lg.style.minHeight = h + 'px';
+}
 function stepper(o) {
-  const fr = frame(o.root, o, 'stepper'), S = o.steps;
+  const fr = frame(o.root, o, 'stepper'), S = o.intro ? [introStep(o.intro)].concat(o.steps) : o.steps, N0 = o.intro ? 1 : 0;
   if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
   const eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
   let cur = 0, first = true, auto = null, ends = [];
@@ -244,18 +307,19 @@ function stepper(o) {
   eng.stopAuto = () => { auto = null; updPP(); };
   if (fr.dots) S.forEach((st, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to step ' + (i + 1)); b.innerHTML = '<i></i>'; b.onclick = () => go(i); fr.dots.appendChild(b); });
   const capTexts = S.map(st => st.cap || '').concat(o.extraCaptions || []);
-  fixCaptionHeight(fr, capTexts); addEventListener('resize', () => fixCaptionHeight(fr, capTexts));
-  const fixNext = () => { fixWidth(fr.next, [ICON.restart + 'Start over', 'Next' + ICON.right]); fixWidth(fr.pp, PPL); };
-  fontsReady().then(() => { fixCaptionHeight(fr, capTexts); fixNext(); });   // a web font can wrap and size text differently once it loads
+  const keySets = S.map(st => st.keys), counts = ['Start here', `Step ${S.length} of ${S.length}`], fixLeg = () => { fixLegendHeight(fr, keySets); fixHeadHeight(fr, S.map(st => st.title), counts); };
+  fixCaptionHeight(fr, capTexts); fixLeg(); addEventListener('resize', () => { fixCaptionHeight(fr, capTexts); fixLeg(); });
+  const fixNext = () => { fixWidth(fr.next, [ICON.restart + 'Start over', 'Next' + ICON.right].concat(o.intro ? [esc(S[0].label || 'Start') + ICON.right] : [])); fixWidth(fr.pp, PPL); };
+  fontsReady().then(() => { fixCaptionHeight(fr, capTexts); fixLeg(); fixNext(); });   // a web font can wrap and size text differently once it loads
   addEventListener('resize', fixNext);
   function build(i) {
     cur = i; eng.touched = false; const st = S[i], s = {};
     fr.svg.innerHTML = (typeof st.draw === 'function' ? st.draw(K) : st.draw || '') + '<g class="kx-dyn"></g>';
-    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = `Step ${i + 1} of ${S.length}`;
+    fr.act.innerHTML = ''; fr.title.textContent = st.title || ''; fr.count.textContent = S[i].isIntro ? 'Start here' : `Step ${i + 1 - N0} of ${S.length - N0}`;
     fr.svg.setAttribute('aria-label', (st.title || '') + '. ' + (st.alt || st.cap || ''));
     if (fr.dots) [...fr.dots.children].forEach((d, j) => j === i ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current'));
     fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !st.keys || st.keys.includes(e.dataset.l) ? '' : 'none');   // only this step's colours
-    if (fr.next) fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : 'Next' + ICON.right;
+    if (fr.next) fr.next.innerHTML = i === S.length - 1 ? ICON.restart + 'Start over' : S[i].isIntro ? esc(S[i].label || 'Start') + ICON.right : 'Next' + ICON.right;
     fr.cap.style.transition = 'none'; fr.cap.style.opacity = 0; fr.cap.textContent = st.cap || '';
     const revealEnd = reveal(fr.svg);
     const ctx = makeCtx(eng, fr.svg, i);
@@ -304,7 +368,7 @@ function stepper(o) {
   return api;
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-/* Time an average reader needs for a caption on a phone: about 230 ms a word plus a second to find it. */
+/* Time an average reader needs for a caption: about 230 ms a word plus a second to find it. */
 const readMs = cap => 1000 + 230 * String(cap || '').split(/\s+/).filter(Boolean).length;
 
 /* ---------- player: a scrubbable timeline. frame(t, s) must draw the scene for time t from scratch,
@@ -320,14 +384,15 @@ function player(o) {
   const SPEEDS = o.speeds === false || fr.ctl !== 'full' ? null : o.speeds || [0.5, 1, 2];
   if (SPEEDS) { const sb = document.createElement('button'); sb.type = 'button'; sb.className = 'kx-speed'; const lab = () => { sb.textContent = speed + '×'; sb.setAttribute('aria-label', 'Playback speed ' + speed + ' times'); };
     lab(); sb.onclick = () => { speed = SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length] || 1; lab(); eng.touched = true; }; tm.after(sb); }
-  fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>';
-  const ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg);
+  let ctx = null;
+  function setup() { if (ctx) return; if (fr.endIntro) fr.endIntro(); fr.svg.innerHTML = (typeof o.scene === 'function' ? o.scene(K) : o.scene || '') + '<g class="kx-dyn"></g>'; ctx = makeCtx(eng, fr.svg, 0); reveal(fr.svg); }
   if (fr.dots) CH.forEach((c, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'kx-dot'; b.setAttribute('aria-label', 'Go to ' + (c.title || 'part ' + (i + 1))); b.innerHTML = '<i></i>'; b.onclick = () => { seek(c.at); play(); }; fr.dots.appendChild(b); });
-  fixCaptionHeight(fr, CH.map(c => c.cap || '')); fontsReady().then(() => fixCaptionHeight(fr, CH.map(c => c.cap || '')));
+  const capsP = CH.map(c => c.cap || '').concat(o.intro ? [o.intro.cap || ''] : []), keysP = CH.map(c => c.keys), fitP = () => { fixCaptionHeight(fr, capsP); fixLegendHeight(fr, keysP); fixHeadHeight(fr, CH.map(c => c.title).concat(o.intro ? [o.intro.title || 'Before you start'] : []), ['Start here', `Part ${CH.length} of ${CH.length}`]); };
+  fitP(); fontsReady().then(fitP); addEventListener('resize', fitP);
   const chapterAt = x => { let k = 0; CH.forEach((c, i) => { if (x >= c.at) k = i; }); return k; };
   function setChapter(k) { if (k === chap) return; chap = k; const c = CH[k]; fr.title.textContent = c.title || ''; fr.count.textContent = `Part ${k + 1} of ${CH.length}`; fr.cap.textContent = c.cap || ''; fr.svg.setAttribute('aria-label', (c.title || '') + '. ' + (c.alt || c.cap || '')); if (fr.dots) [...fr.dots.children].forEach((d, j) => j === k ? d.setAttribute('aria-current', 'step') : d.removeAttribute('aria-current')); fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !c.keys || c.keys.includes(e.dataset.l) ? '' : 'none'); }
   function logTo(x) { if (!fr.log || !o.log) return; const from = o.logScope === 'all' ? -Infinity : CH[chapterAt(x)].at; const L = o.log.filter(e => e.t <= x && e.t >= from).slice(-6), key = L.map(e => e.t + e.text).join('|'); if (key === fr.log.dataset.k) return; fr.log.dataset.k = key; fr.log.innerHTML = L.map(e => `<div style="color:${col(e.c || 'mut')}">${esc(e.text)}</div>`).join(''); }
-  function draw() { if (range) range.value = t; if (tm) tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
+  function draw() { setup(); if (range) range.value = t; if (tm) tm.textContent = o.clock ? o.clock(t) : (t / 1000).toFixed(1) + ' s'; setChapter(chapterAt(t)); logTo(t); o.frame(t, ctx); }
   function seek(x) { t = clamp(x, 0, D); holdUntil = 0; heldAt = -1; restart = false; draw(); }
   function tick(n) { if (!playing) return; const dt = Math.min(64, n - last); last = n;
     if (n < holdUntil) { requestAnimationFrame(tick); return; }
@@ -349,7 +414,7 @@ function player(o) {
     async autoplay() { seek(0); play(); while (t < D) await sleep(200); await sleep(o.hold || 2000); } };
   let resolveReady; api.ready = new Promise(r => resolveReady = r);
   ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
-  fontsReady().then(() => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if (o.autoplay !== false && !QS.has('static')) play(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  fontsReady().then(() => { introGate(fr, o, () => { const k = +(QS.get('step') || 1) - 1; seek(CH[Math.min(k, CH.length - 1)].at); updPP(); if ((o.autoplay !== false || o.intro) && !QS.has('static')) play(); }); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
   return api;
 }
 
@@ -361,10 +426,10 @@ function figure(o) {
   const fr = frame(o.root, o, 'figure'), eng = { gen: 0, timers: [], root: fr.root, act: fr.act, cap: fr.cap, touched: false };
   const D = o.frame ? o.duration || 4000 : 0, loop = o.loop !== false && !REC;
   let t = 0, playing = false, last = 0, holdUntil = 0, restart = false, ctx = null, revealEnd = 0, offscreen = false;
-  if (!o.title) fr.head.remove(); else fr.title.textContent = o.title || '';
+  if (!o.title && !o.intro) fr.head.remove(); else fr.title.textContent = o.title || '';
   if (o.actHeight) fr.act.style.minHeight = o.actHeight + 'px';
   fr.root.querySelectorAll('[data-l]').forEach(e => e.style.display = !o.keys || o.keys.includes(e.dataset.l) ? '' : 'none');
-  const caps = [o.cap || ''].concat(o.extraCaptions || []);
+  const caps = [o.cap || ''].concat(o.extraCaptions || [], o.intro ? [o.intro.cap || ''] : []);
   fr.cap.textContent = o.cap || '';   // an empty caption is hidden, and a hidden one cannot be measured
   if (caps.some(Boolean)) { const fit = () => { if (fr.cap.clientWidth) fixCaptionHeight(fr, caps); }; fit(); fontsReady().then(fit); addEventListener('resize', fit); }
   const PPL = [ICON.pause + 'Pause', ICON.replay + 'Replay', ICON.play + 'Play'];
@@ -380,7 +445,9 @@ function figure(o) {
   function play() { if (!o.frame || RM) return; if (t >= D) { t = 0; restart = false; } playing = true; last = performance.now(); updPP(); requestAnimationFrame(tick); }
   function pause() { playing = false; holdUntil = 0; updPP(); }
   function build() {
+    if (fr.endIntro) fr.endIntro();
     eng.gen++; eng.timers.forEach(clearTimeout); eng.timers = []; eng.touched = false; playing = false; restart = false; holdUntil = 0;
+    if (o.title) fr.title.textContent = o.title; else if (fr.head.isConnected) fr.head.style.display = 'none'; fr.count.textContent = '';
     fr.svg.innerHTML = (typeof o.draw === 'function' ? o.draw(K) : o.draw || '') + '<g class="kx-dyn"></g>';
     fr.act.innerHTML = ''; fr.cap.textContent = o.cap || '';
     fr.svg.setAttribute('aria-label', (o.title ? o.title + '. ' : '') + (o.alt || o.cap || ''));
@@ -405,7 +472,7 @@ function figure(o) {
   };
   let resolveReady; api.ready = new Promise(r => resolveReady = r);
   ALL.push(api); window.EXPLAINER = window.EXPLAINER || api;
-  fontsReady().then(() => { build(); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
+  fontsReady().then(() => { introGate(fr, o, build); resolveReady(); if (REC && ALL[0] === api) api.autoplay().then(() => { api.done = true; }); });
   return api;
 }
 
@@ -439,6 +506,6 @@ const fmt = {
 /* Wilson score interval for k successes in n trials (95% by default). Use it whenever a small sample is shown as a rate. */
 function wilson(k, n, z = 1.96) { if (!n) return [0, 1]; const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)); return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]; }
 
-const K = { version: '1.2', NS, RM, C, STYLES, useStyle, resolveStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, figure, slider, toggle, grid, scale, fmt, wilson, sleep };
+const K = { version: '1.3', NS, RM, C, STYLES, useStyle, resolveStyle, rng, ease, clamp, lerp, f, esc, col, line, rect, ellipse, arrow, poly, curve, P, T, F, reveal, finish, mk, ICON, stepper, player, figure, slider, toggle, grid, scale, fmt, wilson, sleep };
 window.K = K;
 })();

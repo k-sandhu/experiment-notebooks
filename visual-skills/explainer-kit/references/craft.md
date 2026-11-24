@@ -45,7 +45,9 @@ reviewing real explainers frame by frame on a phone; the sources are named where
   contiguity, Mayer). The legend is for colour meanings only.
 - **Margins.** 12 units inside the viewBox edge. Text anchored at `'end'` near the right edge must end by
   x = 368.
-- **Phone first.** The drawing is about 310 px wide on a 360 px phone. Check that width before any other.
+- **Phone and laptop.** Stacked on a 360 px phone the drawing is about 310 px wide; beside the text on a
+  laptop it is about 600 px. Labels must be legible at the small size and must not look oversized or
+  sparse at the large one. Check both contact sheets.
 - **Ends cleanly.** When a game or simulation ends, every element shows a final state ("done for today",
   "round over"). Nothing left saying "working..." or "your turn...".
 

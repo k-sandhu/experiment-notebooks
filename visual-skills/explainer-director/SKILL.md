@@ -18,14 +18,21 @@ problem finishes about twice as many agent tasks as one who needs 15." (Label a 
 again; do not start drawing.
 
 Then write down:
-- **The reader.** What they already know, where they will see this (phone feed, GIF in a post, an
-  artifact page, a slide), and how long they will give it. A LinkedIn reader gives 10 seconds before
+- **The reader.** What they already know, where they will see this (a web page on a laptop or a phone,
+  a feed post, a GIF, a slide), and how long they will give it. A LinkedIn reader gives 10 seconds before
   deciding; a lesson reader gives two minutes.
 - **What the reader does not know yet.** List every term, actor and number the explainer will show,
   and mark the ones a newcomer would not know ("planner agent", "break-even", "Wilson interval", the name
   of a model). Each one gets a plain explanation the first time it appears, on screen or in the caption.
   Reviewers marked down unexplained terms and labels that could be read two ways ("No check") in every
   round.
+- **The opening.** Assume the reader arrives knowing nothing about the subject: not the task, not why
+  anyone tests it, not the people or programs involved. Before any number, chart or model name, the
+  explainer must say in everyday words what situation it is about, who does what in it, why someone would
+  care, and what question it answers. Use one concrete case ("a coding assistant is asked to fix a slow
+  program") rather than a category ("agentic coding"). Write this as the first step, or as the kit's
+  `intro` scene for a replay or a figure. In review, viewers who skipped this said they could not tell
+  what the visual was about, however good the later steps were.
 - **The misconception.** What would this reader believe before seeing it? The explainer exists to move
   them from that belief to the message. ("Zero violations means safe." "Deep focus is always best.")
 - **The evidence.** Which numbers, items or events prove the message, and the file each comes from.
@@ -50,7 +57,7 @@ Then write down:
 | An artifact page, a README, a link people open | **Reader-paced**: Next, replay, hands-on steps | The reader chose to be there and will spend minutes |
 | A figure inside an article, a README section or a doc, next to text that explains it | **Standalone figure**: one view, no steps (`--kind figure`), at most one control or a short loop with a Pause button | The text carries the sequence; a Next button inside a paragraph is one control too many |
 | A slide or a talk | **Short loop or a few static frames** | The presenter is the pace |
-| A chat reply (claude.ai widget) | Reader-paced, compact (3-6 steps) | Sits inline with text |
+| A chat reply (a chat app's HTML preview or widget) | Reader-paced, compact (3-6 steps) | Sits inline with text |
 
 When the request names a feed ("for a LinkedIn post", "a visual for X"), the deliverable is a postable
 card, not a tap-through page:
@@ -63,7 +70,7 @@ card, not a tap-through page:
   tag is at least 13 units in a 400-unit-wide card (about 12 px on screen). If a grid's labels would need
   to be smaller, show fewer columns or put the grid on its own slide. Tiny labels inside a postable card
   were the main complaint against the card that otherwise won.
-- **Reads without tapping.** The hook and the number in the first frame; every point made by the scenes
+- **Reads without tapping.** The first frame says what the situation is in plain words (who, doing what) together with the hook and the number; every point made by the scenes
   themselves; no part of the message behind a button. Optional controls go below the card and must
   change something in it, or be left out.
 - **Clean pause points.** Hold each scene long enough to read (3-6 s) and make every held frame a finished
@@ -96,24 +103,28 @@ N. <title, 2-5 words, handwritten heading>
 
 Rules that make storyboards work, with the reason for each:
 
-1. **Name the parts first.** Step 1 draws the cast (actors, boxes, axes, legend) before anything
+1. **Open with the situation.** The first step (or the `intro`) is for a newcomer: the everyday
+   situation, the people or programs in it, why it matters and the question, with no numbers, no model
+   names and no jargon. A title that only makes sense once you know the answer ("Does it admit it?") is
+   not an opening.
+2. **Name the parts.** The next step draws the cast (actors, boxes, axes, legend) before anything
    moves. Readers cannot follow motion between things they have not met (pre-training principle,
    Mayer, *Multimedia Learning*).
-2. **One new idea per step.** If a caption needs "and also", split the step. Learner-paced segments
+3. **One new idea per step.** If a caption needs "and also", split the step. Learner-paced segments
    beat one long animation (segmenting principle).
-3. **Ordinary case, then the complication.** Show the thing working before showing it fail. The failure
+4. **Ordinary case, then the complication.** Show the thing working before showing it fail. The failure
    only means something against the normal case.
-4. **Keep the same object the same mark.** An invoice that is a dot in step 2 is the same dot in step 5,
+5. **Keep the same object the same mark.** An invoice that is a dot in step 2 is the same dot in step 5,
    in the same colour. Moving marks keep their identity; new marks fade in (Heer and Robertson, 2007,
    "Animated transitions in statistical data graphics").
-5. **One colour, one meaning, everywhere.** Decide the legend in the storyboard. Dim legend entries a
+6. **One colour, one meaning, everywhere.** Decide the legend in the storyboard. Dim legend entries a
    step does not use.
-6. **Ask before you tell, once.** A single guess or hands-on step makes the reader own the conclusion
+7. **Ask before you tell, once.** A single guess or hands-on step makes the reader own the conclusion
    and remember it (Kim, Reinecke and Hullman, CHI 2017, "Explaining the gap"). More than two such
    steps turns a lesson into homework.
-7. **End on what to do.** The last step is the decision, the habit or the rule the reader should take
+8. **End on what to do.** The last step is the decision, the habit or the rule the reader should take
    away, not a recap of numbers.
-8. **Every frame readable when paused.** A screenshot of any step's final state must make sense with
+9. **Every frame readable when paused.** A screenshot of any step's final state must make sense with
    its caption. This is also what makes a good GIF.
 
 ## 4. Honesty checklist (do this in the storyboard, not after)
@@ -146,7 +157,8 @@ Rules that make storyboards work, with the reason for each:
 Pick the form skill from the table and read it, then read `explainer-kit` for the engine, styles and
 checks. Default style is `chalkboard` (dark, hand-drawn, pastel ink) unless the destination calls for
 another: `paper` for warm light pages, `editorial` for data-dense pieces beside text, `blueprint` for
-system diagrams. Default size is a 380-unit-wide drawing, which reads on a phone and records to a
+system diagrams. Default size is a 380-unit-wide drawing. The kit places it beside the caption and controls
+on a laptop or desktop screen and stacks them on a phone, so one drawing serves both; it also records to a
 square-ish GIF.
 
 If the user names colours, fonts or a brand, build with a custom theme (`explainer-kit`,
@@ -162,9 +174,10 @@ autonomously, keep the storyboard in your notes and build straight away.
 
 This lesson was built with an earlier version of these skills and is the reference for tone and pacing.
 Message: "With agents working in parallel, output depends on how fast you can load a new problem, not
-on how long you can stay on one." Reader: knowledge workers on a phone. Misconception: "Protect deep focus
+on how long you can stay on one." Reader: knowledge workers, on a laptop or a phone. Misconception: "Protect deep focus
 at all costs." Form: `stepper-lesson` with two hands-on steps and one simulated comparison.
 
+0. *What changed* (intro) - a person at a desk hands three tasks to three software helpers that work at the same time; the question: does the old advice, protect your focus, still hold?
 1. *The old way: go deep* - a person, one task, a focus meter that fills the longer they stay. A minutes counter runs.
 2. *Switching was expensive* - two tasks; the reader taps "Switch task" and watches focus drop to zero each time. Lost warm-up minutes add up on screen.
 3. *A good day, back then* - a day timeline draws itself: three long blocks, two switches.

@@ -17,7 +17,9 @@ A lesson of steps with Back, step dots, Replay and Next. Options:
 |---|---|
 | `root` | Selector or element to build into (e.g. `'#x'`). |
 | `style` | `'chalkboard'` (default), `'paper'`, `'editorial'`, `'blueprint'`, or a theme object with your own colours and fonts (`references/themes.md`; `scaffold.py --theme` writes it in for you). |
-| `viewBox` | `[w, h]`, default `[380, 300]`. Keep 380 wide for phones and GIFs; height 260-440. |
+| `viewBox` | `[w, h]`, default `[380, 300]`. Keep 380 wide; it renders about 310 px on a phone and about 600 px on a laptop. Height 260-440. |
+| `intro` | `{title, cap, draw, alt, start}`: an opening scene for a newcomer (the situation, who is in it, why it matters, the question; no numbers). Shown as the first step, counted as "Start here"; `start` labels its Next button (default "Start"). Works the same in `player` and `figure`, where the real view is built when the reader presses Start. |
+| `layout` | `'auto'` (default): side by side when the space is at least 760 px wide, stacked below that. `'side'` or `'stack'` forces one. |
 | `title` | One sentence describing the whole explainer, read by screen readers. |
 | `legend` | `[{key, label, color}]`. Steps list the keys they use; the others are hidden on that step. |
 | `steps` | Array of step objects (below). |

@@ -52,7 +52,7 @@ Read `explainer-kit/references/api.md` before building. Default style: `blueprin
    stacked (small multiples, shared clock), or chapter buttons that switch runs. Mark each run's finish
    time with a flag and the number ("done at 31.4 s").
 
-Fit the whole timeline into the drawing's width at phone size. A replay that needs sideways scrolling
+Fit the whole timeline into the drawing's width at phone size (the stacked layout; on a laptop it has more room). A replay that needs sideways scrolling
 plays its key moments off-screen, and readers never find them. If the run is too long to fit legibly,
 compress quiet stretches (with a visible marker), split it into chapters that each fit, or zoom the time
 axis per chapter with a label saying so; never rely on the reader to scroll a timeline.
@@ -63,6 +63,8 @@ skipped") or let them play, because waiting may be the point. Never hide waiting
 ## Choreographed walkthrough recipe (K.stepper)
 
 One mechanism per step, using the same diagram throughout:
+- The `intro` says, in plain words, what the system is for and what question the replay answers, before any
+  timeline: "a planner splits a trip into three cities and hands each to a helper".
 - Step 1 draws the whole system and names every part (no traffic yet).
 - Each later step dims parts it does not use (`focus`), plays one interaction with `s.travel` hops and
   `s.ring` pulses, updates meters, and appends to a log you draw in the action area or the scene.

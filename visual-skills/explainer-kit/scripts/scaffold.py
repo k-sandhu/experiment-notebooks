@@ -22,12 +22,15 @@ never retyped by hand. Compute everything on screen from DATA.
 The theme is checked first with check_theme.py; a failing theme is refused unless --force is given.
 
 --fragment writes a widget fragment (no <html>/<head>/<body>) for chat surfaces that render
-HTML snippets inline, such as claude.ai's visualize/show_widget tool.
+HTML snippets inline, such as a chat app's widget tool.
 """
 import argparse
 import json
 import pathlib
 import sys
+for _s in (sys.stdout, sys.stderr):   # report lines contain arrows and quotes; a Windows console or pipe may not take them
+    try: _s.reconfigure(errors='replace')
+    except AttributeError: pass
 
 HERE = pathlib.Path(__file__).resolve().parent
 KIT = (HERE.parent / "assets" / "kit.js").read_text(encoding="utf-8")
@@ -46,6 +49,16 @@ K.stepper({
     {key: 'you', label: 'You', color: 'amber'},
     {key: 'work', label: 'Work done', color: 'blue'},
   ],
+  // The opening, for a reader who knows nothing about the subject: the everyday situation, who is in it,
+  // why it matters and the question. No numbers, no product names. Shown first, as "Start here".
+  intro: { title: 'What this is about', start: 'Start',
+    cap: 'One concrete situation in plain words, why someone would care, and the question this answers.',
+    alt: 'What the opening drawing shows.',
+    draw: () =>
+      P(rect(40, 90, 120, 70, 11), 'amber', 0, 600) + T(100, 130, 'A person', {h: 1, z: 20, c: 'amber', t: 300}) +
+      P(line(170, 125, 220, 125, 12), 'mut', 700, 300) + P(arrow(170, 125, 220, 125, 13), 'mut', 1000, 150) +
+      P(rect(230, 90, 120, 70, 14), 'blue', 1100, 600) + T(290, 130, 'The job', {h: 1, z: 20, c: 'blue', t: 1400}) +
+      T(190, 230, 'The question, in plain words?', {h: 1, z: 22, t: 1900}) },
   steps: [
     { title: '1. The ordinary case', keys: ['you', 'work'],
       cap: 'One or two sentences that say what this step shows and what to watch for.',

@@ -27,6 +27,9 @@ import math
 import pathlib
 import re
 import sys
+for _s in (sys.stdout, sys.stderr):   # report lines contain arrows and quotes; a Windows console or pipe may not take them
+    try: _s.reconfigure(errors='replace')
+    except AttributeError: pass
 
 SLOTS = ["blue", "green", "amber", "violet", "red"]
 ORDER = ["blue", "amber", "green", "violet", "red"]   # the order fills are assigned to categories

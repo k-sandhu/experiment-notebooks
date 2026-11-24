@@ -24,6 +24,9 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from browser import launch  # noqa: E402
+for _s in (sys.stdout, sys.stderr):   # report lines contain arrows and quotes; a Windows console or pipe may not take them
+    try: _s.reconfigure(errors='replace')
+    except AttributeError: pass
 
 NEXT_JS = r"""() => { const re = /^(next|continue|›|»|→|>)\b|\bnext\b/i;
   const b = [...document.querySelectorAll('button, [role=button]')].find(e => re.test((e.getAttribute('aria-label') || '') + ' ' + (e.textContent || '').trim()) && e.offsetParent !== null);

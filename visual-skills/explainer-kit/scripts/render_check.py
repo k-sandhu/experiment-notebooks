@@ -30,7 +30,7 @@ Frames of each control state go into the contact sheet, so look at them too.
 Works best with explainer-kit pages (window.EXPLAINER). Other pages are stepped by clicking a
 button labelled Next (or similar); if there is none, frames are taken over time.
 
-usage: python render_check.py PAGE.html [--out DIR] [--widths 360,560] [--samples .2,.6,1]
+usage: python render_check.py PAGE.html [--out DIR] [--widths 360,1100] [--samples .2,.6,1]
                               [--max-steps 20] [--no-rm] [--no-sweep] [--index 0] [--wait-ms 4000]
 Then LOOK at the contact sheets. The checks catch layout faults, not unclear explanations.
 """
@@ -44,6 +44,9 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from browser import launch  # noqa: E402
+for _s in (sys.stdout, sys.stderr):   # report lines contain arrows and quotes; a Windows console or pipe may not take them
+    try: _s.reconfigure(errors='replace')
+    except AttributeError: pass
 
 try:
     from PIL import Image, ImageDraw, ImageStat
@@ -409,7 +412,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("page")
     ap.add_argument("--out", default=None)
-    ap.add_argument("--widths", default="360,560")
+    ap.add_argument("--widths", default="360,1100")
     ap.add_argument("--samples", default=".2,.6,1")
     ap.add_argument("--max-steps", type=int, default=20)
     ap.add_argument("--index", type=int, default=0, help="which explainer on the page, if there are several")
