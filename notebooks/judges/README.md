@@ -105,9 +105,23 @@ program that simply picks the version with fewer long words matched the owner on
 examples taught was a preference for plain words. Almost every merged version was drafted by Claude, so the judges
 may be learning that rewriter's habits as much as the owner's taste.
 
+### How the grading set-up changes a judge (36)
+
+[Notebook 36](36-judge-harness/) kept notebook 33's exam and judges fixed and changed one part of the program around
+the judge at a time: both answer orders, low or high reasoning effort, free text or a provider-enforced JSON format,
+reasoning or solving before the verdict, a majority of five replies, grading each answer alone, and an answer key.
+Three judges of different strength took part: GPT-6.1 Sol, GPT-6 Luna and Granite 4.2 8B. A rule fixed before the
+results said a change would be recommended only if it helped two of the three judges on 120 selection pairs, and
+no change qualified, so the plain one-call prompt stands. On the 120 confirmation pairs it scored 114 for Sol, 85
+for Luna and 72 for Granite. High reasoning effort raised Luna from 84 to 100 of 120, mostly on calculations, but
+left 100 of Granite's 120 replies empty. Grading each answer alone cost every judge 13 to 17 points, because the
+judges rejected both answers in 223 of 360 comparisons. Formats that ask for reasoning or a solution first left 96
+to 101 of Granite's replies unreadable. Sol was at the ceiling on three of the four task families, so this exam
+cannot say much about harness changes for a judge that strong.
+
 ## Experiments in progress
 
-These three experiments share one aim: to find out how a team should combine, set up and instruct judges. All of
+These two experiments share one aim: to find out how a team should combine, set up and instruct judges. All of
 them reuse notebook 33's exam, unchanged.
 
 - A weaker model as tie-breaker (34, [issue #95](https://github.com/k-sandhu/experiment-notebooks/issues/95)).
@@ -115,10 +129,6 @@ them reuse notebook 33's exam, unchanged.
   reasons? This is the setting of debate studies such as
   [Khan et al. (2024)](https://arxiv.org/abs/2402.06782), in which a weaker judge decides between stronger models'
   arguments.
-- How to build a judging harness (36, [issue #97](https://github.com/k-sandhu/experiment-notebooks/issues/97)).
-  One part of the grading set-up changes at a time: one answer graded alone or two compared, one answer order or
-  both, reasoning before or after the verdict, one reply or a majority of five, low or high reasoning effort, a
-  strict output format, and solving the task before judging it.
 - Structured instructions (37, [issue #98](https://github.com/k-sandhu/experiment-notebooks/issues/98)). Free-form
   instructions against a general rubric, a checklist written for each item, and separate scoring of each checklist
   question, with the hardest look at pairs where the worse answer is longer or more polished.
