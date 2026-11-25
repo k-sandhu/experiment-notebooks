@@ -218,11 +218,20 @@ def run_study():
     original = [json.loads(s) for s in (DATA / 'from_33/exam_v1.jsonl').read_text(encoding='utf-8').splitlines() if s.strip()]
     original = [i for i in original if i['split'] == 'test']
     if PROFILE == 'smoke':
-        original = [next(i for i in original if i['family'] == f) for f in FAMILIES]
+        screened=run_parallel(baseline_job,[(i,n,'test') for i in original for n in STRONG],'Cached source smoke selection')
+        disagreement_ids={r['item_id'] for r in routing(original,screened) if r['route']=='disagreed'}
+        chosen=[]
+        for family in FAMILIES:
+            family_items=[i for i in original if i['family']==family]
+            preferred=[i for i in family_items if i['item_id'] in disagreement_ids]
+            chosen.extend((preferred+[i for i in family_items if i['item_id'] not in disagreement_ids])[:N_BATCH_PER_FAMILY])
+        original=chosen
+        chosen_ids={i['item_id'] for i in original}
+        strong=[r for r in screened if r['item_id'] in chosen_ids]
     else:
         freeze_design()
+        strong = run_parallel(baseline_job, [(i, n, 'test') for i in original for n in STRONG], 'Original strong cache')
     all_items = list(original)
-    strong = run_parallel(baseline_job, [(i, n, 'test') for i in original for n in STRONG], 'Original strong cache')
     history = []
     if PROFILE == 'full':
         for batch in range(1, N_BATCHES_MAX + 1):
@@ -249,8 +258,6 @@ def run_study():
     routes = routing(all_items, strong)
     selected = {r['item_id'] for r in routes if r['route'] == 'disagreed'}
     tie_items = [i for i in all_items if i['item_id'] in selected]
-    if PROFILE == 'smoke' and not tie_items:
-        tie_items = original
     index = {(r['item_id'], r['judge'], r['order']): r for r in strong}
     alone = run_parallel(baseline_job, [(i, n, 'test' if i['split'] == 'test' else 'nb34test') for i in tie_items for n in [*WEAK, 'Decisions', *THIRD]], 'Tie-breaker alone')
     context = run_parallel(contextual_job, [(i, n, c, index) for i in tie_items for c, names in [('reasons', WEAK), ('revise', STRONG)] for n in names], 'Reasons and revision')
@@ -266,9 +273,9 @@ def run_study():
     return all_items, rows, routes
 
 def quota_handoff():
-    stop = load(DATA / 'quota_stop.json')
+    stop = load(DATA / ('cli429_stop.json' if (DATA/'cli429_stop.json').exists() else 'quota_stop.json'))
     counts = Counter((r['request']['model'], r['request']['purpose'].split(':')[0]) for r in CACHE.values() if not r.get('origin'))
-    text = '# Status: stopped at a usage or quota limit\n\n' + canonical(stop) + '\n\n'
+    text = '# Status: stopped at a usage, quota or exhausted CLI429 limit\n\n' + canonical(stop) + '\n\n'
     text += 'The collector stopped cleanly. The limit outcome is in data/nonfinal_attempts.jsonl and was never cached as a final reply. Pending jobs were cancelled; in-flight returns after the limit are nonfinal.\n\n'
     text += 'Completed local attempts by model and stage: ' + canonical({str(k): v for k, v in counts.items()}) + '\n\n'
     text += 'Imported baseline attempts: ' + str(sum(bool(r.get('origin')) for r in CACHE.values())) + '. Frozen batches and generation progress are in data/batch_* and data/items/. The full run resumes from caches. No git operations were run; no files outside this notebook folder were changed.\n\n'

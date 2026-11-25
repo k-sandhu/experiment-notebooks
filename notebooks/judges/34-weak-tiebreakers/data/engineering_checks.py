@@ -23,7 +23,26 @@ assert canonical_winner(None,'BA') is None
 assert pair_state([dict(lenient_canonical='A'),dict(lenient_canonical='B')])=='split'
 assert pair_state([dict(lenient_canonical='A'),dict(lenient_canonical=None)])=='missing'
 assert pair_state([dict(lenient_canonical='B'),dict(lenient_canonical='B')])=='B'
-assert quota_message(dict(stdout='{"event":"error","message":"You have hit your usage limit. Try again at 22:00"}'))
+quota_cases = [
+    (dict(raw=[dict(type='error', message='You have hit your usage limit. Try again at 22:00')]), True),
+    (dict(raw=[dict(type='turn.failed', error=dict(message='quota exceeded'))]), True),
+    (dict(raw=[dict(type='item.completed', item=dict(type='error', message='insufficient credits'))]), True),
+    (dict(raw=json.dumps(dict(is_error=True, result='credit balance exhausted'))), True),
+    (dict(raw=json.dumps(dict(subtype='error_during_execution', result='usage limit'))), True),
+    (dict(returncode=1, stdout='{"error":"quota exceeded"}'), True),
+    (dict(status=402, raw=dict(error=dict(message='insufficient credits'))), True),
+    (dict(stderr='usage limit'), True),
+    (dict(returncode=0, text='The credit balance is 42; quota is a task field.',
+          raw=[dict(type='item.completed', item=dict(type='agent_message', text='credit balance quota'))]), False),
+    (dict(returncode=0, raw=json.dumps(dict(subtype='success', is_error=False, result='credit balance'))), False),
+    (dict(status=200, text='insufficient credits is the answer', raw=dict(choices=[dict(message=dict(content='quota'))])), False),
+    (dict(returncode=0, stdout='quota usage limit credit balance', raw='quota usage limit credit balance'), False),
+    (dict(returncode=1, raw=[dict(type='item.completed',item=dict(type='agent_message',text='credit balance'))]), False),
+    (dict(returncode=1, raw=dict(subtype='success',is_error=False,result='quota credit balance')), False),
+    (dict(backend='muse',returncode=1,stdout='Error: insufficient credits'), True),
+]
+for reply, expected in quota_cases:
+    assert bool(quota_message(reply)) == expected, reply
 assert quota_message(dict(stderr='insufficient credits'))
 assert not quota_message(dict(error='Details: [bio]. See acceptable use policy'))
 assert not retry_required(dict(error='Details: [bio]. See acceptable use policy'))
@@ -39,5 +58,6 @@ assert new_calls==0
 save(DATA/'engineering_checks.json',dict(at=now(),original_items=240,agreed=206,disagreed=34,agreed_both_wrong=0,
                                       source_hashes_valid=True,baseline_prompts_and_settings_exact=True,
                                       strict_fence_difference_confirmed=True,quota_event_detection=True,policy_refusal_not_quota=True,
+                                      quota_guard_cases=len(quota_cases), successful_reply_text_never_scanned=True,
                                       cache_miss_fails_offline=True,new_calls=0))
 print('ENGINEERING CHECKS PASSED')

@@ -266,7 +266,7 @@ def figures34(tables):
     ax.bar(x,g.agreed,label='Agreed',color='#315f9c',hatch='//');ax.bar(x,g.disagreements,bottom=g.agreed,label='Disagreed',color='#ac5832',hatch='xx')
     if g.missing.sum():ax.bar(x,g.missing,bottom=g.agreed+g.disagreements,label='Missing',color='grey',hatch='..')
     for pos,row in enumerate(g.itertuples()):ax.text(pos,row.items+2,f'{row.disagreements}/{row.items} disagree',ha='center',fontsize=9)
-    ax.set(xticks=x,xticklabels=g.family,ylabel='Items',title='Disagreements are concentrated in particular task families');ax.legend();fig.tight_layout();fig.savefig(FIG/'disagreement_families.png');plt.close(fig)
+    ax.set(xticks=x,xticklabels=g.family,ylabel='Items',ylim=(0,max(g['items'])*1.2),title='Disagreements are concentrated in particular task families');ax.legend(ncol=2,loc='upper right');fig.tight_layout();fig.savefig(FIG/'disagreement_families.png');plt.close(fig)
     f=tables['full_rules'];g=f[(f.report_cohort=='all')&(f.reader=='lenient')&(f.unreadable_policy=='failure')].sort_values('accuracy')
     fig,(ax,cost_ax)=plt.subplots(1,2,figsize=(13,8),sharey=True,gridspec_kw={'width_ratios':[1.1,1.2]})
     y=np.arange(len(g))

@@ -18,6 +18,7 @@ if (data/'exam_v1.jsonl').exists():
     construction_frame.to_csv(data/'item_construction.csv',index=False)
     construction_frame.groupby(['cohort','family','error_source','better_construction'],as_index=False).agg(items=('item_id','size'),traps=('trap','sum')).to_csv(data/'construction_summary.csv',index=False)
 import os,subprocess,sys,tempfile
+tempfile.tempdir=str((data/'tmp').resolve())
 CODE_OBSERVER_RUNNER = "import json,sys,builtins,types\nrequest=json.load(sys.stdin)\nreal_import=builtins.__import__\nallowed={'math','decimal','fractions','collections','itertools','functools','datetime','calendar','re','statistics','bisect','heapq','operator','string','typing','copy','json','ast','dataclasses','numbers','unicodedata'}\ndef guarded(name,*a,**kw):\n if name.split('.')[0] not in allowed: raise ImportError('blocked import')\n return real_import(name,*a,**kw)\nb=dict(vars(builtins));b['__import__']=guarded\nfor k in ['open','input','eval','exec','compile','breakpoint']:b.pop(k,None)\nmodule=types.ModuleType('candidate');module.__dict__['__builtins__']=b;sys.modules['candidate']=module;ns=module.__dict__\ntry:\n exec(request['source'],ns)\n for index,test in enumerate(request['tests']):\n  before=json.dumps(test['input'],sort_keys=True)\n  try:\n   value=ns['solve'](test['input'])\n   result=dict(value_repr=repr(value),value_type=type(value).__name__,input_after=test['input'],input_mutated=before!=json.dumps(test['input'],sort_keys=True))\n  except Exception as exc:result=dict(error=type(exc).__name__,message=str(exc)[:400])\n  if index==request['target']:\n   print(json.dumps(result,ensure_ascii=False));break\nexcept Exception as exc:print(json.dumps(dict(error=type(exc).__name__,message=str(exc)[:400])))\n"
 
 def observe_existing_code_test(item):
@@ -73,6 +74,49 @@ pd.DataFrame(costs).groupby(['model','backend','origin'],as_index=False).agg(
     invocation_attempts=('key','size'),selected_final_requests=('is_final','sum'),missing_cli_price_or_usage=('missing_cli_price_or_usage','sum'),
     muse_proxy_only=('muse_proxy_only','sum'),missing_openrouter_cost=('missing_openrouter_cost','sum')).to_csv(data/'cost_completeness.csv',index=False)
 print('Supplemental call counts, coverage and cost completeness saved')
+
+local_attempts=[r for r in cache.values() if not r.get('origin')]
+if (data/'nonfinal_attempts.jsonl').exists():
+    local_attempts.extend(json.loads(s) for s in (data/'nonfinal_attempts.jsonl').read_text(encoding='utf-8').splitlines() if s.strip())
+spans=[]
+for row in local_attempts:
+    out=row['response']
+    if out.get('started_at') and out.get('completed_at'):
+        spans.append((pd.Timestamp(out['started_at']),pd.Timestamp(out['completed_at'])))
+periods=[]
+for start,end in sorted(spans):
+    if not periods or (start-periods[-1]['end_utc']).total_seconds()>3600:
+        periods.append(dict(start_utc=start,end_utc=end,returned_attempts=1))
+    else:
+        periods[-1]['end_utc']=max(periods[-1]['end_utc'],end)
+        periods[-1]['returned_attempts']+=1
+for p in periods:p['wall_span_seconds']=(p['end_utc']-p['start_utc']).total_seconds()
+period_frame=pd.DataFrame(periods)
+period_frame.to_csv(data/'collection_periods.csv',index=False)
+print('Observed invocation periods (split after >1 hour without invocations):')
+print(period_frame.to_string(index=False))
+print('Sum of observed period wall spans, seconds:',period_frame.wall_span_seconds.sum())
+
+import hashlib,numpy as np
+outcomes=pd.read_csv(data/'item_outcomes.csv')
+paired_families=[]
+for cohort in ['original','new','all']:
+    base=outcomes[outcomes.route.eq('disagreed')]
+    if cohort!='all':base=base[base.cohort.eq(cohort)]
+    for (reader,policy,family),group in base.groupby(['reader','unreadable_policy','family']):
+        wide=group.pivot(index='item_id',columns='method',values='score')
+        for model in ['Haiku','Luna','Granite 8B','DeepSeek 763B']:
+            a,b='reasons:'+model,'alone:'+model
+            delta=(wide[a]-wide[b]).to_numpy(dtype=float)
+            label=json.dumps([3410302026,cohort,reader,policy,family,model],separators=(',',':'))
+            rng=np.random.default_rng(int(hashlib.sha256(label.encode()).hexdigest()[:16],16))
+            boot=delta[rng.integers(0,len(delta),size=(5000,len(delta)))].mean(axis=1)
+            low,high=np.quantile(boot,[.025,.975])
+            paired_families.append(dict(cohort=cohort,reader=reader,unreadable_policy=policy,family=family,
+                model=model,n=len(delta),accuracy_difference=float(delta.mean()),ci_low=low,ci_high=high,
+                reasons_better=int((delta>0).sum()),alone_better=int((delta<0).sum()),equal=int((delta==0).sum()),sparse=len(delta)<10))
+pd.DataFrame(paired_families).to_csv(data/'paired_family_comparisons.csv',index=False)
+print('Planned paired reasons-versus-alone comparisons by family saved')
 
 import difflib,textwrap
 import matplotlib.pyplot as plt

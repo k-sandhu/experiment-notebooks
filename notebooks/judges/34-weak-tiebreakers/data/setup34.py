@@ -14,6 +14,10 @@ from IPython.display import display
 ROOT = Path.cwd()
 DATA, FIG = ROOT/'data', ROOT/'figures'
 DATA.mkdir(exist_ok=True); FIG.mkdir(exist_ok=True)
+TMP = (DATA/'tmp').resolve()
+TMP.mkdir(exist_ok=True)
+tempfile.tempdir = str(TMP)
+os.environ['TEMP'] = os.environ['TMP'] = str(TMP)
 LIVE = os.environ.get('NB_LIVE') == '1'
 if not LIVE:
  def offline_network_guard(*args,**kwargs):raise RuntimeError('Network disabled in notebook replay')
@@ -32,7 +36,7 @@ MAX_TRANSCRIPTION_CHARS = 2200
 MAX_CHUNK_ATTEMPTS = 8
 LONG_MESSAGE_WORD_TARGETS = {7:1000, 8:1600, 9:2400, 10:700, 11:1000, 12:1400}
 SEED = 3410302026
-AUTHORED_ON = '2026-10-30'
+AUTHORED_ON = '2026-11-24'
 MAX_OPENROUTER_USD = 5.00
 MAX_NEW_CALLS = 16000
 BOOTSTRAPS = 5000

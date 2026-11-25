@@ -23,12 +23,13 @@ try:
     else:
         items,rows,routes=run_study()
     if PROFILE=='smoke' or os.environ.get('NB_STAGE')=='development':
-        DATA=DATA/'smoke';FIG=FIG/'smoke';DATA.mkdir(exist_ok=True);FIG.mkdir(exist_ok=True)
+        output_name='smoke' if os.environ.get('NB_STAGE')=='development' else 'smoke_demo'
+        DATA=DATA/output_name;FIG=FIG/output_name;DATA.mkdir(exist_ok=True);FIG.mkdir(exist_ok=True)
     tables=summarize_study(items,rows,routes)
     figures34(tables)
     worked_cases(items,rows,routes,tables)
     if PROFILE=='full' and os.environ.get('NB_STAGE')!='development':validate34(items,rows,routes,tables)
     print('RUN COMPLETE',flush=True)
 except Exception as exc:
-    if type(exc).__name__=='CollectorQuotaStop':quota_handoff()
+    if type(exc).__name__ in ('CollectorQuotaStop','CollectorRateLimitStop'):quota_handoff()
     raise
