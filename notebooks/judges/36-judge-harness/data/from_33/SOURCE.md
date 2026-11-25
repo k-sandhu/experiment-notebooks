@@ -2,7 +2,7 @@
 
 Source commit supplied by owner: `cf854303`, branch `add-33-judge-exam`.
 
-Read-only source: `C:/Users/sandh/nb-worktrees/33-judge-exam/notebooks/judges/33-judge-exam/data/`.
+Read-only source: `D:/projects/experiment_notebooks/worktrees/33-judge-exam/notebooks/judges/33-judge-exam/data/`.
 
 Hashes normalize CRLF to LF, as notebook 33 does. This is a copy of the supplied checkout, with freeze comparisons recorded individually below.
 
@@ -27,3 +27,7 @@ Hashes normalize CRLF to LF, as notebook 33 does. This is a copy of the supplied
 ## Earlier attempts for reused judgments
 
 `prior_baseline_attempts.jsonl.gz` contains 27 earlier attempts joined by the same model and purpose as the 1440 final reused replies. Source path and extraction details are in `../source_retry_manifest.json`. SHA-256 of the gzip bytes: `ddbe7a8da1572e19e7e4519d67a175624e29370ffa19ae6dff0fa99d8f30d15a`. Working cache is extended with these unmodified records and origin metadata; the final-reply copy above remains unchanged.
+
+## Worktree relocation and verification
+
+On 2026-11-24 the source checkout is at `D:/projects/experiment_notebooks/worktrees/33-judge-exam/notebooks/judges/33-judge-exam/data`, still at owner-supplied commit `cf854303`. All copied source-file hashes were rechecked against this checkout and its LF-normalized freeze hashes; see `../resume_source_verification.json`. Earlier logs and immutable cache records retain historical locations. The earlier-attempt recovery used the notebook 34 backup before relocation; its historical path in the extraction manifest is provenance, not an active dependency.

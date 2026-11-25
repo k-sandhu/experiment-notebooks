@@ -1,6 +1,8 @@
 def response_subtype(response):
     text = response_diagnostics(response)
     failed = bool(response.get('error') or response.get('returncode', 0) or response.get('status', 200) != 200)
+    if cli_rate_limit_message(response):
+        return 'rate_limit'
     if quota_message(response):
         return 'usage_quota_limit'
     if re.search(r"OS can.t spawn worker thread|os error 1450|Insufficient system resources", text, re.I):
@@ -65,8 +67,8 @@ def build_attempt_audit(cache, outcomes_frame):
             judge=names.get(request['model'], request['model']), model=request['model'], backend=backend,
             purpose=request.get('purpose', ''), disposition=disposition, returned=returned,
             retry_index=request.get('attempt', 0), is_retry=request.get('attempt', 0) > 0,
-            used_as_final_component=row['key'] in final_keys,
-            used_in_outcome_attempt_keys=row['key'] in used_attempt_keys,
+            used_as_final_component=disposition == 'cached_return' and row['key'] in final_keys,
+            used_in_outcome_attempt_keys=disposition == 'cached_return' and row['key'] in used_attempt_keys,
             diagnostic_subtype=response_subtype(response) if returned else 'interrupted_no_reply',
             strict_unreadable_type=readings['strict']['unreadable_type'] if returned else 'unobserved_interrupted',
             lenient_unreadable_type=readings['lenient']['unreadable_type'] if returned else 'unobserved_interrupted',
@@ -93,7 +95,30 @@ def build_attempt_audit(cache, outcomes_frame):
                      reservation_usd=record.get('reservation_usd', 0)),
                 'interrupted_no_reply', number, False)
     audit = pd.DataFrame(rows)
+    audit['collection_period'] = audit.started_at.fillna('').astype(str).str[:10]
+    interrupted = audit.disposition.eq('interrupted_no_reply')
+    assert not audit.loc[interrupted, 'used_as_final_component'].any()
+    current = audit[audit.origin.eq('36')].copy()
+    periods = []
+    for date, group in current.groupby('collection_period'):
+        starts = [datetime.fromisoformat(value) for value in group.started_at.dropna() if value]
+        if not starts:
+            continue
+        first = min(starts)
+        end = max(starts)
+        for row in group.to_dict('records'):
+            if row.get('started_at') and pd.notna(row.get('seconds')):
+                end = max(end, datetime.fromisoformat(row['started_at']) + __import__('datetime').timedelta(seconds=row['seconds']))
+        if date == '2026-10-30' and (DATA/'resume_record.json').exists():
+            end = max(end, datetime.fromisoformat(load(DATA/'resume_record.json')['pause_at']))
+        periods.append(dict(date=date, first_send=first.isoformat(), last_observation=end.isoformat(),
+                            span_seconds=(end-first).total_seconds(), physical_attempts=len(group)))
+    save(DATA/'collection_periods.json', dict(at=now(), periods=periods,
+         sum_period_span_seconds=sum(row['span_seconds'] for row in periods),
+         owner_reported_pause_days=25 if (DATA/'resume_record.json').exists() else 0,
+         note='Period spans include within-day pauses and exclude the 25-day manual gap; they are not pure inference time.'))
     audit.to_csv(DATA/'attempt_audit.csv', index=False)
+    audit.groupby(['origin','collection_period','stage','judge','method'],dropna=False).agg(started_attempts=('attempt_id','size'),returned_attempts=('returned','sum')).reset_index().to_csv(DATA/'period_by_condition.csv',index=False)
     groups = ['origin', 'stage', 'judge', 'method', 'backend']
     counts = audit.groupby(groups, dropna=False).agg(
         started_attempts=('attempt_id', 'size'), returned_attempts=('returned', 'sum'),
@@ -115,6 +140,30 @@ def build_attempt_audit(cache, outcomes_frame):
         reading_rows.append(view.groupby(groups + ['reader', 'unreadable_type'], dropna=False).size().rename('attempts').reset_index())
     pd.concat(reading_rows, ignore_index=True).to_csv(DATA/'request_reading_summary.csv', index=False)
     return audit, counts, diagnostics
+
+
+def physical_spend_report(attempts):
+    current = attempts[attempts.origin == '36']
+    final = current[current.disposition == 'cached_return']
+    report = load(DATA/'spend.json')
+    report.update(
+        final_cached_openrouter_usd=float(final.openrouter_known_usd.sum()),
+        final_cached_cli_estimated_usd=float(final.cli_estimated_usd.sum()),
+        actual_openrouter_usd=float(current.openrouter_known_usd.sum()),
+        new_cli_estimated_usd=float(current.cli_estimated_usd.sum()),
+        notebook36_physical_sends=len(current),
+        notebook36_returned_attempts=int(current.returned.sum()),
+        openrouter_usage_missing=int(current.openrouter_usage_missing.sum()),
+        cli_usage_missing=int(current.cli_usage_missing.sum()),
+        cost_scope='All notebook36 returned attempts, including nonfinal returns; known sums are lower bounds where usage is absent. Source33 costs are excluded from new spend. Cap accounting includes reservations.')
+    save(DATA/'spend.json', report)
+    attempts.groupby(['origin', 'judge', 'backend']).agg(
+        physical_sends=('attempt_id', 'size'), returned_attempts=('returned', 'sum'),
+        known_openrouter_usd=('openrouter_known_usd', 'sum'),
+        estimated_cli_usd=('cli_estimated_usd', 'sum'),
+        openrouter_usage_missing=('openrouter_usage_missing', 'sum'),
+        cli_usage_missing=('cli_usage_missing', 'sum')).reset_index().to_csv(DATA/'physical_spend_by_model.csv', index=False)
+    return report
 
 
 def outcome_status(row, reader, suffix=''):
@@ -245,11 +294,11 @@ def unary_reports(frame):
                 if count >= 6:
                     ax.text(left[index]+count/2, index, str(int(count)), va='center', ha='center')
             left += values
-        both_pass = int(pivot.both_pass.sum())
+        both_fail = int(pivot.both_fail.sum())
         ax.set_yticks(y, pivot.index)
         ax.invert_yaxis()
         ax.set_xlabel('Collected selection items per judge')
-        ax.set_title(f'Both answers pass in {both_pass} of {len(selection_rows)} unary comparisons')
+        ax.set_title(f'Both answers fail in {both_fail} of {len(selection_rows)} unary comparisons')
         ax.legend(loc='upper center', bbox_to_anchor=(.5, -.18), ncol=2, frameon=False)
         fig.tight_layout()
         fig.savefig(FIG/'unary_grading_patterns.png')
@@ -274,6 +323,7 @@ def supplemental_reports(frame, cache):
             assert score == row[reader+'_score'], (row['item_id'], row['method'], reader)
             checked_scores += 1
     attempts, counts, diagnostics = build_attempt_audit(cache, frame)
+    all_spend = physical_spend_report(attempts)
     paired, transitions = enrich_paired_reports(frame)
     grades, unary = unary_reports(frame)
     if not frame.empty:
@@ -312,10 +362,12 @@ def supplemental_reports(frame, cache):
                  'physical_attempt_counts.csv counts every cached return, nonfinal return and interrupted start exactly once. Source 33 is historical, not new spend. Cached source retries are included. Unknown charges and usage are marked explicitly; known sums are lower bounds when usage is absent.',
                  'paired_comparisons.csv now includes baseline/method correct, wrong, unreadable and undecided counts on matched items. fixed/broke retain their original score-change meaning. full_corrections/full_regressions distinguish wrong-to-correct from partial-credit tie transitions; paired_transitions.csv preserves all transitions.',
                  'unary_grade_summary.csv separates wrong individual grades from unreadable grades; unary_pattern_summary.csv counts both-pass, both-fail and separating verdicts. unary_grading_patterns.png is the descriptive error-analysis figure.',
+                 'All notebook36 returned-attempt spend, including nonfinal returns (spend_by_model.csv is final-cache only; physical_spend_by_model.csv includes every physical send):',
+                 '```json\n'+json.dumps(all_spend, indent=2)+'\n```',
                  'Physical attempts by stage, model and condition:',
                  markdown_table(counts),
                  'Transport diagnostic subtypes:', markdown_table(diagnostics)]
-        for name in ['source_retry_manifest.json', 'client_resource_smoke.json']:
+        for name in ['source_retry_manifest.json', 'client_resource_smoke.json', 'collection_periods.json', 'resume_environment.json', 'resume_reporting_notes.json', 'paused_request_reconstruction.json', 'cache_archive_manifest.json', 'cli429_transport_amendment.json', 'cli429_stop_record.json', 'cli429_stop_20261125T011009.json', 'resume_20261125.json', 'all_attempt_spend_amendment.json']:
             path = DATA/name
             if path.exists():
                 extra += [name, '```json\n'+json.dumps(load(path), indent=2)+'\n```']
@@ -328,3 +380,151 @@ display(physical_counts)
 display(transport_counts[transport_counts.diagnostic_subtype.ne('returned_text')])
 display(paired_with_counts)
 print(json.dumps(supplement_audit, indent=2))
+
+
+def export_selection_examples():
+    import gzip
+    import json
+    import pathlib
+
+    import pandas as pd
+
+    root = ROOT
+    data = root / 'data'
+    frame = pd.read_csv(data / 'outcomes.csv').fillna('')
+    selection = frame[frame.stage.eq('selection')]
+    chosen = []
+
+
+    def pick(label, rows, count=1, paired=False):
+        for row in rows.sort_values(['item_id', 'judge', 'method']).head(count).to_dict('records'):
+            chosen.append(dict(label=label, **row))
+            if paired:
+                baseline = selection[(selection.item_id == row['item_id']) & (selection.judge == row['judge']) & selection.method.eq('baseline')].iloc[0].to_dict()
+                chosen.append(dict(label=label + '_baseline', **baseline))
+
+
+    pick('end_to_end_pair', selection[selection.method.eq('baseline') & selection.family.eq('code') & selection.lenient_score.eq(1)])
+    pick('sol_instruction_baseline_failure', selection[selection.judge.eq('Sol') & selection.method.eq('baseline') & selection.lenient_wrong])
+    joined = selection.merge(selection[selection.method.eq('baseline')][['item_id', 'judge', 'lenient_score']], on=['item_id', 'judge'], suffixes=('', '_baseline'))
+    pick('luna_worked_high_effort_fix', joined[joined.judge.eq('Luna') & joined.family.eq('worked') & joined.method.eq('effort_high') & joined.lenient_score.eq(1) & joined.lenient_score_baseline.eq(0)], paired=True)
+    pick('sol_high_effort_regression', joined[joined.judge.eq('Sol') & joined.method.eq('effort_high') & joined.lenient_wrong & joined.lenient_score_baseline.eq(1)], paired=True)
+    pick('granite_high_effort_unreadable', selection[selection.judge.eq('Granite 8B') & selection.method.eq('effort_high') & selection.lenient_unreadable_type.ne('')])
+    pick('sol_solve_first_unreadable', selection[selection.judge.eq('Sol') & selection.method.eq('solve_first') & selection.lenient_unreadable_type.ne('')], count=4)
+    pick('sol_strict_analysis_recovered', selection[selection.judge.eq('Sol') & selection.method.eq('reason_first') & selection.strict_unreadable_type.ne('') & selection.lenient_score.eq(1)])
+    pick('granite_native_unreadable', selection[selection.judge.eq('Granite 8B') & selection.method.eq('native_schema') & selection.lenient_unreadable_type.ne('')])
+    pick('single_answer_unreadable', selection[selection.method.eq('single_answer') & selection.lenient_unreadable_type.ne('')], count=3)
+    unary = pd.read_csv(data / 'unary_comparisons.csv').fillna('')
+    wrong_both_fail = unary[unary.stage.eq('selection') & unary.reader.eq('lenient') & unary.pattern.eq('both_fail') & unary.wrong]
+    for row in wrong_both_fail.sort_values(['item_id', 'judge']).head(1).to_dict('records'):
+        pick('both_fail_confidence_wrong', selection[selection.item_id.eq(row['item_id']) & selection.judge.eq(row['judge']) & selection.method.eq('single_answer')], paired=True)
+    needed = {key for row in chosen for key in json.loads(row['cache_keys'])}
+    cache = {}
+    for path in [data / 'cache_imported.jsonl.gz', data / 'cache_requests.jsonl']:
+        stream = gzip.open(path, 'rt', encoding='utf-8') if path.suffix == '.gz' else path.open(encoding='utf-8')
+        with stream:
+            for line in stream:
+                if line.strip():
+                    row = json.loads(line)
+                    if row['key'] in needed:
+                        cache[row['key']] = row
+    assert set(cache) == needed
+    items = {}
+    with (data / 'from_33/exam_v1.jsonl').open(encoding='utf-8') as stream:
+        ids = {row['item_id'] for row in chosen}
+        for line in stream:
+            item = json.loads(line)
+            if item['item_id'] in ids:
+                items[item['item_id']] = item
+    for row in chosen:
+        row['item'] = items[row['item_id']]
+        row['requests_and_replies'] = [cache[key] for key in json.loads(row['cache_keys'])]
+        row['example_selection'] = 'First stable selection item matching the stated category; includes all four Sol solve-first unreadables. Examples do not alter the frozen analysis.'
+    (data / 'narrative_examples_selection.json').write_text(json.dumps(chosen, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+    columns = ['label', 'item_id', 'judge', 'method', 'family', 'better', 'lenient_score', 'lenient_unreadable_type', 'strict_unreadable_type']
+    pd.DataFrame(chosen)[columns].to_csv(data / 'narrative_example_index.csv', index=False)
+
+
+def export_editorial_tables():
+    import datetime, json, pandas as pd
+    root = ROOT
+    data = DATA
+    load = lambda name: json.loads((data / name).read_text(encoding='utf-8'))
+    summary = pd.read_csv(data / 'summary.csv').fillna('')
+    paired = pd.read_csv(data / 'paired_comparisons.csv').fillna('')
+    family = pd.read_csv(data / 'family_summary.csv').fillna('')
+    unreadable = pd.read_csv(data / 'unreadable_summary.csv').fillna('')
+    attempts = pd.read_csv(data / 'attempt_audit.csv').fillna('')
+    spend = load('spend.json')
+
+
+    def table(frame):
+        cols = list(frame.columns)
+        def fmt(value):
+            if isinstance(value, float):
+                return f'{value:.8g}'
+            return str(value).replace('|', '/').replace('\n', ' ')
+        return '| ' + ' | '.join(cols) + ' |\n| ' + ' | '.join('---' for _ in cols) + ' |\n' + ''.join('| ' + ' | '.join(fmt(v) for v in row) + ' |\n' for row in frame.itertuples(index=False, name=None))
+
+
+    selection = summary[(summary.stage == 'selection') & (summary.reader == 'lenient')]
+    p = paired[(paired.stage == 'selection') & (paired.reader == 'lenient') & (paired.method != 'reference')]
+    eligibility = []
+    for method, group in p.groupby('method'):
+        positive = int((group.ci_low > 0).sum())
+        cheaper = bool((group.mean_dollar_difference <= 0).all() and (group.mean_dollar_difference < 0).sum() >= 2 and (group.gain >= 0).all())
+        eligibility.append(dict(method=method, judges_with_positive_95_lower_bound=positive,
+                                cheaper_without_observed_loss=cheaper, eligible=positive >= 2 or cheaper,
+                                mean_gain=float(group.gain.mean())))
+    eligibility = pd.DataFrame(eligibility)
+    assert not eligibility.eligible.any() and load('recommendation.json')['choices'] == []
+    eligibility.to_csv(data / 'recommendation_eligibility.csv', index=False)
+    headlines = summary[summary.stage.isin(['selection', 'confirmation'])].copy()
+    headlines['source_file'] = 'summary.csv'
+    headlines.to_csv(data / 'headline_numbers.csv', index=False)
+    rankings = []
+    for (stage, method), group in headlines.groupby(['stage', 'method']):
+        def ranks(reader, field):
+            part = group[group.reader.eq(reader)].sort_values([field, 'judge'], ascending=[False, True])
+            return '; '.join(f"{row.judge}={getattr(row, field):.6f} (readable {row.readable}/{row.n})" for row in part.itertuples())
+        rankings.append(dict(stage=stage, method=method, strict=ranks('strict', 'accuracy'),
+                             lenient=ranks('lenient', 'accuracy'), readable_only_lenient=ranks('lenient', 'readable_accuracy')))
+    pd.DataFrame(rankings).to_csv(data / 'reader_ranking_diagnostics.csv', index=False)
+
+    current = attempts[attempts.origin.astype(str).eq('36')].copy()
+    points = []
+    for row in current.to_dict('records'):
+        start = datetime.datetime.fromisoformat(row['started_at'])
+        seconds = row['seconds'] if isinstance(row['seconds'], (int, float)) else 0
+        points.append((start, start + datetime.timedelta(seconds=seconds)))
+    points.sort()
+    episodes = []
+    for start, end in points:
+        if not episodes or (start - datetime.datetime.fromisoformat(episodes[-1]['last_observation'])).total_seconds() > 3600:
+            episodes.append(dict(first_send=start.isoformat(), last_observation=end.isoformat(), physical_sends=1))
+        else:
+            episodes[-1]['last_observation'] = max(end, datetime.datetime.fromisoformat(episodes[-1]['last_observation'])).isoformat()
+            episodes[-1]['physical_sends'] += 1
+    pause = datetime.datetime.fromisoformat(load('resume_record.json')['pause_at'])
+    episodes[0]['last_observation'] = max(pause, datetime.datetime.fromisoformat(episodes[0]['last_observation'])).isoformat()
+    for episode in episodes:
+        episode['span_hours'] = (datetime.datetime.fromisoformat(episode['last_observation']) - datetime.datetime.fromisoformat(episode['first_send'])).total_seconds() / 3600
+    wall = dict(episodes=episodes, sum_observed_episode_hours=sum(x['span_hours'] for x in episodes),
+                grouping='New-notebook physical sends; a gap exceeding one hour starts a new episode. Endpoints use known return durations; manual October 30 stop extends its episode endpoint.',
+                caveat='Observed collection-window spans, not pure inference time or total engineering work. Excludes long pauses, including the owner-reported 25-day gap. Interrupted calls without usage/latency remain explicitly unknown.')
+    (data / 'collection_episodes.json').write_text(json.dumps(wall, indent=2) + '\n', encoding='utf-8')
+
+    events = [json.loads(line) for line in (data / 'run_log.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+    milestones = []
+    for event in events:
+        kind = event['event']
+        if kind == 'retry':
+            continue
+        milestones.append(dict(at=event['at'], event=kind,
+                               detail=json.dumps({key: event[key] for key in ['status', 'tag', 'profile', 'model', 'purpose', 'choices', 'error'] if key in event}, ensure_ascii=False)[:350]))
+    pd.DataFrame(milestones).to_csv(data / 'protocol_milestones.csv', index=False)
+
+
+
+export_selection_examples()
+export_editorial_tables()

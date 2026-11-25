@@ -162,9 +162,48 @@ class CollectorQuotaStop(RuntimeError):pass
 collector_stop=threading.Event()
 def response_diagnostics(out):
  return '\n'.join(v if isinstance(v,str) else json.dumps(v,ensure_ascii=False,default=str) for k,v in out.items() if k in ('text','stdout','stderr','error','raw'))
-def quota_message(out):
- diagnostic=response_diagnostics(out);match=QUOTA_PATTERN.search(diagnostic)
+def error_diagnostics(out):
+ parts=[]
+ def add(value):
+  if value:
+   parts.append(value if isinstance(value,str) else json.dumps(value,ensure_ascii=False,default=str))
+ def envelope(value):
+  if isinstance(value,list):
+   for event in value:envelope(event)
+  elif isinstance(value,dict):
+   kind=value.get('type')
+   if kind in ('error','turn.failed') or value.get('is_error') is True:
+    add(value)
+   elif value.get('subtype') and value['subtype']!='success':
+    add(value)
+   elif kind and isinstance(value.get('item'),dict) and value['item'].get('type')=='error':
+    add(value['item'])
+   elif value.get('error'):
+    add(value['error'])
+ add(out.get('stderr'))
+ add(out.get('error'))
+ raw=out.get('raw')
+ envelope(raw)
+ for line in str(out.get('stdout') or '').splitlines():
+  try:envelope(json.loads(line))
+  except (ValueError,TypeError):pass
+ if out.get('status',200)>=400 and isinstance(raw,dict):
+  add(raw.get('error') or raw.get('message') or raw.get('unparsed_body'))
+ return '\n'.join(parts)
+
+def usage_limit_message(out):
+ diagnostic=error_diagnostics(out);match=QUOTA_PATTERN.search(diagnostic)
  return diagnostic[max(0,match.start()-150):match.end()+1200] if match else None
+
+def cli_rate_limit_message(out):
+ if not isinstance(out.get('raw'),list):return None
+ diagnostic=error_diagnostics(out)
+ match=re.search(r'exceeded\s+retry\s+limit[^\n]{0,200}\b429\b',diagnostic,re.I)
+ return diagnostic[max(0,match.start()-150):match.end()+1200] if match else None
+
+def quota_message(out):
+ return usage_limit_message(out) or cli_rate_limit_message(out)
+
 NONFINAL=[]
 if ATTEMPT_PATH.exists():
  NONFINAL=[json.loads(line) for line in ATTEMPT_PATH.read_text(encoding='utf-8').splitlines() if line.strip()]
@@ -175,13 +214,28 @@ for cache_file in [DATA/'cache_imported.jsonl.gz',CACHE_PATH]:
  with opener as stream:
   for line in stream:
    r=json.loads(line);assert r['key']==digest(r['request'])
-   if quota_message(r['response']):continue
+   if usage_limit_message(r['response']):continue
    assert r['key'] not in CACHE
    CACHE[r['key']]=r
 cache_lock=threading.RLock(); key_locks=defaultdict(threading.Lock)
 gates={b:threading.Semaphore(n) for b,n in dict(claude=2,codex=2,muse=1).items()}
 for s in [*JUDGES.values(),*WRITERS.values()]:
  if s['backend'] in ('openrouter','decisions'): gates[s['model']]=threading.Semaphore(3)
+class ScheduledGate:
+ def __init__(self,*gates):self.gates=gates
+ def __enter__(self):
+  self.acquired=[]
+  try:
+   for gate in self.gates:gate.acquire();self.acquired.append(gate)
+  except BaseException:
+   for gate in reversed(self.acquired):gate.release()
+   raise
+  return self
+ def __exit__(self,*exc):
+  for gate in reversed(self.acquired):gate.release()
+
+sol_request_gate=threading.Semaphore(1)
+
 new_calls=0; pending_usd=0.; used_keys=set()
 def accounted_openrouter():
  interrupted=load(DATA/'interrupted_attempts.json')['total_reservation_usd'] if (DATA/'interrupted_attempts.json').exists() else 0.
@@ -226,6 +280,7 @@ def ask(spec,prompt,purpose,budget=1600,temperature=0,choices=None,state=None):
    if row is None:
     if not LIVE: raise RuntimeError('Offline cache miss '+key+' '+purpose)
     gate=gates[spec['model'] if spec['backend'] in ('openrouter','decisions') else spec['backend']]
+    if spec['model']=='gpt-6.1-sol':gate=ScheduledGate(sol_request_gate,gate)
     with gate:
      require_running()
      reservation=max(.001,len(canonical(req).encode())*spec.get('rate_in',.15)/1e6+req.get('payload',{}).get('max_tokens',100)*spec.get('rate_out',.6)/1e6)
@@ -336,6 +391,10 @@ def parse_judgment(row,strict=True,allow_truncated=True):
  return dict(winner=w,confidence=float(conf),reason=reason,unreadable_type='',recovery_type=recovery)
 
 
+def codex_executable():
+ npm=Path(os.environ.get('APPDATA',''))/'npm/node_modules/@openai/codex/node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe'
+ return str(npm) if npm.is_file() else (shutil.which('codex.exe') or shutil.which('codex'))
+
 def run_cli_process(cmd,prompt,cwd,env,timeout):
  work=Path(cwd);input_path=work/'stdin.txt';out_path=work/'stdout.jsonl';err_path=work/'stderr.txt'
  input_path.write_text(prompt,encoding='utf-8')
@@ -376,7 +435,7 @@ print(json.dumps({'status':rr.status_code,'raw':raw},ensure_ascii=False))
   choices=raw.get('choices') or [];msg=choices[0].get('message',{}) if choices else {}
   return dict(text=msg.get('content') or '',raw=raw,status=result['status'],usage=raw.get('usage',{}),cost=raw.get('usage',{}).get('cost'),finish_reason=choices[0].get('finish_reason') if choices else None)
  with tempfile.TemporaryDirectory(prefix='cli_',dir=DATA/'tmp',ignore_cleanup_errors=True) as tmp:
-  exe=shutil.which('codex.cmd') or shutil.which('codex')
+  exe=codex_executable()
   env={k:v for k,v in os.environ.items() if k!='FORCE_COLOR'};env['NO_COLOR']='1';env.update(req.get('client_environment',{}))
   cmd=[exe,*req['options']]
   if req.get('schema'):
@@ -524,9 +583,16 @@ def evaluate(job):
 
 RESULT_PATH=DATA/'results_ledger.jsonl'
 RESULTS={}
+retired_outcome_signatures={digest(r) for r in load(DATA/'cli429_affected_outcomes.json')['rows']} if (DATA/'cli429_affected_outcomes.json').exists() else set()
 if RESULT_PATH.exists():
  for line in RESULT_PATH.read_text(encoding='utf-8').splitlines():
-  x=json.loads(line);RESULTS[(x['stage'],x['method'],x['judge'],x['item_id'])]=x
+  x=json.loads(line)
+  if digest(x) in retired_outcome_signatures:continue
+  missing=set(json.loads(x['cache_keys']))-CACHE.keys()
+  if missing:
+   assert missing.issubset({r['key'] for r in NONFINAL}),'Outcome references missing final cache data'
+   continue
+  RESULTS[(x['stage'],x['method'],x['judge'],x['item_id'])]=x
 
 def collect(items,stage,methods,recommended=None):
  jobs=[(i,name,m,stage,recommended if m=='recommended' else None) for m in methods for i in items for name in JUDGES if not(m=='reference' and i['family']=='instructions')]
@@ -665,14 +731,14 @@ def make_figures(df,tables):
    g=selected[selected.judge==name].set_index('method').reindex(METHODS).dropna(subset=['accuracy']);y=np.arange(len(g))
    ax.errorbar(g.accuracy,y,xerr=np.vstack([np.maximum(0,g.accuracy-g.ci_low),np.maximum(0,g.ci_high-g.accuracy)]),fmt=marker,color=color,capsize=3)
    ax.set_yticks(y,g.index);ax.set_title(name);ax.set_xlabel('Accuracy (tie = 0.5)\n95% item bootstrap');ax.set_xlim(0,1.04);ax.invert_yaxis()
-  fig.suptitle('Harness accuracy depends on the judge and the choice',x=.06,ha='left');fig.tight_layout();fig.savefig(FIG/'selection_accuracy.png');plt.show()
+  fig.suptitle('Harness changes help some judges and hurt others',x=.06,ha='left');fig.tight_layout();fig.savefig(FIG/'selection_accuracy.png');plt.show()
  pair=tables['paired_comparisons'];p=pair[(pair.stage=='selection')&(pair.reader=='lenient')]
  if len(p):
   fig,ax=plt.subplots(figsize=(11,7));methods=[m for m in METHODS if m!='baseline'];y=np.arange(len(methods))
   for n,(name,color,marker) in enumerate(zip(JUDGES,['#315f9c','#ac5832','#34816b'],['o','s','^'])):
    g=p[p.judge==name].set_index('method').reindex(methods);keep=g.gain.notna();v=g[keep]
    ax.errorbar(v.gain,y[keep]+(n-1)*.2,xerr=np.vstack([np.maximum(0,v.gain-v.ci_low),np.maximum(0,v.ci_high-v.gain)]),fmt=marker,color=color,label=name,capsize=2)
-  ax.axvline(0,color='black',linestyle='--',linewidth=1);ax.set_yticks(y,methods);ax.invert_yaxis();ax.set_xlabel('Paired accuracy difference from baseline; 95% item bootstrap');ax.set_title('Paired gains show which choices fix more items than they break');ax.legend();fig.tight_layout();fig.savefig(FIG/'paired_gains.png');plt.show()
+  ax.axvline(0,color='black',linestyle='--',linewidth=1);ax.set_yticks(y,methods);ax.invert_yaxis();ax.set_xlabel('Paired accuracy difference from baseline; 95% item bootstrap');ax.set_title('Most choices lack a clear paired gain across judges');ax.legend();fig.tight_layout();fig.savefig(FIG/'paired_gains.png');plt.show()
  fam=tables['family_summary'];f=fam[(fam.stage=='selection')&(fam.reader=='lenient')]
  if len(f):
   fig,axes=plt.subplots(1,3,figsize=(11.5,7),sharey=True)
@@ -683,14 +749,14 @@ def make_figures(df,tables):
     for x in range(4):
      value=pivot.iloc[y,x]
      ax.text(x,y,'—' if pd.isna(value) else f'{value:.2f}',ha='center',va='center',color='white' if pd.notna(value) and value>.75 else 'black',fontsize=10)
-  fig.suptitle('Family scores locate the room for improvement',x=.06,ha='left');fig.tight_layout();fig.savefig(FIG/'family_accuracy.png');plt.show()
+  fig.suptitle('Sol starts at the ceiling in three selection families',x=.06,ha='left');fig.tight_layout();fig.savefig(FIG/'family_accuracy.png');plt.show()
  confirm=summary[(summary.stage=='confirmation')&(summary.reader=='lenient')]
  if len(confirm):
   fig,ax=plt.subplots(figsize=(9,5));x=np.arange(3)
   for n,(method,hatch) in enumerate([('baseline',''),('recommended','//')]):
    g=confirm[confirm.method==method].set_index('judge').reindex(JUDGES)
    ax.bar(x+(n-.5)*.34,g.accuracy,.34,label=method,hatch=hatch,yerr=np.vstack([np.maximum(0,g.accuracy-g.ci_low),np.maximum(0,g.ci_high-g.accuracy)]),capsize=3)
-  ax.set_xticks(x,list(JUDGES));ax.set_ylim(0,1.08);ax.set_ylabel('Accuracy (tie = 0.5); 95% item bootstrap');ax.set_title('Confirmation tests the selected combination on held-out items');ax.legend();fig.tight_layout();fig.savefig(FIG/'confirmation_accuracy.png');plt.show()
+  ax.set_xticks(x,list(JUDGES));ax.set_ylim(0,1.08);ax.set_ylabel('Accuracy (tie = 0.5); 95% item bootstrap');ax.set_title('No choice qualified; confirmation reuses baseline replies' if not load(DATA/'recommendation.json')['choices'] else 'Confirmation scores for the selected harness');ax.legend();fig.tight_layout();fig.savefig(FIG/'confirmation_accuracy.png');plt.show()
  if len(selected):
   fig,axes=plt.subplots(1,2,figsize=(11.5,7),sharey=True);y=np.arange(len(METHODS))
   for ax,col,label in zip(axes,['mean_dollars','mean_seconds'],['Nominal dollars per item (log scale)','Summed call seconds per item (log scale)']):
@@ -785,7 +851,7 @@ def write_handoff(status,error=None):
  '## Chronological run log for Claude’s PROTOCOL.md\n',
  'data/run_log.jsonl contains timestamped preparation, probes, development, freeze, selection, recommendation, confirmation, retry and stop events. data/attempt_lifecycle.jsonl records each started/returned new call; data/nonfinal_attempts.jsonl preserves nonfinal quota streams. data/freeze_record.json contains all pre-test hashes; data/source_manifest.json records source hashes. No generator parameter amendments were made. data/transport_amendments.json records the pre-selection hard-deadline change after two development requests hung beyond their socket timeout. data/interrupted_attempts.json includes conservative reservations for unreturned requests. These unknown-charge interrupted sends must be added to returned-attempt counts; their actual usage/latency is unknown.\n']
  if (DATA/'freeze_record.json').exists():lines.append('```json\n'+json.dumps(load(DATA/'freeze_record.json'),indent=2)+'\n```\n')
- for note in ['client_transport_amendment.json','reporting_amendments.json','manual_timeout_enforcement.json','manual_timeout_reply_audit.json','reporting_caveats.json']:
+ for note in ['sol_serial_scheduling_amendment.json','sol_single_slot_transport_check.json','cli429_stop_record.json','cli429_transport_amendment.json','resume_record.json','resume_transport_amendment.json','resume_transport_checks.json','quota_guard_tests.json','client_transport_amendment.json','reporting_amendments.json','manual_timeout_enforcement.json','manual_timeout_reply_audit.json','reporting_caveats.json']:
   if (DATA/note).exists():lines.append('### '+note+'\n```json\n'+json.dumps(load(DATA/note),indent=2,ensure_ascii=False)+'\n```\n')
  if (DATA/'run_log.jsonl').exists():
   events=[json.loads(s) for s in (DATA/'run_log.jsonl').read_text(encoding='utf-8').splitlines()]
@@ -839,7 +905,7 @@ def probes():
  record=next(m for m in catalog['data'] if m['canonical_slug']==JUDGES['Granite 8B']['model'])
  assert record['canonical_slug']==models[-1]['pinned_version'] or record['canonical_slug']==JUDGES['Granite 8B']['model']
  save(DATA/'granite_live_catalog.json',record)
- help_proc=subprocess.run([shutil.which('codex.cmd') or shutil.which('codex'),'exec','--help'],capture_output=True,text=True,encoding='utf-8',errors='replace')
+ help_proc=subprocess.run([codex_executable(),'exec','--help'],capture_output=True,text=True,encoding='utf-8',errors='replace')
  assert '--output-schema' in help_proc.stdout
  (DATA/'codex_exec_help.txt').write_text(help_proc.stdout,encoding='utf-8')
  out=[]
@@ -856,6 +922,11 @@ def run_study():
  try:
   if LIVE:
    log('invocation',profile=PROFILE,plan_hash=filehash(DATA/'analysis_plan.json'))
+   if (DATA/'resume_record.json').exists():
+    resume_checks=load(DATA/'resume_transport_checks.json')
+    assert resume_checks.get('complete') and len(resume_checks['checks'])==len(JUDGES),'Pinned judges must pass November 24 transport checks before collection'
+   serial_check=load(DATA/'sol_single_slot_transport_check.json')
+   assert serial_check.get('complete') and serial_check['model']=='gpt-6.1-sol','Fresh serial-Sol transport check required'
    prepare_audits();probes()
    if not (DATA/'freeze_record.json').exists():
     log('development_start',ids=[i['item_id'] for i in development])
