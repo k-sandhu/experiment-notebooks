@@ -93,6 +93,20 @@ judgments. The caveat is the exam's construction: in 227 of 240 pairs the worse 
 with one planted edit, so a judge can check only the place where they differ. On the 13 pairs of independently
 written code, the cheaper judges fell to 27% to 65%.
 
+### Settling disagreements between strong judges (34)
+
+[Notebook 34](34-weak-tiebreakers/) asked what to do when two strong judges disagree. It reused notebook 33's exam and
+added 480 new pairs from the same generator, 720 in all. Claude Opus 5.5 and GPT-6.1 Sol named the same answer in
+both orders on 633 pairs and were right on every one; they disagreed on 87, and 75 of those were exact word counts of
+messages of about 715 words. Judging those 87 alone, no cheap model did measurably better than a coin (0.36 to 0.54, where a
+coin scores 0.50), and always trusting Opus scored 0.73. Reading both strong judges' reasons helped two of four cheap
+models: Granite 4.2 8B rose from 0.44 to 0.70 and GPT-6 Luna from 0.51 to 0.63, still below trusting Opus. Haiku and
+DeepSeek lost many pairs to unreadable replies. Muse Wonder Full, the best judge in notebook 33, was right on 86 of the
+87, and one round in which Opus and Sol read each other's reasons settled 51 disputes, all correctly. The practical
+answer is to send disputes to a third strong judge, or to a round of revision and then a person, not to a cheap model.
+This is the setting of debate studies such as [Khan et al. (2024)](https://arxiv.org/abs/2402.06782), in which a
+weaker judge decides between stronger models' arguments.
+
 ### Teaching a judge one person's taste (35)
 
 [Notebook 35](35-judge-taste/) asked whether a judge can learn what one editor prefers when two versions of a
@@ -107,14 +121,9 @@ may be learning that rewriter's habits as much as the owner's taste.
 
 ## Experiments in progress
 
-These three experiments share one aim: to find out how a team should combine, set up and instruct judges. All of
-them reuse notebook 33's exam, unchanged.
+These experiments share one aim: to find out how a team should set up and instruct judges. Both reuse
+notebook 33's exam, unchanged.
 
-- A weaker model as tie-breaker (34, [issue #95](https://github.com/k-sandhu/experiment-notebooks/issues/95)).
-  Where the two strongest judges disagree, can a cheaper model settle it, alone or after reading both judges'
-  reasons? This is the setting of debate studies such as
-  [Khan et al. (2024)](https://arxiv.org/abs/2402.06782), in which a weaker judge decides between stronger models'
-  arguments.
 - How to build a judging harness (36, [issue #97](https://github.com/k-sandhu/experiment-notebooks/issues/97)).
   One part of the grading set-up changes at a time: one answer graded alone or two compared, one answer order or
   both, reasoning before or after the verdict, one reply or a majority of five, low or high reasoning effort, a
