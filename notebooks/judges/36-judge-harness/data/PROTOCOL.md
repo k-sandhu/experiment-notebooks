@@ -151,3 +151,11 @@ are listed for reference and are not new spend.
 
 Collection episodes: 30 October 17:19 to 19:08 (1,057 sends), 24 November 06:07 to 07:49 (1,962), 24 November 20:52
 to 25 November 01:11 (1,954), 25 November 18:24 to 20:51 (1,618); 10.3 hours in all, excluding the 25-day pause.
+
+## Tracing
+
+The notebook has no live tracing code. On 25 November 2026, after the replay, the 5,643 final replies collected by
+this notebook (rows of `cache_imported.jsonl.gz` with no `origin`) were sent to the local Langfuse with
+`D:\projects\langfuse\backfill\backfill_traces.py --only 36`, from a temporary copy because the backfill skips files
+named `cache_imported`. `cache_before_cli429_stop.jsonl.gz` was held out so its rate-limit errors would not take the
+trace IDs of the final replies. The 1,467 replies reused from notebook 33 belong to notebook 33's traces.

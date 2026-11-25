@@ -610,7 +610,8 @@ Cache layout. Every final reply and its full request is in `data/cache_imported.
 reused from notebook 33, including 27 earlier retries, and 5,643 collected here), keyed by a hash of the request.
 New replies would go to `data/cache_requests.jsonl`; non-final records (rate-limit errors, replies after a stop) are
 in `data/nonfinal_attempts.jsonl`. [`data/outcomes.csv`](data/outcomes.csv) has one row per pair, condition and judge
-with every component read. The source exam files and their hashes are under `data/from_33/`.
+with every component read. The source exam files and their hashes are under `data/from_33/`. The notebook does not send traces itself; the 5,643 replies collected here were added to the
+owner's local Langfuse on 25 November 2026 with its backfill script, leaving out the superseded pre-stop cache.
 
 Spend and calls. This notebook sent 6,591 requests (with retries, development and transport checks); 6,574 returned
 and 17 got no reply. Of the returned requests, 931 are non-final, mostly 927 Sol replies
