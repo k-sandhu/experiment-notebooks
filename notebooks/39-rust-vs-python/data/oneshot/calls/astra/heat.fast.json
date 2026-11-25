@@ -1,0 +1,58 @@
+{
+  "cli_cost_usd": null,
+  "cli_version": "codex-cli 0.160.1",
+  "end_utc": "2026-11-12T04:46:53.036359+00:00",
+  "exit_code": 0,
+  "list_cost_usd": 0.118284,
+  "parse": {
+    "blocks": 1,
+    "empty": false,
+    "status": "ok"
+  },
+  "reply": "```python\nimport sys\nimport numpy as np\n\n\ndef main():\n    with open(sys.argv[1], \"rb\") as f:\n        h, w, steps = map(int, f.readline().split())\n        grid = np.frombuffer(f.read(), dtype=np.uint8).reshape(h, w + 1)[:, :w]\n\n    open_cells = grid == ord(\".\")\n    open_indices = np.flatnonzero(open_cells)\n\n    if steps == 0 or not np.any(grid >= ord(\"1\")):\n        r, c = divmod(int(open_indices[0]), w)\n        sys.stdout.write(f\"sum 0\\nmax 0 {r} {c}\\nchecksum 0\\n\")\n        return\n\n    fixed = np.maximum(grid.astype(np.int32) - ord(\"0\"), 0)\n    fixed *= 1000\n    closed_cells = ~open_cells\n\n    blocked = np.ones((h + 2, w + 2), dtype=np.bool_)\n    blocked[1:-1, 1:-1] = grid == ord(\"#\")\n\n    weight = np.full((h, w), 4, dtype=np.int32)\n    weight += blocked[:-2, 1:-1]\n    weight += blocked[2:, 1:-1]\n    weight += blocked[1:-1, :-2]\n    weight += blocked[1:-1, 2:]\n\n    a = np.zeros((h + 2, w + 2), dtype=np.int32)\n    b = np.zeros_like(a)\n    av = a[1:-1, 1:-1]\n    bv = b[1:-1, 1:-1]\n    av[:] = fixed\n\n    a_neighbors = (\n        a[:-2, 1:-1],\n        a[2:, 1:-1],\n        a[1:-1, :-2],\n        a[1:-1, 2:],\n    )\n    b_neighbors = (\n        b[:-2, 1:-1],\n        b[2:, 1:-1],\n        b[1:-1, :-2],\n        b[1:-1, 2:],\n    )\n\n    multiply = np.multiply\n    add = np.add\n    right_shift = np.right_shift\n    copyto = np.copyto\n\n    for _ in range(steps):\n        multiply(av, weight, out=bv)\n        add(bv, a_neighbors[0], out=bv)\n        add(bv, a_neighbors[1], out=bv)\n        add(bv, a_neighbors[2], out=bv)\n        add(bv, a_neighbors[3], out=bv)\n        right_shift(bv, 3, out=bv)\n        copyto(bv, fixed, where=closed_cells)\n\n        av, bv = bv, av\n        a_neighbors, b_neighbors = b_neighbors, a_neighbors\n\n    values = av.ravel()[open_indices].astype(np.int64)\n    total = int(values.sum(dtype=np.int64))\n    best = int(values.argmax())\n    maximum = int(values[best])\n    r, c = divmod(int(open_indices[best]), w)\n    positions = open_indices.astype(np.int64)\n    positions += 1\n    checksum = int(np.sum(values * positions, dtype=np.int64))\n\n    sys.stdout.write(\n        f\"sum {total}\\n\"\n        f\"max {maximum} {r} {c}\\n\"\n        f\"checksum {checksum}\\n\"\n    )\n\n\nif __name__ == \"__main__\":\n    main()\n```",
+  "reported_model": null,
+  "request": {
+    "cli": "codex",
+    "effort": "high",
+    "flags": [
+      "exec",
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=\"high\"",
+      "-c",
+      "model_instructions_file=\"{system_file}\"",
+      "-c",
+      "approval_policy=\"never\"",
+      "--ignore-user-config",
+      "--ephemeral",
+      "--sandbox",
+      "read-only",
+      "--skip-git-repo-check",
+      "-C",
+      "{folder}",
+      "--json",
+      "-o",
+      "{last_file}",
+      "-"
+    ],
+    "model": "gpt-6-astra",
+    "prompt": "Write one complete Python program for the task below. It will be compiled and run automatically with no\nhuman in the loop, and judged first on whether its output is exactly right and then on how fast it runs.\n\n## The program\n\n- File: `fast.py`.\n- Interpreter: CPython 3.13 on Windows.\n- Libraries: the standard library plus NumPy 2.2 (`import numpy as np`). No other packages. Names removed in NumPy 2.0, such as `np.float_`, `np.int0` and `np.in1d`, do not exist.\n\n## How it is run\n\n- Command: `C:\\Python313\\python.exe fast.py INPUT_PATH`. `INPUT_PATH` is the path of the input file.\n- Read the input only from that file. Do not read standard input or any other file, and do not wait for\n  anything.\n- Write the answer to standard output and nothing else: no prompts, labels, debug lines or blank lines.\n  Standard error is ignored. Exit with status 0.\n\n## Output rules that apply to every task\n\n- Print the lines in exactly the order and form the task gives. Each line starts with its keyword (where the\n  task shows one) and its fields are separated by exactly one space, with no spaces at the start or end.\n- End every line with a newline, including the last one. `\\r\\n` line endings are also accepted.\n- Print integers in plain decimal: an optional leading `-` and digits only, with no `+`, no thousands\n  separators, no decimal point and no exponent.\n\n## The task\n\n<task>\n# Heat on a grid\n\nSpread heat across a floor plan with walls and fixed heat sources, in exact integer steps.\n\n## Input\n\n```\nH W S\nrow_0\n...\nrow_(H-1)\n```\n\nThe first line gives the number of rows H, the number of columns W and the number of steps S. Then H lines\nof exactly W characters each: `.` is an open cell, `#` is a wall, and a digit `1`-`9` is a heat source. The\ngrid contains at least one open cell.\n\n## Simulation\n\nOpen cells start at value 0. A source with digit d has the fixed value 1000 * d at all times. Walls have no\nvalue.\n\nIn each of the S steps, every open cell gets a new value computed from the values at the start of the step:\n\n```\nnew = (4 * old + n_up + n_down + n_left + n_right) // 8\n```\n\nn_up is the value of the cell above if that cell is open or a source, and the cell's own old value if the\ncell above is a wall or lies outside the grid. n_down, n_left and n_right are defined the same way for the\nother three neighbours. `//` is integer division rounding down. All open cells update at the same time.\nSources and walls never change.\n\n## Output\n\n```\nsum T\nmax V R C\nchecksum K\n```\n\nAfter S steps, T is the sum of the values of all open cells. V is the largest open-cell value, found at row\nR and column C (both 0-based, row 0 at the top); on a tie, report the first such cell in row-major order\n(smallest R, then smallest C). K is the sum over all open cells of `value * (R * W + C + 1)`. All values fit\nin a signed 64-bit integer.\n\n## Benchmark size\n\nH = 400 rows, W = 400 columns and S = 250 steps (about 40 million cell updates). The samples are smaller.\n</task>\n\n## Exact input and output for this task\n\n- Input: line 1 is `H W S`. Then exactly H lines of exactly W characters, each `.` (open cell), `#` (wall) or a\n  digit `1`-`9` (heat source), each line ending in `\\n`.\n- Only open cells (`.`) change, and only open cells count in the output. Heat sources and walls are not open\n  cells: leave them out of the sum T, the maximum V and its position R C, and the checksum K, even though a\n  source has a value.\n- In the update, a neighbour that is an open cell or a source contributes its value at the start of the step\n  (a source always contributes `1000 * d`). A neighbour that is a wall, or that lies outside the grid,\n  contributes the updating cell's own old value. Values are never negative, so `//` is ordinary integer\n  division.\n- Output: exactly three lines, `sum T`, `max V R C` and `checksum K`. R and C are 0-based; on a tie for the\n  maximum, take the first open cell in row-major order. Compute T and K in 64 bits.\n\n## Examples\n\nEach example is a complete input file and the exact output your program must print for it.\n\nExample `s1` input:\n\n<input>\n7 9 4\n#9.9.9#.#\n#####.#..\n..1..#...\n.....#...\n##.###...\n.....#...\n.#2..#..3\n</input>\n\nExpected output:\n\n<output>\nsum 21557\nmax 6151 0 2\nchecksum 369130\n</output>\n\nExample `s2` input:\n\n<input>\n13 13 250\n#9....#......\n.............\n........6....\n......#......\n......#......\n##..#########\n....3.#......\n......#......\n......#......\n......#......\n.........3...\n.............\n......#....1#\n</input>\n\nExpected output:\n\n<output>\nsum 519540\nmax 7440 0 2\nchecksum 33357316\n</output>\n\n\n## Goals, in order\n\n1. Print the correct output for every valid input the task allows, not only for the examples.\n2. Make the program as fast as you can, written the way a skilled Python developer writes fast code.\n\nUse a single thread and a single process unless the task says otherwise. Do not precompute or embed answers,\nand do not start other programs. The benchmark runs on Windows 11 on a 16-core laptop with the input size\nthe task gives.\n\n## Your reply\n\nReply with the complete contents of `fast.py` in one fenced code block and nothing else. You cannot compile or\nrun the code, so before you reply, check that it compiles with exactly the toolchain above and that it follows\nevery rule under \"Exact input and output for this task\". The examples show the exact output format; you do not\nneed to trace them by hand.\n",
+    "sample_limit": 2000,
+    "system": "You are a programmer. Answer each request in a single reply. You cannot run code or use tools."
+  },
+  "request_hash": "a026e7d8a210f4ea5c90d9bd3b3bc0a4fd93b3f891d2f5f5d659ee0fa71a7425",
+  "result_text": "```python\nimport sys\nimport numpy as np\n\n\ndef main():\n    with open(sys.argv[1], \"rb\") as f:\n        h, w, steps = map(int, f.readline().split())\n        grid = np.frombuffer(f.read(), dtype=np.uint8).reshape(h, w + 1)[:, :w]\n\n    open_cells = grid == ord(\".\")\n    open_indices = np.flatnonzero(open_cells)\n\n    if steps == 0 or not np.any(grid >= ord(\"1\")):\n        r, c = divmod(int(open_indices[0]), w)\n        sys.stdout.write(f\"sum 0\\nmax 0 {r} {c}\\nchecksum 0\\n\")\n        return\n\n    fixed = np.maximum(grid.astype(np.int32) - ord(\"0\"), 0)\n    fixed *= 1000\n    closed_cells = ~open_cells\n\n    blocked = np.ones((h + 2, w + 2), dtype=np.bool_)\n    blocked[1:-1, 1:-1] = grid == ord(\"#\")\n\n    weight = np.full((h, w), 4, dtype=np.int32)\n    weight += blocked[:-2, 1:-1]\n    weight += blocked[2:, 1:-1]\n    weight += blocked[1:-1, :-2]\n    weight += blocked[1:-1, 2:]\n\n    a = np.zeros((h + 2, w + 2), dtype=np.int32)\n    b = np.zeros_like(a)\n    av = a[1:-1, 1:-1]\n    bv = b[1:-1, 1:-1]\n    av[:] = fixed\n\n    a_neighbors = (\n        a[:-2, 1:-1],\n        a[2:, 1:-1],\n        a[1:-1, :-2],\n        a[1:-1, 2:],\n    )\n    b_neighbors = (\n        b[:-2, 1:-1],\n        b[2:, 1:-1],\n        b[1:-1, :-2],\n        b[1:-1, 2:],\n    )\n\n    multiply = np.multiply\n    add = np.add\n    right_shift = np.right_shift\n    copyto = np.copyto\n\n    for _ in range(steps):\n        multiply(av, weight, out=bv)\n        add(bv, a_neighbors[0], out=bv)\n        add(bv, a_neighbors[1], out=bv)\n        add(bv, a_neighbors[2], out=bv)\n        add(bv, a_neighbors[3], out=bv)\n        right_shift(bv, 3, out=bv)\n        copyto(bv, fixed, where=closed_cells)\n\n        av, bv = bv, av\n        a_neighbors, b_neighbors = b_neighbors, a_neighbors\n\n    values = av.ravel()[open_indices].astype(np.int64)\n    total = int(values.sum(dtype=np.int64))\n    best = int(values.argmax())\n    maximum = int(values[best])\n    r, c = divmod(int(open_indices[best]), w)\n    positions = open_indices.astype(np.int64)\n    positions += 1\n    checksum = int(np.sum(values * positions, dtype=np.int64))\n\n    sys.stdout.write(\n        f\"sum {total}\\n\"\n        f\"max {maximum} {r} {c}\\n\"\n        f\"checksum {checksum}\\n\"\n    )\n\n\nif __name__ == \"__main__\":\n    main()\n```",
+  "start_utc": "2026-11-12T04:45:58.865466+00:00",
+  "timed_out": false,
+  "tool_calls": 0,
+  "turns": 1,
+  "usage": {
+    "cache_write_input_tokens": 0,
+    "cached_input_tokens": 11904,
+    "input_tokens": 14237,
+    "output_tokens": 1661,
+    "reasoning_output_tokens": 920
+  },
+  "wall_seconds": 54.17089530000521
+}
